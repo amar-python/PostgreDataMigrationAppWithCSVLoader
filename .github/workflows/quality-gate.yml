@@ -44,7 +44,7 @@ jobs:
       # would otherwise vanish with the runner — keep them for auditability.
       - name: Upload eval reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eval-reports-free-tier
           path: evals/reports/
@@ -147,7 +147,7 @@ jobs:
 
       - name: Upload eval reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eval-reports-integration
           path: evals/reports/
