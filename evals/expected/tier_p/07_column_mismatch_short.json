@@ -1,0 +1,13 @@
+{
+  "scenario": "07_column_mismatch_short",
+  "description": "Header has 3 columns; one data row has only 2.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 2", "Skipped rows : 1"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "first", "last"], ["1", "Alice", "Anderson"], ["3", "Carol", "Smith"]],
+    "skip_csv_row_count": 1,
+    "skip_reasons_contain": ["column mismatch — expected 3, got 2"]
+  }
+}

@@ -1,0 +1,225 @@
+EEE.................F........EFFFFF...................                   [100%]
+==================================== ERRORS ====================================
+_________ ERROR at setup of CsvLoaderArbitraryShapes.test_shape_medium _________
+
+cls = <class 'test_csv_loader_arbitrary_shapes.CsvLoaderArbitraryShapes'>
+
+    @classmethod
+    def setUpClass(cls):
+        if not (_PG_AVAILABLE and _CONFIG_PRESENT):
+>           raise AssertionError(
+                f"{_SKIP_REASON}. Run 'bash scripts/provision_full_test_env.sh'.")
+E           AssertionError: build/config.local.env not present — run ./build/setup.sh. Run 'bash scripts/provision_full_test_env.sh'.
+
+tests/test_csv_loader_arbitrary_shapes.py:82: AssertionError
+_________ ERROR at setup of CsvLoaderArbitraryShapes.test_shape_skinny _________
+
+cls = <class 'test_csv_loader_arbitrary_shapes.CsvLoaderArbitraryShapes'>
+
+    @classmethod
+    def setUpClass(cls):
+        if not (_PG_AVAILABLE and _CONFIG_PRESENT):
+>           raise AssertionError(
+                f"{_SKIP_REASON}. Run 'bash scripts/provision_full_test_env.sh'.")
+E           AssertionError: build/config.local.env not present — run ./build/setup.sh. Run 'bash scripts/provision_full_test_env.sh'.
+
+tests/test_csv_loader_arbitrary_shapes.py:82: AssertionError
+__________ ERROR at setup of CsvLoaderArbitraryShapes.test_shape_tiny __________
+
+cls = <class 'test_csv_loader_arbitrary_shapes.CsvLoaderArbitraryShapes'>
+
+    @classmethod
+    def setUpClass(cls):
+        if not (_PG_AVAILABLE and _CONFIG_PRESENT):
+>           raise AssertionError(
+                f"{_SKIP_REASON}. Run 'bash scripts/provision_full_test_env.sh'.")
+E           AssertionError: build/config.local.env not present — run ./build/setup.sh. Run 'bash scripts/provision_full_test_env.sh'.
+
+tests/test_csv_loader_arbitrary_shapes.py:82: AssertionError
+_________ ERROR at setup of TestDevSeedCounts.test_dev_seed_row_counts _________
+
+cls = <class 'test_parity.TestDevSeedCounts'>
+
+>   setUpClass = classmethod(lambda cls: _require_deployed())
+                                         ^^^^^^^^^^^^^^^^^^^
+
+tests/test_parity.py:135: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _require_deployed():
+        _require_pg()
+        if not _DEV_DEPLOYED:
+>           raise AssertionError(f"Dev database not deployed. {_HELP}")
+E           AssertionError: Dev database not deployed. Run 'bash scripts/provision_full_test_env.sh' (needs a reachable PostgreSQL and PGUSER/PGHOST/PGPORT set).
+
+tests/test_parity.py:131: AssertionError
+=================================== FAILURES ===================================
+_______________ E2EPipelineWithDatabase.test_tier_i_idempotency ________________
+
+self = <test_e2e_pipeline.E2EPipelineWithDatabase testMethod=test_tier_i_idempotency>
+
+    def test_tier_i_idempotency(self):
+        """Tier I (idempotency) scenarios must pass against the running PostgreSQL."""
+        r = subprocess.run(
+            [sys.executable, str(RUNNER), "--tiers", "i"],
+            capture_output=True, text=True, cwd=ROOT,
+        )
+>       self.assertEqual(r.returncode, 0,
+                         f"Tier I eval run failed:\n{r.stdout[-2000:]}\n{r.stderr[-500:]}")
+E       AssertionError: 1 != 0 : Tier I eval run failed:
+E       
+E       === Tier I - 1 scenarios ===
+E       FAIL tier_i/01_deploy_dev_twice
+E            first_run_exit_code: expected 0, got 2; stderr: it/build/te_core_schema.sql:67: NOTICE:  [DEV] Role "te_dev_user" already exists — password and conn_limit refreshed.
+E       psql:/home/claude/audit/build/te_core_schema.sql:69: ERROR:  database "te_mgmt_dev" does not exist
+E       psql:/home/claude/audit/build/te_core_schema.sql:76: error: \connect: connection to server at "localhost" (127.0.0.1), port 5432 failed: FATAL:  database "te_mgmt_dev" does not exist
+E       
+E            second_run_exit_code: expected 0, got 2; stderr: it/build/te_core_schema.sql:67: NOTICE:  [DEV] Role "te_dev_user" already exists — password and conn_limit refreshed.
+E       psql:/home/claude/audit/build/te_core_schema.sql:69: ERROR:  database "te_mgmt_dev" does not exist
+E       psql:/home/claude/audit/build/te_core_schema.sql:76: error: \connect: connection to server at "localhost" (127.0.0.1), port 5432 failed: FATAL:  database "te_mgmt_dev" does not exist
+E       
+E            tables_present: expected >= 11, got 0
+E       
+E       === Summary ===
+E         total:   1
+E         passed:  0
+E         failed:  1
+E         skipped: 0
+E       
+E         report:  /home/claude/audit/evals/reports/20260721T080448Z-f4b944/summary.json
+E         gap report: /home/claude/audit/evals/reports/20260721T080448Z-f4b944/VCRM_GAPS_20260721T080448Z-f4b944.md
+
+tests/test_e2e_pipeline.py:187: AssertionError
+______ TestAllEnvironmentsHaveRequiredTables.test_dev_has_required_tables ______
+
+self = <test_parity.TestAllEnvironmentsHaveRequiredTables testMethod=test_dev_has_required_tables>
+
+    def test_dev_has_required_tables(self):
+>       self._check_env("dev")
+
+tests/test_parity.py:178: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_parity.py:165: in _check_env
+    self.fail(f"Database {db!r} not deployed. {_HELP}")
+E   AssertionError: Database 'te_mgmt_dev' not deployed. Run 'bash scripts/provision_full_test_env.sh' (needs a reachable PostgreSQL and PGUSER/PGHOST/PGPORT set).
+_____ TestAllEnvironmentsHaveRequiredTables.test_prod_has_required_tables ______
+
+self = <test_parity.TestAllEnvironmentsHaveRequiredTables testMethod=test_prod_has_required_tables>
+
+    def test_prod_has_required_tables(self):
+>       self._check_env("prod")
+
+tests/test_parity.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_parity.py:165: in _check_env
+    self.fail(f"Database {db!r} not deployed. {_HELP}")
+E   AssertionError: Database 'te_mgmt_prod' not deployed. Run 'bash scripts/provision_full_test_env.sh' (needs a reachable PostgreSQL and PGUSER/PGHOST/PGPORT set).
+____ TestAllEnvironmentsHaveRequiredTables.test_staging_has_required_tables ____
+
+self = <test_parity.TestAllEnvironmentsHaveRequiredTables testMethod=test_staging_has_required_tables>
+
+    def test_staging_has_required_tables(self):
+>       self._check_env("staging")
+
+tests/test_parity.py:184: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_parity.py:165: in _check_env
+    self.fail(f"Database {db!r} not deployed. {_HELP}")
+E   AssertionError: Database 'te_mgmt_staging' not deployed. Run 'bash scripts/provision_full_test_env.sh' (needs a reachable PostgreSQL and PGUSER/PGHOST/PGPORT set).
+_____ TestAllEnvironmentsHaveRequiredTables.test_test_has_required_tables ______
+
+self = <test_parity.TestAllEnvironmentsHaveRequiredTables testMethod=test_test_has_required_tables>
+
+    def test_test_has_required_tables(self):
+>       self._check_env("test")
+
+tests/test_parity.py:181: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_parity.py:165: in _check_env
+    self.fail(f"Database {db!r} not deployed. {_HELP}")
+E   AssertionError: Database 'te_mgmt_test' not deployed. Run 'bash scripts/provision_full_test_env.sh' (needs a reachable PostgreSQL and PGUSER/PGHOST/PGPORT set).
+__ TestIdempotentDeployParity.test_dev_row_counts_stable_after_second_deploy ___
+
+self = <test_parity.TestIdempotentDeployParity testMethod=test_dev_row_counts_stable_after_second_deploy>
+
+    def test_dev_row_counts_stable_after_second_deploy(self):
+        env_sql = ROOT / "build" / "environments" / "env_dev.sql"
+        if not env_sql.exists():
+            self.fail(f"env_dev.sql not found at {env_sql}. {_HELP}")
+    
+        db, schema = _ENV_CONFIG["dev"]
+    
+        def _snapshot() -> dict[str, int | None]:
+            return {t: _count_rows(db, schema, t) for t in _REQUIRED_TABLES}
+    
+        counts_before = _snapshot()
+    
+        r = subprocess.run(
+            ["psql", "-f", str(env_sql)],
+            env=_pg_env(), capture_output=True, text=True, timeout=180,
+        )
+        if r.returncode != 0:
+>           self.fail(f"Second deploy failed:\n{r.stderr[-500:]}")
+E           AssertionError: Second deploy failed:
+E           psql:/home/claude/audit/build/te_core_schema.sql:67: NOTICE:  [DEV] Role "te_dev_user" already exists — password and conn_limit refreshed.
+E           psql:/home/claude/audit/build/te_core_schema.sql:69: ERROR:  database "te_mgmt_dev" does not exist
+E           psql:/home/claude/audit/build/te_core_schema.sql:76: error: \connect: connection to server at "localhost" (127.0.0.1), port 5432 failed: FATAL:  database "te_mgmt_dev" does not exist
+
+tests/test_parity.py:215: AssertionError
+=========================== short test summary info ============================
+ERROR tests/test_csv_loader_arbitrary_shapes.py::CsvLoaderArbitraryShapes::test_shape_medium
+ERROR tests/test_csv_loader_arbitrary_shapes.py::CsvLoaderArbitraryShapes::test_shape_skinny
+ERROR tests/test_csv_loader_arbitrary_shapes.py::CsvLoaderArbitraryShapes::test_shape_tiny
+ERROR tests/test_parity.py::TestDevSeedCounts::test_dev_seed_row_counts - Ass...
+FAILED tests/test_e2e_pipeline.py::E2EPipelineWithDatabase::test_tier_i_idempotency
+FAILED tests/test_parity.py::TestAllEnvironmentsHaveRequiredTables::test_dev_has_required_tables
+FAILED tests/test_parity.py::TestAllEnvironmentsHaveRequiredTables::test_prod_has_required_tables
+FAILED tests/test_parity.py::TestAllEnvironmentsHaveRequiredTables::test_staging_has_required_tables
+FAILED tests/test_parity.py::TestAllEnvironmentsHaveRequiredTables::test_test_has_required_tables
+FAILED tests/test_parity.py::TestIdempotentDeployParity::test_dev_row_counts_stable_after_second_deploy
+
+==================================================================
+  FINAL RESULT — every test accounted for
+==================================================================
+  collected     : 54
+  executed      : 54
+  PASSED        : 44
+  FAILED        : 6
+  ERROR         : 4
+  SKIPPED       : 0
+  NOT RUN       : 0  (deselected by the marker filter)
+
+  FAILED
+    - tests.test_e2e_pipeline.E2EPipelineWithDatabase::test_tier_i_idempotency
+      AssertionError: 1 != 0 : Tier I eval run failed:
+    - tests.test_parity.TestAllEnvironmentsHaveRequiredTables::test_dev_has_required_tables
+      AssertionError: Database 'te_mgmt_dev' not deployed. Run 'bash scripts/provision_full_test_env.sh' (needs a re
+    - tests.test_parity.TestAllEnvironmentsHaveRequiredTables::test_prod_has_required_tables
+      AssertionError: Database 'te_mgmt_prod' not deployed. Run 'bash scripts/provision_full_test_env.sh' (needs a r
+    - tests.test_parity.TestAllEnvironmentsHaveRequiredTables::test_staging_has_required_tables
+      AssertionError: Database 'te_mgmt_staging' not deployed. Run 'bash scripts/provision_full_test_env.sh' (needs 
+    - tests.test_parity.TestAllEnvironmentsHaveRequiredTables::test_test_has_required_tables
+      AssertionError: Database 'te_mgmt_test' not deployed. Run 'bash scripts/provision_full_test_env.sh' (needs a r
+    - tests.test_parity.TestIdempotentDeployParity::test_dev_row_counts_stable_after_second_deploy
+      AssertionError: Second deploy failed:
+
+  ERROR
+    - tests.test_csv_loader_arbitrary_shapes.CsvLoaderArbitraryShapes::test_shape_medium
+      failed on setup with "AssertionError: build/config.local.env not present — run ./build/setup.sh. Run 'bash scr
+    - tests.test_csv_loader_arbitrary_shapes.CsvLoaderArbitraryShapes::test_shape_skinny
+      failed on setup with "AssertionError: build/config.local.env not present — run ./build/setup.sh. Run 'bash scr
+    - tests.test_csv_loader_arbitrary_shapes.CsvLoaderArbitraryShapes::test_shape_tiny
+      failed on setup with "AssertionError: build/config.local.env not present — run ./build/setup.sh. Run 'bash scr
+    - tests.test_parity.TestDevSeedCounts::test_dev_seed_row_counts
+      failed on setup with "AssertionError: Dev database not deployed. Run 'bash scripts/provision_full_test_env.sh'
+
+  SKIPPED (0)
+    none — no test was skipped
+
+  NOT RUN (0)
+    none — every collected test was executed
+
+==================================================================
+  RESULT: FAIL
+==================================================================
+

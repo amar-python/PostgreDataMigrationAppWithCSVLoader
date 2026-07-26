@@ -1,0 +1,13 @@
+{
+  "scenario": "15_quoted_quote",
+  "description": "Quoted field with escaped double-quote becomes a literal quote in the value.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 2"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "note"], ["1", "she said \"hi\""], ["2", "plain"]],
+    "skip_csv_row_count": 0,
+    "skip_reasons_contain": []
+  }
+}

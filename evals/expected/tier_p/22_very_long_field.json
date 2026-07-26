@@ -1,0 +1,14 @@
+{
+  "scenario": "22_very_long_field",
+  "description": "A 50KB single-field value should be accepted as one valid row.",
+  "runner_action": "write_long_field_file",
+  "field_size_bytes": 50000,
+  "table_name": "payloads",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 1"],
+    "stderr_contains": [],
+    "skip_csv_row_count": 0,
+    "skip_reasons_contain": []
+  }
+}

@@ -1,0 +1,22 @@
+# terraform.tfvars.example - Prod
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# Prod terraform.tfvars is gitignored. NEVER commit secrets here.
+
+location               = "australiaeast"
+cost_center            = "te-platform"
+
+# PG sizing
+pg_version             = "16"
+pg_sku                 = "GP_Standard_D2s_v3"
+pg_storage_mb          = 32768
+
+# Backups / HA
+backup_retention_days  = 14
+geo_redundant_backups  = false  # set true for cross-region DR
+ha_mode                = "Disabled"  # "ZoneRedundant" for real prod
+
+# Networking
+vnet_cidr              = "10.40.0.0/20"
+cae_zone_redundant     = true

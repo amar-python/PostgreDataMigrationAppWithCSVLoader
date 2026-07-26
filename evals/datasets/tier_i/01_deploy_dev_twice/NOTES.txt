@@ -1,0 +1,7 @@
+Tier I scenario: deploy_dev_twice
+
+This scenario verifies the README idempotency claim. When PostgreSQL is
+reachable, the eval runner deploys the Dev environment twice and confirms that
+seeded table row counts do not change between runs.
+
+If PostgreSQL or psql is unavailable, the scenario skips cleanly.

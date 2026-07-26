@@ -1,0 +1,13 @@
+{
+  "scenario": "14_quoted_newline",
+  "description": "Quoted field containing an embedded newline must be parsed as one row.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 2"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "note"], ["1", "line1\nline2"], ["2", "single line"]],
+    "skip_csv_row_count": 0,
+    "skip_reasons_contain": []
+  }
+}

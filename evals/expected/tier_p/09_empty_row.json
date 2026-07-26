@@ -1,0 +1,13 @@
+{
+  "scenario": "09_empty_row",
+  "description": "A row with only commas (every cell empty) should be skipped.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 2", "Skipped rows : 1"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "name"], ["1", "Alice"], ["2", "Bob"]],
+    "skip_csv_row_count": 1,
+    "skip_reasons_contain": ["empty row"]
+  }
+}

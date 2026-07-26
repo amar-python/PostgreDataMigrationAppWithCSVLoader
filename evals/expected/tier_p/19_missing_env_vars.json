@@ -1,0 +1,13 @@
+{
+  "scenario": "19_missing_env_vars",
+  "description": "Runner intentionally omits CSV_FILE, VALID_CSV, SKIP_FILE — validator should reject.",
+  "runner_action": "omit_env_vars",
+  "expected": {
+    "exit_code": 1,
+    "stdout_contains": [],
+    "stderr_contains": ["Missing required environment variables"],
+    "valid_csv_rows": null,
+    "skip_csv_row_count": null,
+    "skip_reasons_contain": []
+  }
+}

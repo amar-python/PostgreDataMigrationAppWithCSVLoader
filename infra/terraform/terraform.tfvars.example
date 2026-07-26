@@ -1,0 +1,10 @@
+# terraform.tfvars.example - copy to terraform.tfvars and edit
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#   # edit terraform.tfvars
+#
+# terraform.tfvars is gitignored (see .gitignore in this folder).
+
+environment     = "dev"
+location        = "australiaeast"
+# subscription_id = "00000000-0000-0000-0000-000000000000"

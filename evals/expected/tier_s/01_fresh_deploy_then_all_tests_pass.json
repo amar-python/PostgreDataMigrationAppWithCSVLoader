@@ -1,0 +1,13 @@
+{
+  "scenario": "01_fresh_deploy_then_all_tests_pass",
+  "description": "Fresh Dev deploy followed by run_all_tests.sql must report 142/142 pass.",
+  "expected": {
+    "deploy_exit_code": 0,
+    "tests_exit_code": 0,
+    "stdout_contains": [
+      "ALL TESTS PASSED"
+    ],
+    "min_total_assertions": 142,
+    "min_pass_rate_percent": 100.0
+  }
+}

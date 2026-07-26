@@ -1,0 +1,4 @@
+id,name,amount,active,created
+1,Alice,10.50,true,2024-01-05
+2,Bob,20,false,2024-02-14
+3,Carol,-3.14,yes,2024-03-01

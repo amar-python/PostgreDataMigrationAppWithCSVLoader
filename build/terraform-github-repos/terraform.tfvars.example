@@ -1,0 +1,15 @@
+################################################################################
+# terraform.tfvars.example
+#
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is listed in .gitignore — NEVER commit it.
+#
+# Better yet, use an environment variable instead:
+#   export TF_VAR_github_token="ghp_yourtoken"
+################################################################################
+
+github_owner = "amar-python"
+
+# Paste your GitHub Personal Access Token here (required scopes: repo)
+# Generate one at: https://github.com/settings/tokens
+github_token = "ghp_REPLACE_WITH_YOUR_ACTUAL_TOKEN"

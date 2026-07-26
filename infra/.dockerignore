@@ -1,0 +1,17 @@
+**/.git
+**/.github
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/evals/reports
+**/.markdownlint*
+**/.env
+**/.env.*
+**/*.md
+**/*.log
+**/Dockerfile
+**/entrypoint.sh
+**/.dockerignore
+**/terraform.tfstate*
+**/.terraform

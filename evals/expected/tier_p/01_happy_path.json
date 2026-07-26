@@ -1,0 +1,13 @@
+{
+  "scenario": "01_happy_path",
+  "description": "Three valid rows, no headers issues.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 3"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "name"], ["1", "Alice"], ["2", "Bob"], ["3", "Carol"]],
+    "skip_csv_row_count": 0,
+    "skip_reasons_contain": []
+  }
+}

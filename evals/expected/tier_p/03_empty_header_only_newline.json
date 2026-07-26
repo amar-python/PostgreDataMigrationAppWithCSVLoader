@@ -1,0 +1,13 @@
+{
+  "scenario": "03_empty_header_only_newline",
+  "description": "File contains only a newline — header row exists but has zero columns.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 1,
+    "stdout_contains": [],
+    "stderr_contains": ["Header row is empty"],
+    "valid_csv_rows": null,
+    "skip_csv_row_count": null,
+    "skip_reasons_contain": []
+  }
+}

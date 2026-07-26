@@ -1,0 +1,13 @@
+{
+  "scenario": "21_utf8_arabic",
+  "description": "Arabic / RTL Unicode text must survive the round-trip.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 2"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "name"], ["1", "محمد"], ["2", "فاطمة"]],
+    "skip_csv_row_count": 0,
+    "skip_reasons_contain": []
+  }
+}

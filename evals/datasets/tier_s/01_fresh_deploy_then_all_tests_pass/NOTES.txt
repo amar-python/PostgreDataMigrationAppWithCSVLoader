@@ -1,0 +1,6 @@
+Tier S scenario: fresh_deploy_then_all_tests_pass
+
+This scenario verifies that a current Dev deployment can run the bundled SQL
+suite and report all 85 assertions passing.
+
+If PostgreSQL or psql is unavailable, the scenario skips cleanly.

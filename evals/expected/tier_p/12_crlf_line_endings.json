@@ -1,0 +1,13 @@
+{
+  "scenario": "12_crlf_line_endings",
+  "description": "CRLF (Windows) line endings — csv module handles them natively.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 2"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "name"], ["1", "Alice"], ["2", "Bob"]],
+    "skip_csv_row_count": 0,
+    "skip_reasons_contain": []
+  }
+}

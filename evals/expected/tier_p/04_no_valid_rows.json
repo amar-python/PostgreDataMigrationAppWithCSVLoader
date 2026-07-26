@@ -1,0 +1,13 @@
+{
+  "scenario": "04_no_valid_rows",
+  "description": "Header present, but every data row is empty/blank.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 1,
+    "stdout_contains": [],
+    "stderr_contains": ["No valid rows found"],
+    "valid_csv_rows": [["id", "name"]],
+    "skip_csv_row_count": 2,
+    "skip_reasons_contain": ["empty row"]
+  }
+}

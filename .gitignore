@@ -1,0 +1,54 @@
+﻿# Secrets & environment-specific config (NEVER commit)
+config.local.env
+*.local.env
+build/environments/env_dev.sql
+build/environments/env_test.sql
+build/environments/env_staging.sql
+build/environments/env_prod.sql
+!build/environments/*.example.sql
+*.tfvars
+!*.tfvars.example
+*.pgpass
+.env
+.env.*
+!.env.example
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+
+# Eval / test runtime output
+evals/reports/
+**/csv/logs/
+
+# Tool / session / editor folders
+.abacusai/
+.claude/
+.cursor/
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Exploratory / not-yet-wired folders
+_norton_/
+extend to Oracle dbs/
+
+# Runtime test artifacts (regenerate with scripts/test_report.py)
+tests/snapshots/
+tfplan
+*.tfplan
+terraform-provider-*.log
+
+*.zip

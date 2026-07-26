@@ -1,0 +1,155 @@
+name: Quality Gate
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  # Fast, deterministic checks — no database, no network beyond pip.
+  free-tier:
+    name: free-tier (unit, lint, health, evals-p)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install dev dependencies
+        # api/requirements.txt is needed too: tests/test_api.py imports FastAPI
+        # at module level, so without it pytest collection fails.
+        run: pip install -r requirements-dev.txt -r api/requirements.txt
+
+      - name: Unit / regression / security / snapshot tests — final result
+        run: |
+          python3 scripts/test_report.py \
+            --markers "unit or regression or security or snapshot" --strict
+
+      - name: Lint (flake8 + bandit)
+        run: make lint
+
+      - name: Component health check
+        run: make health
+
+      - name: Evals — Tier P (offline validator scenarios)
+        run: python3 evals/runner.py --tiers p --verbose
+
+      # Reports (incl. the VCRM gap report) are written to evals/reports/ and
+      # would otherwise vanish with the runner — keep them for auditability.
+      - name: Upload eval reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports-free-tier
+          path: evals/reports/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # Full integration surface: Tier I deploys env_dev.sql twice (idempotency),
+  # Tier S runs the 142-assertion SQL suite, then the PG-gated pytest tiers run.
+  integration-postgres:
+    name: integration (postgres service)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install dev dependencies
+        # api/requirements.txt is needed too: tests/test_api.py imports FastAPI
+        # at module level, so without it pytest collection fails.
+        run: pip install -r requirements-dev.txt -r api/requirements.txt
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Write CI database config
+        run: |
+          cat > build/config.local.env <<'EOF'
+          DB_ENGINE="postgresql"
+          PG_HOST="localhost"
+          PG_PORT="5432"
+          PG_SUPERUSER="postgres"
+          PG_SUPERUSER_PASSWORD="postgres"
+          PG_DB_DEV="te_mgmt_dev"
+          PG_SCHEMA_DEV="te_dev"
+          PG_DB_TEST="te_mgmt_test"
+          PG_SCHEMA_TEST="te_test"
+          PG_DB_STAGING="te_mgmt_staging"
+          PG_SCHEMA_STAGING="te_staging"
+          PG_DB_PROD="te_mgmt_prod"
+          PG_SCHEMA_PROD="te_prod"
+          EOF
+
+      # env_*.sql scripts do not create their databases — deploy_all.sh does that
+      # before invoking them (see build/te_core_schema.sql:41). Mirror it here.
+      # Only *.example.sql are committed (concrete env_<env>.sql are gitignored),
+      # so materialise them before anything that deploys an environment.
+      - name: Materialise environment launchers from templates
+        run: |
+          for env in dev test staging prod; do
+            cp "build/environments/env_${env}.example.sql" \
+               "build/environments/env_${env}.sql"
+          done
+          ls -1 build/environments/
+
+      - name: Create environment databases
+        run: |
+          for db in te_mgmt_dev te_mgmt_test te_mgmt_staging te_mgmt_prod; do
+            if [ -z "$(psql -d postgres -tA -c "SELECT 1 FROM pg_database WHERE datname = '$db'")" ]; then
+              psql -v ON_ERROR_STOP=1 -d postgres -c \
+                "CREATE DATABASE \"$db\" WITH OWNER = postgres ENCODING = 'UTF8' TEMPLATE = template0 CONNECTION LIMIT = -1"
+            fi
+          done
+
+      - name: Evals — Tiers P, I, S
+        run: python3 evals/runner.py --tiers p,i,s --verbose
+
+      - name: Deploy all environments (for cross-env parity)
+        run: |
+          for env in dev test staging prod; do
+            bash build/deploy_all.sh "$env"
+          done
+
+      # Prints a final block accounting for every test: PASSED / FAILED /
+      # ERROR / SKIPPED (with reasons) / NOT RUN (deselected). --strict fails
+      # the build on any skip.
+      - name: Full test suite — final result with skip accounting
+        run: python3 scripts/test_report.py --strict
+
+      - name: Upload eval reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports-integration
+          path: evals/reports/
+          if-no-files-found: ignore
+          retention-days: 30

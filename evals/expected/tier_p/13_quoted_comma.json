@@ -1,0 +1,13 @@
+{
+  "scenario": "13_quoted_comma",
+  "description": "Quoted field containing a comma must be preserved as a single field.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 2"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "note"], ["1", "Smith, John"], ["2", "Doe, Jane"]],
+    "skip_csv_row_count": 0,
+    "skip_reasons_contain": []
+  }
+}

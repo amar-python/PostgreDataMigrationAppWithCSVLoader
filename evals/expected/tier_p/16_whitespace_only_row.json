@@ -1,0 +1,13 @@
+{
+  "scenario": "16_whitespace_only_row",
+  "description": "A row with only whitespace in every cell should be treated as empty (cell.strip()).",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 2", "Skipped rows : 1"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "name"], ["1", "Alice"], ["2", "Bob"]],
+    "skip_csv_row_count": 1,
+    "skip_reasons_contain": ["empty row"]
+  }
+}

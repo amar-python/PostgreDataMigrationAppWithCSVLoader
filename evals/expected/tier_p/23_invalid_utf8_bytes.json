@@ -1,0 +1,12 @@
+{
+  "scenario": "23_invalid_utf8_bytes",
+  "description": "Invalid UTF-8 bytes in a data row are skipped with a reason; valid rows still pass. Only an undecodable header aborts the file.",
+  "runner_action": "write_invalid_utf8_file",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 1", "Skipped rows : 1"],
+    "stderr_contains": [],
+    "skip_csv_row_count": 1,
+    "skip_reasons_contain": ["invalid UTF-8 bytes"]
+  }
+}

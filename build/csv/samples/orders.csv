@@ -1,0 +1,9 @@
+order_id,customer_id,product,qty,price
+1001,1,"Wireless headphones, black",1,89.95
+1002,2,USB-C charger,2,19.50
+1003,1,"Notebook, A5 hardcover",3,12.00
+1004,3,Mechanical keyboard,1,145.00
+1005,4,"Mouse pad, large",1,24.99
+1006,2,Webcam 1080p,1,59.00
+1007,5,"Cable organiser, 6-pack",1,15.75
+1008,3,Desk lamp,1,42.50

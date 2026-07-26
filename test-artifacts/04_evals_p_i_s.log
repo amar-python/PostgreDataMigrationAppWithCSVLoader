@@ -1,0 +1,40 @@
+
+=== Tier P - 23 scenarios ===
+PASS tier_p/01_happy_path
+PASS tier_p/02_empty_file
+PASS tier_p/03_empty_header_only_newline
+PASS tier_p/04_no_valid_rows
+PASS tier_p/05_mixed_valid_skipped
+PASS tier_p/06_duplicate_headers
+PASS tier_p/07_column_mismatch_short
+PASS tier_p/08_column_mismatch_long
+PASS tier_p/09_empty_row
+PASS tier_p/10_utf8_bom
+PASS tier_p/11_utf8_emoji
+PASS tier_p/12_crlf_line_endings
+PASS tier_p/13_quoted_comma
+PASS tier_p/14_quoted_newline
+PASS tier_p/15_quoted_quote
+PASS tier_p/16_whitespace_only_row
+PASS tier_p/17_header_whitespace
+PASS tier_p/18_utf8_cjk
+PASS tier_p/19_missing_env_vars
+PASS tier_p/20_missing_csv_file
+PASS tier_p/21_utf8_arabic
+PASS tier_p/22_very_long_field
+PASS tier_p/23_invalid_utf8_bytes
+
+=== Tier I - 1 scenarios ===
+PASS tier_i/01_deploy_dev_twice
+
+=== Tier S - 1 scenarios ===
+PASS tier_s/01_fresh_deploy_then_all_tests_pass
+
+=== Summary ===
+  total:   25
+  passed:  25
+  failed:  0
+  skipped: 0
+
+  report:  /home/claude/audit/evals/reports/20260721T080526Z-5372c3/summary.json
+  gap report: /home/claude/audit/evals/reports/20260721T080526Z-5372c3/VCRM_GAPS_20260721T080526Z-5372c3.md

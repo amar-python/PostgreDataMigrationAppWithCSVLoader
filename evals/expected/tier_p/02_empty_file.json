@@ -1,0 +1,13 @@
+{
+  "scenario": "02_empty_file",
+  "description": "0-byte CSV.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 1,
+    "stdout_contains": [],
+    "stderr_contains": ["CSV file is empty"],
+    "valid_csv_rows": null,
+    "skip_csv_row_count": null,
+    "skip_reasons_contain": []
+  }
+}

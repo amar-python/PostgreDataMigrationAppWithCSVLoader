@@ -1,0 +1,13 @@
+{
+  "scenario": "05_mixed_valid_skipped",
+  "description": "Two valid rows, one empty, one with too many fields.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 2", "Skipped rows : 2"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "name"], ["1", "Alice"], ["3", "Bob"]],
+    "skip_csv_row_count": 2,
+    "skip_reasons_contain": ["empty row", "column mismatch"]
+  }
+}

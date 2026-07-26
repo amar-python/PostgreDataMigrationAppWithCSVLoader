@@ -1,0 +1,39 @@
+.......................................                                  [100%]
+
+==================================================================
+  FINAL RESULT — every test accounted for
+==================================================================
+  marker filter : -m "unit or regression or security or snapshot"
+  collected     : 54
+  executed      : 39
+  PASSED        : 39
+  FAILED        : 0
+  ERROR         : 0
+  SKIPPED       : 0
+  NOT RUN       : 15  (deselected by the marker filter)
+
+  SKIPPED (0)
+    none — no test was skipped
+
+  NOT RUN (15)
+    - tests/test_csv_loader_arbitrary_shapes.py::CsvLoaderArbitraryShapes::test_shape_medium
+    - tests/test_csv_loader_arbitrary_shapes.py::CsvLoaderArbitraryShapes::test_shape_skinny
+    - tests/test_csv_loader_arbitrary_shapes.py::CsvLoaderArbitraryShapes::test_shape_tiny
+    - tests/test_e2e_pipeline.py::E2EPipelineValidateOnly::test_all_invalid_rows_exit_nonzero
+    - tests/test_e2e_pipeline.py::E2EPipelineValidateOnly::test_happy_path_two_valid_rows
+    - tests/test_e2e_pipeline.py::E2EPipelineValidateOnly::test_mixed_rows_splits_correctly
+    - tests/test_e2e_pipeline.py::E2EPipelineValidateOnly::test_output_directory_is_created_automatically
+    - tests/test_e2e_pipeline.py::E2EPipelineWithDatabase::test_tier_i_idempotency
+    - tests/test_e2e_pipeline.py::E2EPipelineWithDatabase::test_tier_p_scenarios_all_pass
+    - tests/test_parity.py::TestAllEnvironmentsHaveRequiredTables::test_dev_has_required_tables
+    - tests/test_parity.py::TestAllEnvironmentsHaveRequiredTables::test_prod_has_required_tables
+    - tests/test_parity.py::TestAllEnvironmentsHaveRequiredTables::test_staging_has_required_tables
+    - tests/test_parity.py::TestAllEnvironmentsHaveRequiredTables::test_test_has_required_tables
+    - tests/test_parity.py::TestDevSeedCounts::test_dev_seed_row_counts
+    - tests/test_parity.py::TestIdempotentDeployParity::test_dev_row_counts_stable_after_second_deploy
+    Deselected by the marker filter, not skipped. They must run in another job.
+
+==================================================================
+  RESULT: PASS
+==================================================================
+

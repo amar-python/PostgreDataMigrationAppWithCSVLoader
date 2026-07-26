@@ -1,0 +1,195 @@
+────────────────────────────────────────────────────────────
+  Defence T&E Database Deployment
+  Host     : localhost:5432
+  User     : postgres
+  Targets  : dev
+────────────────────────────────────────────────────────────
+
+[⚠] Deploying environment: DEV  (database: te_mgmt_dev)
+[✓] Database te_mgmt_dev already exists — skipping CREATE.
+
+============================================================
+ DEFENCE T&E DATABASE SETUP
+   Environment  : DEV
+   Database     : te_mgmt_dev
+   Schema       : te_dev
+   App User     : te_dev_user
+   Seed Data    : true
+============================================================
+
+ set_config | set_config  | set_config  |      set_config      | set_config 
+------------+-------------+-------------+----------------------+------------
+ DEV        | te_mgmt_dev | te_dev_user | __INJECT_AT_DEPLOY__ | 10
+(1 row)
+
+>> [1/6] Creating database: te_mgmt_dev
+>> [2/6] Creating application user: te_dev_user
+psql:/home/claude/audit/build/te_core_schema.sql:67: NOTICE:  [DEV] Role "te_dev_user" already exists — password and conn_limit refreshed.
+DO
+GRANT
+You are now connected to database "te_mgmt_dev" as user "postgres".
+ set_config | set_config | set_config  |  set_config   | set_config |  set_config   |   set_config   | set_config  |  set_config  | set_config |  set_config  | set_config  |  set_config  |   set_config   |     set_config     
+------------+------------+-------------+---------------+------------+---------------+----------------+-------------+--------------+------------+--------------+-------------+--------------+----------------+--------------------
+ DEV        | te_dev     | te_dev_user | organisations | personnel  | test_programs | temp_documents | test_phases | requirements | test_cases | vcrm_entries | test_events | test_results | defect_reports | evidence_artifacts
+(1 row)
+
+>> [3/6] Setting up schema: te_dev
+psql:/home/claude/audit/build/te_core_schema.sql:98: NOTICE:  extension "uuid-ossp" already exists, skipping
+CREATE EXTENSION
+psql:/home/claude/audit/build/te_core_schema.sql:99: NOTICE:  extension "pg_trgm" already exists, skipping
+CREATE EXTENSION
+psql:/home/claude/audit/build/te_core_schema.sql:100: NOTICE:  extension "dblink" already exists, skipping
+CREATE EXTENSION
+psql:/home/claude/audit/build/te_core_schema.sql:102: NOTICE:  schema "te_dev" already exists, skipping
+CREATE SCHEMA
+  set_config   
+---------------
+ te_dev,public
+(1 row)
+
+GRANT
+GRANT
+ALTER DEFAULT PRIVILEGES
+>> [4/6] Creating tables
+psql:/home/claude/audit/build/te_core_schema.sql:128: NOTICE:  relation "organisations" already exists, skipping
+CREATE TABLE
+COMMENT
+psql:/home/claude/audit/build/te_core_schema.sql:153: NOTICE:  relation "personnel" already exists, skipping
+CREATE TABLE
+COMMENT
+COMMENT
+psql:/home/claude/audit/build/te_core_schema.sql:177: NOTICE:  relation "test_programs" already exists, skipping
+CREATE TABLE
+COMMENT
+psql:/home/claude/audit/build/te_core_schema.sql:199: NOTICE:  relation "temp_documents" already exists, skipping
+CREATE TABLE
+COMMENT
+psql:/home/claude/audit/build/te_core_schema.sql:223: NOTICE:  relation "test_phases" already exists, skipping
+CREATE TABLE
+COMMENT
+psql:/home/claude/audit/build/te_core_schema.sql:247: NOTICE:  relation "requirements" already exists, skipping
+CREATE TABLE
+COMMENT
+COMMENT
+psql:/home/claude/audit/build/te_core_schema.sql:273: NOTICE:  relation "test_cases" already exists, skipping
+CREATE TABLE
+COMMENT
+psql:/home/claude/audit/build/te_core_schema.sql:293: NOTICE:  relation "vcrm_entries" already exists, skipping
+CREATE TABLE
+COMMENT
+psql:/home/claude/audit/build/te_core_schema.sql:319: NOTICE:  relation "test_events" already exists, skipping
+CREATE TABLE
+COMMENT
+psql:/home/claude/audit/build/te_core_schema.sql:340: NOTICE:  relation "test_results" already exists, skipping
+CREATE TABLE
+COMMENT
+psql:/home/claude/audit/build/te_core_schema.sql:366: NOTICE:  relation "defect_reports" already exists, skipping
+CREATE TABLE
+COMMENT
+psql:/home/claude/audit/build/te_core_schema.sql:386: NOTICE:  relation "evidence_artifacts" already exists, skipping
+CREATE TABLE
+COMMENT
+>> [4/6] Creating indexes
+psql:/home/claude/audit/build/te_core_schema.sql:398: NOTICE:  relation "idx_personnel_org" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:400: NOTICE:  relation "idx_personnel_email_trgm" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:403: NOTICE:  relation "idx_programs_org" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:405: NOTICE:  relation "idx_programs_status" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:407: NOTICE:  relation "idx_programs_code_trgm" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:410: NOTICE:  relation "idx_phases_program" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:412: NOTICE:  relation "idx_phases_status" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:415: NOTICE:  relation "idx_requirements_program" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:417: NOTICE:  relation "idx_requirements_type" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:420: NOTICE:  relation "idx_testcases_phase" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:422: NOTICE:  relation "idx_testcases_status" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:425: NOTICE:  relation "idx_vcrm_req" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:427: NOTICE:  relation "idx_vcrm_tc" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:430: NOTICE:  relation "idx_events_phase" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:432: NOTICE:  relation "idx_events_status" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:435: NOTICE:  relation "idx_results_event" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:437: NOTICE:  relation "idx_results_verdict" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:440: NOTICE:  relation "idx_defects_program" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:442: NOTICE:  relation "idx_defects_severity" already exists, skipping
+CREATE INDEX
+psql:/home/claude/audit/build/te_core_schema.sql:444: NOTICE:  relation "idx_defects_status" already exists, skipping
+CREATE INDEX
+CREATE FUNCTION
+DO
+>> [5/6] Seeding realistic T&E data
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+>> [6/6] Verification — row counts for DEV
+     table_name     | rows | status  
+--------------------+------+---------
+ defect_reports     |    3 | ✓ OK
+ evidence_artifacts |    0 | ⚠ EMPTY
+ organisations      |    5 | ✓ OK
+ personnel          |    6 | ✓ OK
+ requirements       |    8 | ✓ OK
+ temp_documents     |    3 | ✓ OK
+ test_cases         |    8 | ✓ OK
+ test_events        |    3 | ✓ OK
+ test_phases        |    3 | ✓ OK
+ test_programs      |    2 | ✓ OK
+ test_results       |    7 | ✓ OK
+ vcrm_entries       |    8 | ✓ OK
+(12 rows)
+
+ req_identifier |                     title                     |  req_type   | test_cases_mapped | coverage_status 
+----------------+-----------------------------------------------+-------------+-------------------+-----------------
+ IFV-PERF-001   | Cross-Country Speed — 40 km/h Minimum         | performance |                 0 | ✗ NO COVERAGE
+ IFV-SAF-001    | Crew Survivability — STANAG 4569 Level 4      | safety      |                 0 | ✗ NO COVERAGE
+ SYS-COMP-001   | ISM Control Compliance — Section 3 (Gateways) | compliance  |                 1 | ✓ COVERED
+ SYS-FUNC-001   | Audit Log — All User Actions Captured         | functional  |                 1 | ✓ COVERED
+ SYS-FUNC-002   | Role-Based Access Control (RBAC) Enforcement  | functional  |                 1 | ✓ COVERED
+ SYS-PERF-001   | System Availability — 99.5% Uptime SLA        | performance |                 1 | ✓ COVERED
+ SYS-SEC-001    | Multi-Factor Authentication Enforcement       | security    |                 2 | ✓ COVERED
+ SYS-SEC-002    | Data-at-Rest Encryption (AES-256)             | security    |                 2 | ✓ COVERED
+(8 rows)
+
+ severity |   status    | count 
+----------+-------------+-------
+ major    | in_progress |     1
+ major    | open        |     1
+ minor    | open        |     1
+(3 rows)
+
+
+============================================================
+ Setup complete for environment: DEV
+ Database : te_mgmt_dev | Schema: te_dev
+============================================================
+
+[✓] Environment DEV deployed successfully.
+────────────────────────────────────────────────────────────
+
+  Deployment Summary
+────────────────────────────────────────────────────────────
+[✓] Succeeded : dev
+

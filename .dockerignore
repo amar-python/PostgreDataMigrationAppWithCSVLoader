@@ -1,0 +1,12 @@
+.git
+.gitignore
+**/.terraform
+**/.terraform.lock.hcl
+**/*.tfstate
+**/*.tfstate.*
+.terraform.tfstate.lock.info
+.remember
+.abacusai
+_norton_
+.github
+*.md

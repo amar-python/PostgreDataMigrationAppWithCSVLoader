@@ -1,0 +1,13 @@
+{
+  "scenario": "08_column_mismatch_long",
+  "description": "Header has 2 columns; one data row has 5.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 2", "Skipped rows : 1"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "name"], ["1", "Alice"], ["3", "Carol"]],
+    "skip_csv_row_count": 1,
+    "skip_reasons_contain": ["column mismatch — expected 2, got 5"]
+  }
+}

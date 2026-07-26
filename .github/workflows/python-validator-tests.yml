@@ -1,0 +1,42 @@
+name: Python Validator Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  python-validator-tests:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install dev dependencies
+        # api/requirements.txt is needed too: tests/test_api.py imports FastAPI
+        # at module level, so without it pytest collection fails.
+        run: pip install -r requirements-dev.txt -r api/requirements.txt
+
+      # Database-backed tests (integration/e2e/parity) run in the Linux
+      # integration-postgres job of quality-gate.yml, which has a PostgreSQL
+      # service. Service containers are Linux-only, so this Windows job covers
+      # the database-free markers. Missing prerequisites FAIL rather than skip,
+      # so this job must not collect the database-backed markers.
+      - name: Run validator tests (PowerShell)
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File "tests/run_python_tests.ps1"
+
+      # Final block accounts for every test, including skips (with reasons)
+      # and tests deselected by the marker filter. --strict fails on any skip.
+      - name: Final result with skip accounting
+        shell: pwsh
+        run: |
+          python scripts/test_report.py `
+            --markers "unit or regression or security or snapshot" --strict

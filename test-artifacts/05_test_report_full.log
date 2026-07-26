@@ -1,0 +1,23 @@
+......................................................                   [100%]
+
+==================================================================
+  FINAL RESULT — every test accounted for
+==================================================================
+  collected     : 54
+  executed      : 54
+  PASSED        : 54
+  FAILED        : 0
+  ERROR         : 0
+  SKIPPED       : 0
+  NOT RUN       : 0  (deselected by the marker filter)
+
+  SKIPPED (0)
+    none — no test was skipped
+
+  NOT RUN (0)
+    none — every collected test was executed
+
+==================================================================
+  RESULT: PASS
+==================================================================
+

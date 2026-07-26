@@ -1,0 +1,13 @@
+{
+  "scenario": "20_missing_csv_file",
+  "description": "Runner sets CSV_FILE to a path that does not exist.",
+  "runner_action": "point_at_missing_file",
+  "expected": {
+    "exit_code": 1,
+    "stdout_contains": [],
+    "stderr_contains": ["CSV file not found"],
+    "valid_csv_rows": null,
+    "skip_csv_row_count": null,
+    "skip_reasons_contain": []
+  }
+}

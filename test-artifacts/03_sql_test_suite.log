@@ -1,0 +1,254 @@
+────────────────────────────────────────────────────────────
+  Defence T&E — Test Suite Runner
+  Host     : localhost:5432
+  User     : postgres
+  Targets  : dev
+────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────
+[i] Running tests against: DEV  (db=te_mgmt_dev  schema=te_dev)
+────────────────────────────────────────────────────────────
+
+============================================================
+ DEFENCE T&E TEST SUITE
+ Schema: te_dev
+============================================================
+
+  set_config   | set_config | set_config  | set_config 
+---------------+------------+-------------+------------
+ te_dev,public | te_dev     | te_dev_user | 10
+(1 row)
+
+>> Loading test framework...
+CREATE TABLE
+COMMENT
+TRUNCATE TABLE
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+   [framework] Test framework loaded.
+
+>> Running test suites...
+
+   [suite 01] organisations & personnel
+DO
+   [suite 02] programs, TEMP documents & test phases
+DO
+   [suite 03] requirements & VCRM coverage
+DO
+   [suite 04] test cases, events, results & defect reports
+DO
+   [suite 05] schema structure, indexes, triggers & business rules
+DO
+
+============================================================
+ REPORT 1: Suite Summary
+============================================================
+     suite      | total | passed | failed | skipped | pass_rate | suite_status 
+----------------+-------+--------+--------+---------+-----------+--------------
+ business_rules |    10 |     10 |      0 |       0 | 100.0%    | ✓ ALL PASS
+ defect_reports |    12 |     12 |      0 |       0 | 100.0%    | ✓ ALL PASS
+ organisations  |    11 |     11 |      0 |       0 | 100.0%    | ✓ ALL PASS
+ personnel      |    12 |     12 |      0 |       0 | 100.0%    | ✓ ALL PASS
+ programs       |    13 |     13 |      0 |       0 | 100.0%    | ✓ ALL PASS
+ requirements   |    13 |     13 |      0 |       0 | 100.0%    | ✓ ALL PASS
+ schema         |    23 |     23 |      0 |       0 | 100.0%    | ✓ ALL PASS
+ temp_documents |     6 |      6 |      0 |       0 | 100.0%    | ✓ ALL PASS
+ test_cases     |     9 |      9 |      0 |       0 | 100.0%    | ✓ ALL PASS
+ test_events    |     8 |      8 |      0 |       0 | 100.0%    | ✓ ALL PASS
+ test_phases    |     6 |      6 |      0 |       0 | 100.0%    | ✓ ALL PASS
+ test_results   |     9 |      9 |      0 |       0 | 100.0%    | ✓ ALL PASS
+ vcrm           |    10 |     10 |      0 |       0 | 100.0%    | ✓ ALL PASS
+(13 rows)
+
+
+============================================================
+ REPORT 2: Failures Only (empty = all green)
+============================================================
+ suite | test_name | expected | actual | message 
+-------+-----------+----------+--------+---------
+(0 rows)
+
+
+============================================================
+ REPORT 3: Full Detail (all assertions)
+============================================================
+     suite      |                                 test_name                                  | status |     expected     |                                                 actual                                                 | message 
+----------------+----------------------------------------------------------------------------+--------+------------------+--------------------------------------------------------------------------------------------------------+---------
+ business_rules | S01 — All results: test case phase matches event phase                     | PASS   | 0                | 0                                                                                                      | 
+ business_rules | S02 — All fail verdicts have a matching DR raised                          | PASS   | 0                | 0                                                                                                      | 
+ business_rules | S03 — No results recorded against planned (future) events                  | PASS   | 0                | 0                                                                                                      | 
+ business_rules | S04 — All open DRs belong to an active program                             | PASS   | 0                | 0                                                                                                      | 
+ business_rules | S05 — No baseline-cleared personnel authoring cases in PROTECTED+ programs | PASS   | 0                | 0                                                                                                      | 
+ business_rules | S06 — All VCRM entries: requirement and test case share same program       | PASS   | 0                | 0                                                                                                      | 
+ business_rules | S07 — No test events have planned_end before planned_start                 | PASS   | 0                | 0                                                                                                      | 
+ business_rules | S08 — evidence_artifacts table is empty (no files uploaded yet)            | PASS   | 0                | 0                                                                                                      | 
+ business_rules | S09 — App role exists in pg_roles                                          | PASS   | 1                | 1                                                                                                      | 
+ business_rules | S10 — App role conn limit matches env config                               | PASS   | 10               | 10                                                                                                     | 
+ defect_reports | O01 — Row count = 3                                                        | PASS   | 3                | 3                                                                                                      | 
+ defect_reports | O02 — DR-CYB-0001 (Audit Log gap) exists                                   | PASS   | 1                | 1                                                                                                      | 
+ defect_reports | O03 — DR-CYB-0002 (TLS 1.2 gap) exists                                     | PASS   | 1                | 1                                                                                                      | 
+ defect_reports | O04 — DR-CYB-0003 (Session Timeout) exists                                 | PASS   | 1                | 1                                                                                                      | 
+ defect_reports | O05 — No critical-severity defects in seed data                            | PASS   | 0                | 0                                                                                                      | 
+ defect_reports | O06 — 2 major-severity defects seeded                                      | PASS   | 2                | 2                                                                                                      | 
+ defect_reports | O07 — No closed/resolved defects (all active)                              | PASS   | 0                | 0                                                                                                      | 
+ defect_reports | O08 — All defects reference a valid program (FK check)                     | PASS   | 0                | 0                                                                                                      | 
+ defect_reports | O09 — All defect raisers exist in personnel (FK check)                     | PASS   | 0                | 0                                                                                                      | 
+ defect_reports | O10 — All defect_ref values are unique (UNIQUE enforced)                   | PASS   | 0                | 0                                                                                                      | 
+ defect_reports | O11 — All resolved defects have a resolved_at timestamp                    | PASS   | 0                | 0                                                                                                      | 
+ defect_reports | O12 — All severity values are valid                                        | PASS   | 0                | 0                                                                                                      | 
+ organisations  | A01 — Row count = 5                                                        | PASS   | 5                | 5                                                                                                      | 
+ organisations  | A02 — CASG record exists                                                   | PASS   | 1                | 1                                                                                                      | 
+ organisations  | A03 — All organisations active by default                                  | PASS   | 0                | 0                                                                                                      | 
+ organisations  | A04 — All country codes are 2 chars (ISO 3166-1)                           | PASS   | 0                | 0                                                                                                      | 
+ organisations  | A05 — All org_type values are valid                                        | PASS   | 0                | 0                                                                                                      | 
+ organisations  | A06 — No duplicate organisation names                                      | PASS   | 0                | 0                                                                                                      | 
+ organisations  | A07 — At least one test_unit organisation exists                           | PASS   | TRUE             | TRUE                                                                                                   | 
+ organisations  | A08 — created_at populated on all organisations                            | PASS   | 0                | 0                                                                                                      | 
+ organisations  | B01 — Invalid org_type rejected by CHECK constraint                        | PASS   | exception raised | new row for relation "organisations" violates check constraint "organisations_org_type_check"          | 
+ organisations  | B02 — NULL name rejected by NOT NULL constraint                            | PASS   | exception raised | null value in column "name" of relation "organisations" violates not-null constraint                   | 
+ organisations  | B03 — Duplicate org name rejected by UNIQUE constraint                     | PASS   | exception raised | duplicate key value violates unique constraint "organisations_name_key"                                | 
+ personnel      | C01 — Row count = 6                                                        | PASS   | 6                | 6                                                                                                      | 
+ personnel      | C02 — No orphaned personnel (all linked to valid org)                      | PASS   | 0                | 0                                                                                                      | 
+ personnel      | C03 — At least one NV2-cleared person exists                               | PASS   | TRUE             | TRUE                                                                                                   | 
+ personnel      | C04 — All clearance values are within allowed set                          | PASS   | 0                | 0                                                                                                      | 
+ personnel      | C05 — All emails contain @                                                 | PASS   | 0                | 0                                                                                                      | 
+ personnel      | C06 — No duplicate email addresses                                         | PASS   | 0                | 0                                                                                                      | 
+ personnel      | C07 — All password hashes are bcrypt format ($2b$/$2a$)                    | PASS   | 0                | 0                                                                                                      | 
+ personnel      | C08 — All te_role values are valid                                         | PASS   | 0                | 0                                                                                                      | 
+ personnel      | C09 — All personnel active by default                                      | PASS   | 0                | 0                                                                                                      | 
+ personnel      | D01 — Invalid clearance level rejected by CHECK                            | PASS   | exception raised | new row for relation "personnel" violates check constraint "personnel_clearance_check"                 | 
+ personnel      | D02 — Invalid te_role rejected by CHECK                                    | PASS   | exception raised | new row for relation "personnel" violates check constraint "personnel_te_role_check"                   | 
+ personnel      | D03 — Invalid org_id rejected by FK constraint                             | PASS   | exception raised | insert or update on table "personnel" violates foreign key constraint "personnel_org_id_fkey"          | 
+ programs       | E01 — Row count = 2                                                        | PASS   | 2                | 2                                                                                                      | 
+ programs       | E02 — CYB9131 program present                                              | PASS   | 1                | 1                                                                                                      | 
+ programs       | E03 — LAND400-P3 program present                                           | PASS   | 1                | 1                                                                                                      | 
+ programs       | E04 — All programs have a director assigned                                | PASS   | 0                | 0                                                                                                      | 
+ programs       | E05 — All program directors exist in personnel table                       | PASS   | 0                | 0                                                                                                      | 
+ programs       | E06 — All program status values are valid                                  | PASS   | 0                | 0                                                                                                      | 
+ programs       | E07 — All classification markings are valid                                | PASS   | 0                | 0                                                                                                      | 
+ programs       | E08 — No programs have end_date before start_date                          | PASS   | 0                | 0                                                                                                      | 
+ programs       | E09 — All program_codes are unique                                         | PASS   | 0                | 0                                                                                                      | 
+ programs       | E10 — CYB9131 classification is PROTECTED                                  | PASS   | PROTECTED        | PROTECTED                                                                                              | 
+ programs       | F01 — Inverted date range rejected by CHECK constraint                     | PASS   | exception raised | new row for relation "test_programs" violates check constraint "chk_program_dates"                     | 
+ programs       | F02 — Invalid classification rejected by CHECK constraint                  | PASS   | exception raised | new row for relation "test_programs" violates check constraint "test_programs_classification_check"    | 
+ programs       | F03 — Duplicate program_code rejected by UNIQUE constraint                 | PASS   | exception raised | duplicate key value violates unique constraint "test_programs_program_code_key"                        | 
+ requirements   | I01 — Row count = 8                                                        | PASS   | 8                | 8                                                                                                      | 
+ requirements   | I02 — CYB9131 has 6 requirements                                           | PASS   | 6                | 6                                                                                                      | 
+ requirements   | I03 — LAND400-P3 has 2 requirements                                        | PASS   | 2                | 2                                                                                                      | 
+ requirements   | I04 — All requirements have a non-empty req_identifier                     | PASS   | 0                | 0                                                                                                      | 
+ requirements   | I05 — All mandatory requirements have a verification method                | PASS   | 0                | 0                                                                                                      | 
+ requirements   | I06 — All verification_method values are valid                             | PASS   | 0                | 0                                                                                                      | 
+ requirements   | I07 — All req_type values are valid                                        | PASS   | 0                | 0                                                                                                      | 
+ requirements   | I08 — All priority values are between 1 and 3                              | PASS   | 0                | 0                                                                                                      | 
+ requirements   | I09 — No duplicate req_identifier per program (UNIQUE enforced)            | PASS   | 0                | 0                                                                                                      | 
+ requirements   | I10 — All requirements reference a valid program (FK check)                | PASS   | 0                | 0                                                                                                      | 
+ requirements   | I11 — SYS-SEC-001 (MFA Enforcement) requirement exists                     | PASS   | 1                | 1                                                                                                      | 
+ requirements   | J01 — Priority outside 1–3 rejected by CHECK constraint                    | PASS   | exception raised | new row for relation "requirements" violates check constraint "requirements_priority_check"            | 
+ requirements   | J02 — Invalid verification_method rejected by CHECK                        | PASS   | exception raised | new row for relation "requirements" violates check constraint "requirements_verification_method_check" | 
+ schema         | P01 — Table organisations exists                                           | PASS   | 1                | 1                                                                                                      | 
+ schema         | P02 — Table personnel exists                                               | PASS   | 1                | 1                                                                                                      | 
+ schema         | P03 — Table test_programs exists                                           | PASS   | 1                | 1                                                                                                      | 
+ schema         | P04 — Table temp_documents exists                                          | PASS   | 1                | 1                                                                                                      | 
+ schema         | P05 — Table test_phases exists                                             | PASS   | 1                | 1                                                                                                      | 
+ schema         | P06 — Table requirements exists                                            | PASS   | 1                | 1                                                                                                      | 
+ schema         | P07 — Table test_cases exists                                              | PASS   | 1                | 1                                                                                                      | 
+ schema         | P08 — Table vcrm_entries exists                                            | PASS   | 1                | 1                                                                                                      | 
+ schema         | P09 — Table test_events exists                                             | PASS   | 1                | 1                                                                                                      | 
+ schema         | P10 — Table test_results exists                                            | PASS   | 1                | 1                                                                                                      | 
+ schema         | P11 — Table defect_reports exists                                          | PASS   | 1                | 1                                                                                                      | 
+ schema         | P12 — Table evidence_artifacts exists                                      | PASS   | 1                | 1                                                                                                      | 
+ schema         | Q01 — Index idx_personnel_org exists                                       | PASS   | 1                | 1                                                                                                      | 
+ schema         | Q02 — Index idx_programs_status exists                                     | PASS   | 1                | 1                                                                                                      | 
+ schema         | Q03 — Index idx_testcases_phase exists                                     | PASS   | 1                | 1                                                                                                      | 
+ schema         | Q04 — Index idx_results_verdict exists                                     | PASS   | 1                | 1                                                                                                      | 
+ schema         | Q05 — Index idx_defects_severity exists                                    | PASS   | 1                | 1                                                                                                      | 
+ schema         | Q06 — Index idx_vcrm_req exists                                            | PASS   | 1                | 1                                                                                                      | 
+ schema         | Q07 — GIN trigram index idx_personnel_email_trgm exists                    | PASS   | 1                | 1                                                                                                      | 
+ schema         | R01 — Trigger fires: organisations.updated_at advances on UPDATE           | PASS   | TRUE             | TRUE                                                                                                   | 
+ schema         | R02 — Trigger fires: test_programs.updated_at advances on UPDATE           | PASS   | TRUE             | TRUE                                                                                                   | 
+ schema         | R03 — Trigger trg_updated_at registered on personnel                       | PASS   | 1                | 1                                                                                                      | 
+ schema         | R04 — Trigger trg_updated_at registered on defect_reports                  | PASS   | 1                | 1                                                                                                      | 
+ temp_documents | G01 — Row count = 3                                                        | PASS   | 3                | 3                                                                                                      | 
+ temp_documents | G02 — CYB9131 has an approved TEMP                                         | PASS   | 1                | 1                                                                                                      | 
+ temp_documents | G03 — All TEMP authors exist in personnel                                  | PASS   | 0                | 0                                                                                                      | 
+ temp_documents | G04 — No duplicate version per program (UNIQUE enforced)                   | PASS   | 0                | 0                                                                                                      | 
+ temp_documents | G05 — All TEMP status values are valid                                     | PASS   | 0                | 0                                                                                                      | 
+ temp_documents | G06 — At least one TEMP in active draft/review state                       | PASS   | TRUE             | TRUE                                                                                                   | 
+ test_cases     | L01 — Row count = 8                                                        | PASS   | 8                | 8                                                                                                      | 
+ test_cases     | L02 — All 8 test cases belong to CYB9131 OT&E phase                        | PASS   | 8                | 8                                                                                                      | 
+ test_cases     | L03 — All seeded test cases are in approved status                         | PASS   | 0                | 0                                                                                                      | 
+ test_cases     | L04 — TC-OTE-001 (MFA valid TOTP) exists                                   | PASS   | 1                | 1                                                                                                      | 
+ test_cases     | L05 — All test cases have a non-empty title                                | PASS   | 0                | 0                                                                                                      | 
+ test_cases     | L06 — All tc_type values are valid                                         | PASS   | 0                | 0                                                                                                      | 
+ test_cases     | L07 — All test case authors exist in personnel (FK check)                  | PASS   | 0                | 0                                                                                                      | 
+ test_cases     | L08 — No duplicate tc_identifier per phase (UNIQUE enforced)               | PASS   | 0                | 0                                                                                                      | 
+ test_cases     | L09 — All test cases have a defined objective                              | PASS   | 0                | 0                                                                                                      | 
+ test_events    | M01 — Row count = 3                                                        | PASS   | 3                | 3                                                                                                      | 
+ test_events    | M02 — All event_codes are unique (UNIQUE enforced)                         | PASS   | 0                | 0                                                                                                      | 
+ test_events    | M03 — CYB9131-OTE-EV01 status is completed                                 | PASS   | completed        | completed                                                                                              | 
+ test_events    | M04 — CYB9131-OTE-EV02 status is in_progress                               | PASS   | in_progress      | in_progress                                                                                            | 
+ test_events    | M05 — CYB9131-OTE-EV03 status is planned                                   | PASS   | planned          | planned                                                                                                | 
+ test_events    | M06 — All completed events have actual_start and actual_end                | PASS   | 0                | 0                                                                                                      | 
+ test_events    | M07 — Planned events have no actual_end date                               | PASS   | 0                | 0                                                                                                      | 
+ test_events    | M08 — All test events reference a valid phase (FK check)                   | PASS   | 0                | 0                                                                                                      | 
+ test_phases    | H01 — Row count = 3                                                        | PASS   | 3                | 3                                                                                                      | 
+ test_phases    | H02 — CYB9131 has DT&E and OT&E phases                                     | PASS   | 2                | 2                                                                                                      | 
+ test_phases    | H03 — All completed phases have an actual_start date                       | PASS   | 0                | 0                                                                                                      | 
+ test_phases    | H04 — All phase_type values are valid                                      | PASS   | 0                | 0                                                                                                      | 
+ test_phases    | H05 — No duplicate phase_code per program (UNIQUE enforced)                | PASS   | 0                | 0                                                                                                      | 
+ test_phases    | H06 — Planned phases have no actual_start date                             | PASS   | 0                | 0                                                                                                      | 
+ test_results   | N01 — Row count = 7                                                        | PASS   | 7                | 7                                                                                                      | 
+ test_results   | N02 — EV01 has 6 test results                                              | PASS   | 6                | 6                                                                                                      | 
+ test_results   | N03 — EV02 has 1 test result so far                                        | PASS   | 1                | 1                                                                                                      | 
+ test_results   | N04 — EV01 has 4 pass verdicts                                             | PASS   | 4                | 4                                                                                                      | 
+ test_results   | N05 — EV01 has 2 fail verdicts                                             | PASS   | 2                | 2                                                                                                      | 
+ test_results   | N06 — EV02 result verdict is inconclusive                                  | PASS   | 1                | 1                                                                                                      | 
+ test_results   | N07 — All verdict values are valid                                         | PASS   | 0                | 0                                                                                                      | 
+ test_results   | N08 — All test results reference a valid test case (FK check)              | PASS   | 0                | 0                                                                                                      | 
+ test_results   | N09 — All results have actual_result or notes recorded                     | PASS   | 0                | 0                                                                                                      | 
+ vcrm           | K01 — VCRM row count = 8                                                   | PASS   | 8                | 8                                                                                                      | 
+ vcrm           | K02 — All CYB9131 requirements have VCRM coverage                          | PASS   | 0                | 0                                                                                                      | 
+ vcrm           | K03 — SYS-SEC-001 (MFA) mapped to exactly 2 test cases                     | PASS   | 2                | 2                                                                                                      | 
+ vcrm           | K04 — SYS-PERF-001 (Availability) mapped to exactly 1 test case            | PASS   | 1                | 1                                                                                                      | 
+ vcrm           | K05 — No duplicate req↔tc entries in VCRM (UNIQUE enforced)                | PASS   | 0                | 0                                                                                                      | 
+ vcrm           | K06 — All VCRM entries reference a valid requirement (FK check)            | PASS   | 0                | 0                                                                                                      | 
+ vcrm           | K07 — All VCRM entries reference a valid test case (FK check)              | PASS   | 0                | 0                                                                                                      | 
+ vcrm           | K08 — All coverage_type values are valid                                   | PASS   | 0                | 0                                                                                                      | 
+ vcrm           | K09 — LAND400-P3 requirements correctly have no VCRM entries yet           | PASS   | 0                | 0                                                                                                      | 
+ vcrm           | K10 — CYB9131 VCRM coverage is 100%                                        | PASS   | 100.0            | 100.0                                                                                                  | 
+(142 rows)
+
+
+============================================================
+ REPORT 4: Overall Result
+============================================================
+ total_tests | passed | failed | skipped | pass_rate |      overall       
+-------------+--------+--------+---------+-----------+--------------------
+         142 |    142 |      0 |       0 | 100.0%    | ✓ ALL TESTS PASSED
+(1 row)
+
+
+============================================================
+ Test run complete.
+============================================================
+
+[✓] Test run for DEV completed.
+
+────────────────────────────────────────────────────────────
+  OVERALL TEST SUMMARY
+────────────────────────────────────────────────────────────
+  Environment   Result
+  -----------   ------
+  DEV           142 | 142 | 0 | 0 | 100.0% | ✓ ALL TESTS PASSED
+────────────────────────────────────────────────────────────
+[✓] All test runs completed successfully.

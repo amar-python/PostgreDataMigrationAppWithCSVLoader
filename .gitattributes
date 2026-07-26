@@ -1,0 +1,57 @@
+# Pin line endings per file type.
+# This file overrides core.autocrlf — without it, Git for Windows would
+# silently translate LF → CRLF on checkout of shell scripts, which break
+# inside Linux containers with: syntax error near unexpected token $'do\r''
+#
+# After adding this file you may need to re-normalise existing files:
+#   git add --renormalize .
+#   git status   # shows files Git will re-write
+#   git commit -m "Normalise line endings via .gitattributes"
+
+# Default: text files use LF (preferred for cross-platform)
+* text=auto eol=lf
+
+# Shell scripts — MUST be LF (Linux/Mac/Cloud Shell execute these)
+*.sh text eol=lf
+*.bash text eol=lf
+
+# PowerShell — keep CRLF (Windows-native)
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+
+# Windows batch — CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Web / config — LF
+*.py text eol=lf
+*.sql text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.tf text eol=lf
+*.hcl text eol=lf
+*.tfvars text eol=lf
+*.dockerignore text eol=lf
+*.gitignore text eol=lf
+Dockerfile text eol=lf
+Makefile text eol=lf
+
+# Binary files — never translate
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.skill binary
+*.tar binary
+*.gz binary
+*.xlsx binary
+*.docx binary
+*.pptx binary

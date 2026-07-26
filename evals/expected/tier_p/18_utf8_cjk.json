@@ -1,0 +1,13 @@
+{
+  "scenario": "18_utf8_cjk",
+  "description": "CJK characters must survive the round-trip.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 2"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "name"], ["1", "田中花子"], ["2", "佐藤一郎"]],
+    "skip_csv_row_count": 0,
+    "skip_reasons_contain": []
+  }
+}

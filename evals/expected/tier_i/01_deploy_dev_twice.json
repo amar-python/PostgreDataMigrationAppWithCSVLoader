@@ -1,0 +1,10 @@
+{
+  "scenario": "01_deploy_dev_twice",
+  "description": "Deploy env_dev.sql twice; row counts must not change between runs.",
+  "expected": {
+    "first_run_exit_code": 0,
+    "second_run_exit_code": 0,
+    "row_counts_unchanged": true,
+    "min_seeded_tables_present": 11
+  }
+}

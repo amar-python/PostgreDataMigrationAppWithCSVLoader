@@ -1,0 +1,13 @@
+{
+  "scenario": "17_header_whitespace",
+  "description": "Leading/trailing whitespace in header cells should be stripped.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Valid rows   : 2"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "name"], ["1", "Alice"], ["2", "Bob"]],
+    "skip_csv_row_count": 0,
+    "skip_reasons_contain": []
+  }
+}

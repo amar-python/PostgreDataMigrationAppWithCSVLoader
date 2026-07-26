@@ -1,0 +1,10 @@
+
+=== flake8 (style + logic) ===
+✓ flake8 clean
+
+=== bandit (security) ===
+[tester]	WARNING	nosec encountered (B608), but no failed test on file ./evals/runner.py:309
+✓ bandit clean
+
+All lint checks passed.
+

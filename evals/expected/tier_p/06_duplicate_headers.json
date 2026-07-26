@@ -1,0 +1,13 @@
+{
+  "scenario": "06_duplicate_headers",
+  "description": "Duplicate column name in header — validator warns but still processes row.",
+  "runner_action": "default",
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": ["Duplicate column names", "id"],
+    "stderr_contains": [],
+    "valid_csv_rows": [["id", "id", "name"], ["1", "2", "Alice"]],
+    "skip_csv_row_count": 0,
+    "skip_reasons_contain": []
+  }
+}

@@ -1,0 +1,33 @@
+# =============================================================================
+# .gitignore — Terraform GitHub Management
+# =============================================================================
+
+# ── Terraform state — contains sensitive data, never commit ──────────────────
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# ── Secret values — never commit real credentials ────────────────────────────
+terraform.tfvars
+*.auto.tfvars
+*.tfvars
+!terraform.tfvars.example     # keep the example file — it has no real secrets
+
+# ── Terraform plan output files ──────────────────────────────────────────────
+*.tfplan
+tfplan
+
+# ── Crash logs ───────────────────────────────────────────────────────────────
+crash.log
+crash.*.log
+
+# ── OS files ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editor ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
