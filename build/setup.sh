@@ -162,16 +162,16 @@ configure_postgresql() {
       for env in "${ENVS[@]}"; do
          header "  PostgreSQL — ${env^^} Environment"
          E="${env^^}"
-         ask "PG_DB_${E}"           "Database name"    "$(eval echo "\$PG_DB_${E}")"
-         ask "PG_SCHEMA_${E}"       "Schema name"      "$(eval echo "\$PG_SCHEMA_${E}")"
-         ask "PG_APP_USER_${E}"     "App username"     "$(eval echo "\$PG_APP_USER_${E}")"
-         ask "PG_APP_PASSWORD_${E}" "App password"     "$(eval echo "\$PG_APP_PASSWORD_${E}")" secret
-         ask "PG_CONN_LIMIT_${E}"   "Connection limit" "$(eval echo "\$PG_CONN_LIMIT_${E}")"
+         _v="PG_DB_${E}";           ask "PG_DB_${E}"           "Database name"    "${!_v:-}"
+         _v="PG_SCHEMA_${E}";       ask "PG_SCHEMA_${E}"       "Schema name"      "${!_v:-}"
+         _v="PG_APP_USER_${E}";     ask "PG_APP_USER_${E}"     "App username"     "${!_v:-}"
+         _v="PG_APP_PASSWORD_${E}"; ask "PG_APP_PASSWORD_${E}" "App password"     "${!_v:-}" secret
+         _v="PG_CONN_LIMIT_${E}";   ask "PG_CONN_LIMIT_${E}"   "Connection limit" "${!_v:-}"
          if [[ "$env" == "prod" || "$env" == "staging" ]]; then
-            eval "export SEED_${E}=false"
+            export "SEED_${E}=false"
             info "Seed data disabled for ${E}"
          else
-            ask_bool "SEED_${E}" "Load seed data?" "$(eval echo "\$SEED_${E}")"
+            _v="SEED_${E}"; ask_bool "SEED_${E}" "Load seed data?" "${!_v:-}"
          fi
       done
    else
@@ -196,10 +196,10 @@ configure_mariadb() {
          ask "MYSQL_APP_USER_${E}"     "App username"  "$(eval echo "\$MYSQL_APP_USER_${E}")"
          ask "MYSQL_APP_PASSWORD_${E}" "App password"  "$(eval echo "\$MYSQL_APP_PASSWORD_${E}")" secret
          if [[ "$env" == "prod" || "$env" == "staging" ]]; then
-            eval "export SEED_${E}=false"
+            export "SEED_${E}=false"
             info "Seed data disabled for ${E}"
          else
-            ask_bool "SEED_${E}" "Load seed data?" "$(eval echo "\$SEED_${E}")"
+            _v="SEED_${E}"; ask_bool "SEED_${E}" "Load seed data?" "${!_v:-}"
          fi
       done
    else
@@ -216,10 +216,10 @@ configure_sqlite() {
          E="${env^^}"
          ask "SQLITE_DB_${E}" "Database filename" "$(eval echo "\$SQLITE_DB_${E}")"
          if [[ "$env" == "prod" || "$env" == "staging" ]]; then
-            eval "export SEED_${E}=false"
+            export "SEED_${E}=false"
             info "Seed data disabled for ${E}"
          else
-            ask_bool "SEED_${E}" "Load seed data?" "$(eval echo "\$SEED_${E}")"
+            _v="SEED_${E}"; ask_bool "SEED_${E}" "Load seed data?" "${!_v:-}"
          fi
       done
    else
@@ -280,9 +280,9 @@ configure_teradata() {
          ask "TD_APP_USER_${E}"     "App username"  "$(eval echo "\$TD_APP_USER_${E}")"
          ask "TD_APP_PASSWORD_${E}" "App password"  "$(eval echo "\$TD_APP_PASSWORD_${E}")" secret
          if [[ "$env" == "prod" || "$env" == "staging" ]]; then
-            eval "export SEED_${E}=false"
+            export "SEED_${E}=false"
          else
-            ask_bool "SEED_${E}" "Load seed data?" "$(eval echo "\$SEED_${E}")"
+            _v="SEED_${E}"; ask_bool "SEED_${E}" "Load seed data?" "${!_v:-}"
          fi
       done
    else
@@ -485,12 +485,12 @@ printf "  %-10s  %-30s  %s\n" "───" "────────────�
 for env in dev test staging prod; do
    E="${env^^}"
    case "$DB_ENGINE" in
-      postgresql) db_val="$(eval echo "\$PG_DB_${E}")" ;;
-      mariadb)    db_val="$(eval echo "\$MYSQL_DB_${E}")" ;;
-      sqlite)     db_val="${SQLITE_DIR}/$(eval echo "\$SQLITE_DB_${E}")" ;;
-      influxdb)   db_val="$(eval echo "\$INFLUX_BUCKET_${E}")" ;;
-      redis)      db_val="db$(eval echo "\$REDIS_DB_${E}") / $(eval echo "\$REDIS_KEY_PREFIX_${E}")" ;;
-      teradata)   db_val="$(eval echo "\$TD_DB_${E}")" ;;
+      postgresql) _v="PG_DB_${E}";            db_val="${!_v:-}" ;;
+      mariadb)    _v="MYSQL_DB_${E}";         db_val="${!_v:-}" ;;
+      sqlite)     _v="SQLITE_DB_${E}";        db_val="${SQLITE_DIR}/${!_v:-}" ;;
+      influxdb)   _v="INFLUX_BUCKET_${E}";    db_val="${!_v:-}" ;;
+      redis)      _v="REDIS_DB_${E}"; _v2="REDIS_KEY_PREFIX_${E}"; db_val="db${!_v:-} / ${!_v2:-}" ;;
+      teradata)   _v="TD_DB_${E}";            db_val="${!_v:-}" ;;
    esac
    seed_val="$(eval echo "\$SEED_${E}")"
    printf "  %-10s  %-30s  %s\n" "$env" "$db_val" "$seed_val"

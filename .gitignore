@@ -46,9 +46,14 @@ _norton_/
 extend to Oracle dbs/
 
 # Runtime test artifacts (regenerate with scripts/test_report.py)
-tests/snapshots/
+# tests/snapshots/ holds committed fixtures AND runtime-generated output.
+# Ignore only the generated file; fixtures must be committed.
+tests/snapshots/all_valid_expected_valid.csv
 tfplan
 *.tfplan
 terraform-provider-*.log
 
 *.zip
+
+# Serena tool workspace
+.serena/

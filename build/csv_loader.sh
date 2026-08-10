@@ -89,6 +89,11 @@ done
 [[ -z "$CSV_FILE" ]] && { error "No CSV file specified."; usage; }
 [[ ! -f "$CSV_FILE" ]] && { error "File not found: $CSV_FILE"; exit 1; }
 
+case "$TARGET_ENV" in
+   dev|test|staging|prod) ;;
+   *) error "Invalid environment: '${TARGET_ENV}'. Must be one of: dev, test, staging, prod."; exit 1 ;;
+esac
+
 # ── Load configuration ────────────────────────────────────────────────────────
 if [[ -f "$CONFIG_LOCAL" ]]; then
    source "$CONFIG_LOCAL"

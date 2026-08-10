@@ -145,13 +145,19 @@ if [[ "$DB_ENGINE" != "postgresql" ]]; then
    exit 2
 fi
 
+# ── Validate environment ────────────────────────────────────────────────────
+case "$TARGET_ENV" in
+   dev|test|staging|prod) ;;
+   *) error "Invalid environment: '${TARGET_ENV}'. Must be one of: dev, test, staging, prod."; exit 1 ;;
+esac
+
 # ── Resolve PostgreSQL connection details ────────────────────────────────────
 E="${TARGET_ENV^^}"
 PG_HOST="${PGHOST:-${PG_HOST:-localhost}}"
 PG_PORT="${PGPORT:-${PG_PORT:-5432}}"
 PG_USER="${PGUSER:-${PG_SUPERUSER:-postgres}}"
-DB_NAME="$(eval echo "\$PG_DB_${E}")"
-SCHEMA="$(eval echo "\$PG_SCHEMA_${E}")"
+_db_var="PG_DB_${E}";     DB_NAME="${!_db_var:-}"
+_sc_var="PG_SCHEMA_${E}"; SCHEMA="${!_sc_var:-}"
 
 if [[ -z "$DB_NAME" || -z "$SCHEMA" ]]; then
    error "Could not resolve database / schema for env '${TARGET_ENV}'."

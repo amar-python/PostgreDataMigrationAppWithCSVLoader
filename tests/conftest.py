@@ -6,7 +6,19 @@ where one test sets CSV_FILE / PGPASSWORD / PATH and leaks that value into
 an unrelated downstream test.
 """
 import os
+import sys
+from pathlib import Path
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# Tests exercise the API directly via TestClient without an API key; bypass the
+# require_api_key dependency for the whole test session rather than threading
+# a header through every test's client.get/post/delete call.
+from api.auth import require_api_key  # noqa: E402
+from api.main import app  # noqa: E402
+
+app.dependency_overrides[require_api_key] = lambda: None
 
 # Env vars tests are allowed to mutate; restored after every test.
 _RESTORE_KEYS = (
