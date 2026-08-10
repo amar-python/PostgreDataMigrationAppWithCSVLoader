@@ -8,10 +8,13 @@ For the full architecture and rationale see `ARCHITECTURE.md`, `VCRM.md`, and
 
 ## Prerequisites
 
-- PostgreSQL 14 or later running locally (default port 5432)
+- PostgreSQL 14 or later running locally
+  - Default port `5432` for the CLI / SQL suite examples below
+  - Port `5433` for the Web UI + API (local PG 18 dev setup — see `README.md`)
 - Python 3.10 or later on PATH
 - `psql` client on PATH (Windows: under `C:\Program Files\PostgreSQL\<ver>\bin`)
 - Git Bash, WSL, or PowerShell (examples below use PowerShell)
+- Node.js 20+ on PATH (only if you plan to run the Web UI in `frontend/`)
 
 ## Install
 
@@ -242,6 +245,21 @@ ss -ltnp | grep 5432
 brew services list
 lsof -iTCP:5432 -sTCP:LISTEN
 ```
+
+## Optional — start the Web UI
+
+The `api/` (FastAPI) and `frontend/` (React 19 + TanStack Start) folders add a browser UI for CSV upload/preview backed by a REST API. Two-terminal setup:
+
+```powershell
+# Terminal 1 — API on http://localhost:8000
+pip install -r api\requirements.txt      # first run only
+.\scripts\start-api.ps1                  # prompts for PGPASSWORD if unset
+
+# Terminal 2 — UI on http://localhost:5173
+.\scripts\start-frontend.ps1             # runs npm install on first launch
+```
+
+Open <http://localhost:5173/> in a browser. The UI talks to the API via `VITE_API_URL` (default `http://localhost:8000`) — see `frontend/.env`. See the **Web UI + REST API** section of `README.md` for the full endpoint list and env vars.
 
 ## Next steps
 

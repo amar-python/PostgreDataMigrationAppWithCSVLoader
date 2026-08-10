@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
-import re
-
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from psycopg2 import sql
 from pydantic import BaseModel, Field
 
+from api.auth import require_api_key
 from api.config import settings
 from api.db import Conn
 from api.services.csv_parse import build_preview
 from api.services.dynamic_loader import upload_dynamic
 from api.services.te_loader import match_te_table, upload_te
 
-router = APIRouter(prefix="/api/csv", tags=["csv"])
+# BUG-035: auth is applied here (per-router) instead of at app level in
+# api/main.py, so /api/health can stay unauthenticated for external monitoring.
+router = APIRouter(
+    prefix="/api/csv",
+    tags=["csv"],
+    dependencies=[Depends(require_api_key)],
+)
 
 
 class PreviewRequest(BaseModel):
@@ -35,10 +40,23 @@ class UploadRequest(BaseModel):
 def preview(req: PreviewRequest) -> dict:
     if len(req.content) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
-    result = build_preview(req.content)
+    # BUG-025: mirror the try/except contract that /upload has. An unexpected
+    # parse error (regex catastrophic backtracking, memory error, etc.) must
+    # not surface as a raw 500 to the frontend.
+    try:
+        result = build_preview(req.content)
+    except Exception as exc:  # noqa: BLE001 — surface any parser failure as structured JSON
+        return {
+            "status": "invalid_structure",
+            "reason": "parse_failed",
+            "message": f"The CSV couldn't be parsed: {str(exc)[:200]}",
+        }
     if result.get("status") == "ok":
         # Suggest a T&E table if the columns fit one (drives the mode picker in the UI)
-        result["teTableMatch"] = match_te_table(result["columns"])
+        try:
+            result["teTableMatch"] = match_te_table(result["columns"])
+        except Exception:  # noqa: BLE001 — T&E match is best-effort, never block the preview
+            result["teTableMatch"] = None
     return result
 
 
@@ -79,12 +97,9 @@ def list_files() -> list[dict]:
             ]
 
 
-CSV_TABLE_NAME_RE = re.compile(r"^csv_[0-9a-f]{16}$")
-
-
 @router.get("/tables/{table_name}/rows")
 def table_rows(table_name: str, limit: int = 50) -> dict:
-    if not CSV_TABLE_NAME_RE.fullmatch(table_name):
+    if not table_name.startswith("csv_") or len(table_name) > 64:
         raise HTTPException(422, "Invalid table name")
     limit = max(1, min(limit, 200))
     with Conn() as conn:
@@ -116,29 +131,54 @@ def table_rows(table_name: str, limit: int = 50) -> dict:
 
 @router.delete("/files/{file_id}")
 def delete_file(file_id: int) -> dict:
+    if not settings.allow_destructive:
+        raise HTTPException(
+            403,
+            "Destructive operations are disabled. "
+            "Set API_ALLOW_DESTRUCTIVE=true to enable DELETE.",
+        )
     with Conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 sql.SQL(
-                    "SELECT table_name, mode FROM {}.csv_files WHERE id = %s"
+                    "SELECT table_name, mode, file_name FROM {}.csv_files WHERE id = %s"
                 ).format(sql.Identifier(settings.UPLOADS_SCHEMA)),
                 (file_id,),
             )
             row = cur.fetchone()
             if row is None:
                 raise HTTPException(404, "File not found")
-            table_name, mode = row
+            table_name, mode, file_name = row
             if mode == "dynamic":
+                # Schema whitelist: only drop tables that live in the uploads schema.
                 cur.execute(
-                    sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
-                        sql.Identifier(settings.UPLOADS_SCHEMA), sql.Identifier(table_name)
-                    )
+                    """
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = %s AND table_name = %s
+                    """,
+                    (settings.UPLOADS_SCHEMA, table_name),
                 )
+                if cur.fetchone() is not None:
+                    cur.execute(
+                        sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
+                            sql.Identifier(settings.UPLOADS_SCHEMA),
+                            sql.Identifier(table_name),
+                        )
+                    )
             cur.execute(
                 sql.SQL("DELETE FROM {}.csv_files WHERE id = %s").format(
                     sql.Identifier(settings.UPLOADS_SCHEMA)
                 ),
                 (file_id,),
             )
-        conn.commit()
-    return {"status": "ok", "deleted": file_id}
+            # Persist audit record so deletions are traceable after the table is gone.
+            cur.execute(
+                sql.SQL(
+                    "INSERT INTO {}.audit_log "
+                    "(action, file_id, file_name, table_name, mode) "
+                    "VALUES ('delete', %s, %s, %s, %s)"
+                ).format(sql.Identifier(settings.UPLOADS_SCHEMA)),
+                (file_id, file_name, table_name, mode),
+            )
+            conn.commit()
+            return {"status": "ok", "deleted": file_id}

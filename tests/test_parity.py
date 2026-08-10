@@ -187,6 +187,40 @@ class TestAllEnvironmentsHaveRequiredTables(unittest.TestCase):
         self._check_env("prod")
 
 
+class TestNoSeedInStagingAndProd(unittest.TestCase):
+    """Staging and prod must NOT contain seed data (include_seed_data=false).
+
+    Catches the case where env_staging.sql or env_prod.sql accidentally has
+    include_seed_data flipped to true, which would silently push test data
+    into production. See GitHub Issue #23.
+    """
+    setUpClass = classmethod(lambda cls: _require_pg())
+
+    _SEEDED_TABLES = list(_DEV_MIN_COUNTS.keys())
+
+    def _assert_env_has_no_seed_data(self, env_name: str) -> None:
+        db, schema = _ENV_CONFIG[env_name]
+        if not _db_deployed(db):
+            self.fail(f"Database {db!r} not deployed. {_HELP}")
+
+        non_empty = []
+        for table in self._SEEDED_TABLES:
+            count = _count_rows(db, schema, table)
+            if count is not None and count > 0:
+                non_empty.append(f"  {schema}.{table}: {count} rows (expected 0)")
+        if non_empty:
+            self.fail(
+                f"Environment {env_name!r} has seed data but should not "
+                f"(include_seed_data=false):\n" + "\n".join(non_empty)
+            )
+
+    def test_staging_has_no_seed_data(self):
+        self._assert_env_has_no_seed_data("staging")
+
+    def test_prod_has_no_seed_data(self):
+        self._assert_env_has_no_seed_data("prod")
+
+
 class TestIdempotentDeployParity(unittest.TestCase):
     setUpClass = classmethod(lambda cls: _require_pg())
     """Row counts in dev must be identical after re-running the deploy script.

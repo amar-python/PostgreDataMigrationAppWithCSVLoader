@@ -1,12 +1,18 @@
 """T&E schema endpoints — table list with row counts for the fixed 12 tables."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from psycopg2 import sql
 
+from api.auth import require_api_key
 from api.config import TE_TABLES, settings
 from api.db import Conn
 
-router = APIRouter(prefix="/api/te", tags=["te"])
+# BUG-035: auth is applied per-router (see csv_routes.py for the rationale).
+router = APIRouter(
+    prefix="/api/te",
+    tags=["te"],
+    dependencies=[Depends(require_api_key)],
+)
 
 
 @router.get("/tables")

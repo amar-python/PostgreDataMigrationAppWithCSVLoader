@@ -13,6 +13,50 @@ from typing import Optional
 
 ALLOWED_TYPES = ["int8", "numeric", "date", "timestamptz", "boolean", "text"]
 
+# BUG-028: map information_schema.columns.data_type values to one of the six
+# ALLOWED_TYPES so te_loader can validate T&E-table cells client-side before
+# INSERT. Returns None for column types we can't safely validate here (uuid,
+# array, jsonb, user-defined enums, etc.) — the caller falls through to
+# per-row server-side casting with a SAVEPOINT for those.
+_PG_TYPE_MAP = {
+    "bigint": "int8",
+    "integer": "int8",
+    "smallint": "int8",
+    "int8": "int8",
+    "int4": "int8",
+    "int2": "int8",
+    "numeric": "numeric",
+    "decimal": "numeric",
+    "real": "numeric",
+    "double precision": "numeric",
+    "float4": "numeric",
+    "float8": "numeric",
+    "date": "date",
+    "timestamp with time zone": "timestamptz",
+    "timestamp without time zone": "timestamptz",
+    "timestamptz": "timestamptz",
+    "timestamp": "timestamptz",
+    "boolean": "boolean",
+    "bool": "boolean",
+    "text": "text",
+    "character varying": "text",
+    "varchar": "text",
+    "character": "text",
+    "char": "text",
+    "citext": "text",
+}
+
+
+def pg_type_to_allowed_type(pg_data_type: str) -> Optional[str]:
+    """Return the ALLOWED_TYPES entry that mirrors a Postgres data_type, or None.
+
+    None signals "we can't validate this client-side" — the caller should let
+    Postgres do the cast and report per-row failures via SAVEPOINT/ROLLBACK.
+    Examples that return None: ``uuid``, ``ARRAY``, ``USER-DEFINED`` (enums),
+    ``jsonb``, ``bytea``.
+    """
+    return _PG_TYPE_MAP.get((pg_data_type or "").strip().lower())
+
 _RESERVED = {"_id", "_row_hash", "_created_at"}
 
 _INT_RE = re.compile(r"^-?\d+$")
@@ -76,8 +120,17 @@ def parse_csv(text: str) -> list[list[str]]:
 
 
 def sanitize_columns(headers: list[str]) -> list[str]:
-    """Lowercase, strip invalid chars, dedupe — mirrors sanitizeColumns() in TS."""
-    seen: dict[str, int] = {}
+    """Lowercase, strip invalid chars, dedupe — mirrors sanitizeColumns() in TS.
+
+    BUG-036: keep bumping the numeric suffix until the candidate name isn't
+    already assigned. The previous implementation incremented a per-stem
+    counter without checking against previously assigned names, so unique
+    input like ``["foo", "foo", "foo_2"]`` collapsed to
+    ``["foo", "foo_2", "foo_2"]`` and the caller rejected the whole upload
+    as "Duplicate sanitized column".
+    """
+    assigned: set[str] = set()
+    counter: dict[str, int] = {}
     out: list[str] = []
     for idx, h in enumerate(headers):
         base = (h or f"column_{idx + 1}").lower().strip()
@@ -90,9 +143,11 @@ def sanitize_columns(headers: list[str]) -> list[str]:
             base = f"{base}_col"
         if len(base) > 55:
             base = base[:55]
-        count = seen.get(base, 0)
-        name = base if count == 0 else f"{base}_{count + 1}"
-        seen[base] = count + 1
+        name = base
+        while name in assigned:
+            counter[base] = counter.get(base, 0) + 1
+            name = f"{base}_{counter[base] + 1}"
+        assigned.add(name)
         out.append(name)
     return out
 

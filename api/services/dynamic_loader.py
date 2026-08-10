@@ -10,9 +10,10 @@ All identifiers go through psycopg2.sql.Identifier — no string interpolation.
 from __future__ import annotations
 
 import hashlib
-import json
+import logging
 import time
 
+import psycopg2.errors
 from psycopg2 import sql
 from psycopg2.extras import execute_values
 
@@ -25,6 +26,8 @@ from api.services.csv_parse import (
     sanitize_columns,
     valid_identifier,
 )
+
+logger = logging.getLogger(__name__)
 
 _TYPE_SQL = {
     "int8": "int8",
@@ -79,9 +82,52 @@ def upload_dynamic(
             "logs": logs,
         }
 
-    schema = settings.UPLOADS_SCHEMA
-    replaced_file_name: str | None = None
+    # BUG-027 guard: reject files above the configured row cap before doing any
+    # per-row work. `rows` includes the header, so subtract one.
+    data_row_count = len(rows) - 1
+    if data_row_count > settings.MAX_ROWS:
+        _log(
+            logs,
+            "error",
+            f"CSV has {data_row_count} data rows; max allowed is {settings.MAX_ROWS}.",
+            "error",
+        )
+        return {
+            "status": "error",
+            "message": (
+                f"CSV has {data_row_count} data rows, but the API is configured to "
+                f"accept at most {settings.MAX_ROWS}. Split the file or raise API_MAX_ROWS."
+            ),
+            "logs": logs,
+        }
 
+    schema = settings.UPLOADS_SCHEMA
+
+    try:
+        return _do_upload(file_name, types, overwrite, logs, schema, rows, file_hash)
+    except psycopg2.Error as exc:
+        # Mirror te_loader's structured-error contract: an unexpected DB error
+        # (e.g. a column type edge case not caught by cast_value) should not
+        # surface as a raw 500 to the frontend.
+        logger.warning("Dynamic upload failed for %r: %s", file_name, exc)
+        _log(logs, "error", "Database error while loading the CSV", "error")
+        return {
+            "status": "error",
+            "message": "The CSV could not be loaded due to a database error. Check the file's data types and try again.",
+            "logs": logs,
+        }
+
+
+def _do_upload(
+    file_name: str,
+    types: list[str] | None,
+    overwrite: bool,
+    logs: list[dict],
+    schema: str,
+    rows: list[list[str]],
+    file_hash: str,
+) -> dict:
+    replaced_file_name: str | None = None
     with Conn() as conn:
         with conn.cursor() as cur:
             # Duplicate FILENAME check
@@ -168,14 +214,7 @@ def upload_dynamic(
             _log(logs, "validate_columns", f"Validated {len(columns)} columns", count=len(columns))
 
             # Types
-            if types is not None and len(types) != len(columns):
-                _log(logs, "error", "Mismatched column types length", "error")
-                return {
-                    "status": "error",
-                    "message": "The number of provided column types does not match the number of columns.",
-                    "logs": logs,
-                }
-            if types is not None:
+            if types and len(types) == len(columns):
                 col_types = types
             else:
                 col_types = ["text"] * len(columns)
@@ -203,6 +242,7 @@ def upload_dynamic(
             seen: set[str] = set()
             to_insert: list[tuple] = []
             row_errors: list[dict] = []
+            failed_row_count = 0
             duplicates = 0
 
             for r, raw in enumerate(data_rows):
@@ -215,21 +255,23 @@ def upload_dynamic(
                     raw_joined.append(cell)
                     ok, val, reason = cast_value(cell, col_types[c])
                     if not ok:
-                        row_errors.append(
-                            {"rowNumber": row_number, "column": columns[c], "value": cell, "reason": reason}
-                        )
+                        # BUG-027: cap row_errors so a pathological file doesn't
+                        # produce a 200MB JSON response. Summary count still
+                        # reflects the true failure count via failed_row_count.
+                        if len(row_errors) < settings.MAX_ROW_ERRORS_REPORTED:
+                            row_errors.append(
+                                {"rowNumber": row_number, "column": columns[c], "value": cell, "reason": reason}
+                            )
                         failed = True
+                        failed_row_count += 1
                         break
                     values.append(val)
                 if failed:
                     continue
+                # BUG-022: ASCII unit separator (U+001F) between cells prevents
+                # ["ab","cd"] and ["a","bcd"] from hashing to the same value.
                 row_hash = hashlib.sha256(
-                    json.dumps(
-                        raw_joined,
-                        ensure_ascii=False,
-                        separators=(",", ":"),
-                        sort_keys=False,
-                    ).encode("utf-8")
+                    "\x1f".join(raw_joined).encode("utf-8")
                 ).hexdigest()
                 if row_hash in seen:
                     duplicates += 1
@@ -240,11 +282,8 @@ def upload_dynamic(
             _log(
                 logs,
                 "cast_rows",
-                (
-                    f"Cast {len(data_rows)} rows → {len(to_insert)} valid, "
-                    f"{len(row_errors)} errors, {duplicates} in-file duplicates"
-                ),
-                "warn" if row_errors else "info",
+                f"Cast {len(data_rows)} rows → {len(to_insert)} valid, {failed_row_count} errors, {duplicates} in-file duplicates",
+                "warn" if failed_row_count else "info",
                 count=len(to_insert),
             )
 
@@ -263,22 +302,46 @@ def upload_dynamic(
                     "ON CONFLICT (_row_hash) DO NOTHING RETURNING 1"
                 ).format(sql.Identifier(schema), sql.Identifier(table_name), insert_cols)
                 for i in range(0, len(to_insert), 500):
-                    chunk = to_insert[i:i + 500]
+                    chunk = to_insert[i : i + 500]
                     returned = execute_values(
                         cur, stmt.as_string(cur), chunk, fetch=True)
                     inserted += len(returned)
             _log(logs, "insert", f"Inserted {inserted} rows", count=inserted)
 
-            # Register
+            # Register. The duplicate checks above are racy (check-then-act, no
+            # lock held across the row-casting work), so a concurrent identical
+            # upload can slip past them; the registry's UNIQUE indexes are the
+            # real guard, and we turn a violation here into the same
+            # structured "duplicate_file" response the earlier check returns.
             _log(logs, "register", "Registering file in csv_files")
-            cur.execute(
-                sql.SQL(
-                    "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names) "
-                    "VALUES (%s, %s, %s, 'dynamic', %s, %s) RETURNING id"
-                ).format(sql.Identifier(schema)),
-                (file_name, file_hash, table_name, inserted, columns),
-            )
-            file_id = cur.fetchone()[0]
+            try:
+                cur.execute(
+                    sql.SQL(
+                        "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names) "
+                        "VALUES (%s, %s, %s, 'dynamic', %s, %s) RETURNING id"
+                    ).format(sql.Identifier(schema)),
+                    (file_name, file_hash, table_name, inserted, columns),
+                )
+                file_id = cur.fetchone()[0]
+            except psycopg2.errors.UniqueViolation:
+                conn.rollback()
+                cur.execute(
+                    sql.SQL(
+                        "SELECT file_name, table_name, row_count FROM {}.csv_files "
+                        "WHERE file_name = %s OR file_hash = %s"
+                    ).format(sql.Identifier(schema)),
+                    (file_name, file_hash),
+                )
+                existing = cur.fetchone()
+                _log(logs, "duplicate_check", "Lost race to a concurrent identical upload", "warn")
+                return {
+                    "status": "duplicate_file",
+                    "reason": "content" if existing and existing[0] != file_name else "name",
+                    "existingFileName": existing[0] if existing else file_name,
+                    "tableName": existing[1] if existing else table_name,
+                    "existingRowCount": (existing[2] or 0) if existing else 0,
+                    "logs": logs,
+                }
 
         conn.commit()
 
@@ -290,7 +353,7 @@ def upload_dynamic(
         "totalRows": len(data_rows),
         "insertedRows": inserted,
         "duplicateRowsSkipped": duplicates,
-        "failedRows": len(row_errors),
+        "failedRows": failed_row_count,
         "columns": columns,
         "types": col_types,
         "rowErrors": row_errors,

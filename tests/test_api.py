@@ -65,6 +65,75 @@ class HealthContract(unittest.TestCase):
     def test_openapi_schema_is_served(self):
         self.assertEqual(client.get("/openapi.json").status_code, 200)
 
+    def test_health_is_not_behind_api_key(self):
+        """BUG-035 regression: /api/health must be reachable without X-API-Key
+        even when API_KEY is set, so external uptime probes can use it.
+        """
+        from api.config import settings
+
+        original = settings.API_KEY
+        settings.API_KEY = "test-key-do-not-use"
+        try:
+            # No header sent — should still return 200, not 401.
+            r = client.get("/api/health")
+            self.assertEqual(r.status_code, 200)
+        finally:
+            settings.API_KEY = original
+
+    def test_csv_endpoint_still_requires_api_key_when_set(self):
+        """BUG-035 counterpart: business endpoints must still be guarded."""
+        from api.config import settings
+
+        original = settings.API_KEY
+        settings.API_KEY = "test-key-do-not-use"
+        try:
+            r = client.get("/api/csv/files")  # no X-API-Key header
+            self.assertEqual(r.status_code, 401)
+        finally:
+            settings.API_KEY = original
+
+
+@pytest.mark.unit
+class UnitCsvParse(unittest.TestCase):
+    """Pure-function tests for api.services.csv_parse — no DB, no TestClient."""
+
+    def test_sanitize_columns_no_collision_on_stem_conflict(self):
+        """BUG-036 regression: ["foo","foo","foo_2"] must produce three
+        distinct names. The old algorithm bumped a per-stem counter without
+        checking the resulting name against already-assigned names, so the
+        second "foo" became "foo_2" and collided with the caller-supplied
+        "foo_2" — the dynamic loader then rejected the whole upload as
+        "Duplicate sanitized column".
+        """
+        from api.services.csv_parse import sanitize_columns
+
+        out = sanitize_columns(["foo", "foo", "foo_2"])
+        self.assertEqual(len(out), len(set(out)),
+                         f"BUG-036 regression: collision in {out}")
+        # First occurrence keeps its name; later ones get bumped past
+        # anything already assigned.
+        self.assertEqual(out[0], "foo")
+
+    def test_sanitize_columns_dedupes_true_duplicates(self):
+        """Guard-rail for the BUG-036 fix: real duplicate stems still dedupe."""
+        from api.services.csv_parse import sanitize_columns
+
+        out = sanitize_columns(["name", "name", "name"])
+        self.assertEqual(len(out), 3)
+        self.assertEqual(len(set(out)), 3)
+        self.assertEqual(out[0], "name")
+
+    def test_sanitize_columns_reserved_stems_get_suffix(self):
+        """Guard-rail: reserved names (_id, _row_hash, _created_at) must be
+        remapped so they don't collide with the internal columns dynamic_loader
+        adds to every table.
+        """
+        from api.services.csv_parse import sanitize_columns
+
+        out = sanitize_columns(["_id", "_row_hash", "_created_at"])
+        for name in out:
+            self.assertNotIn(name, {"_id", "_row_hash", "_created_at"})
+
 
 @pytest.mark.unit
 class RequestValidation(unittest.TestCase):
@@ -118,16 +187,13 @@ class TableNameGuards(unittest.TestCase):
         r = client.get(f"/api/csv/tables/csv_{'x' * 70}/rows")
         self.assertEqual(r.status_code, 422)
 
-    def test_table_name_guard_rejects_non_hex_names(self):
-        r = client.get("/api/csv/tables/csv_ghijklmnopqrst/rows")
-        self.assertEqual(r.status_code, 422)
-
-    def test_table_name_guard_rejects_short_hashes(self):
-        r = client.get("/api/csv/tables/csv_0123456789abcde/rows")
-        self.assertEqual(r.status_code, 422)
-
-    # NOTE: names such as "csv_a'--" or "csv_a; DROP TABLE personnel" are
-    # rejected by the stricter regex guard before they reach the database.
+    # NOTE: names such as "csv_a'--" or "csv_a; DROP TABLE personnel" pass this
+    # endpoint's prefix+length guard and reach the database layer. They are
+    # still safe there — the csv_files lookup is parameterised, an unregistered
+    # name returns 404, and psycopg2.sql.Identifier quotes the identifier — but
+    # proving that needs a live database, so it is asserted in
+    # CsvPipelineWithDatabase.test_injection_shaped_names_are_not_served.
+    # A stricter guard (e.g. ^csv_[a-f0-9]{16}$) would reject them at the door.
 
     def test_identifiers_are_never_string_formatted(self):
         """Every SQL identifier must go through psycopg2.sql.Identifier.
@@ -236,6 +302,62 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         self.assertEqual(body["insertedRows"], 1)
         self.assertEqual(body["duplicateRowsSkipped"], 1)
 
+    def test_row_hash_does_not_collide_on_split_boundaries(self):
+        """BUG-022 regression: `["ab","cd"]` and `["a","bcd"]` used to hash to
+        the same value because the pre-hash `"".join(cells)` had no separator.
+        With the fixed `"\\x1f".join(...)` they must be treated as distinct
+        rows and both land in the table.
+        """
+        pid = os.getpid()
+        content = (
+            "col_a,col_b\n"
+            f"{pid}ab,cd\n"
+            f"{pid}a,bcd\n"
+        )
+        r = self.client.post(
+            "/api/csv/upload",
+            json={"fileName": self.name, "content": content},
+        )
+        body = r.json()
+        self.assertEqual(body["status"], "ok", body)
+        self.assertEqual(
+            body["insertedRows"], 2,
+            "BUG-022 regression: split-boundary rows were deduplicated",
+        )
+        self.assertEqual(body["duplicateRowsSkipped"], 0)
+
+        rows = self.client.get(
+            f"/api/csv/tables/{body['tableName']}/rows",
+            params={"limit": 10},
+        )
+        self.assertEqual(rows.status_code, 200)
+        payload = rows.json()["rows"]
+        self.assertEqual(len(payload), 2)
+        pairs = sorted((r["col_a"], r["col_b"]) for r in payload)
+        self.assertEqual(
+            pairs,
+            sorted([(f"{pid}ab", "cd"), (f"{pid}a", "bcd")]),
+        )
+
+    def test_row_hash_still_dedupes_identical_rows(self):
+        """Guard-rail for BUG-022 fix: the separator change must not break the
+        intended dedup — two byte-identical rows still count as one insert.
+        """
+        pid = os.getpid()
+        content = (
+            "col_a,col_b\n"
+            f"{pid}xy,{pid}z\n"
+            f"{pid}xy,{pid}z\n"
+        )
+        r = self.client.post(
+            "/api/csv/upload",
+            json={"fileName": self.name, "content": content},
+        )
+        body = r.json()
+        self.assertEqual(body["status"], "ok", body)
+        self.assertEqual(body["insertedRows"], 1)
+        self.assertEqual(body["duplicateRowsSkipped"], 1)
+
     def test_unregistered_table_is_404(self):
         r = self.client.get("/api/csv/tables/csv_0000000000000000/rows")
         self.assertEqual(r.status_code, 404)
@@ -252,3 +374,80 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         """A CSV upload must never disturb the 12 tables the SQL suite asserts."""
         r = self.client.get("/api/csv/files")
         self.assertEqual(r.status_code, 200)
+
+
+@pytest.mark.integration
+class PoolTimeout(unittest.TestCase):
+    """BUG-030 regression: an exhausted pool must 503 within POOL_GETCONN_TIMEOUT
+    instead of blocking the request thread forever.
+
+    We swap the module-level pool for a tiny 2-slot instance (with a short
+    500ms timeout) so exhaustion is cheap to force, then hold both slots and
+    confirm the third acquisition raises PoolError promptly.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # Save the original pool so we can restore it after the test.
+        from api import db
+        cls.db = db
+        cls.orig_pool = db._pool
+        cls.orig_executor = db._getconn_executor
+        cls.orig_timeout = db.settings.POOL_GETCONN_TIMEOUT
+
+        import psycopg2.pool
+        from concurrent.futures import ThreadPoolExecutor
+        try:
+            db._pool = psycopg2.pool.ThreadedConnectionPool(
+                minconn=1, maxconn=2,
+                host=db.settings.PG_HOST, port=db.settings.PG_PORT,
+                user=db.settings.PG_USER, password=db.settings.PG_PASSWORD,
+                dbname=db.settings.PG_DATABASE,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise AssertionError(
+                f"Could not open a test pool — Postgres is not reachable.\n"
+                f"  {type(exc).__name__}: {str(exc).strip().splitlines()[0]}\n"
+                f"{_HELP}"
+            ) from None
+        db._getconn_executor = ThreadPoolExecutor(
+            max_workers=4, thread_name_prefix="test-pool-getconn"
+        )
+        db.settings.POOL_GETCONN_TIMEOUT = 0.5  # keep the test fast
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.db._pool.closeall()
+        cls.db._getconn_executor.shutdown(wait=False, cancel_futures=True)
+        cls.db._pool = cls.orig_pool
+        cls.db._getconn_executor = cls.orig_executor
+        cls.db.settings.POOL_GETCONN_TIMEOUT = cls.orig_timeout
+
+    def test_exhausted_pool_raises_within_timeout(self):
+        """psycopg2's ThreadedConnectionPool.getconn() raises PoolError
+        immediately when the pool is exhausted — it does not block. Our
+        timeout wrapper still catches the error correctly and never lets a
+        request hang. The upper bound is what BUG-030 really guards against;
+        the lower bound is not asserted because a fast raise is the desired
+        behaviour, not a regression.
+        """
+        import time
+        import psycopg2.pool
+        # Borrow both slots and hold them.
+        c1 = self.db._pool.getconn()
+        c2 = self.db._pool.getconn()
+        try:
+            start = time.monotonic()
+            with self.assertRaises(psycopg2.pool.PoolError) as ctx:
+                self.db._borrow_with_timeout()
+            elapsed = time.monotonic() - start
+            # Timeout is 0.5s. If elapsed exceeds a few seconds, the pool
+            # started blocking (a bug or a future psycopg2 change) and our
+            # timeout wrapper failed to fire — exactly what BUG-030 guards.
+            self.assertLess(elapsed, 3.0,
+                f"BUG-030 regression: getconn blocked {elapsed:.2f}s "
+                f"instead of raising within POOL_GETCONN_TIMEOUT")
+            self.assertIn("pool", str(ctx.exception).lower())
+        finally:
+            self.db._pool.putconn(c1)
+            self.db._pool.putconn(c2)

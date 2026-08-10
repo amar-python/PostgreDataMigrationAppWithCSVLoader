@@ -22,6 +22,7 @@ This project provides a **production-grade SQL framework** to stand up a T&E man
 - **Multi-environment isolation** — separate databases, schemas, and users for Dev, Test, Staging, and Prod
 - **Automated data testing** — 142 assertions across 5 SQL test suites, all written in pure PostgreSQL
 - **Data-driven evals** — 23 offline CSV validator scenarios plus PostgreSQL-backed idempotency and full-suite checks
+- **Web UI + REST API** — FastAPI backend (`api/`) and React frontend (`frontend/`) for CSV upload, preview, and browsing — no direct DB access from the browser
 
 All names (database, schema, users, every table) are controlled by a single `\set` configuration block at the top of each environment file. Rename anything in one place and the entire script updates automatically.
 
@@ -44,6 +45,31 @@ The project is organised into three categories: `build/` (everything that ships)
 
 ```text
 PostgreDataMigrationApp/
+│
+├── api/                              ← FastAPI backend (CSV pipeline REST API)
+│   ├── main.py                       ← app entrypoint, CORS, health, lifespan
+│   ├── config.py                     ← env-var driven Settings, TE_TABLES list
+│   ├── db.py                         ← psycopg2 pool + Conn context manager
+│   ├── auth.py                       ← optional X-API-Key dependency
+│   ├── routers/
+│   │   ├── csv_routes.py             ← /api/csv/preview, /upload, /files, /tables/{n}/rows, /files/{id}
+│   │   └── te_routes.py              ← /api/te/tables (fixed 12-table row counts)
+│   ├── services/
+│   │   ├── csv_parse.py              ← pure-Python CSV parser + type inference
+│   │   ├── dynamic_loader.py         ← creates csv_<hash> tables from any CSV
+│   │   └── te_loader.py              ← loads a CSV into one of the fixed T&E tables
+│   └── requirements.txt              ← fastapi, uvicorn, psycopg2-binary, pydantic
+│
+├── frontend/                         ← React 19 + TanStack Start UI
+│   ├── src/routes/                   ← file-based routes (SSR)
+│   ├── src/lib/csv.functions.ts      ← fetch client for the FastAPI backend
+│   ├── vite.config.ts                ← dev server pinned to port 5173
+│   ├── .env                          ← VITE_API_URL, VITE_API_KEY
+│   └── package.json
+│
+├── scripts/
+│   ├── start-api.ps1                 ← Terminal 1 — FastAPI on http://localhost:8000
+│   └── start-frontend.ps1            ← Terminal 2 — Vite on http://localhost:5173
 │
 ├── build/                             ← everything that ships
 │   ├── te_core_schema.sql             ← PostgreSQL master schema (legacy entry point)
@@ -313,6 +339,68 @@ make csv-load FILE=path/to/anything.csv ENV=test ENGINE=postgresql
 ```
 
 `csv_utilise.sh` only sees tables that carry the marker columns, so it cannot accidentally touch the rigid te_core_schema tables.
+
+---
+
+## Web UI + REST API
+
+The `api/` and `frontend/` folders provide a browser-based CSV migration UI backed by a FastAPI REST layer. **The browser never talks to Postgres directly** — every read and write goes through the API. This is the merged replacement for the earlier Supabase-based flow.
+
+### Two-terminal dev setup
+
+Both scripts are Windows-first PowerShell (Git Bash equivalents `.sh` are on the roadmap).
+
+**▶ Terminal 1 — FastAPI backend on `http://localhost:8000`:**
+
+```powershell
+pip install -r api\requirements.txt      # first run only
+.\scripts\start-api.ps1
+# Interactive docs: http://localhost:8000/docs
+# Health:            http://localhost:8000/api/health
+```
+
+The script defaults to local PG 18 (`PGHOST=localhost`, `PGPORT=5433`, `PGDATABASE=te_mgmt_dev`, `PGUSER=postgres`) and prompts for `PGPASSWORD` if unset. Override any of those before invoking the script. If `API_KEY` is unset, every endpoint is unauthenticated (fine for localhost).
+
+**▶ Terminal 2 — React frontend on `http://localhost:5173`:**
+
+```powershell
+.\scripts\start-frontend.ps1              # runs npm install on first launch
+```
+
+The frontend reads `VITE_API_URL` (defaults to `http://localhost:8000`) and, when set, `VITE_API_KEY` (sent as the `X-API-Key` header). Both live in `frontend/.env`.
+
+### API surface (v1 — CSV pipeline core)
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/health` | DB reachability + Postgres version |
+| `POST` | `/api/csv/preview` | Parse a CSV payload, infer types, suggest a T&E table match |
+| `POST` | `/api/csv/upload` | Load a CSV — `mode: "dynamic"` (new `csv_<hash>` table) or `mode: "te"` (into a fixed T&E table) |
+| `GET` | `/api/csv/files` | List all uploaded CSVs (from the `csv_uploads.csv_files` registry) |
+| `GET` | `/api/csv/tables/{table_name}/rows` | Preview rows of a dynamically loaded table (whitelisted to `csv_uploads.*`) |
+| `DELETE` | `/api/csv/files/{file_id}` | Drop a dynamically loaded table + registry row (gated by `API_ALLOW_DESTRUCTIVE`) |
+| `GET` | `/api/te/tables` | Existence + row counts for the 12 fixed T&E tables |
+
+### Backend data model
+
+Two coexisting modes share one registry (`csv_uploads.csv_files`):
+
+- **Dynamic mode** — each uploaded CSV becomes its own table `csv_uploads.csv_<sha256[:16]>` with typed columns plus `_id`, `_row_hash`, `_created_at` metadata. Types come from a whitelist: `int8 | numeric | date | timestamptz | boolean | text`.
+- **T&E mode** — validates that the CSV columns are a subset of one of the 12 fixed `te_dev.*` tables and inserts row-by-row with `SAVEPOINT`/`ROLLBACK TO SAVEPOINT` so partial failures don't abort the batch.
+
+All dynamic SQL uses `psycopg2.sql.Identifier()` / `sql.SQL()` — no f-string interpolation of table or column names (project rule from `CLAUDE.md`).
+
+### Env vars the API reads
+
+| Variable | Default | Notes |
+|---|---|---|
+| `PGHOST` / `PGPORT` / `PGUSER` / `PGPASSWORD` / `PGDATABASE` | `localhost` / `5433` / `postgres` / *(empty)* / `te_mgmt_dev` | Standard libpq |
+| `CSV_UPLOADS_SCHEMA` | `csv_uploads` | Where dynamic tables + the file registry live |
+| `TE_SCHEMA` | `te_dev` | Where the 12 fixed T&E tables live |
+| `CORS_ORIGINS` | `http://localhost:5173,http://localhost:3000` | Comma-separated allowed origins |
+| `MAX_UPLOAD_BYTES` | `52428800` (50 MB) | Reject `POST /preview` and `/upload` above this |
+| `API_ALLOW_DESTRUCTIVE` | `true` | Set `false` in shared/prod to block `DELETE /api/csv/files/{id}` |
+| `API_KEY` | *(unset)* | If set, every endpoint requires `X-API-Key: <value>` |
 
 ---
 
@@ -820,127 +908,4 @@ MIT — see [LICENSE](LICENSE) for full text.
 
 ## Acknowledgements
 
-Here are the prompts, distilled from every action I actually performed today. Each one is self-contained and would run end-to-end without follow-up questions.
-
----
-
-### Prompt 1 — Audit & Fix Stale Documentation
-
-```text
-Audit all markdown docs and requirements.txt against the current codebase.
-For each file, check that referenced functions, imports, file paths, test
-counts, and CLI commands still match the code. Fix anything stale in-place.
-Push to GitHub with a summary of what changed and why.
-
-Files to check: README.md, FIXES_APPLIED.md, VALIDATION_REPORT.md,
-NEW_USER_NAVIGATION_GUIDE.md, requirements.txt
-```
-
----
-
-### Prompt 2 — Generate Edge Case Datasets + Stress Tests
-
-```text
-Generate synthetic edge case CSV datasets in sample_data/edge_cases/ and
-write matching pytest tests in tests/test_edge_cases.py. Cover these cases:
-
-- UTF-8 BOM in headers
-- Tab-delimited (.tsv)
-- Duplicate primary keys
-- Header-only (empty) CSV
-- Unicode (CJK, accented, Polish characters)
-- Nulls in required columns (empty string, "NULL", "N/A")
-- Special characters (embedded commas, quotes, apostrophes)
-- Ragged rows (inconsistent column count)
-- Wrong/missing column headers
-- Over-length string values exceeding max_length
-- Large file (10,000 rows) with a performance assertion under 5 seconds
-- Missing/nonexistent file path
-
-Each test should use the project's existing JobConfig and pre_import stage.
-Run the full test suite to confirm everything passes, then push to GitHub.
-```
-
----
-
-### Prompt 3 — Run Tests + Generate Detailed Report for Lead
-
-```text
-Run the full pytest suite and create TEST_REPORT.md at the project root.
-The report must include:
-
-- Summary line: total / passed / failed / skipped
-- A table per test file with columns: #, Test name, Marker (unit/integration),
-  Status, What it verifies
-- A "Note for Lead" section explaining that integration tests need a live
-  PostgreSQL database configured via .env, and that running `pytest -m unit`
-  deselects them by marker filter (not skipped due to failure)
-- A test data table listing every dataset file and its purpose
-
-Push TEST_REPORT.md to GitHub.
-```
-
----
-
-### Prompt 4 — Repo Hygiene (one-shot cleanup)
-
-```text
-Clean up the GitHub repo (amar-python/TestUploadtoGIT) in one pass:
-
-1. If files exist at both root and a nested path (e.g. OneDrive/Desktop/...),
-   keep the latest version at root and git rm the nested duplicate entirely.
-2. Add .abacusai/, .claude/, and any other tool/session folders to .gitignore
-   and untrack them with git rm --cached.
-3. Prune the reports/ folder to keep only the 5 most recent timestamped run
-   directories and their matching logs. Delete the rest.
-4. Add an auto-pruning rule to src/reporting.py that deletes old runs
-   beyond MAX_REPORT_RUNS (default 5) after each write_summary() call.
-   Make the limit configurable via env var.
-
-Commit each logical change separately and push to master.
-```
-
----
-
-### Prompt 5 — Full Session (combines all of the above)
-
-```text
-I have a CSV-to-PostgreSQL migration framework at:
-C:\Users\User\OneDrive\Desktop\Migration using ai
-GitHub repo: amar-python/TestUploadtoGIT
-
-Do the following in order:
-
-1. AUDIT DOCS — Check all .md files and requirements.txt against the code.
-   Fix anything stale.
-
-2. EDGE CASE TESTS — Generate 11+ synthetic CSV datasets covering:
-   - BOM (Byte Order Mark — the hidden \xEF\xBB\xBF prefix Excel adds to
-     UTF-8 files that corrupts the first column header)
-   - Tab-delimited (.tsv)
-   - Unicode (CJK, accented, Polish characters)
-   - Nulls in required columns (empty string, "NULL", "N/A")
-   - Special characters (embedded commas, quotes, apostrophes)
-   - Ragged rows (inconsistent column count)
-   - Wrong/missing column headers
-   - Over-length string values exceeding max_length
-   - Large file (10,000 rows) with a performance assertion under 5 seconds
-   - Duplicate primary keys
-   - Empty file (header only)
-   Write matching pytest tests. Run the suite to confirm all pass.
-
-3. TEST REPORT — Create TEST_REPORT.md listing every test with status,
-   marker, and description. Include a note for the lead about integration
-   tests requiring PostgreSQL.
-
-4. REPO HYGIENE — Flatten any nested paths to root level. Add tool folders
-   to .gitignore and untrack them. Prune reports/ to 5 most recent runs
-   and add auto-pruning logic to src/reporting.py (MAX_REPORT_RUNS=5).
-
-5. PUSH — Commit each logical change separately and push to master.
-   Confirm the final repo structure.
-```
-
----
-
-The full session prompt (#5) would reproduce today's entire day of work in a single request. The individual prompts (#1-4)
+Built with [PostgreSQL](https://www.postgresql.org/) 13+. Schema design informed by Australian Defence T&E practice (ASDEFCON, ISM, MIL-STD-882).

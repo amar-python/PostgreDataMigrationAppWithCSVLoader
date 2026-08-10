@@ -62,7 +62,7 @@ testing with small samples.
 
 ## Blast radius
 
-`inserted` is written to `uploads.csv_files.row_count`:
+`inserted` is written to `csv_uploads.csv_files.row_count`:
 
 ```python
 "INSERT INTO {}.csv_files (..., row_count, ...) VALUES (%s, %s, %s, 'dynamic', %s, %s)",
