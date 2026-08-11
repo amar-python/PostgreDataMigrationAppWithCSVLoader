@@ -159,7 +159,17 @@ def bootstrap() -> None:
     from alembic.config import Config
 
     repo_root = Path(__file__).resolve().parent.parent
-    cfg = Config(str(repo_root / "alembic.ini"))
+    alembic_ini = repo_root / "alembic.ini"
+
+    if not alembic_ini.exists():
+        logger.warning(
+            "alembic.ini not found at %s — skipping Alembic migration. "
+            "Schema must be provisioned manually (bash scripts/provision_full_test_env.sh).",
+            alembic_ini,
+        )
+        return
+
+    cfg = Config(str(alembic_ini))
     logger.info("Running alembic upgrade head against %s@%s:%s/%s",
                 settings.PG_USER, settings.PG_HOST, settings.PG_PORT,
                 settings.PG_DATABASE)
