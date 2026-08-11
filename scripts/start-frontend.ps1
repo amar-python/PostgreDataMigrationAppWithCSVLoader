@@ -2,7 +2,7 @@
 # First run installs node_modules automatically.
 
 $ErrorActionPreference = "Stop"
-$feDir = Join-Path $PSScriptRoot "..\frontend"
+$feDir = Join-Path $PSScriptRoot "..\csv-table-hub-main"
 Set-Location $feDir
 
 if (-not (Test-Path "node_modules")) {
