@@ -97,7 +97,7 @@ For each requirement, the columns mark which test layer verifies it. Numbers in 
 | BR-17 | Graceful degradation when PG unavailable | 9, 11 | — | — | (skip behaviour) | (skip behaviour) | — | ✅ | Python unit tests directly assert the skip path. |
 | BR-18 | Machine-readable JSON report per run | 5, 6 | — | — | — | — | — | ✅ | Verified by `_load_expected` and `discover_scenarios` unit tests; the report write itself is exercised by every Tier P run. |
 | BR-19 | Build / tests / evals physically segregated | — | — | — | — | — | — | ✅ | Verified by `ARCHITECTURE.md` + the directory layout + the green test runs after the refactor. (Verification method = Inspection.) |
-| BR-20 | 85 / 85 SQL assertions pass | — | (all 5 suites) | — | — | **01 (asserts `min_total_assertions: 85`, `min_pass_rate_percent: 100`)** | — | ✅ | Tier S is the headline gating check. |
+| BR-20 | 142 / 142 SQL assertions pass | — | (all 5 suites) | — | — | **01 (asserts `min_total_assertions: 142`, `min_pass_rate_percent: 100`)** | — | ✅ | Tier S is the headline gating check. Count updated from 85 → 142 to match the Tier S expected JSON and observed suite output. |
 | BR-21 | Cross-engine schema equivalence | — | — | — | — | — | — | ❌ | Deferred. Tier X. |
 | BR-22 | Performance at ≥ 1 M rows | — | — | — | — | — | — | ❌ | Deferred. No perf tier exists. |
 
