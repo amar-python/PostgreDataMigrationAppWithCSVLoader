@@ -375,6 +375,80 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         r = self.client.get("/api/csv/files")
         self.assertEqual(r.status_code, 200)
 
+    # ── BR-15: audit trail completeness ──────────────────────────────────
+    # Every import must leave a complete, retrievable audit record containing
+    # file name, table name, row count, and timestamp. These tests verify the
+    # record is persisted (not just returned in the upload response) and can
+    # be retrieved independently via GET /api/csv/files.
+
+    def test_audit_record_contains_required_fields(self):
+        """BR-15: GET /api/csv/files must return all required audit fields."""
+        up = self.client.post("/api/csv/upload",
+                              json={"fileName": self.name, "content": self.content})
+        self.assertEqual(up.json()["status"], "ok")
+
+        files = self.client.get("/api/csv/files").json()
+        record = next((f for f in files if f["file_name"] == self.name), None)
+        self.assertIsNotNone(record, f"Uploaded file not found in audit log")
+
+        for field in ("id", "file_name", "table_name", "mode", "row_count", "created_at"):
+            self.assertIn(field, record, f"Audit record missing required field: {field}")
+
+    def test_audit_record_row_count_matches_inserted_rows(self):
+        """BR-15: persisted row_count must match what the upload response reported."""
+        content = f"col_a,col_b\n{os.getpid()}_audit,1\n{os.getpid()}_audit,2\n"
+        name = f"br15_rowcount_{os.getpid()}.csv"
+        up = self.client.post("/api/csv/upload",
+                              json={"fileName": name, "content": content})
+        body = up.json()
+        self.assertEqual(body["status"], "ok")
+
+        files = self.client.get("/api/csv/files").json()
+        record = next((f for f in files if f["file_name"] == name), None)
+        self.assertIsNotNone(record)
+        self.assertEqual(record["row_count"], body["insertedRows"],
+                         "Persisted row_count must match insertedRows in upload response")
+
+    def test_audit_record_table_name_matches_upload_response(self):
+        """BR-15: persisted table_name must match what the upload response reported."""
+        up = self.client.post("/api/csv/upload",
+                              json={"fileName": self.name, "content": self.content})
+        body = up.json()
+        self.assertEqual(body["status"], "ok")
+
+        files = self.client.get("/api/csv/files").json()
+        record = next((f for f in files if f["file_name"] == self.name), None)
+        self.assertIsNotNone(record)
+        self.assertEqual(record["table_name"], body["tableName"],
+                         "Persisted table_name must match tableName in upload response")
+
+    def test_audit_record_has_iso_timestamp(self):
+        """BR-15: created_at must be a non-empty ISO timestamp."""
+        up = self.client.post("/api/csv/upload",
+                              json={"fileName": self.name, "content": self.content})
+        self.assertEqual(up.json()["status"], "ok")
+
+        files = self.client.get("/api/csv/files").json()
+        record = next((f for f in files if f["file_name"] == self.name), None)
+        self.assertIsNotNone(record)
+        self.assertTrue(record.get("created_at", ""), "created_at must not be empty")
+        from datetime import datetime
+        try:
+            datetime.fromisoformat(record["created_at"].replace("Z", "+00:00"))
+        except ValueError:
+            self.fail(f"created_at is not a valid ISO timestamp: {record['created_at']}")
+
+    def test_failed_upload_leaves_no_audit_record(self):
+        """BR-15: a structurally invalid file must not create a registry entry."""
+        bad_name = f"br15_fail_{os.getpid()}.csv"
+        up = self.client.post("/api/csv/upload",
+                              json={"fileName": bad_name, "content": "col_a\n"})
+        self.assertIn(up.json()["status"], ("invalid_structure", "error"))
+
+        files = self.client.get("/api/csv/files").json()
+        record = next((f for f in files if f["file_name"] == bad_name), None)
+        self.assertIsNone(record, "A failed upload must not leave a registry entry")
+
 
 @pytest.mark.integration
 class PoolTimeout(unittest.TestCase):
