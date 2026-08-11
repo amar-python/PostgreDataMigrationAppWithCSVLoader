@@ -5,7 +5,7 @@ import os
 
 class Settings:
     PG_HOST: str = os.environ.get("PGHOST", "localhost")
-    PG_PORT: int = int(os.environ.get("PGPORT", "5433"))
+    PG_PORT: int = int(os.environ.get("PGPORT", "5432"))
     PG_USER: str = os.environ.get("PGUSER", "postgres")
     PG_PASSWORD: str = os.environ.get("PGPASSWORD", "")
     PG_DATABASE: str = os.environ.get("PGDATABASE", "te_mgmt_dev")
