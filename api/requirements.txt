@@ -1,6 +1,6 @@
 fastapi>=0.140.7
 uvicorn[standard]>=0.51.0
-psycopg2-binary>=2.9
+psycopg2-binary>=2.9.12
 python-multipart>=0.0.9
 pydantic>=2.13.4
 # BUG-032: schema migrations for csv_uploads.* — auto-runs at API startup
