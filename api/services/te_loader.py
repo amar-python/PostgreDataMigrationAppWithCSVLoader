@@ -80,6 +80,30 @@ def match_te_table(columns: list[str]) -> str | None:
     return None
 
 
+def _cleanup_prior_registry_entries(cur, file_name, file_hash):
+    """Remove prior csv_files entries. Uses sql.Identifier, no f-strings."""
+    cur.execute(
+        sql.SQL(
+            "SELECT table_name, mode FROM {s}.csv_files"
+            " WHERE file_name = %s OR file_hash = %s"
+        ).format(s=sql.Identifier("uploads")),
+        (file_name, file_hash),
+    )
+    for table_name, mode in cur.fetchall():
+        if mode == "dynamic" and table_name.startswith("csv_"):
+            cur.execute(
+                sql.SQL("DROP TABLE IF EXISTS {}").format(
+                    sql.Identifier(table_name)
+                )
+            )
+    cur.execute(
+        sql.SQL(
+            "DELETE FROM {s}.csv_files WHERE file_name = %s OR file_hash = %s"
+        ).format(s=sql.Identifier("uploads")),
+        (file_name, file_hash),
+    )
+
+
 def upload_te(file_name: str, content: str, target_table: str) -> dict:
     logs: list[dict] = []
     _log(logs, "receive", f'Received "{file_name}" for T&E table "{target_table}"')

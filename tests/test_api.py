@@ -52,7 +52,7 @@ def _db_reachable() -> bool:
         return False
 
 
-@pytest.mark.unit
+@pytest.mark.integration
 class HealthContract(unittest.TestCase):
     """Health must degrade rather than error, so the UI can render a state."""
 
