@@ -18,7 +18,7 @@ build scripts, and provisioning scripts.
 | Variable | Default | Required in prod | Description |
 |---|---|---|---|
 | `PGHOST` | `localhost` | Yes | PostgreSQL host |
-| `PGPORT` | `5433` (API) / `5432` (build scripts) | Yes | PostgreSQL port — note the API defaults to **5433** (local PG 18) while build scripts default to **5432** |
+| `PGPORT` | `5433` (API) / `5432` (build scripts) | Yes | PostgreSQL port — note the all components default to **5432** |
 | `PGUSER` | `postgres` | Yes | PostgreSQL superuser for provisioning; app user for normal operation |
 | `PGPASSWORD` | _(empty)_ | Yes | PostgreSQL password — never commit a real value |
 | `PGDATABASE` | `te_mgmt_dev` | Yes | Target database — switch per environment (see section 3) |
