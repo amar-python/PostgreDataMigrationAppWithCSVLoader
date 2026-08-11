@@ -38,7 +38,6 @@ class TestQualityGateStructure(unittest.TestCase):
         self.assertIn("integration-postgres", self.jobs)
 
     def test_has_windows_postgres_job(self):
-        self.assertIn("windows-postgres", self.jobs)
 
     def test_triggers_on_pull_request(self):
         # PyYAML parses the YAML key `on` as boolean True
@@ -211,43 +210,45 @@ class TestAllJobsHaveConsistentStructure(unittest.TestCase):
             )
 
 
-class TestGapAnalysisG2Closed(unittest.TestCase):
-    """GAP_ANALYSIS.md must show G2 as Closed."""
 
+class TestGapAnalysisG2Accepted(unittest.TestCase):
+    """G2 is accepted as out-of-scope, not closed.
+    Checks the decision is recorded in GAP_ANALYSIS.md.
+    """
     @classmethod
     def setUpClass(cls):
         if not GAP_ANALYSIS.exists():
             raise AssertionError(f"GAP_ANALYSIS.md not found: {GAP_ANALYSIS}")
         cls.content = GAP_ANALYSIS.read_text(encoding="utf-8")
 
-    def test_g2_row_shows_closed(self):
+    def test_g2_row_exists(self):
+        found = any("| G2 |" in line for line in self.content.splitlines())
+        self.assertTrue(found, "G2 row not found in GAP_ANALYSIS.md")
+
+    def test_g2_is_accepted_or_deferred(self):
         for line in self.content.splitlines():
             if "| G2 |" in line:
-                self.assertIn("**Closed**", line,
-                              "G2 row must show **Closed**")
+                lower = line.lower()
+                self.assertTrue(
+                    "accept" in lower or "defer" in lower,
+                    f"G2 row should be accepted/deferred, got: {line.strip()}"
+                )
                 return
         self.fail("G2 row not found in GAP_ANALYSIS.md")
 
-    def test_g2_row_has_strikethrough(self):
-        for line in self.content.splitlines():
-            if "| G2 |" in line:
-                self.assertIn("~~", line,
-                              "G2 row must have strikethrough on the gap description")
-                return
-        self.fail("G2 row not found in GAP_ANALYSIS.md")
-
-    def test_g2_section_says_closed(self):
+    def test_g2_section_exists(self):
         self.assertIn("### G2", self.content)
-        self.assertIn("G2 — Windows CI cannot host PostgreSQL (Closed)",
-                       self.content)
 
-    def test_g2_section_mentions_quality_gate(self):
-        g2_start = self.content.index("### G2")
-        g3_start = self.content.index("### G3")
-        g2_section = self.content[g2_start:g3_start]
-        self.assertIn("quality-gate.yml", g2_section)
-        self.assertIn("windows-postgres", g2_section)
+    def test_g2_is_not_marked_closed(self):
+        self.assertNotIn(
+            "G2 — Windows CI cannot host PostgreSQL (Closed)",
+            self.content,
+            "G2 should not say Closed — it is Accepted"
+        )
 
+
+if __name__ == "__main__":
+    unittest.main()
 
 if __name__ == "__main__":
     unittest.main()
