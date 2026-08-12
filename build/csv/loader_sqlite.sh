@@ -20,7 +20,15 @@ CONFIG_DEFAULT="${SCRIPT_DIR}/config.env"
 [[ -f "$CONFIG_LOCAL" ]] && source "$CONFIG_LOCAL" || source "$CONFIG_DEFAULT"
 
 E="${TARGET_ENV^^}"
-DB_FILE="${SQLITE_DIR}/$(eval echo "\$SQLITE_DB_${E}")"
+_dbfile_var="SQLITE_DB_${E}"; DB_FILE="${SQLITE_DIR}/${!_dbfile_var:-}"
+
+# Guard against shell→Python source injection below: TABLE_NAME must be a
+# plain identifier before it's allowed anywhere near a SQL statement or
+# process environment.
+if [[ ! "$TABLE_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+   err "Invalid table name '${TABLE_NAME}' — must match ^[A-Za-z_][A-Za-z0-9_]*\$"
+   exit 1
+fi
 
 [[ ! -f "$DB_FILE" ]] && { warn "SQLite DB not found at ${DB_FILE} — it will be created."; }
 mkdir -p "$(dirname "$DB_FILE")"
@@ -28,15 +36,22 @@ mkdir -p "$(dirname "$DB_FILE")"
 log "Target: ${DB_FILE} → table '${TABLE_NAME}'"
 
 # ── Load CSV into SQLite via Python ───────────────────────────────────────────
-python3 << PYEOF >> "$LOG_FILE" 2>&1
+# DB_FILE/TABLE_NAME/VALID_CSV are passed via the environment and read with
+# os.environ — never interpolated into the Python source (the heredoc
+# terminator is quoted so the shell does no expansion inside it either).
+# A shell value containing a quote/backslash could otherwise break out of a
+# string literal and execute arbitrary Python.
+SQLITE_DB_FILE="$DB_FILE" SQLITE_TABLE_NAME="$TABLE_NAME" SQLITE_VALID_CSV="$VALID_CSV" \
+python3 << 'PYEOF' >> "$LOG_FILE" 2>&1
 import csv
+import os
 import sqlite3
 import sys
 from datetime import datetime
 
-db_file    = "$DB_FILE"
-table      = "$TABLE_NAME"
-valid_csv  = "$VALID_CSV"
+db_file    = os.environ["SQLITE_DB_FILE"]
+table      = os.environ["SQLITE_TABLE_NAME"]
+valid_csv  = os.environ["SQLITE_VALID_CSV"]
 
 conn = sqlite3.connect(db_file)
 cur  = conn.cursor()
@@ -49,11 +64,14 @@ with open(valid_csv, 'r', encoding='utf-8-sig', newline='') as f:
    reader  = csv.reader(f)
    headers = next(reader)
 
-   # Sanitise column names
+   # Sanitise column names, then escape any embedded quote before it goes
+   # into a quoted SQL identifier (defense in depth alongside TABLE_NAME's
+   # shell-side validation above).
    cols = [h.strip().lower().replace(' ', '_').replace('-', '_') for h in headers]
+   quoted_cols = [c.replace('"', '""') for c in cols]
 
    # Auto-create table if not exists (all TEXT columns)
-   col_defs  = ', '.join(f'"{c}" TEXT' for c in cols)
+   col_defs  = ', '.join(f'"{c}" TEXT' for c in quoted_cols)
    create_sql = f'''
       CREATE TABLE IF NOT EXISTS "{table}" (
          _csv_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +83,7 @@ with open(valid_csv, 'r', encoding='utf-8-sig', newline='') as f:
 
    # Insert rows
    placeholders = ', '.join(['?'] * len(cols))
-   col_list     = ', '.join(f'"{c}"' for c in cols)
+   col_list     = ', '.join(f'"{c}"' for c in quoted_cols)
    insert_sql   = f'INSERT INTO "{table}" ({col_list}) VALUES ({placeholders})'
 
    loaded = 0
@@ -87,14 +105,17 @@ PYEOF
 if [[ $? -eq 0 ]]; then
    log "Load complete."
    # Show row count
-   ROW_COUNT=$(python3 -c "
+   ROW_COUNT=$(SQLITE_DB_FILE="$DB_FILE" SQLITE_TABLE_NAME="$TABLE_NAME" python3 - << 'PYEOF'
+import os
 import sqlite3
-conn = sqlite3.connect('$DB_FILE')
+conn = sqlite3.connect(os.environ["SQLITE_DB_FILE"])
 cur = conn.cursor()
-cur.execute('SELECT COUNT(*) FROM \"${TABLE_NAME}\"')
+table = os.environ["SQLITE_TABLE_NAME"].replace('"', '""')
+cur.execute(f'SELECT COUNT(*) FROM "{table}"')
 print(cur.fetchone()[0])
 conn.close()
-")
+PYEOF
+)
    log "Rows now in '${TABLE_NAME}': ${ROW_COUNT}"
 else
    err "Load failed. Check: ${LOG_FILE}"

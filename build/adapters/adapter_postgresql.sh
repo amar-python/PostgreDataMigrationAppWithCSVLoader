@@ -4,6 +4,8 @@
 # Called by deploy_all.sh — do not run directly.
 # =============================================================================
 
+set -euo pipefail
+
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()   { echo -e "${GREEN}[✓ PG]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[⚠ PG]${NC} $*"; }
@@ -17,7 +19,7 @@ SCHEMA_FILE="${SCRIPT_DIR}/schema/postgresql/te_core_schema.sql"
 PSQL_OPTS="-h ${PG_HOST} -p ${PG_PORT} -U ${PG_SUPERUSER}"
 [[ -n "${PG_SUPERUSER_PASSWORD:-}" ]] && export PGPASSWORD="${PG_SUPERUSER_PASSWORD}"
 
-get() { local E="${1^^}"; eval echo "\${PG_${2}_${E}}"; }
+get() { local E="${1^^}"; local key="PG_${2}_${E}"; echo "${!key:-}"; }
 
 SUCCEEDED=(); FAILED=()
 
@@ -28,7 +30,7 @@ for env in "${ENVS[@]}"; do
    app_user="$(get "$env" APP_USER)"
    app_pw="$(get "$env" APP_PASSWORD)"
    conn_limit="$(get "$env" CONN_LIMIT)"
-   seed="$(eval echo "\$SEED_${E}")"
+   _seed_var="SEED_${E}"; seed="${!_seed_var:-}"
 
    echo ""
    warn "Deploying PostgreSQL ${E}: db=${db}  schema=${schema}  seed=${seed}"

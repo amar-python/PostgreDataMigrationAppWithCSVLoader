@@ -22,7 +22,7 @@ CONFIG_DEFAULT="${SCRIPT_DIR}/config.env"
 [[ -f "$CONFIG_LOCAL" ]] && source "$CONFIG_LOCAL" || source "$CONFIG_DEFAULT"
 
 E="${TARGET_ENV^^}"
-BUCKET="$(eval echo "\$INFLUX_BUCKET_${E}")"
+_bucket_var="INFLUX_BUCKET_${E}"; BUCKET="${!_bucket_var:-}"
 INFLUX_URL="${INFLUX_HOST}:${INFLUX_PORT}"
 MEASUREMENT="${TABLE_NAME}"
 

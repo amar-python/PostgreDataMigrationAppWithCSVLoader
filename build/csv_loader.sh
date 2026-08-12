@@ -120,8 +120,18 @@ fi
 BASENAME="$(basename "$CSV_FILE")"
 TABLE_NAME="${TABLE_OVERRIDE:-${BASENAME%.csv}}"
 TABLE_NAME="${TABLE_NAME%.CSV}"
-# Sanitise: lowercase, replace spaces/hyphens with underscores
-TABLE_NAME="$(echo "$TABLE_NAME" | tr '[:upper:]' '[:lower:]' | tr ' -' '__')"
+# Sanitise to a safe SQL identifier: lowercase, collapse any run of
+# non [a-z0-9_] characters to a single underscore, trim leading/trailing
+# underscores. The engine-specific loaders splice TABLE_NAME into SQL and
+# (for sqlite) shell/Python contexts — the previous sanitiser only swapped
+# spaces/hyphens, letting quotes, semicolons, `$()`, backticks etc. through
+# unchanged. Validate the result the same way csv_utilise.sh does and abort
+# rather than proceed with an unsafe or empty name.
+TABLE_NAME="$(echo "$TABLE_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_]+/_/g; s/^_+//; s/_+$//')"
+if [[ ! "$TABLE_NAME" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+   error "Could not derive a safe table name from '${BASENAME}' (sanitised to '${TABLE_NAME}'). Pass --table with an explicit name (letters, digits, underscore; must not start with a digit)."
+   exit 1
+fi
 
 # ── Setup log directory and files ─────────────────────────────────────────────
 mkdir -p "$LOG_DIR"

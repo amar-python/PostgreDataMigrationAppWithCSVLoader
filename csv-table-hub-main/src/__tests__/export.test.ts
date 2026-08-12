@@ -22,8 +22,6 @@ function captureBlob(): { blob: Blob | null; filename: string | null; reset: () 
   const state = { blob: null as Blob | null, filename: null as string | null };
   const origCreate = URL.createObjectURL;
   const origRevoke = URL.revokeObjectURL;
-  const origAppend = document.body.appendChild.bind(document.body);
-  const origRemove = Element.prototype.remove;
 
   URL.createObjectURL = (b: Blob) => { state.blob = b; return "blob:mock"; };
   URL.revokeObjectURL = vi.fn();

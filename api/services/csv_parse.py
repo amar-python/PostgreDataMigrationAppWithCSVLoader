@@ -134,13 +134,18 @@ def sanitize_columns(headers: list[str]) -> list[str]:
     out: list[str] = []
     for idx, h in enumerate(headers):
         base = (h or f"column_{idx + 1}").lower().strip()
-        base = re.sub(r"[^a-z0-9_]+", "_", base).strip("_")
+        base = re.sub(r"[^a-z0-9_]+", "_", base)
+        # Check reserved names (all of which have a leading underscore, e.g.
+        # "_id") before stripping underscores — otherwise "_id" strips to
+        # "id" first and never matches _RESERVED, silently losing the
+        # collision guard against the real system columns.
+        if base in _RESERVED:
+            base = f"{base}_col"
+        base = base.strip("_")
         if not base:
             base = f"column_{idx + 1}"
         if base[0].isdigit():
             base = f"col_{base}"
-        if base in _RESERVED:
-            base = f"{base}_col"
         if len(base) > 55:
             base = base[:55]
         name = base

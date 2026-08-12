@@ -192,9 +192,9 @@ configure_mariadb() {
       for env in "${ENVS[@]}"; do
          header "  MariaDB — ${env^^} Environment"
          E="${env^^}"
-         ask "MYSQL_DB_${E}"           "Database name" "$(eval echo "\$MYSQL_DB_${E}")"
-         ask "MYSQL_APP_USER_${E}"     "App username"  "$(eval echo "\$MYSQL_APP_USER_${E}")"
-         ask "MYSQL_APP_PASSWORD_${E}" "App password"  "$(eval echo "\$MYSQL_APP_PASSWORD_${E}")" secret
+         _v="MYSQL_DB_${E}";           ask "MYSQL_DB_${E}"           "Database name" "${!_v:-}"
+         _v="MYSQL_APP_USER_${E}";     ask "MYSQL_APP_USER_${E}"     "App username"  "${!_v:-}"
+         _v="MYSQL_APP_PASSWORD_${E}"; ask "MYSQL_APP_PASSWORD_${E}" "App password"  "${!_v:-}" secret
          if [[ "$env" == "prod" || "$env" == "staging" ]]; then
             export "SEED_${E}=false"
             info "Seed data disabled for ${E}"
@@ -214,7 +214,7 @@ configure_sqlite() {
       for env in "${ENVS[@]}"; do
          header "  SQLite — ${env^^} Environment"
          E="${env^^}"
-         ask "SQLITE_DB_${E}" "Database filename" "$(eval echo "\$SQLITE_DB_${E}")"
+         _v="SQLITE_DB_${E}"; ask "SQLITE_DB_${E}" "Database filename" "${!_v:-}"
          if [[ "$env" == "prod" || "$env" == "staging" ]]; then
             export "SEED_${E}=false"
             info "Seed data disabled for ${E}"
@@ -237,9 +237,9 @@ configure_influxdb() {
       for env in "${ENVS[@]}"; do
          header "  InfluxDB — ${env^^} Environment"
          E="${env^^}"
-         ask "INFLUX_BUCKET_${E}"    "Bucket name"     "$(eval echo "\$INFLUX_BUCKET_${E}")"
-         ask "INFLUX_RETENTION_${E}" "Retention period (e.g. 30d, 0 = infinite)" \
-            "$(eval echo "\$INFLUX_RETENTION_${E}")"
+         _v="INFLUX_BUCKET_${E}"; ask "INFLUX_BUCKET_${E}"    "Bucket name"     "${!_v:-}"
+         _v="INFLUX_RETENTION_${E}"; ask "INFLUX_RETENTION_${E}" "Retention period (e.g. 30d, 0 = infinite)" \
+            "${!_v:-}"
       done
    else
       success "Using InfluxDB defaults from config.env"
@@ -256,8 +256,8 @@ configure_redis() {
       for env in "${ENVS[@]}"; do
          header "  Redis — ${env^^} Environment"
          E="${env^^}"
-         ask "REDIS_DB_${E}"          "Database index (0-15)"  "$(eval echo "\$REDIS_DB_${E}")"
-         ask "REDIS_KEY_PREFIX_${E}"  "Key namespace prefix"   "$(eval echo "\$REDIS_KEY_PREFIX_${E}")"
+         _v="REDIS_DB_${E}";         ask "REDIS_DB_${E}"          "Database index (0-15)"  "${!_v:-}"
+         _v="REDIS_KEY_PREFIX_${E}"; ask "REDIS_KEY_PREFIX_${E}"  "Key namespace prefix"   "${!_v:-}"
       done
    else
       success "Using Redis defaults from config.env"
@@ -276,9 +276,9 @@ configure_teradata() {
       for env in "${ENVS[@]}"; do
          header "  Teradata — ${env^^} Environment"
          E="${env^^}"
-         ask "TD_DB_${E}"           "Database name" "$(eval echo "\$TD_DB_${E}")"
-         ask "TD_APP_USER_${E}"     "App username"  "$(eval echo "\$TD_APP_USER_${E}")"
-         ask "TD_APP_PASSWORD_${E}" "App password"  "$(eval echo "\$TD_APP_PASSWORD_${E}")" secret
+         _v="TD_DB_${E}";           ask "TD_DB_${E}"           "Database name" "${!_v:-}"
+         _v="TD_APP_USER_${E}";     ask "TD_APP_USER_${E}"     "App username"  "${!_v:-}"
+         _v="TD_APP_PASSWORD_${E}"; ask "TD_APP_PASSWORD_${E}" "App password"  "${!_v:-}" secret
          if [[ "$env" == "prod" || "$env" == "staging" ]]; then
             export "SEED_${E}=false"
          else
@@ -492,7 +492,7 @@ for env in dev test staging prod; do
       redis)      _v="REDIS_DB_${E}"; _v2="REDIS_KEY_PREFIX_${E}"; db_val="db${!_v:-} / ${!_v2:-}" ;;
       teradata)   _v="TD_DB_${E}";            db_val="${!_v:-}" ;;
    esac
-   seed_val="$(eval echo "\$SEED_${E}")"
+   _v="SEED_${E}"; seed_val="${!_v:-}"
    printf "  %-10s  %-30s  %s\n" "$env" "$db_val" "$seed_val"
 done
 

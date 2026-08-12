@@ -86,7 +86,7 @@ def _cleanup_prior_registry_entries(cur, file_name, file_hash):
         sql.SQL(
             "SELECT table_name, mode FROM {s}.csv_files"
             " WHERE file_name = %s OR file_hash = %s"
-        ).format(s=sql.Identifier("uploads")),
+        ).format(s=sql.Identifier(settings.UPLOADS_SCHEMA)),
         (file_name, file_hash),
     )
     for table_name, mode in cur.fetchall():
@@ -99,7 +99,7 @@ def _cleanup_prior_registry_entries(cur, file_name, file_hash):
     cur.execute(
         sql.SQL(
             "DELETE FROM {s}.csv_files WHERE file_name = %s OR file_hash = %s"
-        ).format(s=sql.Identifier("uploads")),
+        ).format(s=sql.Identifier(settings.UPLOADS_SCHEMA)),
         (file_name, file_hash),
     )
 

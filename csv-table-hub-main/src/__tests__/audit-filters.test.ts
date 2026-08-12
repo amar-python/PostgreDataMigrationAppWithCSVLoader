@@ -5,16 +5,7 @@
 // the same logic the component uses via useMemo.
 
 import { describe, it, expect } from "vitest";
-
-// ─── mirror of the Job type in audit.tsx ─────────────────────────────────────
-
-type JobStatus = "reading"|"uploading"|"processing"|"done"|"duplicate"|"error"|"interrupted"|"cancelled";
-
-type Job = {
-  id: string; name: string; status: JobStatus; createdAt: number;
-  overwritten?: boolean; size: number; batchId: string; progress: number;
-  cancellationReason?: string;
-};
+import type { Job } from "@/lib/job-types";
 
 // ─── extracted filter predicate (mirrors the useMemo in AuditPage) ────────────
 

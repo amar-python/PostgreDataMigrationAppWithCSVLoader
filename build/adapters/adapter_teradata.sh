@@ -6,6 +6,8 @@
 # Requires: bteq installed and on PATH (part of Teradata Tools and Utilities)
 # =============================================================================
 
+set -euo pipefail
+
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()   { echo -e "${GREEN}[✓ TD]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[⚠ TD]${NC} $*"; }
@@ -22,16 +24,21 @@ SUCCEEDED=(); FAILED=()
 
 for env in "${ENVS[@]}"; do
    E="${env^^}"
-   db="$(eval echo "\$TD_DB_${E}")"
-   app_user="$(eval echo "\$TD_APP_USER_${E}")"
-   app_pw="$(eval echo "\$TD_APP_PASSWORD_${E}")"
-   seed="$(eval echo "\$SEED_${E}")"
+   _db_var="TD_DB_${E}";           db="${!_db_var:-}"
+   _user_var="TD_APP_USER_${E}";   app_user="${!_user_var:-}"
+   _pw_var="TD_APP_PASSWORD_${E}"; app_pw="${!_pw_var:-}"
+   _seed_var="SEED_${E}";          seed="${!_seed_var:-}"
 
    echo ""
    warn "Deploying Teradata ${E}: db=${db}  user=${app_user}  seed=${seed}"
 
    # Substitute placeholders, then run via BTEQ
    BTEQ_SCRIPT=$(mktemp /tmp/te_td_${env}_XXXXXX.btq)
+   # BTEQ_SCRIPT holds a cleartext .LOGON password below; the explicit
+   # `rm -f` at the end of this iteration handles normal completion, but a
+   # crash/kill mid-iteration would otherwise leave the password on disk —
+   # the trap covers that case too.
+   trap 'rm -f "$BTEQ_SCRIPT"' EXIT
 
    # BTEQ login header
    cat > "$BTEQ_SCRIPT" << BTEQHDR

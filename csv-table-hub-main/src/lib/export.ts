@@ -71,11 +71,25 @@ function toXlsxBlob(
 
 // ─── PDF (print) ──────────────────────────────────────────────────────────────
 
+// All values below (row cells, filenames, error reasons) originate from
+// user-supplied CSV content, so every interpolation into the print window's
+// HTML must be escaped — this is rendered via document.write(), not React.
+function escapeHtml(v: unknown): string {
+  const s = v === undefined || v === null ? "" : String(v);
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function printHtml(title: string, html: string): void {
   const w = window.open("", "_blank");
   if (!w) return;
+  const safeTitle = escapeHtml(title);
   w.document.write(`<!DOCTYPE html><html><head>
-    <title>${title}</title>
+    <title>${safeTitle}</title>
     <style>
       body { font-family: system-ui, sans-serif; font-size: 11px; padding: 1rem; }
       h1 { font-size: 14px; margin: 0 0 .75rem; }
@@ -84,7 +98,7 @@ function printHtml(title: string, html: string): void {
       th { background: #f1f1f1; font-weight: 600; }
       tr:nth-child(even) td { background: #fafafa; }
     </style>
-  </head><body><h1>${title}</h1>${html}</body></html>`);
+  </head><body><h1>${safeTitle}</h1>${html}</body></html>`);
   w.document.close();
   w.focus();
   setTimeout(() => {
@@ -94,11 +108,11 @@ function printHtml(title: string, html: string): void {
 }
 
 function rowsToHtmlTable(headers: string[], rows: Record<string, unknown>[]): string {
-  const ths = headers.map((h) => `<th>${h}</th>`).join("");
+  const ths = headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
   const trs = rows
     .map(
       (r) =>
-        `<tr>${headers.map((h) => `<td>${r[h] ?? ""}</td>`).join("")}</tr>`,
+        `<tr>${headers.map((h) => `<td>${escapeHtml(r[h] ?? "")}</td>`).join("")}</tr>`,
     )
     .join("");
   return `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;

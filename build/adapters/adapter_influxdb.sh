@@ -7,6 +7,8 @@
 # Requires: influx CLI v2.x installed and on PATH
 # =============================================================================
 
+set -euo pipefail
+
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()   { echo -e "${GREEN}[✓ INFLUX]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[⚠ INFLUX]${NC} $*"; }
@@ -24,9 +26,9 @@ SUCCEEDED=(); FAILED=()
 
 for env in "${ENVS[@]}"; do
    E="${env^^}"
-   bucket="$(eval echo "\$INFLUX_BUCKET_${E}")"
-   retention="$(eval echo "\$INFLUX_RETENTION_${E}")"
-   seed="$(eval echo "\$SEED_${E:-false}")"
+   _bucket_var="INFLUX_BUCKET_${E}";    bucket="${!_bucket_var:-}"
+   _retention_var="INFLUX_RETENTION_${E}"; retention="${!_retention_var:-}"
+   _seed_var="SEED_${E:-false}";        seed="${!_seed_var:-}"
 
    echo ""
    warn "Deploying InfluxDB ${E}: bucket=${bucket}  retention=${retention}"

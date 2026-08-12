@@ -4,7 +4,7 @@
 
 2. **Typed columns** — the per-file table is created with actual Postgres types inferred from the CSV sample (`int8`, `numeric`, `date`, `timestamptz`, `boolean`, `text`), not all-text. Values that don't match their column type are recorded as row errors instead of silently coerced.
 
-3. **Filename duplicate handling** — behavior stays **skip** (no re-import), but the duplicate note now reads: _"A file named 'X.csv' was already uploaded. Rename your file and try again if this is a different dataset."_ No overwrite/replace option.
+3. **Filename duplicate handling** — a duplicate upload is flagged with a note explaining the match (by name or content); the user can rename and retry, or choose **Overwrite** to replace the existing import (see `requestOverwrite`/`DiffDialog`/`confirmOverwrite` in `index.tsx`).
 
 4. **Batch import summary** — a summary card above the jobs list for the current batch: `Files: N` · `Rows processed: N` · `Rows created: N` · `Duplicate rows skipped: N` · `Failed rows: N` · `Duplicate files: N` · `Failed files: N`.
 
@@ -23,6 +23,6 @@
 
 ## Out of scope
 
-- Overwrite/replace/append modes for duplicate files (user chose skip-only).
+- Append mode for duplicate files (overwrite/replace shipped; see F9 in `index.tsx`).
 - Editing headers, types, or skipping columns in the preview (view-only).
 - Server-side history — persistence is this-browser-only via localStorage.

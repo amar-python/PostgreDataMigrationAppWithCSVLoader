@@ -24,8 +24,8 @@ CONFIG_DEFAULT="${SCRIPT_DIR}/config.env"
 [[ -f "$CONFIG_LOCAL" ]] && source "$CONFIG_LOCAL" || source "$CONFIG_DEFAULT"
 
 E="${TARGET_ENV^^}"
-DB_INDEX="$(eval echo "\$REDIS_DB_${E}")"
-KEY_PREFIX="$(eval echo "\$REDIS_KEY_PREFIX_${E}")"
+_db_var="REDIS_DB_${E}";          DB_INDEX="${!_db_var:-}"
+_prefix_var="REDIS_KEY_PREFIX_${E}"; KEY_PREFIX="${!_prefix_var:-}"
 
 REDIS_ARGS="-h ${REDIS_HOST} -p ${REDIS_PORT} -n ${DB_INDEX}"
 [[ -n "${REDIS_PASSWORD:-}" ]] && REDIS_ARGS+=" -a ${REDIS_PASSWORD}"

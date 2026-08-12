@@ -45,11 +45,15 @@ export function sanitizeColumns(headers: string[]): string[] {
   return headers.map((h, idx) => {
     let base = (h || `column_${idx + 1}`)
       .toLowerCase().trim()
-      .replace(/[^a-z0-9_]+/g, "_")
-      .replace(/^_+|_+$/g, "");
+      .replace(/[^a-z0-9_]+/g, "_");
+    // Check reserved names (all of which have a leading underscore, e.g.
+    // "_id") before stripping underscores — otherwise "_id" strips to "id"
+    // first and never matches the reserved set, silently losing the
+    // collision guard against the real system columns.
+    if (reserved.has(base)) base = `${base}_col`;
+    base = base.replace(/^_+|_+$/g, "");
     if (!base) base = `column_${idx + 1}`;
     if (/^[0-9]/.test(base)) base = `col_${base}`;
-    if (reserved.has(base)) base = `${base}_col`;
     if (base.length > 55) base = base.slice(0, 55);
     let name = base;
     const count = seen.get(base) ?? 0;

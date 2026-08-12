@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 
 from api import db
 from api.config import settings
-from api.routers import csv_routes, te_routes
+from api.routers import audit_routes, csv_routes, te_routes
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,7 @@ app.add_middleware(
 
 app.include_router(csv_routes.router)
 app.include_router(te_routes.router)
+app.include_router(audit_routes.router)
 
 
 @app.exception_handler(psycopg2.pool.PoolError)

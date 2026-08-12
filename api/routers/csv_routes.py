@@ -38,7 +38,7 @@ class UploadRequest(BaseModel):
 
 @router.post("/preview")
 def preview(req: PreviewRequest) -> dict:
-    if len(req.content) > settings.MAX_UPLOAD_BYTES:
+    if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
     # BUG-025: mirror the try/except contract that /upload has. An unexpected
     # parse error (regex catastrophic backtracking, memory error, etc.) must
@@ -62,7 +62,7 @@ def preview(req: PreviewRequest) -> dict:
 
 @router.post("/upload")
 def upload(req: UploadRequest) -> dict:
-    if len(req.content) > settings.MAX_UPLOAD_BYTES:
+    if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
     if req.mode == "te":
         if not req.targetTable:

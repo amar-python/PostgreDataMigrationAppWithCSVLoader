@@ -21,9 +21,9 @@ CONFIG_DEFAULT="${SCRIPT_DIR}/config.env"
 [[ -f "$CONFIG_LOCAL" ]] && source "$CONFIG_LOCAL" || source "$CONFIG_DEFAULT"
 
 E="${TARGET_ENV^^}"
-DB_NAME="$(eval echo "\$TD_DB_${E}")"
-TD_USER="$(eval echo "\$TD_APP_USER_${E}")"
-TD_PASS="$(eval echo "\$TD_APP_PASSWORD_${E}")"
+_db_var="TD_DB_${E}";           DB_NAME="${!_db_var:-}"
+_user_var="TD_APP_USER_${E}";   TD_USER="${!_user_var:-}"
+_pw_var="TD_APP_PASSWORD_${E}"; TD_PASS="${!_pw_var:-}"
 
 command -v bteq &>/dev/null || { err "bteq not found. Install Teradata Tools and Utilities (TTU)."; exit 1; }
 log "Target: ${TD_HOST}/${DB_NAME}.${TABLE_NAME}"

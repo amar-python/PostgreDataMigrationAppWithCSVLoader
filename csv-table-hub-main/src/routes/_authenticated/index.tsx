@@ -21,10 +21,10 @@
 
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   listCsvFiles, previewCsvTable, uploadCsv,
-  type CsvFileSummary, type UploadResult, type RowError, type ColumnType, type ProcessingLog,
+  type CsvFileSummary, type ColumnType,
 } from "@/lib/csv.functions";
 import { parseCsvPreview, COLUMN_TYPE_LABEL, sanitizeColumns, type CsvPreview } from "@/lib/csv-preview";
 import { useLocalStorageState } from "@/hooks/use-local-storage";
@@ -33,6 +33,11 @@ import {
   type MappingTemplate, type ColumnMapping,
 } from "@/lib/mapping-templates";
 import { downloadErrorReport, buildErrorRows, type ExportFormat } from "@/lib/export";
+import type { Job, JobStatus } from "@/lib/job-types";
+import {
+  classifyUploadResult, classifyThrownError, buildCancelPatch, buildCancelToastMessage,
+  decideOverwriteAction,
+} from "@/lib/job-outcome";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -45,13 +50,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { toast, Toaster } from "sonner";
 import {
   Loader2, UploadCloud, FileSpreadsheet, Database, Eye, CheckCircle2, AlertTriangle,
   XCircle, RotateCw, ChevronDown, ChevronRight, Copy, Download, PauseCircle,
-  BookmarkPlus, Bookmark, X as XIcon, BellRing,
+  BookmarkPlus, Bookmark, X as XIcon,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -95,17 +98,7 @@ function Home() {
 }
 
 // ─── types ────────────────────────────────────────────────────────────────────
-
-type JobStatus = "reading"|"uploading"|"processing"|"done"|"duplicate"|"error"|"interrupted"|"cancelled";
-
-type Job = {
-  id: string; batchId: string; name: string; size: number; status: JobStatus; progress: number; createdAt: number;
-  insertedRows?: number; duplicateRowsSkipped?: number; failedRows?: number; totalRows?: number; tableName?: string;
-  existingFileName?: string; duplicateReason?: "content"|"name"|"empty"; invalidReason?: "empty"|"header_only"|"no_columns";
-  existingRowCount?: number; overwritten?: boolean; replacedFileName?: string; errorMessage?: string;
-  errorDetails?: string; errorStack?: string; rowErrors?: RowError[]; columns?: string[]; types?: ColumnType[];
-  logs?: ProcessingLog[]; headerMapping?: ColumnMapping[]; cancellationReason?: string;
-};
+// Job / JobStatus now live in @/lib/job-types (shared with audit.tsx).
 
 const STATUS_LABEL: Record<JobStatus,string> = {
   reading:"Reading file…", uploading:"Uploading…", processing:"Processing on server…",
@@ -130,7 +123,7 @@ function sendNotif(title: string, body: string) {
 
 // ─── Uploader ─────────────────────────────────────────────────────────────────
 
-function Uploader() {
+export function Uploader() {
   const router = useRouter();
   const [dragOver, setDragOver] = useState(false);
   const [jobs, setJobs, clearStoredJobs] = useLocalStorageState<Job[]>([]);
@@ -157,8 +150,8 @@ function Uploader() {
   const cancelJob = useCallback((id:string,reason?:string)=>{
     const ctrl = abortMap.current.get(id);
     if (ctrl) { ctrl.abort(); abortMap.current.delete(id); }
-    updateJob(id,{status:"cancelled",progress:100,cancellationReason:reason??"Cancelled by user"});
-    toast.info(`Import cancelled${reason?`: ${reason}`:""}.`);
+    updateJob(id,buildCancelPatch(reason));
+    toast.info(buildCancelToastMessage(reason));
   },[updateJob]);
 
   const runJob = useCallback(async(job:Job,file:File,mapping?:ColumnMapping[],overwrite?:boolean)=>{
@@ -183,35 +176,21 @@ function Uploader() {
       const types = mapping?.map(c=>c.type);
       const headerMapping = mapping ?? undefined;
 
-      const res = await uploadCsv({ fileName:job.name, content, types, overwrite, headerMapping: headerMapping?.map(c=>({original:c.original,renamed:c.renamed})) } as any) as UploadResult;
+      const res = await uploadCsv({ fileName:job.name, content, types, overwrite, headerMapping: headerMapping?.map(c=>({original:c.original,renamed:c.renamed})) });
       if (ctrl.signal.aborted) return;
       abortMap.current.delete(job.id);
 
-      if (res.status==="ok") {
-        updateJob(job.id,{status:"done",progress:100,insertedRows:res.insertedRows,duplicateRowsSkipped:res.duplicateRowsSkipped,failedRows:res.failedRows,totalRows:res.totalRows,tableName:res.tableName,columns:res.columns,types:res.types,rowErrors:res.rowErrors,logs:res.logs,overwritten:res.overwritten,replacedFileName:res.replacedFileName,headerMapping:mapping});
-        const msg = `${job.name}: ${res.overwritten?"overwrote · ":""}${res.insertedRows} of ${res.totalRows} rows imported${res.failedRows?` · ${res.failedRows} failed`:""}`;
-        toast.success(msg);
-        sendNotif("Import complete", msg); // F12
-        await router.invalidate();
-      } else if (res.status==="duplicate_file") {
-        updateJob(job.id,{status:"duplicate",progress:100,existingFileName:res.existingFileName,tableName:res.tableName,duplicateReason:res.reason,existingRowCount:res.existingRowCount,logs:res.logs,headerMapping:mapping});
-        toast.warning(`${job.name}: already imported — click Overwrite to replace.`);
-        sendNotif("Duplicate detected", `${job.name} matches an existing import.`); // F12
-      } else if (res.status==="invalid_structure") {
-        updateJob(job.id,{status:"error",progress:100,errorMessage:res.message,errorDetails:res.message,invalidReason:res.reason,logs:res.logs,headerMapping:mapping});
-        toast.error(`${job.name}: ${res.message}`);
-        sendNotif("Import failed", `${job.name}: ${res.message}`); // F12
-      } else {
-        updateJob(job.id,{status:"error",progress:100,errorMessage:(res as any).message,errorDetails:(res as any).message,rowErrors:(res as any).rowErrors,logs:(res as any).logs,headerMapping:mapping});
-        toast.error(`${job.name}: ${(res as any).message}`);
-        sendNotif("Import failed", `${job.name}: ${(res as any).message}`); // F12
-      }
+      const outcome = classifyUploadResult(job.name,res,mapping);
+      updateJob(job.id,outcome.patch);
+      toast[outcome.toast.type](outcome.toast.message);
+      if (outcome.notify) sendNotif(outcome.notify.title,outcome.notify.body); // F12
+      if (outcome.invalidateRoute) await router.invalidate();
     } catch(err) {
       abortMap.current.delete(job.id);
       if (ctrl.signal.aborted) return; // already cancelled
-      const e = err as Error;
-      updateJob(job.id,{status:"error",progress:100,errorMessage:e.message||"Unknown error",errorDetails:e.message,errorStack:e.stack});
-      toast.error(`${job.name}: ${e.message}`);
+      const outcome = classifyThrownError(job.name,err);
+      updateJob(job.id,outcome.patch);
+      toast[outcome.toast.type](outcome.toast.message);
     }
   },[router,updateJob]);
 
@@ -268,7 +247,8 @@ function Uploader() {
   // F9: show diff before overwrite
   const requestOverwrite = useCallback((id:string)=>{
     const job = jobs.find(j=>j.id===id);
-    if (job?.tableName) { setDiffJob(job); } else { retryJob(id,{overwrite:true}); }
+    const decision = decideOverwriteAction(job);
+    if (decision.action==="show-diff") { setDiffJob(decision.job); } else { retryJob(id,{overwrite:true}); }
   },[jobs,retryJob]);
 
   const confirmOverwrite = useCallback(()=>{ if(diffJob){retryJob(diffJob.id,{overwrite:true});} setDiffJob(null); },[diffJob,retryJob]);
@@ -526,7 +506,6 @@ function PreviewDialog({pending,index,onPrev,onNext,onUpdateMapping,onConfirm,on
                 {preview.headers.map((orig,colIdx)=>{
                   const col=m[colIdx]??{original:orig,renamed:"",type:preview.inferredTypes[colIdx]};
                   const sanitizedDefault=sanitizeColumns([orig])[0];
-                  const displayName=col.renamed?col.renamed:sanitizedDefault;
                   const changed=col.renamed&&col.renamed!==sanitizedDefault;
                   return (
                     <TableRow key={colIdx}>

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import psycopg2
 import psycopg2.pool
+from psycopg2 import sql
 
 from api.config import settings
 
@@ -163,10 +164,12 @@ def bootstrap() -> None:
 
     if not alembic_ini.exists():
         logger.warning(
-            "alembic.ini not found at %s — skipping Alembic migration. "
-            "Schema must be provisioned manually (bash scripts/provision_full_test_env.sh).",
+            "alembic.ini not found at %s — falling back to hand-written "
+            "CREATE TABLE IF NOT EXISTS bootstrap. Add alembic.ini + an "
+            "alembic/ versions directory to get real schema-evolution support.",
             alembic_ini,
         )
+        _bootstrap_fallback_schema()
         return
 
     cfg = Config(str(alembic_ini))
@@ -175,3 +178,51 @@ def bootstrap() -> None:
                 settings.PG_DATABASE)
     command.upgrade(cfg, "head")
     logger.info("Alembic migrations complete")
+
+
+def _bootstrap_fallback_schema() -> None:
+    """Idempotent CREATE TABLE IF NOT EXISTS bootstrap used when Alembic isn't
+    wired up (see bootstrap() above). Mirrors the columns every INSERT/SELECT
+    in api/services/*.py and api/routers/*.py already assumes exist.
+
+    This does not track schema versions — any future column addition needs a
+    real Alembic migration (or a manual ALTER) to reach already-bootstrapped
+    databases. It only guarantees the schema exists at all on a fresh DB.
+    """
+    schema = settings.UPLOADS_SCHEMA
+    with Conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema)))
+            cur.execute(
+                sql.SQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS {}.csv_files (
+                        id BIGSERIAL PRIMARY KEY,
+                        file_name TEXT NOT NULL,
+                        file_hash TEXT NOT NULL,
+                        table_name TEXT NOT NULL,
+                        mode TEXT NOT NULL,
+                        row_count INTEGER NOT NULL DEFAULT 0,
+                        column_names TEXT[] NOT NULL DEFAULT '{{}}',
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                    )
+                    """
+                ).format(sql.Identifier(schema))
+            )
+            cur.execute(
+                sql.SQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS {}.audit_log (
+                        id BIGSERIAL PRIMARY KEY,
+                        action TEXT NOT NULL,
+                        file_id BIGINT,
+                        file_name TEXT,
+                        table_name TEXT,
+                        mode TEXT,
+                        performed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                    )
+                    """
+                ).format(sql.Identifier(schema))
+            )
+        conn.commit()
+    logger.info("Fallback bootstrap complete: schema %s ready (csv_files, audit_log)", schema)

@@ -18,7 +18,7 @@ import unittest
 import pytest
 from fastapi.testclient import TestClient
 
-from api.config import TE_TABLES
+from api.config import TE_TABLES, settings
 from api.main import app
 
 client = TestClient(app)
@@ -35,6 +35,10 @@ class _IntegrationBase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # BUG-040 flipped the default to False; every test class here relies
+        # on tearDown() being able to DELETE its tagged files for cleanup.
+        cls._orig_allow_destructive = settings.allow_destructive
+        settings.allow_destructive = True
         cls.ctx = TestClient(app)
         try:
             cls.client = cls.ctx.__enter__()
@@ -51,6 +55,7 @@ class _IntegrationBase(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.ctx.__exit__(None, None, None)
+        settings.allow_destructive = cls._orig_allow_destructive
 
     def setUp(self):
         self.tag = f"coverage_{os.getpid()}_{self._testMethodName}"
@@ -257,6 +262,38 @@ class DeleteEndpoint(_IntegrationBase):
 
         ids = [f["id"] for f in self.client.get("/api/csv/files").json()]
         self.assertNotIn(str(file_id), ids)
+
+
+
+# ---------------------------------------------------------------------------
+# BUG-041: GET /api/audit/log (integration)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.integration
+class AuditLogEndpoint(_IntegrationBase):
+    """audit_log used to be write-only; verify deletions are readable back."""
+
+    def test_delete_appears_in_audit_log(self):
+        up = self._upload_dynamic()
+        body = up.json()
+        self.assertEqual(body["status"], "ok", body)
+        file_id = int(body["fileId"])
+        file_name = f"{self.tag}.csv"
+
+        self.client.delete(f"/api/csv/files/{file_id}")
+
+        r = self.client.get("/api/audit/log", params={"limit": 200})
+        self.assertEqual(r.status_code, 200)
+        page = r.json()
+        for field in ("total", "limit", "offset", "entries"):
+            self.assertIn(field, page)
+        entry = next(
+            (e for e in page["entries"] if e["fileId"] == file_id), None
+        )
+        self.assertIsNotNone(entry, "delete should be recorded in the audit log")
+        self.assertEqual(entry["action"], "delete")
+        self.assertEqual(entry["fileName"], file_name)
+        self.assertIn("performedAt", entry)
 
 
 # ---------------------------------------------------------------------------

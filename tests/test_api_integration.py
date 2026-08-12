@@ -241,7 +241,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
 
         files = self.client.get("/api/csv/files").json()
         record = next((f for f in files if f["file_name"] == self.name), None)
-        self.assertIsNotNone(record, f"Uploaded file not found in audit log")
+        self.assertIsNotNone(record, "Uploaded file not found in audit log")
 
         for field in ("id", "file_name", "table_name", "mode", "row_count", "created_at"):
             self.assertIn(field, record, f"Audit record missing required field: {field}")
@@ -370,7 +370,8 @@ class PoolTimeout(unittest.TestCase):
             # Timeout is 0.5s. If elapsed exceeds a few seconds, the pool
             # started blocking (a bug or a future psycopg2 change) and our
             # timeout wrapper failed to fire — exactly what BUG-030 guards.
-            self.assertLess(elapsed, 3.0,
+            self.assertLess(
+                elapsed, 3.0,
                 f"BUG-030 regression: getconn blocked {elapsed:.2f}s "
                 f"instead of raising within POOL_GETCONN_TIMEOUT")
             self.assertIn("pool", str(ctx.exception).lower())

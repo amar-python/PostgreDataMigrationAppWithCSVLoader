@@ -14,12 +14,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CheckCircle2, AlertTriangle, XCircle, PauseCircle, ChevronDown, ChevronRight, Download, RotateCw, Search, FileText, CalendarRange } from "lucide-react";
 import { toast } from "sonner";
-import type { RowError, ColumnType, ProcessingLog } from "@/lib/csv.functions";
-import type { ColumnMapping } from "@/lib/mapping-templates";
 import { downloadErrorReport, downloadAuditReport, buildErrorRows, mappingSummary, type ExportFormat, type AuditReportRow } from "@/lib/export";
-
-type JobStatus = "reading"|"uploading"|"processing"|"done"|"duplicate"|"error"|"interrupted"|"cancelled";
-type Job = { id: string; batchId: string; name: string; size: number; status: JobStatus; progress: number; createdAt: number; insertedRows?: number; duplicateRowsSkipped?: number; failedRows?: number; totalRows?: number; tableName?: string; existingFileName?: string; duplicateReason?: "content"|"name"|"empty"; invalidReason?: "empty"|"header_only"|"no_columns"; existingRowCount?: number; overwritten?: boolean; replacedFileName?: string; errorMessage?: string; errorDetails?: string; errorStack?: string; rowErrors?: RowError[]; columns?: string[]; types?: ColumnType[]; logs?: ProcessingLog[]; headerMapping?: ColumnMapping[]; cancellationReason?: string; };
+import type { Job, JobStatus } from "@/lib/job-types";
 
 export const Route = createFileRoute("/audit")({ head: () => ({ meta: [{ title: "Audit log — CSV Migrator" }] }), component: AuditPage });
 

@@ -140,9 +140,10 @@ Start-Process "http://localhost:8080"
 | `GET` | `/api/health` | DB reachability + PostgreSQL version |
 | `POST` | `/api/csv/preview` | Parse CSV, infer types, suggest T&E table match |
 | `POST` | `/api/csv/upload` | Load CSV — `mode: "dynamic"` or `mode: "te"` |
-| `GET` | `/api/csv/files` | List all uploaded CSVs (audit log) |
+| `GET` | `/api/csv/files` | List all uploaded CSVs |
 | `GET` | `/api/csv/tables/{name}/rows` | Preview rows of a dynamic table |
 | `DELETE` | `/api/csv/files/{id}` | Drop a dynamic table (requires `API_ALLOW_DESTRUCTIVE=true`) |
+| `GET` | `/api/audit/log` | Paginated deletion history (who/what/when was dropped) |
 | `GET` | `/api/te/tables` | Existence + row counts for the 12 fixed T&E tables |
 
 Interactive docs: `http://localhost:8000/docs`

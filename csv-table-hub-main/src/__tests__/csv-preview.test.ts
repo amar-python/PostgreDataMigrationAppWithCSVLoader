@@ -37,13 +37,13 @@ describe("sanitizeColumns", () => {
     expect(result).toEqual(["name", "name_2", "name_3"]);
   });
 
-  it("leading underscores are stripped, so _id becomes 'id'", () => {
-    // The reserved check fires on the stripped base, but the set contains "_id"
-    // (with underscore), so after stripping "_id" → "id" the check does not match.
-    // The sanitiser therefore produces "id", not "id_col". This test documents
-    // the actual behaviour so any future change is caught.
-    expect(sanitizeColumns(["_id"])[0]).toBe("id");
-    expect(sanitizeColumns(["_row_hash"])[0]).toBe("row_hash");
+  it("reserved system column names get a _col suffix instead of colliding", () => {
+    // The reserved check runs before underscores are stripped, so a header
+    // that sanitises to exactly "_id"/"_row_hash"/"_created_at" (the real
+    // system columns) is renamed to "id_col"/"row_hash_col"/"created_at_col".
+    expect(sanitizeColumns(["_id"])[0]).toBe("id_col");
+    expect(sanitizeColumns(["_row_hash"])[0]).toBe("row_hash_col");
+    expect(sanitizeColumns(["_created_at"])[0]).toBe("created_at_col");
   });
 
   it("truncates names longer than 55 characters", () => {

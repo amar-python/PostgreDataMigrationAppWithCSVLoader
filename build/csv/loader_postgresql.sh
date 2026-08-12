@@ -30,8 +30,8 @@ E="${TARGET_ENV^^}"
 PG_HOST="${PGHOST:-${PG_HOST:-localhost}}"
 PG_PORT="${PGPORT:-${PG_PORT:-5432}}"
 PG_USER="${PGUSER:-${PG_SUPERUSER:-postgres}}"
-DB_NAME="$(eval echo "\$PG_DB_${E}")"
-SCHEMA="$(eval echo "\$PG_SCHEMA_${E}")"
+_db_var="PG_DB_${E}";     DB_NAME="${!_db_var:-}"
+_sc_var="PG_SCHEMA_${E}"; SCHEMA="${!_sc_var:-}"
 
 [[ -n "${PG_SUPERUSER_PASSWORD:-}" ]] && export PGPASSWORD="${PG_SUPERUSER_PASSWORD}"
 
@@ -40,31 +40,65 @@ PSQL="psql -h ${PG_HOST} -p ${PG_PORT} -U ${PG_USER} -d ${DB_NAME}"
 log "Target: ${DB_NAME}.${SCHEMA}.${TABLE_NAME} on ${PG_HOST}:${PG_PORT}"
 
 # ── Read CSV header to get column names ───────────────────────────────────────
+# CSV header text must never be trusted as raw SQL: each column name is
+# sanitised to ^[a-z_][a-z0-9_]*$ (load aborts if that's not achievable) and
+# every identifier below is always double-quoted, with embedded quotes
+# escaped, before it goes into a SQL statement.
 HEADER=$(head -1 "$VALID_CSV")
 COLUMNS=$(python3 -c "
-import csv, sys
+import csv, re, sys
+
+def sanitize(name, idx):
+    base = re.sub(r'[^a-z0-9_]+', '_', name.strip().lower()).strip('_')
+    if not base:
+        base = f'column_{idx}'
+    if base[0].isdigit():
+        base = f'col_{base}'
+    return base
+
+def quote_ident(name):
+    return '\"' + name.replace('\"', '\"\"') + '\"'
+
 cols = next(csv.reader([sys.argv[1]]))
-print(', '.join(c.strip().lower().replace(' ','_') for c in cols))
-" "$HEADER")
+sanitized = [sanitize(c, i + 1) for i, c in enumerate(cols)]
+bad = [c for c in sanitized if not re.match(r'^[a-z_][a-z0-9_]*\$', c)]
+if bad:
+    sys.exit('unsafe column name(s) after sanitisation: ' + ', '.join(bad))
+print(', '.join(quote_ident(c) for c in sanitized))
+" "$HEADER") || { err "CSV header has column name(s) that can't be made into safe SQL identifiers."; exit 1; }
 
 log "Columns: ${COLUMNS}"
 
 # ── Auto-create table if it doesn't exist ────────────────────────────────────
 # All columns default to TEXT — alter types after load if needed
 CREATE_SQL=$(python3 -c "
-import csv, sys
+import csv, re, sys
+
+def sanitize(name, idx):
+    base = re.sub(r'[^a-z0-9_]+', '_', name.strip().lower()).strip('_')
+    if not base:
+        base = f'column_{idx}'
+    if base[0].isdigit():
+        base = f'col_{base}'
+    return base
+
+def quote_ident(name):
+    return '\"' + name.replace('\"', '\"\"') + '\"'
+
 cols = next(csv.reader([sys.argv[1]]))
-col_defs = ',\n   '.join(
-    f'{c.strip().lower().replace(\" \",\"_\")}   TEXT' for c in cols
-)
-schema = sys.argv[2]
-table  = sys.argv[3]
-print(f'''CREATE TABLE IF NOT EXISTS \"{schema}\".\"{table}\" (
+sanitized = [sanitize(c, i + 1) for i, c in enumerate(cols)]
+bad = [c for c in sanitized if not re.match(r'^[a-z_][a-z0-9_]*\$', c)]
+if bad:
+    sys.exit('unsafe column name(s) after sanitisation: ' + ', '.join(bad))
+col_defs = ',\n   '.join(f'{quote_ident(c)}   TEXT' for c in sanitized)
+schema = quote_ident(sys.argv[2])
+table  = quote_ident(sys.argv[3])
+print(f'''CREATE TABLE IF NOT EXISTS {schema}.{table} (
    _csv_row_id  BIGSERIAL PRIMARY KEY,
    {col_defs},
    _loaded_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );''')
-" "$HEADER" "$SCHEMA" "$TABLE_NAME")
+" "$HEADER" "$SCHEMA" "$TABLE_NAME") || { err "Failed to build CREATE TABLE statement — check column names."; exit 1; }
 
 log "Creating table if not exists..."
 $PSQL -c "$CREATE_SQL" >> "$LOG_FILE" 2>&1 \

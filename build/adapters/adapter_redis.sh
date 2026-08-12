@@ -7,6 +7,8 @@
 # Requires: redis-cli installed and on PATH
 # =============================================================================
 
+set -euo pipefail
+
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()   { echo -e "${GREEN}[✓ REDIS]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[⚠ REDIS]${NC} $*"; }
@@ -26,9 +28,9 @@ SUCCEEDED=(); FAILED=()
 
 for env in "${ENVS[@]}"; do
    E="${env^^}"
-   db_index="$(eval echo "\$REDIS_DB_${E}")"
-   key_prefix="$(eval echo "\$REDIS_KEY_PREFIX_${E}")"
-   seed="$(eval echo "\$SEED_${E:-false}")"
+   _db_var="REDIS_DB_${E}";          db_index="${!_db_var:-}"
+   _prefix_var="REDIS_KEY_PREFIX_${E}"; key_prefix="${!_prefix_var:-}"
+   _seed_var="SEED_${E:-false}";     seed="${!_seed_var:-}"
 
    echo ""
    warn "Deploying Redis ${E}: db=${db_index}  prefix=${key_prefix}  seed=${seed}"

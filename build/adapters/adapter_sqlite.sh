@@ -3,6 +3,8 @@
 # adapters/adapter_sqlite.sh — SQLite 3 Deployment Adapter
 # =============================================================================
 
+set -euo pipefail
+
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()   { echo -e "${GREEN}[✓ SQLITE]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[⚠ SQLITE]${NC} $*"; }
@@ -20,8 +22,8 @@ SUCCEEDED=(); FAILED=()
 
 for env in "${ENVS[@]}"; do
    E="${env^^}"
-   db_file="${SQLITE_DIR}/$(eval echo "\$SQLITE_DB_${E}")"
-   seed="$(eval echo "\$SEED_${E}")"
+   _dbfile_var="SQLITE_DB_${E}"; db_file="${SQLITE_DIR}/${!_dbfile_var:-}"
+   _seed_var="SEED_${E}";        seed="${!_seed_var:-}"
 
    echo ""
    warn "Deploying SQLite ${E}: file=${db_file}  seed=${seed}"

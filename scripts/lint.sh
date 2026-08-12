@@ -15,7 +15,8 @@ PY_SRC=(
 PY_TESTS=(
     tests/test_csv_validator.py
     tests/test_evals_runner.py
-    tests/test_api.py
+    tests/test_api_unit.py
+    tests/test_api_integration.py
     tests/test_issue_04_multi_file_upload.py
     tests/test_issue_05_import_summary.py
 )
