@@ -294,4 +294,4 @@ MIT — see [LICENSE](LICENSE) for full text.
 
 ## Acknowledgements
 
-Built with [PostgreSQL](https://www.postgresql.org/) 17+, [FastAPI](https://fastapi.tiangolo.com/), [React 19](https://react.dev/), and [Lovable](https://lovable.dev/). T&E schema design informed by Australian Defence practice (ASDEFCON, ISM, MIL-STD-882).
+Built with [PostgreSQL](https://www.postgresql.org/) 17+, [FastAPI](https://fastapi.tiangolo.com/), [React 19](https://react.dev/), and [Lovable](https://lovable.dev/).
