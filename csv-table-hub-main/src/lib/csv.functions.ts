@@ -91,13 +91,16 @@ const previewRowsSchema = z.object({
 });
 
 const apiBase = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
+const apiKey = import.meta.env.VITE_API_KEY ?? "";
 
 async function apiFetch<T>(path: string, schema: z.ZodType<T>, options?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
+    ...options,
     headers: {
       "content-type": "application/json",
+      ...(apiKey ? { "X-API-Key": apiKey } : {}),
+      ...options?.headers,
     },
-    ...options,
   });
 
   const text = await response.text();

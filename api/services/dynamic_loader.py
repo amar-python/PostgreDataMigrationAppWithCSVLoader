@@ -214,10 +214,11 @@ def _do_upload(
             _log(logs, "validate_columns", f"Validated {len(columns)} columns", count=len(columns))
 
             # Types
-            if types and len(types) == len(columns):
-                col_types = types
-            else:
-                col_types = ["text"] * len(columns)
+            if types is not None and len(types) != len(columns):
+                msg = f"Provided {len(types)} column types but the CSV has {len(columns)} columns."
+                _log(logs, "error", msg, "error")
+                return {"status": "error", "message": msg, "logs": logs}
+            col_types = types if types else ["text"] * len(columns)
             if any(t not in ALLOWED_TYPES for t in col_types):
                 _log(logs, "error", "Unsupported column type provided", "error")
                 return {"status": "error", "message": "Unsupported column type provided.", "logs": logs}

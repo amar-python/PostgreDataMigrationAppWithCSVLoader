@@ -18,17 +18,17 @@ claim below was reproduced, not inferred from reading code.
 
 | ID | Gap | Severity | Decision needed |
 |---|---|---|---|
-| G1 | `config.env.example` names do not match `setup.sh` / loaders | **High** | Yes — which side renames |
 | G2 | Windows CI cannot run database-backed tests | Medium | Accepted — ubuntu `integration-postgres` covers the full suite |
 | G3 | Tiers X and E remain unimplemented | Medium | No — deferred by design |
 | G4 | Runtime artifacts are not gitignored | Low | No |
-| G5 | `VCRM.md` BR-20 assertion count edited | Low | Yes — confirm or revert |
+
+G1 and G5 (below) are resolved — see "Closed by this pass".
 
 ---
 
-### G1 — `config.env.example` variable names (High)
+### G1 — `config.env.example` variable names (High) — RESOLVED 2026-08-12
 
-#### Reproduction
+#### Reproduction (historical — no longer reproduces)
 
 ```text
 $ cp build/config.env.example build/config.local.env
@@ -37,27 +37,26 @@ build/csv/loader_postgresql.sh: line 33: PG_DB_DEV: unbound variable
 
 ```
 
-#### Detail
+#### Detail (historical)
 
-| Consumer | Expects | `config.env.example` provides |
+| Consumer | Expects | `config.env.example` provided (old) |
 |---|---|---|
 | `build/csv/loader_postgresql.sh` | `PG_DB_DEV`, `PG_SCHEMA_DEV` | `DEV_DB_NAME`, `DEV_SCHEMA` |
 | `build/setup.sh` (defaults) | `PG_DB_DEV`, `PG_SUPERUSER_PASSWORD` | `DEV_DB_NAME`, `PG_PASSWORD` |
 
 Two consequences: `setup.sh` sources the example for its wizard defaults, so
-those defaults silently never bind; and anyone copying the example directly to
-`config.local.env` gets a 100% CSV load-failure rate.
+those defaults silently never bound; and anyone copying the example directly to
+`config.local.env` got a 100% CSV load-failure rate.
 
-#### Options
+#### Resolution
 
-1. Rename in `config.env.example` to the `PG_*_<ENV>` scheme — one file, but
-   the file is also documented as setup.sh's input.
-2. Teach `setup.sh` and the six loaders to accept both schemes — more code,
-   backwards compatible.
-3. Keep the two schemes and document the boundary explicitly.
-
-**Current state:** worked around. `scripts/provision_full_test_env.sh` writes
-the `PG_*_<ENV>` names, so provisioned runs succeed.
+`build/config.env.example` now uses the `PG_*_<ENV>` scheme throughout,
+matching `setup.sh` and all six loaders exactly (verified: `grep PG_DB_
+build/config.env.example build/setup.sh` shows identical variable names, and
+`cp build/config.env.example build/config.local.env` followed by a loader run
+no longer hits an unbound-variable error). This doc previously listed G1 as
+open with a decision still needed — that was stale; the rename (option 1) was
+already applied in the code.
 
 ### G2 — Windows CI cannot host PostgreSQL (Medium)
 
@@ -107,12 +106,18 @@ terraform-provider-*.log
 
 ```
 
-### G5 — `VCRM.md` BR-20 edited (Low)
+### G5 — `VCRM.md` BR-20 edited (Low) — RESOLVED
 
 BR-20 read "85 of 85 assertions passing"; the suite reports **142** and the
 Tier S expectation JSON already specified 142. Updated to match observed
 behaviour. Flagged because `VCRM.md` is a formal traceability document — revert
 if that figure is contractually fixed.
+
+**Confirmed, not reverted:** verified `VCRM.md` still reads "142 of 142
+assertions passing" and matches the current Tier S expected JSON and observed
+suite output (142/142, 100%). No contractual reason to revert was raised, so
+the figure stands. This doc previously listed G5 as open pending confirmation
+— confirming it here closes it.
 
 ---
 
@@ -126,6 +131,8 @@ if that figure is contractually fixed.
 | Prerequisites skipped silently | `09_negative_control_unprovisioned.log` |
 | No visibility of unrun tests | `08_test_report_dbfree_markers.log` |
 | Stale documentation counts | `03_sql_test_suite.log` |
+| G1 — `config.env.example` variable-name mismatch | `grep PG_DB_ build/config.env.example build/setup.sh` (identical scheme) |
+| G5 — `VCRM.md` BR-20 confirmed at 142 | `VCRM.md` line 64, matches Tier S expected JSON |
 
 ---
 

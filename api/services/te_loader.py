@@ -91,9 +91,13 @@ def _cleanup_prior_registry_entries(cur, file_name, file_hash):
     )
     for table_name, mode in cur.fetchall():
         if mode == "dynamic" and table_name.startswith("csv_"):
+            # Schema-qualify: the connection's search_path is never set to
+            # UPLOADS_SCHEMA, so an unqualified DROP TABLE would silently
+            # miss the table (it lives in csv_uploads, not public/default).
             cur.execute(
-                sql.SQL("DROP TABLE IF EXISTS {}").format(
-                    sql.Identifier(table_name)
+                sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
+                    sql.Identifier(settings.UPLOADS_SCHEMA),
+                    sql.Identifier(table_name),
                 )
             )
     cur.execute(
@@ -281,13 +285,11 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
             # Register the load in the shared registry (mode='te')
             file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
             # T&E loads may be re-run; clear any prior registry entry for this
-            # file name or identical content before re-registering.
-            cur.execute(
-                sql.SQL("DELETE FROM {}.csv_files WHERE file_name = %s OR file_hash = %s").format(
-                    sql.Identifier(settings.UPLOADS_SCHEMA)
-                ),
-                (file_name, file_hash),
-            )
+            # file name or identical content before re-registering. Uses
+            # _cleanup_prior_registry_entries (not a plain DELETE) so a prior
+            # *dynamic*-mode upload of the same file also has its csv_<hash>
+            # table dropped instead of orphaned.
+            _cleanup_prior_registry_entries(cur, file_name, file_hash)
             cur.execute(
                 sql.SQL(
                     "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names) "
