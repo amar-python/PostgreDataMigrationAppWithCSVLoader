@@ -59,16 +59,28 @@ class HealthContract(unittest.TestCase):
             settings.API_KEY = original
 
     def test_csv_endpoint_still_requires_api_key_when_set(self):
-        """BUG-035 counterpart: business endpoints must still be guarded."""
+        """BUG-035 counterpart: business endpoints must still be guarded.
+
+        conftest.py overrides require_api_key to a no-op for the whole test
+        session (so other tests don't need to thread an X-API-Key header
+        through every call), which means this test — the one test meant to
+        prove auth is actually enforced — could never see a real 401. Pop
+        the override for just this test's scope so the real dependency runs.
+        """
+        from api.auth import require_api_key
         from api.config import settings
 
         original = settings.API_KEY
         settings.API_KEY = "test-key-do-not-use"
+        had_override = require_api_key in app.dependency_overrides
+        saved_override = app.dependency_overrides.pop(require_api_key, None)
         try:
             r = client.get("/api/csv/files")  # no X-API-Key header
             self.assertEqual(r.status_code, 401)
         finally:
             settings.API_KEY = original
+            if had_override:
+                app.dependency_overrides[require_api_key] = saved_override
 
 
 @pytest.mark.integration
