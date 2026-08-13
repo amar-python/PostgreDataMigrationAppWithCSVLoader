@@ -20,9 +20,8 @@ claim below was reproduced, not inferred from reading code.
 |---|---|---|---|
 | G2 | Windows CI cannot run database-backed tests | Medium | Accepted — ubuntu `integration-postgres` covers the full suite |
 | G3 | Tiers X and E remain unimplemented | Medium | No — deferred by design |
-| G4 | Runtime artifacts are not gitignored | Low | No |
 
-G1 and G5 (below) are resolved — see "Closed by this pass".
+G1, G4, and G5 (below) are resolved — see "Closed by this pass".
 
 ---
 
@@ -84,10 +83,10 @@ Redis and Teradata rest on code review rather than execution.
 Partially mitigated: `tests/test_parity.py::TestAllEnvironmentsHaveRequiredTables`
 now runs against all four PostgreSQL environments.
 
-### G4 — Runtime artifacts not gitignored (Low)
+### G4 — Runtime artifacts not gitignored (Low) — RESOLVED 2026-08-13
 
-These appear as untracked after a normal run and risk being committed by a
-careless `git add -A`:
+These appeared as untracked after a normal run and risked being committed by
+a careless `git add -A`:
 
 ```text
 tests/snapshots/all_valid_expected_valid.csv
@@ -96,15 +95,12 @@ infra/terraform/terraform-provider-debug-after-refresh.log
 
 ```
 
-**Suggested `.gitignore` additions**
-
-```text
-tests/snapshots/
-tfplan
-*.tfplan
-terraform-provider-*.log
-
-```
+**Resolution:** `.gitignore` already carries every suggested entry —
+`tests/snapshots/all_valid_expected_valid.csv` (the one committed fixture
+under that directory is called out explicitly so the rest of the directory
+can be ignored without also ignoring it), `tfplan`, `*.tfplan`, and
+`terraform-provider-*.log`. This doc previously listed G4 as open with no
+decision recorded; that was stale — the additions were already applied.
 
 ### G5 — `docs/VCRM.md` BR-20 edited (Low) — RESOLVED
 
@@ -132,6 +128,7 @@ the figure stands. This doc previously listed G5 as open pending confirmation
 | No visibility of unrun tests | `08_test_report_dbfree_markers.log` |
 | Stale documentation counts | `03_sql_test_suite.log` |
 | G1 — `config.env.example` variable-name mismatch | `grep PG_DB_ build/config.env.example build/setup.sh` (identical scheme) |
+| G4 — runtime artifacts not gitignored | `.gitignore` contains all four suggested entries |
 | G5 — `VCRM.md` BR-20 confirmed at 142 | `VCRM.md` line 64, matches Tier S expected JSON |
 
 ---
