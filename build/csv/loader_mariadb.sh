@@ -27,6 +27,19 @@ MYSQL_OPTS="-h ${MYSQL_HOST} -P ${MYSQL_PORT} -u ${MYSQL_ROOT_USER}"
 # the mysql client and never appears in argv.
 [[ -n "${MYSQL_ROOT_PASSWORD:-}" ]] && export MYSQL_PWD="${MYSQL_ROOT_PASSWORD}"
 
+# Defense-in-depth: don't rely solely on csv_loader.sh's upstream TABLE_NAME
+# validation, or on MYSQL_DB_${E} being a well-formed config value -- validate
+# both here too (this script can be run directly despite the "called by
+# csv_loader.sh only" convention above), and quote every one of them at the
+# point of use below, not just inside the CREATE TABLE statement.
+mysql_quote_ident() { printf '`%s`' "${1//\`/\`\`}"; }
+for _ident in "$TABLE_NAME" "$DB_NAME"; do
+   if [[ ! "$_ident" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      err "Invalid identifier '${_ident}' -- must match ^[A-Za-z_][A-Za-z0-9_]*\$"
+      exit 1
+   fi
+done
+
 log "Target: ${DB_NAME}.${TABLE_NAME} on ${MYSQL_HOST}:${MYSQL_PORT}"
 
 # ── Read CSV header ───────────────────────────────────────────────────────────
@@ -95,10 +108,12 @@ echo "$CREATE_SQL" | mysql $MYSQL_OPTS >> "$LOG_FILE" 2>&1 \
 ABS_CSV="$(realpath "$VALID_CSV")"
 log "Loading CSV using LOAD DATA LOCAL INFILE..."
 
+Q_DB="$(mysql_quote_ident "$DB_NAME")"
+Q_TABLE="$(mysql_quote_ident "$TABLE_NAME")"
 LOAD_SQL="
-USE \`${DB_NAME}\`;
+USE ${Q_DB};
 LOAD DATA LOCAL INFILE '${ABS_CSV}'
-INTO TABLE \`${TABLE_NAME}\`
+INTO TABLE ${Q_TABLE}
 FIELDS TERMINATED BY ','
 OPTIONALLY ENCLOSED BY '\"'
 LINES TERMINATED BY '\n'
@@ -112,7 +127,7 @@ echo "$LOAD_SQL" | mysql $MYSQL_OPTS --local-infile=1 >> "$LOG_FILE" 2>&1 \
    || { err "Load failed. Check: ${LOG_FILE}"; exit 1; }
 
 # ── Verify row count ──────────────────────────────────────────────────────────
-DB_COUNT=$(echo "SELECT COUNT(*) FROM \`${DB_NAME}\`.\`${TABLE_NAME}\`;" \
+DB_COUNT=$(echo "SELECT COUNT(*) FROM ${Q_DB}.${Q_TABLE};" \
    | mysql $MYSQL_OPTS -s -N)
 log "Rows now in ${DB_NAME}.${TABLE_NAME}: ${DB_COUNT}"
 

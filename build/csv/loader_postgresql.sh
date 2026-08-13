@@ -33,6 +33,19 @@ PG_USER="${PGUSER:-${PG_SUPERUSER:-postgres}}"
 _db_var="PG_DB_${E}";     DB_NAME="${!_db_var:-}"
 _sc_var="PG_SCHEMA_${E}"; SCHEMA="${!_sc_var:-}"
 
+# Defense-in-depth: don't rely solely on csv_loader.sh's upstream TABLE_NAME
+# validation, or on PG_DB_${E}/PG_SCHEMA_${E} being well-formed config values
+# -- validate all three here too (this script can be run directly despite the
+# "called by csv_loader.sh only" convention above), and quote every one of
+# them at the point of use below, not just inside the CREATE TABLE statement.
+pg_quote_ident() { printf '"%s"' "${1//\"/\"\"}"; }
+for _ident in "$TABLE_NAME" "$SCHEMA" "$DB_NAME"; do
+   if [[ ! "$_ident" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      err "Invalid identifier '${_ident}' -- must match ^[A-Za-z_][A-Za-z0-9_]*\$"
+      exit 1
+   fi
+done
+
 [[ -n "${PG_SUPERUSER_PASSWORD:-}" ]] && export PGPASSWORD="${PG_SUPERUSER_PASSWORD}"
 
 PSQL="psql -h ${PG_HOST} -p ${PG_PORT} -U ${PG_USER} -d ${DB_NAME}"
@@ -108,7 +121,9 @@ $PSQL -c "$CREATE_SQL" >> "$LOG_FILE" 2>&1 \
 # ── Load data using COPY ──────────────────────────────────────────────────────
 log "Loading CSV using COPY..."
 
-COPY_SQL="\\COPY \"${SCHEMA}\".\"${TABLE_NAME}\" (${COLUMNS}) FROM STDIN WITH (FORMAT CSV, HEADER FALSE, NULL '', QUOTE '\"', DELIMITER ',')"
+Q_SCHEMA="$(pg_quote_ident "$SCHEMA")"
+Q_TABLE="$(pg_quote_ident "$TABLE_NAME")"
+COPY_SQL="\\COPY ${Q_SCHEMA}.${Q_TABLE} (${COLUMNS}) FROM STDIN WITH (FORMAT CSV, HEADER FALSE, NULL '', QUOTE '\"', DELIMITER ',')"
 
 # Skip header row from valid CSV before piping to COPY
 tail -n +2 "$VALID_CSV" | $PSQL -c "$COPY_SQL" >> "$LOG_FILE" 2>&1 \
@@ -116,7 +131,7 @@ tail -n +2 "$VALID_CSV" | $PSQL -c "$COPY_SQL" >> "$LOG_FILE" 2>&1 \
    || { err "COPY failed. Check: ${LOG_FILE}"; exit 1; }
 
 # ── Verify row count ──────────────────────────────────────────────────────────
-DB_COUNT=$($PSQL -t -c "SELECT COUNT(*) FROM \"${SCHEMA}\".\"${TABLE_NAME}\";" | xargs)
+DB_COUNT=$($PSQL -t -c "SELECT COUNT(*) FROM ${Q_SCHEMA}.${Q_TABLE};" | xargs)
 log "Rows now in ${SCHEMA}.${TABLE_NAME}: ${DB_COUNT}"
 
 unset PGPASSWORD
