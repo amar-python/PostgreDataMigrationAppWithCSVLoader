@@ -113,7 +113,7 @@ Set automatically by the workflow files. Listed here for reference.
 
 > The Windows CI job (`python-validator-tests.yml`) runs only database-free
 > tests (unit, regression, security, snapshot) and sets no PG variables.
-> G2 in `GAP_ANALYSIS.md` documents this as an accepted limitation.
+> G2 in `docs/GAP_ANALYSIS.md` documents this as an accepted limitation.
 
 ---
 

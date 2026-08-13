@@ -1,6 +1,6 @@
 # Production deployment — PostgreDataMigrationApp
 
-Companion to `AZURE_DEPLOY.md` (the Dev guide). This file covers the
+Companion to `docs/AZURE_DEPLOY.md` (the Dev guide). This file covers the
 Prod variant: Azure Database for PostgreSQL Flexible Server with HA +
 backups, private networking, Container Apps Job for managed scheduling,
 remote Terraform state, audit logging, and a Dev → Prod data migration
@@ -312,9 +312,9 @@ Suggested alerts (add via `azurerm_monitor_metric_alert`):
 
 ## See also
 
-- `AZURE_DEPLOY.md` — Dev deployment guide
+- `docs/AZURE_DEPLOY.md` — Dev deployment guide
 - `infra/terraform-prod/` — Prod IaC
 - `infra/terraform-prod/variables.tf` — cost/HA dials
 - `.github/workflows/azure-prod-*.yml` — Prod CI/CD
-- `ARCHITECTURE.md` — overall framework architecture
-- `VCRM.md` — verification cross-reference m
+- `docs/ARCHITECTURE.md` — overall framework architecture
+- `docs/VCRM.md` — verification cross-reference m

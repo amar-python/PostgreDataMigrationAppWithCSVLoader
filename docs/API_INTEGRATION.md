@@ -56,7 +56,7 @@ before deploying anywhere reachable beyond localhost. See `frontend/.env`.
 
 > **Known DX gap** — if `API_KEY` and `VITE_API_KEY` don't match, every request
 > returns 401 with no hint from either process. Tracked as BUG-006 in
-> `BUG_REPORT.md`.
+> `docs/BUG_REPORT.md`.
 
 ## What it does well
 

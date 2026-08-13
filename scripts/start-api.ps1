@@ -3,7 +3,7 @@
 #
 # ASCII-only on purpose: Windows PowerShell 5.1 mis-parses non-ASCII characters
 # like em-dashes when the file lacks a UTF-8 BOM, which turns strings after the
-# em-dash into unquoted command calls (see BUG-021 in BUG_REPORT.md).
+# em-dash into unquoted command calls (see BUG-021 in docs/BUG_REPORT.md).
 
 $ErrorActionPreference = "Stop"
 $apiDir = Join-Path $PSScriptRoot "..\api"

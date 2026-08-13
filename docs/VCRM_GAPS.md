@@ -1,6 +1,6 @@
 # VCRM Gap Analysis — uncovered & partially-covered requirements
 
-Companion to `VCRM.md`. Lists only the 5 business requirements that are **not fully verified** by an automated test condition, with risk assessment, recommended remediation, and effort/priority. The remaining 17 of 22 requirements are fully covered and not repeated here.
+Companion to `docs/VCRM.md`. Lists only the 5 business requirements that are **not fully verified** by an automated test condition, with risk assessment, recommended remediation, and effort/priority. The remaining 17 of 22 requirements are fully covered and not repeated here.
 
 > **Verification methods** (from MIL-STD / IEEE 1012): **T**est, **A**nalysis, **I**nspection, **D**emonstration. The recommendations below pick the cheapest method that gives a real signal.
 
@@ -267,8 +267,8 @@ Append to this log whenever a gap is accepted as risk, scheduled for verificatio
 
 *Companion documents:*
 
-- `VCRM.md` — full Verification Cross Reference Matrix (all 22 requirements)
-- `TEST_CONDITIONS.md` — every test condition catalogued in detail
-- `ARCHITECTURE.md` — the three-layer model (build / tests / evals)
+- `docs/VCRM.md` — full Verification Cross Reference Matrix (all 22 requirements)
+- `docs/TEST_CONDITIONS.md` — every test condition catalogued in detail
+- `docs/ARCHITECTURE.md` — the three-layer model (build / tests / evals)
 - `evals/FAILURE_MODES.md` — failure-mode catalogue at the eval layer
 - `evals/HANDOFF.md` — deferred-items log for the eval pa

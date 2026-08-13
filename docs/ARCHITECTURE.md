@@ -9,7 +9,7 @@ PostgreDataMigrationApp/
 +-- tests/             <-- correctness coverage for the production code
 +-- evals/             <-- data-driven black-box scenarios
 |
-+-- README.md  LICENSE  ARCHITECTURE.md  .gitignore
++-- README.md  LICENSE  docs/ARCHITECTURE.md  .gitignore
 ```
 
 ## Why the split
@@ -101,7 +101,7 @@ If a file would fit two of those, split it — the test belongs in `tests/`, the
 
 ## What's not part of any layer
 
-- `README.md`, `LICENSE`, `ARCHITECTURE.md`, `.gitignore` — repo metadata
+- `README.md`, `LICENSE`, `docs/ARCHITECTURE.md`, `.gitignore` — repo metadata
 - `_norton_/`, `extend to Oracle dbs/` — exploratory user folders, not currently wired up
 - `scripts/insert_random_test_data.sql` — auxiliary helper not yet categorised
 

@@ -1,13 +1,13 @@
 # Gap Analysis
 
 Open gaps in the repository after the documentation audit and no-skip hardening
-pass. Fixed items are in `FIXES_APPLIED.md`; evidence is in `test-artifacts/`.
+pass. Fixed items are in `docs/FIXES_APPLIED.md`; evidence is in `test-artifacts/`.
 
 **Assessed at:** `main` @ `b255262` + audit changes
 **Method:** clean-clone execution on Ubuntu 24.04 with PostgreSQL 16.14 — every
 claim below was reproduced, not inferred from reading code.
 
-> **Relationship to `VCRM_GAPS.md`:** that file traces the 22 business
+> **Relationship to `docs/VCRM_GAPS.md`:** that file traces the 22 business
 > requirements to eval evidence and is regenerated per run. This document covers
 > engineering gaps that sit outside the BR set — configuration, coverage and
 > process. The two are complementary.
@@ -106,14 +106,14 @@ terraform-provider-*.log
 
 ```
 
-### G5 — `VCRM.md` BR-20 edited (Low) — RESOLVED
+### G5 — `docs/VCRM.md` BR-20 edited (Low) — RESOLVED
 
 BR-20 read "85 of 85 assertions passing"; the suite reports **142** and the
 Tier S expectation JSON already specified 142. Updated to match observed
-behaviour. Flagged because `VCRM.md` is a formal traceability document — revert
+behaviour. Flagged because `docs/VCRM.md` is a formal traceability document — revert
 if that figure is contractually fixed.
 
-**Confirmed, not reverted:** verified `VCRM.md` still reads "142 of 142
+**Confirmed, not reverted:** verified `docs/VCRM.md` still reads "142 of 142
 assertions passing" and matches the current Tier S expected JSON and observed
 suite output (142/142, 100%). No contractual reason to revert was raised, so
 the figure stands. This doc previously listed G5 as open pending confirmation

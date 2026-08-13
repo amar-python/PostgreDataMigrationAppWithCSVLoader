@@ -185,10 +185,10 @@ In Claude:
 
 Expect Claude to:
 
-1. Produce `BUG_REPORT.md` cataloguing ~20 bugs across modules
+1. Produce `docs/BUG_REPORT.md` cataloguing ~20 bugs across modules
 2. Pause for your approval before fixing
 3. Apply fixes module-by-module, adding a test per bug
-4. Produce `FIXES_APPLIED.md` tracking each fix
+4. Produce `docs/FIXES_APPLIED.md` tracking each fix
 
 ### Verify Phase 2
 
@@ -266,7 +266,7 @@ After major changes, sync docs with code:
 > Apply prompt 15 to audit and update all markdown docs against the
 > current code.
 
-Output: refreshed README.md, ARCHITECTURE.md, etc., with stale references
+Output: refreshed README.md, docs/ARCHITECTURE.md, etc., with stale references
 fixed.
 
 ## Phase 7 — Layer segregation + VCRM
@@ -276,11 +276,11 @@ properly-layered T&E system with full traceability.
 
 | Prompt | Produces |
 |---|---|
-| 18_segregate_build_tests_evals | Physical move into `build/`, `tests/`, `evals/` + `ARCHITECTURE.md` |
+| 18_segregate_build_tests_evals | Physical move into `build/`, `tests/`, `evals/` + `docs/ARCHITECTURE.md` |
 | 19_top_level_navigation_readme | The big root README |
-| 20_test_conditions_catalogue | `TEST_CONDITIONS.md` |
-| 21_map_to_business_requirements | `VCRM.md` Section 1 (22 BRs catalogued) |
-| 22_vcrm_traceability_matrix | `VCRM.md` Section 2 (BR-to-test-condition matrix) |
+| 20_test_conditions_catalogue | `docs/TEST_CONDITIONS.md` |
+| 21_map_to_business_requirements | `docs/VCRM.md` Section 1 (22 BRs catalogued) |
+| 22_vcrm_traceability_matrix | `docs/VCRM.md` Section 2 (BR-to-test-condition matrix) |
 
 ### Verify Phase 7
 
@@ -300,7 +300,7 @@ Apply prompts 14, 23, 24, 26:
 | Prompt | Produces |
 |---|---|
 | 14_per_run_gap_report | `evals/gap_report.py` + hook in runner.py |
-| 23_gap_analysis_uncovered | `VCRM_GAPS.md` |
+| 23_gap_analysis_uncovered | `docs/VCRM_GAPS.md` |
 | 26_markdown_lint_cleanup | `.markdownlint.json`, `.markdownlintignore`, blank-line + code-language fixes across all docs |
 
 ### Verify Phase 8
@@ -543,20 +543,20 @@ Once Phase 8 (local) or Phase 9 (cloud) is green:
   today (`tests/suites/test_05_*.sql` S09 + S10) catches typos in the
   per-env `\set conn_limit` values. Run the full suite after deploy to
   verify Dev shows `rolconnlimit = 10`.
-- **Push the te-framework-prompts skill v1.2** — add this RECONSTRUCT.md
+- **Push the te-framework-prompts skill v1.2** — add this docs/RECONSTRUCT.md
   as prompt 34 so future reconstructions reference the corrections
   inline.
 - **Wire up Tier X cross-engine evals** — see VCRM_GAPS BR-02. Start with
   SQLite (file-based, zero infra).
 - **Move to Prod** — the `infra/terraform-prod/` folder already has the
-  Flex Server + VNet + private endpoint pattern. Read `PROD_DEPLOY.md`.
+  Flex Server + VNet + private endpoint pattern. Read `docs/PROD_DEPLOY.md`.
 
 ## See also
 
 - `te-framework-prompts.skill` — the 33-prompt catalogue this guide
   drives
-- `ARCHITECTURE.md` — the build/tests/evals three-layer model
-- `VCRM.md` — the 22 business requirements and their verification
-- `AZURE_DEPLOY.md` — the original (pre-correction) Azure guide
-- `PROD_DEPLOY.md` — the Flex Server + VNet + private endpoints prod
+- `docs/ARCHITECTURE.md` — the build/tests/evals three-layer model
+- `docs/VCRM.md` — the 22 business requirements and their verification
+- `docs/AZURE_DEPLOY.md` — the original (pre-correction) Azure guide
+- `docs/PROD_DEPLOY.md` — the Flex Server + VNet + private endpoints prod
   recipe (always correct)

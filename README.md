@@ -91,17 +91,17 @@ PostgreDataMigrationAppWithCSVLoader/
 │   └── snapshots/                    ← committed CSV test fixtures
 │
 ├── env.dev.example                   ← dev environment template
-├── ENV_VARIABLES.md                  ← all environment variables documented
-├── API_INTEGRATION.md                ← frontend ↔ API endpoint mapping
-├── QUICKSTART.md                     ← 10-minute setup guide
-└── VCRM.md                           ← business requirement traceability
+├── docs/ENV_VARIABLES.md                  ← all environment variables documented
+├── docs/API_INTEGRATION.md                ← frontend ↔ API endpoint mapping
+├── docs/QUICKSTART.md                     ← 10-minute setup guide
+└── docs/VCRM.md                           ← business requirement traceability
 ```
 
 ---
 
 ## Quick Start
 
-See **`QUICKSTART.md`** for the full 10-minute walkthrough. Summary:
+See **`docs/QUICKSTART.md`** for the full 10-minute walkthrough. Summary:
 
 ```powershell
 # 1. Clone
@@ -217,7 +217,7 @@ python evals\runner.py --tiers p,i,s   # 25 scenarios, all should pass
 
 ## Environment Variables
 
-See **`ENV_VARIABLES.md`** for the full reference. Key variables:
+See **`docs/ENV_VARIABLES.md`** for the full reference. Key variables:
 
 | Variable | Default | Description |
 |---|---|---|
@@ -280,7 +280,7 @@ verify this automatically.
 
 ## Azure Deployment
 
-See `AZURE_DEPLOY.md` and `infra/` for full deployment instructions. The API
+See `docs/AZURE_DEPLOY.md` and `infra/` for full deployment instructions. The API
 and frontend run as separate Azure Container Apps in the same environment. The
 PostgreSQL Container App has `external_enabled = false` so the database is not
 publicly reachable.

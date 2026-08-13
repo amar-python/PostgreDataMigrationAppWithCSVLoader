@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     else:
         # Fingerprint (first 4 chars + length) so mismatches with the frontend's
         # VITE_API_KEY are diagnosable without leaking the secret to the log.
-        # Fixes BUG-006 in BUG_REPORT.md.
+        # Fixes BUG-006 in docs/BUG_REPORT.md.
         fp = settings.API_KEY[:4] + "..." if len(settings.API_KEY) >= 4 else "***"
         logger.info(
             "API_KEY is set (fingerprint: %s, length: %d). "

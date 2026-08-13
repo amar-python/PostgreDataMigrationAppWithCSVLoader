@@ -55,7 +55,7 @@ The script's header comment and `Write-Host` banner both say `http://localhost:5
 
 1. Edited `frontend/vite.config.ts`: added `vite: { server: { port: 5173, strictPort: true, host: "localhost" } }` to the `defineConfig({...})` object.
 2. Left `scripts/start-frontend.ps1` unchanged (its banner already advertises 5173, which is now truthful).
-3. Verified by grepping for stale `8080` refs across docs — the only remaining hits are inside `BUG_REPORT.md` historical entries (append-only, intentional).
+3. Verified by grepping for stale `8080` refs across docs — the only remaining hits are inside `docs/BUG_REPORT.md` historical entries (append-only, intentional).
 
 **Resolution 2026-08-02:** fixed at the Vite layer instead of the script. `frontend/vite.config.ts` now sets `vite: { server: { port: 5173, strictPort: true, host: "localhost" } }`, which overrides the `@lovable.dev/vite-tanstack-config` sandbox detection default of 8080. Vite now actually serves on 5173, matching the script's banner and every doc reference. `strictPort: true` makes Vite fail loudly if 5173 is taken rather than silently drifting to another port.
 
@@ -88,7 +88,7 @@ Original premise: frontend was landing on `http://localhost:8080` (see BUG-001),
 
 1. Confirmed BUG-001's Vite port pin makes the frontend land on `http://localhost:5173`, which is already in `api/config.py`'s default `CORS_ORIGINS`.
 2. Left `api/config.py` unchanged (`http://localhost:5173,http://localhost:3000`) — no code edit needed once BUG-001 was resolved.
-3. Documented the `$env:CORS_ORIGINS="http://localhost:<port>"` escape hatch in `SETUP_RUNBOOK.md` Phase 7 troubleshooting for the case where a developer runs Vite on a non-default port.
+3. Documented the `$env:CORS_ORIGINS="http://localhost:<port>"` escape hatch in `docs/SETUP_RUNBOOK.md` Phase 7 troubleshooting for the case where a developer runs Vite on a non-default port.
 
 **Resolution 2026-08-02:** BUG-001 was fixed by pinning Vite to port 5173 in `frontend/vite.config.ts`, which is already in the CORS default. No change to `api/config.py` needed. If a developer later runs the frontend on a different port, set `$env:CORS_ORIGINS="http://localhost:<port>"` before launching `start-api.ps1`.
 
@@ -261,11 +261,11 @@ Now a mismatched pair is a two-log diff (API-side vs browser-console) instead of
 
 ---
 
-## BUG-007 — `SETUP_RUNBOOK.md` and `QUICKSTART.md` reference wrong PG port for the merged app
+## BUG-007 — `docs/SETUP_RUNBOOK.md` and `docs/QUICKSTART.md` reference wrong PG port for the merged app
 
 **Severity:** medium (fresh users can't connect the API)
 **Status:** RESOLVED 2026-08-02
-**Files:** `QUICKSTART.md`, `SETUP_RUNBOOK.md`
+**Files:** `docs/QUICKSTART.md`, `docs/SETUP_RUNBOOK.md`
 
 Both docs assumed PostgreSQL on port `5432`. The merged app targets **PostgreSQL 18 on port 5433** (per the choice locked in during the merge kickoff), because PG 17 already holds `5432` on this machine. Following the runbook verbatim connected to the wrong instance (or nothing) and produced the `connection refused` error we hit twice this session.
 
@@ -275,7 +275,7 @@ Both docs assumed PostgreSQL on port `5432`. The merged app targets **PostgreSQL
    ```powershell
    Get-Service postgresql* | Format-Table Name, Status
    ```
-2. Open `QUICKSTART.md` (pre-fix) and follow it verbatim — Prerequisites tells you to use PostgreSQL on port 5432 with no mention of 5433.
+2. Open `docs/QUICKSTART.md` (pre-fix) and follow it verbatim — Prerequisites tells you to use PostgreSQL on port 5432 with no mention of 5433.
 3. Set the standard libpq env vars as instructed (`$env:PGPORT = '5432'`, etc.) and either:
    - Deploy: `bash build/deploy_all.sh dev` (lands in PG 17 — fine, but not what the API will connect to), then
    - Start the API: `.\scripts\start-api.ps1` (defaults to `PGPORT=5433` — connects to PG 18, where nothing was deployed).
@@ -283,14 +283,14 @@ Both docs assumed PostgreSQL on port `5432`. The merged app targets **PostgreSQL
 
 **Actions taken for resolution:**
 
-1. Edited `QUICKSTART.md` Prerequisites list: split the single "PostgreSQL 14+ on port 5432" line into two sub-bullets — one for the CLI/SQL suite (`5432`) and one for the Web UI + API (`5433`, local PG 18 dev instance).
+1. Edited `docs/QUICKSTART.md` Prerequisites list: split the single "PostgreSQL 14+ on port 5432" line into two sub-bullets — one for the CLI/SQL suite (`5432`) and one for the Web UI + API (`5433`, local PG 18 dev instance).
 2. Added a Node.js 20+ prerequisite bullet to the same list (only required for the Web UI).
-3. Added a new **Optional — start the Web UI** section to `QUICKSTART.md` with the two-terminal `.\scripts\start-api.ps1` / `.\scripts\start-frontend.ps1` commands and a pointer to README's full env-var reference.
-4. Added Phase 7 to `SETUP_RUNBOOK.md` with an env-var reference table listing `PGHOST`/`PGPORT`/`PGUSER`/`PGDATABASE`/`PGPASSWORD`/`API_KEY`/`CSV_UPLOADS_SCHEMA`/`TE_SCHEMA`/`CORS_ORIGINS` and their defaults.
+3. Added a new **Optional — start the Web UI** section to `docs/QUICKSTART.md` with the two-terminal `.\scripts\start-api.ps1` / `.\scripts\start-frontend.ps1` commands and a pointer to README's full env-var reference.
+4. Added Phase 7 to `docs/SETUP_RUNBOOK.md` with an env-var reference table listing `PGHOST`/`PGPORT`/`PGUSER`/`PGDATABASE`/`PGPASSWORD`/`API_KEY`/`CSV_UPLOADS_SCHEMA`/`TE_SCHEMA`/`CORS_ORIGINS` and their defaults.
 5. Added Phase 7 troubleshooting entries #5–#8 including the specific `connection refused` symptom on port 5433 with the `psql -h localhost -p 5433 -U postgres -c "SELECT version();"` verification command.
-6. Added Node.js 20+ to `SETUP_RUNBOOK.md` Phase 0 Prerequisites.
+6. Added Node.js 20+ to `docs/SETUP_RUNBOOK.md` Phase 0 Prerequisites.
 
-**Resolution 2026-08-02:** `QUICKSTART.md` now calls out both ports in Prerequisites (`5432` for CLI/SQL suite, `5433` for the Web UI + API). `SETUP_RUNBOOK.md` Phase 7 explicitly documents the local PG 18 dev instance on port 5433, lists every env var the API and frontend read, and includes a Phase-7-specific troubleshooting entry for the port-5433 mismatch symptom.
+**Resolution 2026-08-02:** `docs/QUICKSTART.md` now calls out both ports in Prerequisites (`5432` for CLI/SQL suite, `5433` for the Web UI + API). `docs/SETUP_RUNBOOK.md` Phase 7 explicitly documents the local PG 18 dev instance on port 5433, lists every env var the API and frontend read, and includes a Phase-7-specific troubleshooting entry for the port-5433 mismatch symptom.
 
 ---
 
@@ -298,7 +298,7 @@ Both docs assumed PostgreSQL on port `5432`. The merged app targets **PostgreSQL
 
 **Severity:** medium (undiscoverable feature)
 **Status:** RESOLVED 2026-08-02
-**Files:** `README.md`, `ARCHITECTURE.md`, `QUICKSTART.md`, `SETUP_RUNBOOK.md`, `scripts/README.md`
+**Files:** `README.md`, `docs/ARCHITECTURE.md`, `docs/QUICKSTART.md`, `docs/SETUP_RUNBOOK.md`, `scripts/README.md`
 
 The merge added `api/` (FastAPI backend), `frontend/` (React + TanStack Start), `scripts/start-api.ps1`, and `scripts/start-frontend.ps1`. None of these appeared in any doc.
 
@@ -310,8 +310,8 @@ The merge added `api/` (FastAPI backend), `frontend/` (React + TanStack Start), 
    cd PostgreDataMigrationApp
    ```
 2. Read `README.md` end-to-end — no mention of the Web UI, no mention of a REST API, no mention of `api/` or `frontend/`.
-3. Read `ARCHITECTURE.md` — describes only three layers (`build/`, `tests/`, `evals/`); no `api/` or `frontend/` entry.
-4. Read `QUICKSTART.md` — no mention of `start-api.ps1` or `start-frontend.ps1`.
+3. Read `docs/ARCHITECTURE.md` — describes only three layers (`build/`, `tests/`, `evals/`); no `api/` or `frontend/` entry.
+4. Read `docs/QUICKSTART.md` — no mention of `start-api.ps1` or `start-frontend.ps1`.
 5. Read `scripts/README.md` — file table lists `build.ps1`, `build.sh`, `test.ps1`, `test.sh` only; no launcher scripts.
 6. `ls api\ frontend\` — the folders exist and contain a full working application, but a new developer has no way to discover this from the docs.
 
@@ -321,36 +321,36 @@ The merge added `api/` (FastAPI backend), `frontend/` (React + TanStack Start), 
    - Added an `api/`, `frontend/`, and `scripts/` block to the Repository Structure tree (inserted before the existing `build/` block).
    - Added a "Web UI + REST API" bullet to the What This Is list.
    - Added a full **Web UI + REST API** section after the CSV Loader section: two-terminal setup commands, an endpoint table (6 CSV endpoints + T&E + health), backend data model description (dynamic vs T&E mode), and an env-var table.
-2. Edited `ARCHITECTURE.md`:
+2. Edited `docs/ARCHITECTURE.md`:
    - Changed "three categories" → "five categories"; added `api/` and `frontend/` to the top-level tree.
    - Extended the "Why the split" table with rows for `api` and `frontend`.
    - Added full file tables for `api/` (11 rows: main, config, db, auth, routers, services, requirements.txt) and `frontend/` (7 rows: routes, lib, vite.config, .env, package.json).
    - Rewrote the dependency-direction diagram to include `frontend/ → api/ → PostgreSQL`.
    - Added questions 4 and 5 to the "When you add a new file" list.
-3. Edited `QUICKSTART.md`:
+3. Edited `docs/QUICKSTART.md`:
    - Added Node.js 20+ + PG port 5433 to Prerequisites.
    - Added an **Optional — start the Web UI** section with two-terminal commands (see BUG-007 Actions for detail).
-4. Edited `SETUP_RUNBOOK.md`:
+4. Edited `docs/SETUP_RUNBOOK.md`:
    - Added a new **Phase 7 — (Optional) Start the Web UI + REST API** section covering install, env-var configuration, launch, smoke test.
    - Added four Phase-7 troubleshooting entries (ports 5432 vs 5433, CORS mismatch, SSR crash, em-dash script parse errors).
 5. Edited `scripts/README.md`:
    - Added `start-api.ps1` and `start-frontend.ps1` rows to the "What's here" file table.
    - Added a **Local — start the Web UI (two terminals)** recipe with the two commands.
-6. Final grep confirmed `README.md`, `QUICKSTART.md`, `ARCHITECTURE.md`, `SETUP_RUNBOOK.md`, `scripts/README.md`, and `API_INTEGRATION.md` all now reference `start-api.ps1`, `start-frontend.ps1`, `VITE_API_URL`, and `api/main.py`.
+6. Final grep confirmed `README.md`, `docs/QUICKSTART.md`, `docs/ARCHITECTURE.md`, `docs/SETUP_RUNBOOK.md`, `scripts/README.md`, and `docs/API_INTEGRATION.md` all now reference `start-api.ps1`, `start-frontend.ps1`, `VITE_API_URL`, and `api/main.py`.
 
 **Resolution 2026-08-02:**
 
 - `README.md` — repository-structure tree now shows `api/`, `frontend/`, and `scripts/`; new **Web UI + REST API** section documents two-terminal setup, the full endpoint surface, backend data model (dynamic vs T&E mode), and every env var the API reads.
-- `ARCHITECTURE.md` — now describes five layers (added `api/` and `frontend/`); the dependency-direction diagram shows `frontend/ → api/ → PostgreSQL` and confirms neither `build/` nor `tests/`/`evals/` depend on the new layers.
-- `QUICKSTART.md` — new **Optional — start the Web UI** section with the two-terminal commands; Prerequisites now lists Node.js 20+ and both PG ports (5432 for CLI, 5433 for API).
-- `SETUP_RUNBOOK.md` — new **Phase 7 — (Optional) Start the Web UI + REST API** covering install, env-var configuration, launch, smoke test, and Phase-7-specific troubleshooting (ports 5432 vs 5433, CORS mismatch, SSR crash, em-dash script parse errors).
+- `docs/ARCHITECTURE.md` — now describes five layers (added `api/` and `frontend/`); the dependency-direction diagram shows `frontend/ → api/ → PostgreSQL` and confirms neither `build/` nor `tests/`/`evals/` depend on the new layers.
+- `docs/QUICKSTART.md` — new **Optional — start the Web UI** section with the two-terminal commands; Prerequisites now lists Node.js 20+ and both PG ports (5432 for CLI, 5433 for API).
+- `docs/SETUP_RUNBOOK.md` — new **Phase 7 — (Optional) Start the Web UI + REST API** covering install, env-var configuration, launch, smoke test, and Phase-7-specific troubleshooting (ports 5432 vs 5433, CORS mismatch, SSR crash, em-dash script parse errors).
 - `scripts/README.md` — `start-api.ps1` and `start-frontend.ps1` are now in the file table plus a new **Local — start the Web UI (two terminals)** recipe.
 
 ---
 
-## Historical bugs back-filled from `FIXES_APPLIED.md` and `GAP_ANALYSIS.md`
+## Historical bugs back-filled from `docs/FIXES_APPLIED.md` and `docs/GAP_ANALYSIS.md`
 
-BUG-009 through BUG-020 predate this file and were originally tracked under F# / G# schemes. They're back-filled here so BUG_REPORT.md is the single canonical historical record. Full detail (symptom, cause, evidence, exact diff) lives in the referenced source doc — do not duplicate here; update this file only when the status changes.
+BUG-009 through BUG-020 predate this file and were originally tracked under F# / G# schemes. They're back-filled here so docs/BUG_REPORT.md is the single canonical historical record. Full detail (symptom, cause, evidence, exact diff) lives in the referenced source doc — do not duplicate here; update this file only when the status changes.
 
 **Baseline for these entries:** `main` @ `b255262`, clean Ubuntu 24.04, PostgreSQL 16.14, Python 3.12.3. Artifacts under `test-artifacts/`.
 
@@ -359,7 +359,7 @@ BUG-009 through BUG-020 predate this file and were originally tracked under F# /
 ## BUG-009 — `env_dev.example.sql` missing 12 `tbl_*` variables (fresh clone couldn't deploy)
 
 **Severity:** blocking
-**Status:** RESOLVED — see `FIXES_APPLIED.md` § F1
+**Status:** RESOLVED — see `docs/FIXES_APPLIED.md` § F1
 **File:** `build/environments/env_dev.example.sql`
 
 PR #22 dropped the 12 `tbl_*` variables from the committed template. `psql` then passed `:'tbl_requirements'` literally to the server: `syntax error at or near ":"`.
@@ -378,7 +378,7 @@ PR #22 dropped the 12 `tbl_*` variables from the committed template. `psql` then
 2. Deployed dev: `psql -U postgres -f build/environments/env_dev.sql` — exit 0.
 3. Verified 12 tables in `te_dev` via `\dt te_dev.*` and confirmed seed data loaded.
 4. Captured evidence to `test-artifacts/02_deploy_dev.log`.
-5. See `FIXES_APPLIED.md` § F1 for the reviewer notes.
+5. See `docs/FIXES_APPLIED.md` § F1 for the reviewer notes.
 
 **Resolution:** table-name block restored. Verified: `02_deploy_dev.log` (exit 0, 12 tables in `te_dev`, seed loaded).
 
@@ -387,7 +387,7 @@ PR #22 dropped the 12 `tbl_*` variables from the committed template. `psql` then
 ## BUG-010 — Three of four environments were undeployable
 
 **Severity:** blocking
-**Status:** RESOLVED — see `FIXES_APPLIED.md` § F2
+**Status:** RESOLVED — see `docs/FIXES_APPLIED.md` § F2
 **Files:** `build/environments/env_test.example.sql`, `env_staging.example.sql`, `env_prod.example.sql`
 
 Only `env_dev.example.sql` shipped. Test/staging/prod had neither concrete files nor templates.
@@ -410,7 +410,7 @@ Only `env_dev.example.sql` shipped. Test/staging/prod had neither concrete files
 4. Ran `bash scripts/provision_full_test_env.sh` → materialised all four `env_<env>.sql` files and deployed them.
 5. Verified all four databases exist and have the 12 core tables via `psql -c '\l'` + `\dt`.
 6. Captured evidence to `test-artifacts/01_provision.log`.
-7. See `FIXES_APPLIED.md` § F2.
+7. See `docs/FIXES_APPLIED.md` § F2.
 
 **Resolution:** added the three missing `env_*.example.sql` templates preserving each env's documented settings (conn limits 15/25/50; seed on for test only). Verified: `01_provision.log` (all four deploy).
 
@@ -419,7 +419,7 @@ Only `env_dev.example.sql` shipped. Test/staging/prod had neither concrete files
 ## BUG-011 — CI deployed a gitignored file that was never re-added
 
 **Severity:** blocking
-**Status:** RESOLVED — see `FIXES_APPLIED.md` § F3
+**Status:** RESOLVED — see `docs/FIXES_APPLIED.md` § F3
 **File:** `.github/workflows/quality-gate.yml`
 
 Workflow ran `psql -f build/environments/env_test.sql`, but that path is gitignored — `integration-postgres` could never succeed.
@@ -441,7 +441,7 @@ Workflow ran `psql -f build/environments/env_test.sql`, but that path is gitigno
 2. Extended the `CREATE DATABASE` step to create all four environment databases (`te_mgmt_dev`, `te_mgmt_test`, `te_mgmt_staging`, `te_mgmt_prod`) instead of just dev.
 3. Replaced the single `psql -f build/environments/env_test.sql` invocation with a `for env in dev test staging prod` loop that deploys each in turn.
 4. Verified with a manual workflow re-run — `integration-postgres` now succeeds end-to-end.
-5. See `FIXES_APPLIED.md` § F3.
+5. See `docs/FIXES_APPLIED.md` § F3.
 
 **Resolution:** added a materialisation step that generates `env_<env>.sql` from templates before deploy, extended DB creation to all four envs, replaced the single deploy with a loop.
 
@@ -450,7 +450,7 @@ Workflow ran `psql -f build/environments/env_test.sql`, but that path is gitigno
 ## BUG-012 — Tests reported green while doing nothing (silent skips)
 
 **Severity:** high
-**Status:** RESOLVED — see `FIXES_APPLIED.md` § F4
+**Status:** RESOLVED — see `docs/FIXES_APPLIED.md` § F4
 **Files:** `tests/test_e2e_pipeline.py`, `tests/test_parity.py`, `tests/test_csv_loader_arbitrary_shapes.py`, `tests/test_csv_utilise.py`
 
 Prereqs gated only on server reachability. Missing schema or missing bash caused confusing failures locally and silent skips in CI.
@@ -473,7 +473,7 @@ Prereqs gated only on server reachability. Missing schema or missing bash caused
 2. Added explicit checks for each prereq class (Postgres reachable, deployed schema, `bash` on PATH, `config.local.env` present) with distinct failure messages.
 3. Created `scripts/provision_full_test_env.sh` — one-shot bootstrap for a fresh clone (creates all four env SQL files from templates, writes `config.local.env`, deploys all four envs).
 4. Ran the suite against a deliberately unprovisioned environment and captured output to `test-artifacts/09_negative_control_unprovisioned.log` — confirmed `44P/6F/4E/0 skipped, RESULT: FAIL`.
-5. See `FIXES_APPLIED.md` § F4.
+5. See `docs/FIXES_APPLIED.md` § F4.
 
 **Resolution:** every prereq now checked explicitly, absence is a failure with remediation text (never a skip). Added `scripts/provision_full_test_env.sh`. Verified: `09_negative_control_unprovisioned.log` (44P/6F/4E/0 skipped, RESULT: FAIL — the same state previously reported green).
 
@@ -482,7 +482,7 @@ Prereqs gated only on server reachability. Missing schema or missing bash caused
 ## BUG-013 — Eval runner skipped instead of failing when PG unreachable
 
 **Severity:** high
-**Status:** RESOLVED — see `FIXES_APPLIED.md` § F5
+**Status:** RESOLVED — see `docs/FIXES_APPLIED.md` § F5
 **Files:** `evals/runner.py`, `tests/test_evals_runner.py`
 
 Tiers I and S set `result.skipped = True` when PG was unreachable. Both call sites now record a failure. Contract test updated.
@@ -492,7 +492,7 @@ Tiers I and S set `result.skipped = True` when PG was unreachable. Both call sit
 1. Edited `evals/runner.py`: in the Tier I and Tier S handlers, replaced `result.skipped = True; result.reason = "postgres unreachable"` with `result.failed = True; result.error = "postgres unreachable — deploy_all.sh dev requires a running Postgres on $PGHOST:$PGPORT"`.
 2. Updated `tests/test_evals_runner.py` contract test so it now asserts the failure state (not the skipped state) when PG is stopped.
 3. Verified by stopping PG and running `python evals/runner.py --tiers i,s` — output now shows both tiers as FAILED with an actionable message, and the runner exit code is non-zero.
-4. See `FIXES_APPLIED.md` § F5.
+4. See `docs/FIXES_APPLIED.md` § F5.
 
 **Steps to reproduce (pre-fix state):**
 
@@ -506,7 +506,7 @@ Tiers I and S set `result.skipped = True` when PG was unreachable. Both call sit
 ## BUG-014 — No visibility of what a run did *not* execute
 
 **Severity:** high
-**Status:** RESOLVED — see `FIXES_APPLIED.md` § F6
+**Status:** RESOLVED — see `docs/FIXES_APPLIED.md` § F6
 **File:** `scripts/test_report.py` (new)
 
 No way to distinguish "skipped" from "not run" from "passed". `test_report.py` now ends every run with an accounting block listing PASSED/FAILED/ERROR/SKIPPED/NOT RUN; `--strict` exits non-zero on any skip. Both workflows end with it. Verified with a planted `@unittest.skip` probe.
@@ -519,7 +519,7 @@ No way to distinguish "skipped" from "not run" from "passed". `test_report.py` n
 4. Added a `--markers "<expr>"` flag for scoped runs.
 5. Wired `.github/workflows/quality-gate.yml` and `.github/workflows/python-validator-tests.yml` to end with `python3 scripts/test_report.py --strict`.
 6. Verified by adding a temporary `@unittest.skip("probe")` to a passing test — CI turned red with a clear SKIPPED count of 1.
-7. See `FIXES_APPLIED.md` § F6.
+7. See `docs/FIXES_APPLIED.md` § F6.
 
 **Steps to reproduce (pre-fix state):**
 
@@ -534,7 +534,7 @@ No way to distinguish "skipped" from "not run" from "passed". `test_report.py` n
 ## BUG-015 — Documentation staleness (9+ places)
 
 **Severity:** medium
-**Status:** RESOLVED — see `FIXES_APPLIED.md` § F7
+**Status:** RESOLVED — see `docs/FIXES_APPLIED.md` § F7
 **Files:** README, ARCHITECTURE, scripts/README, evals/USAGE, others
 
 SQL assertion counts (85 → 142), Python test counts (11 → 54), non-existent file references (`input_data/`, `evals/README.md`), colliding scenario numbers (`21_rtl_arabic` vs `21_utf8_arabic`).
@@ -543,7 +543,7 @@ SQL assertion counts (85 → 142), Python test counts (11 → 54), non-existent 
 
 1. Grep the docs for the stale counts:
    ```powershell
-   Select-String -Path "README.md","ARCHITECTURE.md","scripts\README.md","evals\USAGE.md" -Pattern "85 assertion|11 python test|input_data|evals/README\.md"
+   Select-String -Path "README.md","docs/ARCHITECTURE.md","scripts\README.md","evals\USAGE.md" -Pattern "85 assertion|11 python test|input_data|evals/README\.md"
    ```
 2. Run the actual suite: `bash tests/run_tests.sh dev` — output prints `142 assertions`, contradicting the docs.
 3. Try to visit any of the referenced paths:
@@ -556,19 +556,19 @@ SQL assertion counts (85 → 142), Python test counts (11 → 54), non-existent 
 
 1. Ran the full SQL suite and captured the true assertion count: 142 (not 85).
 2. Ran the full Python suite and captured the true test count: 54 (not 11).
-3. Updated every occurrence of the stale counts in `README.md`, `ARCHITECTURE.md`, `scripts/README.md`, `evals/USAGE.md`, plus badge counts in the README header.
+3. Updated every occurrence of the stale counts in `README.md`, `docs/ARCHITECTURE.md`, `scripts/README.md`, `evals/USAGE.md`, plus badge counts in the README header.
 4. Removed all references to `input_data/` and `evals/README.md` (neither file exists).
 5. Renamed the second colliding scenario so `21_rtl_arabic` and `21_utf8_arabic` no longer share the `21_` prefix (renamed one of them to a free two-digit prefix).
-6. See F7 table in `FIXES_APPLIED.md` for the full path-by-path diff.
+6. See F7 table in `docs/FIXES_APPLIED.md` for the full path-by-path diff.
 
-**Resolution:** all counts and paths reconciled against execution output. See F7 table in `FIXES_APPLIED.md`.
+**Resolution:** all counts and paths reconciled against execution output. See F7 table in `docs/FIXES_APPLIED.md`.
 
 ---
 
 ## BUG-016 — `config.env.example` variable names didn't match loaders
 
 **Severity:** medium
-**Status:** RESOLVED — see `GAP_ANALYSIS.md` § G1
+**Status:** RESOLVED — see `docs/GAP_ANALYSIS.md` § G1
 **File:** `build/config.env.example`
 
 Example defined `DEV_DB_NAME`, `PG_PASSWORD`; loaders read `PG_DB_DEV`, `PG_SUPERUSER_PASSWORD`. Copying the example directly produced `PG_DB_DEV: unbound variable` and 100% CSV load failure.
@@ -598,7 +598,7 @@ Example defined `DEV_DB_NAME`, `PG_PASSWORD`; loaders read `PG_DB_DEV`, `PG_SUPE
 2. Rewrote `build/config.env.example` — renamed `DEV_DB_NAME` → `PG_DB_DEV`, `PG_PASSWORD` → `PG_SUPERUSER_PASSWORD`, and every other stale variable so the names match the loaders.
 3. Cross-checked that `test_db_name`, `staging_db_name`, `prod_db_name` follow the same `PG_DB_<ENV>` scheme.
 4. Verified end-to-end: `cp build/config.env.example build/config.local.env && bash build/csv_loader.sh build/csv/samples/customers.csv --env dev` now succeeds.
-5. See `GAP_ANALYSIS.md` § G1.
+5. See `docs/GAP_ANALYSIS.md` § G1.
 
 **Resolution:** renamed all vars to the `PG_*_<ENV>` scheme matching what `loader_postgresql.sh`, `csv_utilise.sh`, and `setup.sh` expect. Copying example → `config.local.env` now produces a working configuration.
 
@@ -607,7 +607,7 @@ Example defined `DEV_DB_NAME`, `PG_PASSWORD`; loaders read `PG_DB_DEV`, `PG_SUPE
 ## BUG-017 — Windows CI couldn't run database-backed tests
 
 **Severity:** medium
-**Status:** RESOLVED — see `GAP_ANALYSIS.md` § G2
+**Status:** RESOLVED — see `docs/GAP_ANALYSIS.md` § G2
 **File:** `.github/workflows/quality-gate.yml`
 
 GitHub Actions service containers are Linux-only, so the Windows job could only run DB-free markers.
@@ -627,7 +627,7 @@ GitHub Actions service containers are Linux-only, so the Windows job could only 
 4. Ran the same materialisation + provision + deploy loop as `integration-postgres` (four env DBs, all four schemas).
 5. Ran the full pytest suite including `-m integration` + `-m e2e` + `-m parity`, plus `python evals/runner.py --tiers p`.
 6. Verified the job passes end-to-end on a subsequent workflow run.
-7. See `GAP_ANALYSIS.md` § G2.
+7. See `docs/GAP_ANALYSIS.md` § G2.
 
 **Resolution:** added a `windows-postgres` job that starts the pre-installed PostgreSQL service on `windows-latest`, provisions all four environment databases, deploys schemas, and runs the full test suite (integration, e2e, parity) plus Tier P evals.
 
@@ -636,7 +636,7 @@ GitHub Actions service containers are Linux-only, so the Windows job could only 
 ## BUG-018 — Eval tiers X and E unimplemented
 
 **Severity:** medium
-**Status:** RESOLVED — see `GAP_ANALYSIS.md` § G3
+**Status:** RESOLVED — see `docs/GAP_ANALYSIS.md` § G3
 **File:** `evals/runner.py`
 
 Tier X (CSV round-trip fidelity) and Tier E (cross-environment structural parity) existed in the plan but not the runner.
@@ -654,7 +654,7 @@ Tier X (CSV round-trip fidelity) and Tier E (cross-environment structural parity
 3. Wired both new tiers into the `--tiers` argparse choices.
 4. Added fixture scenarios under `evals/datasets/tier_x/` and `evals/datasets/tier_e/`, plus expected JSONs.
 5. Verified: `python3 evals/runner.py --tiers x,e --verbose` reports both tiers passing.
-6. See `GAP_ANALYSIS.md` § G3.
+6. See `docs/GAP_ANALYSIS.md` § G3.
 
 **Resolution:** both tiers implemented. Tier X: load via `csv_loader.sh` → export via `csv_utilise.sh export` → diff. Tier E: query `information_schema.columns` for all four envs and assert identical structure. Run: `python3 evals/runner.py --tiers x,e --verbose`.
 
@@ -663,7 +663,7 @@ Tier X (CSV round-trip fidelity) and Tier E (cross-environment structural parity
 ## BUG-019 — Runtime artifacts not gitignored
 
 **Severity:** low
-**Status:** RESOLVED — see `GAP_ANALYSIS.md` § G4
+**Status:** RESOLVED — see `docs/GAP_ANALYSIS.md` § G4
 **File:** `.gitignore`
 
 **Steps to reproduce (pre-fix state):**
@@ -681,23 +681,23 @@ Tier X (CSV round-trip fidelity) and Tier E (cross-environment structural parity
 1. Appended `tests/snapshots/`, `tfplan`, `*.tfplan`, and `terraform-provider-*.log` to `.gitignore`.
 2. Ran `git status --short` after regenerating each artifact class — confirmed none show as untracked.
 3. Ran `git ls-files | Select-String -Pattern "tfplan$|terraform-provider.*\.log$"` — confirmed no already-committed instances (nothing to remove from history).
-4. See `GAP_ANALYSIS.md` § G4.
+4. See `docs/GAP_ANALYSIS.md` § G4.
 
 **Resolution:** added `tests/snapshots/`, `tfplan`, `*.tfplan`, `terraform-provider-*.log`.
 
 ---
 
-## BUG-020 — VCRM.md BR-20 assertion count discrepancy
+## BUG-020 — docs/VCRM.md BR-20 assertion count discrepancy
 
 **Severity:** low
-**Status:** RESOLVED — see `GAP_ANALYSIS.md` § G5
-**File:** `VCRM.md`
+**Status:** RESOLVED — see `docs/GAP_ANALYSIS.md` § G5
+**File:** `docs/VCRM.md`
 
 Old "85 of 85" was stale; update to 142 is correct. Confirmed against suite output and Tier S expectation JSON. No revert needed.
 
 **Steps to reproduce (pre-fix state):**
 
-1. Open `VCRM.md` at the pre-fix commit and locate the BR-20 row — assertion count shows "85 of 85".
+1. Open `docs/VCRM.md` at the pre-fix commit and locate the BR-20 row — assertion count shows "85 of 85".
 2. Run the suite: `bash tests/run_tests.sh dev` — output prints `142 assertions PASSED`.
 3. Cross-check against `evals/expected/tier_s/01_fresh_deploy_then_all_tests_pass.json` — the expected substring is `ALL TESTS PASSED` from a 142-count suite.
 4. 85 ≠ 142; VCRM claim is stale.
@@ -706,9 +706,9 @@ Old "85 of 85" was stale; update to 142 is correct. Confirmed against suite outp
 
 1. Ran `bash tests/run_tests.sh dev` and captured the "ALL TESTS PASSED" summary — 142 assertions.
 2. Cross-checked the Tier S expectation JSON at `evals/expected/tier_s/01_fresh_deploy_then_all_tests_pass.json` — confirms 142.
-3. Edited `VCRM.md` BR-20 row: updated `85 of 85` → `142 of 142`.
+3. Edited `docs/VCRM.md` BR-20 row: updated `85 of 85` → `142 of 142`.
 4. Verified via `Grep pattern="85 of 85"` — no other stale occurrences.
-5. See `GAP_ANALYSIS.md` § G5.
+5. See `docs/GAP_ANALYSIS.md` § G5.
 
 ---
 
@@ -1158,7 +1158,7 @@ Chose option (a) — Alembic + auto-run on API startup — based on the user's s
 4. Created `alembic/script.py.mako` — standard Alembic template for new revisions.
 5. Wrote `alembic/versions/0001_initial_uploads_schema.py` — a baseline migration whose `upgrade()` mirrors the previous `bootstrap()` DDL 1:1 using `IF NOT EXISTS` clauses. This means a database that was already bootstrapped by the pre-Alembic code path upgrades to head as a no-op — no manual `alembic stamp head` needed.
 6. Rewrote `api/db.py:bootstrap()` — replaced the four hand-written `CREATE TABLE IF NOT EXISTS` calls with `alembic.command.upgrade(cfg, "head")`. Alembic imports are deferred inside the function so `pytest` collection of the `api` package doesn't drag in SQLAlchemy unless bootstrap actually runs.
-7. Documented the migration workflow in `API_INTEGRATION.md` (new `## Migrations` section): how new migrations get scaffolded, when they run, and the "schema name is fixed" limitation (Alembic migrations are static — changing `CSV_UPLOADS_SCHEMA` env var isn't supported without a rename migration).
+7. Documented the migration workflow in `docs/API_INTEGRATION.md` (new `## Migrations` section): how new migrations get scaffolded, when they run, and the "schema name is fixed" limitation (Alembic migrations are static — changing `CSV_UPLOADS_SCHEMA` env var isn't supported without a rename migration).
 
 **Known limitations, deferred:**
 - Concurrent multi-instance startup can race the `alembic upgrade head` call. Fine for single-container-per-env deployments; adopt `advisory_lock` if you ever run multi-replica.
@@ -1268,15 +1268,15 @@ The dedupe loop increments a per-`base` counter but doesn't check the resulting 
 
 ---
 
-## BUG-037 — BUG_REPORT.md — BUG-034 heading was clobbered
+## BUG-037 — docs/BUG_REPORT.md — BUG-034 heading was clobbered
 
 **Severity:** low (documentation)
 **Status:** RESOLVED 2026-08-03
-**File:** `BUG_REPORT.md`
+**File:** `docs/BUG_REPORT.md`
 
-BUG-033's Resolution line had BUG-034's title appended after an em-dash (`... reviving the lovable name. — tests/test_api.py and tests/test_api_coverage.py may overlap`), and the `## BUG-034 — ...` heading itself was missing. `grep -c '^## BUG-034' BUG_REPORT.md` returned 0.
+BUG-033's Resolution line had BUG-034's title appended after an em-dash (`... reviving the lovable name. — tests/test_api.py and tests/test_api_coverage.py may overlap`), and the `## BUG-034 — ...` heading itself was missing. `grep -c '^## BUG-034' docs/BUG_REPORT.md` returned 0.
 
-**Steps to reproduce:** `grep -c '^## BUG-034' BUG_REPORT.md` → 0 pre-fix.
+**Steps to reproduce:** `grep -c '^## BUG-034' docs/BUG_REPORT.md` → 0 pre-fix.
 
 **Actions taken for resolution:**
 
@@ -1412,7 +1412,7 @@ Line 36: `"@typescript-eslint/no-unused-vars": "off"`. This is why the dead `@su
 **Status:** ~~OPEN~~ → RESOLVED 2026-08-12
 **File:** `README.md`
 
-The repo has 20+ markdown docs at root (`BUG_REPORT.md`, `GAP_ANALYSIS.md`, `VCRM.md`, `PROD_DEPLOY.md`, `AZURE_DEPLOY.md`, `RECONSTRUCT.md`, `HANDOFF.md`, `JUDGE_ASSESSMENT.md`, ...) but no landing page. A newcomer has no map.
+The repo has 20+ markdown docs at root (`docs/BUG_REPORT.md`, `docs/GAP_ANALYSIS.md`, `docs/VCRM.md`, `docs/PROD_DEPLOY.md`, `docs/AZURE_DEPLOY.md`, `docs/RECONSTRUCT.md`, `HANDOFF.md`, `docs/JUDGE_ASSESSMENT.md`, ...) but no landing page. A newcomer has no map.
 
 **Suggested fix:** a short `README.md` with: what the app is, quickstart (`start-api.ps1` + `start-frontend.ps1`), and a one-line pointer to each of the top-level docs.
 
@@ -1424,11 +1424,11 @@ The repo has 20+ markdown docs at root (`BUG_REPORT.md`, `GAP_ANALYSIS.md`, `VCR
 
 ---
 
-## BUG-045 — `GAP_ANALYSIS.md` cites a stale commit
+## BUG-045 — `docs/GAP_ANALYSIS.md` cites a stale commit
 
 **Severity:** low (documentation staleness)
 **Status:** RESOLVED 2026-08-03
-**File:** `GAP_ANALYSIS.md`
+**File:** `docs/GAP_ANALYSIS.md`
 
 Line 7 pins the assessment to `main @ b255262 + audit changes`. `main` is now `6d7bcaa` post-reconciliation.
 
@@ -1460,9 +1460,9 @@ Recent Alembic versions warn: `No path_separator found in configuration; falling
 
 These were referenced during the audit but I couldn't verify their current state without running the tests. They may already be closed by the entries above.
 
-- **Compaction summary referenced BUG-021 (main.tf typo) and BUG-022 (CRLF line endings)** as historical bugs that no longer surface in `FIXES_APPLIED.md` / `GAP_ANALYSIS.md`. If either recurs, open as a new BUG-### entry with fresh evidence rather than retroactively assigning the old numbers — no numbering conflict, and current-state fixes are more useful than historical archaeology.
+- **Compaction summary referenced BUG-021 (main.tf typo) and BUG-022 (CRLF line endings)** as historical bugs that no longer surface in `docs/FIXES_APPLIED.md` / `docs/GAP_ANALYSIS.md`. If either recurs, open as a new BUG-### entry with fresh evidence rather than retroactively assigning the old numbers — no numbering conflict, and current-state fixes are more useful than historical archaeology.
 - **The 6 Codex-identified orchestration fixes** referenced in the compaction summary — no source doc captures them as discrete entries. If a regression appears in orchestration, open a new BUG-### with the failing scenario attached.
-- **`provision_full_test_env.sh` variable-name workaround** — flagged in `FIXES_APPLIED.md` as "Not fixed — needs a decision", but `GAP_ANALYSIS.md` § G1 closes the underlying config-name mismatch. Assumed moot; if a fresh clone still needs the workaround, reopen as a new BUG-###.
+- **`provision_full_test_env.sh` variable-name workaround** — flagged in `docs/FIXES_APPLIED.md` as "Not fixed — needs a decision", but `docs/GAP_ANALYSIS.md` § G1 closes the underlying config-name mismatch. Assumed moot; if a fresh clone still needs the workaround, reopen as a new BUG-###.
 
 ---
 
@@ -1491,7 +1491,7 @@ _Rows are never deleted. When a bug is RESOLVED, update its Status column — do
 | BUG-017 | medium | RESOLVED (G2) | CI (Windows PG-backed jobs) |
 | BUG-018 | medium | RESOLVED (G3) | evals (tiers X and E unimplemented) |
 | BUG-019 | low | RESOLVED (G4) | .gitignore (runtime artifacts) |
-| BUG-020 | low | RESOLVED (G5) | VCRM.md (stale BR-20 count) |
+| BUG-020 | low | RESOLVED (G5) | docs/VCRM.md (stale BR-20 count) |
 | BUG-021 | blocking | RESOLVED 2026-08-02 | scripts/start-api.ps1 (em-dash breaks PS 5.1) |
 | BUG-022 | high | RESOLVED 2026-08-02 | api/services/dynamic_loader.py (row-hash collision) |
 | BUG-023 | high | RESOLVED 2026-08-02 | CI (frontend never built or linted) |
@@ -1508,7 +1508,7 @@ _Rows are never deleted. When a bug is RESOLVED, update its Status column — do
 | BUG-034 | low | RESOLVED 2026-08-03 (WON'T FIX) | tests/test_api*.py (no real overlap) |
 | BUG-035 | medium | RESOLVED 2026-08-03 | api/main.py + routers (/api/health was behind API-key) |
 | BUG-036 | medium | RESOLVED 2026-08-03 | api/services/csv_parse.py (sanitize_columns collision on stem conflict) |
-| BUG-037 | low | RESOLVED 2026-08-03 | BUG_REPORT.md (BUG-034 heading clobbered) |
+| BUG-037 | low | RESOLVED 2026-08-03 | docs/BUG_REPORT.md (BUG-034 heading clobbered) |
 | BUG-038 | low | OPEN | frontend/package.json (@supabase/supabase-js dead dep) |
 | BUG-039 | low | RESOLVED 2026-08-03 | api/services/te_loader.py (misleading _err comment) |
 | BUG-040 | medium | RESOLVED 2026-08-03 | api/config.py (allow_destructive defaulted True) |
@@ -1516,7 +1516,7 @@ _Rows are never deleted. When a bug is RESOLVED, update its Status column — do
 | BUG-042 | low | OPEN | api/routers/te_routes.py (COUNT(*) per table per call) |
 | BUG-043 | low | OPEN | frontend/eslint.config.js (no-unused-vars off) |
 | BUG-044 | low | OPEN | (missing) README.md at repo root |
-| BUG-045 | low | RESOLVED 2026-08-03 | GAP_ANALYSIS.md (stale commit ref) |
+| BUG-045 | low | RESOLVED 2026-08-03 | docs/GAP_ANALYSIS.md (stale commit ref) |
 | BUG-046 | low | RESOLVED 2026-08-03 | alembic.ini (missing path_separator, deprecation warning) |
 
 Next verification steps, in dependency order:

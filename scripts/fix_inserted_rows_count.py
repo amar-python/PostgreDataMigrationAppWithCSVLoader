@@ -8,7 +8,7 @@ INSERT per page. ``cursor.rowcount`` reflects only the **last** statement, so a
 250-row upload reports 50. Files of 100 rows or fewer are correct, which is why
 this survived manual testing.
 
-See DEFECT_INSERTED_ROWS.md for the full analysis and reproduction.
+See docs/DEFECT_INSERTED_ROWS.md for the full analysis and reproduction.
 
 The fix
 -------
@@ -42,7 +42,7 @@ OLD_STMT = '''                stmt = sql.SQL(
 NEW_STMT = '''                # RETURNING + fetch=True is deliberate: execute_values pages at 100
                 # by default and cur.rowcount reflects only the last page, which
                 # under-counted every file over 100 rows. Counting returned rows is
-                # page-size independent. See DEFECT_INSERTED_ROWS.md.
+                # page-size independent. See docs/DEFECT_INSERTED_ROWS.md.
                 stmt = sql.SQL(
                     "INSERT INTO {}.{} ({}) VALUES %s "
                     "ON CONFLICT (_row_hash) DO NOTHING RETURNING 1"
@@ -85,7 +85,7 @@ def main() -> int:
         for name in missing:
             print(f"  - {name}")
         print("\nThe file may have been edited since this script was written.")
-        print("Apply the change by hand using DEFECT_INSERTED_ROWS.md.")
+        print("Apply the change by hand using docs/DEFECT_INSERTED_ROWS.md.")
         return 1
 
     updated = text.replace(OLD_STMT, NEW_STMT, 1).replace(OLD_LOOP, NEW_LOOP, 1)

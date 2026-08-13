@@ -69,7 +69,7 @@ sensible), click the green button.
 | Pulled new code, no infra changes | `build` only |
 | Updated only test fixtures | `test` only |
 | Updated `build/csv/validator.py` or any source | `build` then `test` |
-| Updated `infra/terraform/*` | Run Terraform locally — see `AZURE_DEPLOY.md` |
+| Updated `infra/terraform/*` | Run Terraform locally — see `docs/AZURE_DEPLOY.md` |
 | End-of-day sanity check | `test -OnlyPython` |
 | Before a release | `build` → `test` (full) → manual eyeball |
 
@@ -100,4 +100,4 @@ sensible), click the green button.
 
 These are the only two workflows in `.github/workflows/`. The `build.*` and
 `test.*` scripts in this directory are run locally; Azure infrastructure is
-provisioned with Terraform from `infra/terraform/` (see `AZURE_DEPLOY.md`).
+provisioned with Terraform from `infra/terraform/` (see `docs/AZURE_DEPLOY.md`).

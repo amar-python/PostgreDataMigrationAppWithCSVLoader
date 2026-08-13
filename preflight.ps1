@@ -173,7 +173,7 @@ if ($Azure) {
 
     Test-Check 'docker on PATH' {
         & docker --version 2>&1 | Select-String 'Docker version'
-    } -Optional -FixHint 'Docker not installed. For Azure deploy you can use Cloud Shell + `az acr build` instead (see AZURE_DEPLOY.md).'
+    } -Optional -FixHint 'Docker not installed. For Azure deploy you can use Cloud Shell + `az acr build` instead (see docs/AZURE_DEPLOY.md).'
 
     Test-Check 'terraform on PATH' {
         & terraform version 2>&1 | Select-String 'Terraform'

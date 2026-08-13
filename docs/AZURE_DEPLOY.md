@@ -278,4 +278,4 @@ az containerapp exec \
 - `infra/terraform/` — Azure resource definitions
 - `infra/azure-portal-walkthrough.md` — manual UI walkthrough
 - `.github/workflows/azure-*.yml` — CI/CD workflows
-- `ARCHITECTURE.md` — overall framework architecture
+- `docs/ARCHITECTURE.md` — overall framework architecture

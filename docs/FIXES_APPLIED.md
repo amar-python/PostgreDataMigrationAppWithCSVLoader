@@ -129,8 +129,8 @@ reason and failed the run under `--strict`. Probe removed afterwards.
 |---|---|---|
 | SQL assertions (9 files) | 85 | **142** |
 | Python unit tests | 11 | **54** across 9 files |
-| `TEST_CONDITIONS.md` categories | six, incl. `input_data/load_input_data.sql` | five — `input_data/` never existed |
-| `ARCHITECTURE.md` → `evals/README.md` | nonexistent | `evals/USAGE.md` |
+| `docs/TEST_CONDITIONS.md` categories | six, incl. `input_data/load_input_data.sql` | five — `input_data/` never existed |
+| `docs/ARCHITECTURE.md` → `evals/README.md` | nonexistent | `evals/USAGE.md` |
 | `scripts/README.md` workflows | five workflow files | only the two that exist here |
 | `evals/USAGE.md` tutorial | `21_rtl_arabic` — collides with real `21_utf8_arabic` | renumbered to `24_` |
 
@@ -171,4 +171,4 @@ load-failure rate.
 
 `provision_full_test_env.sh` writes the correct names, so this is worked around,
 not fixed. Renaming touches the example, `setup.sh` and all six loaders — see
-`GAP_ANALYSIS.md`.
+`docs/GAP_ANALYSIS.md`.

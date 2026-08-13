@@ -297,7 +297,7 @@ def _do_upload(
                 # RETURNING + fetch=True is deliberate: execute_values pages at 100
                 # by default and cur.rowcount reflects only the last page, which
                 # under-counted every file over 100 rows. Counting returned rows is
-                # page-size independent. See DEFECT_INSERTED_ROWS.md.
+                # page-size independent. See docs/DEFECT_INSERTED_ROWS.md.
                 stmt = sql.SQL(
                     "INSERT INTO {}.{} ({}) VALUES %s "
                     "ON CONFLICT (_row_hash) DO NOTHING RETURNING 1"

@@ -14,7 +14,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "quality-gate.yml"
-GAP_ANALYSIS = ROOT / "GAP_ANALYSIS.md"
+GAP_ANALYSIS = ROOT / "docs/GAP_ANALYSIS.md"
 
 
 def _load_workflow() -> dict:
@@ -97,17 +97,17 @@ class TestAllJobsHaveConsistentStructure(unittest.TestCase):
 
 class TestGapAnalysisG2Accepted(unittest.TestCase):
     """G2 is accepted as out-of-scope, not closed.
-    Checks the decision is recorded in GAP_ANALYSIS.md.
+    Checks the decision is recorded in docs/GAP_ANALYSIS.md.
     """
     @classmethod
     def setUpClass(cls):
         if not GAP_ANALYSIS.exists():
-            raise AssertionError(f"GAP_ANALYSIS.md not found: {GAP_ANALYSIS}")
+            raise AssertionError(f"docs/GAP_ANALYSIS.md not found: {GAP_ANALYSIS}")
         cls.content = GAP_ANALYSIS.read_text(encoding="utf-8")
 
     def test_g2_row_exists(self):
         found = any("| G2 |" in line for line in self.content.splitlines())
-        self.assertTrue(found, "G2 row not found in GAP_ANALYSIS.md")
+        self.assertTrue(found, "G2 row not found in docs/GAP_ANALYSIS.md")
 
     def test_g2_is_accepted_or_deferred(self):
         for line in self.content.splitlines():
@@ -118,7 +118,7 @@ class TestGapAnalysisG2Accepted(unittest.TestCase):
                     f"G2 row should be accepted/deferred, got: {line.strip()}"
                 )
                 return
-        self.fail("G2 row not found in GAP_ANALYSIS.md")
+        self.fail("G2 row not found in docs/GAP_ANALYSIS.md")
 
     def test_g2_section_exists(self):
         self.assertIn("### G2", self.content)

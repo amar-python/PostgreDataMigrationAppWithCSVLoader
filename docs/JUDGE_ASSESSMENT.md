@@ -111,7 +111,7 @@ Verdict — **4 / 4**
 
 The assertion count and eval-outcome claims were corrected during the
 documentation audit. The deploy description was the last outstanding defect and
-was corrected here — `QUICKSTART.md` had claimed the deploy produces a database
+was corrected here — `docs/QUICKSTART.md` had claimed the deploy produces a database
 named `te_dev` with **6** core tables. It produces `te_mgmt_dev` with **12**;
 the schema (not the database) is `te_dev`. The note about
 `test_run_results` appearing as a 13th table after the SQL suite runs was added

@@ -1,6 +1,6 @@
 # VCRM — Verification Cross Reference Matrix
 
-The framework's own Verification Cross Reference Matrix, applying its T&E concept to itself. Maps each business requirement to the test condition(s) that verify it across the six test layers catalogued in `TEST_CONDITIONS.md`.
+The framework's own Verification Cross Reference Matrix, applying its T&E concept to itself. Maps each business requirement to the test condition(s) that verify it across the six test layers catalogued in `docs/TEST_CONDITIONS.md`.
 
 > **Vocabulary used here** follows ASDEFCON T&E practice: requirements are stated, decomposed where useful, and traced to verification activities. Verification methods follow MIL-STD / IEEE 1012 conventions: **Test (T)**, **Analysis (A)**, **Inspection (I)**, **Demonstration (D)**.
 
@@ -60,7 +60,7 @@ Test-layer codes used in column headers below:
 | **BR-16** | An **automated regression suite** shall be runnable from a single command and produce a deterministic, CI-gateable pass/fail outcome. | README §"Test Suite", T&E practice |
 | **BR-17** | The framework shall **gracefully degrade** when an optional dependency (PostgreSQL, psql, Internet) is unavailable: tests skip cleanly rather than crashing. | `evals/runner.py` design intent |
 | **BR-18** | Every regression run shall produce a **machine-readable JSON report** persisted under `evals/reports/<run_id>/`. | `evals/runner.py` behaviour |
-| **BR-19** | The build, test, and eval layers shall be **physically segregated** so a change to one cannot inadvertently break the others' contract. | `ARCHITECTURE.md` |
+| **BR-19** | The build, test, and eval layers shall be **physically segregated** so a change to one cannot inadvertently break the others' contract. | `docs/ARCHITECTURE.md` |
 | **BR-20** | The full SQL test suite shall reach **142 of 142 assertions passing** (100.0 % pass rate) on every release. | README §"142 assertions", `tests/run_all_tests.sql` |
 
 ### Out of scope (recorded for completeness)
@@ -74,7 +74,7 @@ Test-layer codes used in column headers below:
 
 ## 2. Traceability matrix
 
-For each requirement, the columns mark which test layer verifies it. Numbers in cells are scenario/test IDs from `TEST_CONDITIONS.md`. **Status** is the worst-case across the cells (a requirement is ⚠️ if any aspect is partial, ❌ if no automated coverage exists).
+For each requirement, the columns mark which test layer verifies it. Numbers in cells are scenario/test IDs from `docs/TEST_CONDITIONS.md`. **Status** is the worst-case across the cells (a requirement is ⚠️ if any aspect is partial, ❌ if no automated coverage exists).
 
 | ID | Requirement (short) | PU | SQL | TP | TI | TS | LV | Status | Notes |
 |----|--------------------|----|-----|----|----|----|----|-------|-------|
@@ -96,7 +96,7 @@ For each requirement, the columns mark which test layer verifies it. Numbers in 
 | BR-16 | Automated single-command regression | — | — | All TP (single `runner.py` invocation) | 01 | 01 | — | ✅ | Combined `runner.py --tiers p,i,s` is the entry point. |
 | BR-17 | Graceful degradation when PG unavailable | 9, 11 | — | — | (skip behaviour) | (skip behaviour) | — | ✅ | Python unit tests directly assert the skip path. |
 | BR-18 | Machine-readable JSON report per run | 5, 6 | — | — | — | — | — | ✅ | Verified by `_load_expected` and `discover_scenarios` unit tests; the report write itself is exercised by every Tier P run. |
-| BR-19 | Build / tests / evals physically segregated | — | — | — | — | — | — | ✅ | Verified by `ARCHITECTURE.md` + the directory layout + the green test runs after the refactor. (Verification method = Inspection.) |
+| BR-19 | Build / tests / evals physically segregated | — | — | — | — | — | — | ✅ | Verified by `docs/ARCHITECTURE.md` + the directory layout + the green test runs after the refactor. (Verification method = Inspection.) |
 | BR-20 | 142 / 142 SQL assertions pass | — | (all 5 suites) | — | — | **01 (asserts `min_total_assertions: 142`, `min_pass_rate_percent: 100`)** | — | ✅ | Tier S is the headline gating check. Count updated from 85 → 142 to match the Tier S expected JSON and observed suite output. |
 | BR-21 | Cross-engine schema equivalence | — | — | — | — | — | — | ❌ | Deferred. Tier X. |
 | BR-22 | Performance at ≥ 1 M rows | — | — | — | — | — | — | ❌ | Deferred. No perf tier exists. |
@@ -169,7 +169,7 @@ The `input_data/` loader has its own implicit requirements — verified end-to-e
 
 This VCRM was derived as follows:
 
-1. **Requirements extraction** — read `README.md`, `ARCHITECTURE.md`, `evals/PLAN.md`, `evals/FAILURE_MODES.md`, `evals/HANDOFF.md`, `TEST_CONDITIONS.md`. Identified statements of intent that could be operationalised as testable conditions.
+1. **Requirements extraction** — read `README.md`, `docs/ARCHITECTURE.md`, `evals/PLAN.md`, `evals/FAILURE_MODES.md`, `evals/HANDOFF.md`, `docs/TEST_CONDITIONS.md`. Identified statements of intent that could be operationalised as testable conditions.
 2. **Domain inference** — supplemented the documented requirements with industry-standard T&E concerns referenced in the README (ASDEFCON, ISM, MIL-STD-882, ISO 31000). These appear in BR-12, BR-13, BR-14, BR-15.
 3. **Traceability** — for each requirement, walked through all six test layers and recorded the specific test condition(s) that assert it. Where multiple test conditions touched the same requirement, all are recorded.
 4. **Coverage classification** — applied the ✅ / ⚠️ / ❌ legend uniformly: a requirement is ✅ only if every aspect is verified; ⚠️ if some aspects are tested and some are gaps; ❌ if nothing tests it.
@@ -190,7 +190,7 @@ This VCRM was derived as follows:
 
 *Companion documents:*
 
-- `ARCHITECTURE.md` — the three-layer model (build / tests / evals)
-- `TEST_CONDITIONS.md` — every test condition catalogued in full detail
+- `docs/ARCHITECTURE.md` — the three-layer model (build / tests / evals)
+- `docs/TEST_CONDITIONS.md` — every test condition catalogued in full detail
 - `evals/FAILURE_MODES.md` — failure-mode catalogue at the eval layer
 - `evals/PLAN.md` — eval suite design rationale
