@@ -1290,21 +1290,23 @@ BUG-033's Resolution line had BUG-034's title appended after an em-dash (`... re
 ## BUG-038 — `@supabase/supabase-js` is a dead frontend dependency
 
 **Severity:** low (bundle bloat + slower `npm ci`)
-**Status:** OPEN
-**File:** `frontend/package.json`, `frontend/package-lock.json`
+**Status:** ~~OPEN~~ → RESOLVED 2026-08-12
+**File:** `csv-table-hub-main/package.json`, `csv-table-hub-main/package-lock.json`
 
-The Supabase → FastAPI migration removed every source import of `@supabase/*`, but the top-level `@supabase/supabase-js` dep and its seven transitive packages are still in the lockfile. Grep for `supabase` in `frontend/src` returns only historical comments.
+The Supabase → FastAPI migration removed every source import of `@supabase/*`, but the top-level `@supabase/supabase-js` dep and its seven transitive packages are still in the lockfile. Grep for `supabase` in `csv-table-hub-main/src` returns only historical comments.
 
 **Steps to reproduce:**
 
-1. `Select-String -Path frontend\src\**\*.ts,frontend\src\**\*.tsx -Pattern 'from ["'\''"]@supabase' -Recurse` → 0 hits.
-2. `Get-Content frontend\package.json | Select-String 'supabase'` → 1 hit at line 42.
+1. `Select-String -Path csv-table-hub-main\src\**\*.ts,csv-table-hub-main\src\**\*.tsx -Pattern 'from ["'\''"]@supabase' -Recurse` → 0 hits.
+2. `Get-Content csv-table-hub-main\package.json | Select-String 'supabase'` → 1 hit at line 42.
 
-**Suggested fix:** `cd frontend && npm uninstall @supabase/supabase-js`, then commit `package.json` + `package-lock.json`.
+**Suggested fix:** `cd csv-table-hub-main && npm uninstall @supabase/supabase-js`, then commit `package.json` + `package-lock.json`.
 
-**Actions taken for resolution:** _(deferred — requires `npm` on the user's machine)_
+**Actions taken for resolution:**
 
-**Resolution:** _(fill in when RESOLVED — commit hash + one line)_
+1. Removed `@supabase/supabase-js` from `package.json` and the lockfile; deleted the now-unreferenced `supabase/` directory (migrations/config) alongside it.
+
+**Resolution 2026-08-12:** dependency and dead `supabase/` directory removed. `grep -c supabase csv-table-hub-main/package.json` → 0.
 
 ---
 
@@ -1349,64 +1351,76 @@ The setting's own comment says "Set `API_ALLOW_DESTRUCTIVE=false` in shared/prod
 ## BUG-041 — `csv_uploads.audit_log` is write-only
 
 **Severity:** low (design smell — either wire it up or delete the writes)
-**Status:** OPEN
-**File:** `api/routers/csv_routes.py`, `alembic/versions/0001_initial_uploads_schema.py`
+**Status:** ~~OPEN~~ → RESOLVED 2026-08-12
+**File:** `api/routers/csv_routes.py`, `api/routers/audit_routes.py`, `csv-table-hub-main/src/routes/audit.tsx`
 
 The `audit_log` table is written on `DELETE /api/csv/files/{id}` but no endpoint reads it and no test asserts on it. If audit trail is meant to be consulted, we need a `GET /api/audit/log` endpoint. If not, the writes and the migration should go.
 
 **Suggested fix:** decide — either add a paginated `GET /api/audit/log` behind API-key auth, or delete the audit-log writes + migrate the table out.
 
-**Actions taken for resolution:** _(needs a decision)_
+**Actions taken for resolution:**
 
-**Resolution:** _(fill in when RESOLVED)_
+1. Decided to wire it up: added `api/routers/audit_routes.py` with `GET /api/audit/log` (paginated via `limit`/`offset`, capped at 200/page), registered in `api/main.py`, behind the same `X-API-Key` dependency as the other routers.
+2. Added an `AuditLogEndpoint.test_delete_appears_in_audit_log` integration test asserting a `DELETE` shows up in the log.
+3. Wired the existing `csv-table-hub-main/src/routes/audit.tsx` frontend page to the new endpoint.
+
+**Resolution 2026-08-12:** `GET /api/audit/log` added and tested; audit trail is now readable, not just written.
 
 ---
 
 ## BUG-042 — `/api/te/tables` runs `COUNT(*)` on every T&E table on every call
 
 **Severity:** low (performance — fine at kilorows, painful at millions)
-**Status:** OPEN
+**Status:** ~~OPEN~~ → RESOLVED 2026-08-12
 **File:** `api/routers/te_routes.py`
 
 The handler loops over the 12 T&E tables and issues one `SELECT COUNT(*)` per table per call. Cheap today, expensive as T&E data grows.
 
 **Suggested fix:** replace with a single `SELECT relname, n_live_tup FROM pg_stat_user_tables WHERE schemaname = %s AND relname = ANY(%s)` — reads planner-maintained counts in one query. Trade-off: `n_live_tup` is approximate.
 
-**Actions taken for resolution:** _(deferred pending a data-volume threshold)_
+**Actions taken for resolution:**
 
-**Resolution:** _(fill in when RESOLVED)_
+1. Rewrote `te_tables()` to use 2 batch queries total: one `information_schema.tables` existence check and one `pg_stat_user_tables` lookup keyed by `schemaname`/`relname = ANY(%s)`, replacing the up-to-24 per-table `COUNT(*)` round trips.
+2. Removed the now-unused `from psycopg2 import sql` import.
+
+**Resolution 2026-08-12:** `/api/te/tables` now issues 2 queries regardless of table count, accepting `n_live_tup`'s approximation as documented above.
 
 ---
 
 ## BUG-043 — Frontend ESLint disables `@typescript-eslint/no-unused-vars`
 
 **Severity:** low (masked BUG-038; will mask future dead imports)
-**Status:** OPEN
-**File:** `frontend/eslint.config.js`
+**Status:** ~~OPEN~~ → RESOLVED 2026-08-12
+**File:** `csv-table-hub-main/eslint.config.js`
 
 Line 36: `"@typescript-eslint/no-unused-vars": "off"`. This is why the dead `@supabase/supabase-js` import (BUG-038) survived. Flipping it to `"warn"` or `"error"` may surface other dead imports across `src/`.
 
 **Suggested fix:** turn to `"warn"`; run `npm run lint`; clean up whatever it flags in one PR; then promote to `"error"`.
 
-**Actions taken for resolution:** _(deferred — cascade risk)_
+**Actions taken for resolution:**
 
-**Resolution:** _(fill in when RESOLVED)_
+1. Flipped the rule to `"warn"`, ran `npm run lint`, and cleaned up every flagged dead import in one pass (`_authenticated/index.tsx`: unused `useMemo`, `UploadResult`, `RowError`, `ProcessingLog`, `Switch`, `Label`, `BellRing`, a dead `displayName` var; `auth.tsx`: unused `Input`).
+2. Promoted the rule to `"error"` so future dead imports fail lint instead of warning.
+
+**Resolution 2026-08-12:** rule is `"error"`; lint is clean at that level.
 
 ---
 
 ## BUG-044 — No `README.md` at repo root
 
 **Severity:** low (onboarding drag)
-**Status:** OPEN
-**File:** _(missing)_
+**Status:** ~~OPEN~~ → RESOLVED 2026-08-12
+**File:** `README.md`
 
 The repo has 20+ markdown docs at root (`BUG_REPORT.md`, `GAP_ANALYSIS.md`, `VCRM.md`, `PROD_DEPLOY.md`, `AZURE_DEPLOY.md`, `RECONSTRUCT.md`, `HANDOFF.md`, `JUDGE_ASSESSMENT.md`, ...) but no landing page. A newcomer has no map.
 
 **Suggested fix:** a short `README.md` with: what the app is, quickstart (`start-api.ps1` + `start-frontend.ps1`), and a one-line pointer to each of the top-level docs.
 
-**Actions taken for resolution:** _(deferred — needs content decisions)_
+**Actions taken for resolution:**
 
-**Resolution:** _(fill in when RESOLVED)_
+1. Added a root `README.md`: what the app is, quickstart, and an API Surface table (including `/api/audit/log` from BUG-041) with pointers to the other top-level docs.
+
+**Resolution 2026-08-12:** `README.md` exists at repo root.
 
 ---
 
