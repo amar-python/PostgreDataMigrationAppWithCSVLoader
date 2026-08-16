@@ -57,3 +57,8 @@ terraform-provider-*.log
 
 # Serena tool workspace
 .serena/
+
+# Coverage reports
+.coverage
+.coverage.*
+htmlcov/
