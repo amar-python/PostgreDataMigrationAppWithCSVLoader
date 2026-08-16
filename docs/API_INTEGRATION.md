@@ -1,8 +1,8 @@
 # Frontend Integration — CSV Table Hub
 
 Notes on the FastAPI backend in `api/`, which connects the React frontend in
-`frontend/` (originally the standalone **csv-table-hub-main** project, now
-merged into this monorepo) to PostgreSQL.
+`csv-table-hub-main/` (originally a standalone project, now merged into this
+monorepo) to PostgreSQL.
 
 > **See also** the **Web UI + REST API** section of `README.md` for the
 > user-facing quickstart (two-terminal launch, endpoint table, env vars). This
@@ -14,7 +14,7 @@ merged into this monorepo) to PostgreSQL.
 ## Architecture
 
 ```text
-frontend/ (React 19 + TanStack Start)  →  api/ (FastAPI)  →  PostgreSQL
+csv-table-hub-main/ (React 19 + TanStack Start)  →  api/ (FastAPI)  →  PostgreSQL
                                                           ├── csv_uploads schema  (dynamic mode)
                                                           └── te_<env>    schema  (te mode)
 ```
@@ -52,7 +52,8 @@ matching the `API_KEY` environment variable. If `API_KEY` is unset the check
 is skipped — that's the local-dev default, and `api/main.py` logs a warning
 at startup when it's unset so this isn't silently forgotten in a real
 deployment. Set `API_KEY` (backend) and `VITE_API_KEY` (frontend, same value)
-before deploying anywhere reachable beyond localhost. See `frontend/.env`.
+before deploying anywhere reachable beyond localhost. See
+`csv-table-hub-main/.env.local`.
 
 > **Known DX gap** — if `API_KEY` and `VITE_API_KEY` don't match, every request
 > returns 401 with no hint from either process. Tracked as BUG-006 in
@@ -222,25 +223,28 @@ python -m alembic downgrade -1
 
 ## Tests
 
-`tests/test_api.py` provides 19 tests:
+`tests/test_api.py` was later split into `test_api_unit.py`,
+`test_api_integration.py`, and `test_api_coverage.py` (plus several
+issue-specific files, e.g. `test_issue_04_multi_file_upload.py`). The
+original two files provide 32 tests between them:
 
 | Group | Count | Needs a database |
 |---|---|---|
 | `unit` — health contract, request validation | 9 | No |
 | `unit` + `security` — table-name guards, AST identifier check | 3 | No |
-| `integration` — upload → list → rows → dedup round trip | 7 | Yes |
+| `integration` — upload → list → rows → dedup round trip | 20 | Yes |
 
 Per the repository's no-skip policy, the integration group **fails** with
 remediation text when the database is unreachable rather than skipping.
 
 ```bash
-python -m pytest tests/test_api.py -m unit          # no database
-python -m pytest tests/test_api.py                  # full
-python scripts/test_report.py --strict              # whole suite
+python -m pytest tests/test_api_unit.py -m unit      # no database
+python -m pytest tests/test_api_unit.py tests/test_api_integration.py  # both files
+python scripts/test_report.py --strict                # whole suite
 ```
 
-**Verification status:** all 19 tests verified green against the real `api/`
-package and a live PostgreSQL 18 instance on port 5433 — 12 `unit` and 7
+**Verification status:** all 32 tests verified green against the real `api/`
+package and a live PostgreSQL 18 instance on port 5433 — 12 `unit` and 20
 `integration`, the latter exercising the upload → list → rows round trip, both
 deduplication paths (content hash and in-file row hash), and 404 handling for
 unregistered tables.
@@ -251,8 +255,9 @@ with remediation text rather than skipping, per the no-skip policy.
 
 ## Also required
 
-CI installs only `requirements-dev.txt`. Because `tests/test_api.py` imports
-FastAPI at module level, both workflows need:
+CI installs only `requirements-dev.txt`. Because `tests/test_api_unit.py` and
+`tests/test_api_integration.py` import FastAPI at module level, both
+workflows need:
 
 ```yaml
 run: pip install -r requirements-dev.txt -r api/requirements.txt

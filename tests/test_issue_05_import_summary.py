@@ -36,6 +36,7 @@ import unittest
 import pytest
 from fastapi.testclient import TestClient
 
+from api.config import settings
 from api.main import app
 
 _HELP = ("Start PostgreSQL and ensure api/ can reach it. Most often this means "
@@ -52,6 +53,11 @@ class ImportSummaryCounts(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # BUG-040 flipped the default to False; tearDown() below relies on
+        # being able to DELETE its tagged files for cleanup (see
+        # test_api_coverage.py's _IntegrationBase for the same pattern).
+        cls._orig_allow_destructive = settings.allow_destructive
+        settings.allow_destructive = True
         cls.ctx = TestClient(app)
         try:
             cls.client = cls.ctx.__enter__()
@@ -68,6 +74,7 @@ class ImportSummaryCounts(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.ctx.__exit__(None, None, None)
+        settings.allow_destructive = cls._orig_allow_destructive
 
     def setUp(self):
         self.uploaded: list[str] = []

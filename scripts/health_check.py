@@ -11,6 +11,7 @@ Exit code 0 when all checks pass; 1 if any check fails.
 from __future__ import annotations
 
 import ast
+import re
 import sys
 from pathlib import Path
 
@@ -187,10 +188,20 @@ def check_config() -> None:
         _fail("config.env.example", "missing")
         return
     content = example.read_text(encoding="utf-8")
-    if 'PG_PASSWORD=""' in content or "PG_PASSWORD=''" in content:
-        _pass("config.env.example: PG_PASSWORD is empty (safe default)")
+    # Match every *PASSWORD* var, not just a hardcoded PG_PASSWORD — this file
+    # actually defines PG_SUPERUSER_PASSWORD and PG_APP_PASSWORD_{DEV,TEST,STAGING,PROD}.
+    password_vars = re.findall(r'^(\w*PASSWORD\w*)=(["\'])(.*?)\2', content, re.MULTILINE)
+    if not password_vars:
+        _warn("config.env.example: password vars", "no *PASSWORD* variables found — check could not verify anything")
+        return
+    non_empty = [name for name, _, value in password_vars if value]
+    if non_empty:
+        _warn(
+            "config.env.example: password vars",
+            f"non-empty value(s) for {', '.join(non_empty)} — check for accidental credential commit",
+        )
     else:
-        _warn("config.env.example: PG_PASSWORD", "value may not be empty — check for accidental credential commit")
+        _pass(f"config.env.example: all {len(password_vars)} password vars are empty (safe default)")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

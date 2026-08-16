@@ -48,7 +48,14 @@ const uploadResultSchema = z.discriminatedUnion("status", [
     rowErrors: z.array(rowErrorSchema),
     logs: z.array(processingLogSchema),
     overwritten: z.boolean().optional(),
-    replacedFileName: z.string().optional(),
+    // The backend always sends this key (dynamic_loader.py's replaced_file_name
+    // starts as None and is JSON-serialised to null on every non-overwrite
+    // upload — it's not merely omitted). .optional() alone only permits
+    // undefined/absent, not null, so every first-time upload failed this
+    // schema despite succeeding on the backend. Discovered via manual
+    // browser verification of #24 (T&E mode UI) — the upload registered
+    // server-side (visible in /api/csv/files) while the UI reported "Failed".
+    replacedFileName: z.string().nullable().optional(),
   }),
   z.object({
     status: z.literal("duplicate_file"),
@@ -154,6 +161,45 @@ export async function uploadCsv(input: {
 
 export async function listCsvFiles(): Promise<CsvFileSummary[]> {
   return apiFetch("/api/csv/files", csvFileSummaryListSchema);
+}
+
+const csvPreviewResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("ok"),
+    headers: z.array(z.string()),
+    columns: z.array(z.string()),
+    inferredTypes: z.array(columnTypeSchema),
+    sampleRows: z.array(z.array(z.string())),
+    totalRowsApprox: z.number(),
+    teTableMatch: z.string().nullable().optional(),
+  }),
+  z.object({
+    status: z.literal("invalid_structure"),
+    reason: z.enum(["empty", "header_only", "no_columns"]),
+  }),
+]);
+export type CsvPreviewResult = z.infer<typeof csvPreviewResultSchema>;
+
+/** Server-side preview — used here only for its `teTableMatch` suggestion
+ * (best-effort T&E table match); the header/type preview itself is done
+ * client-side by parseCsvPreview() in csv-preview.ts. */
+export async function previewCsv(fileName: string, content: string): Promise<CsvPreviewResult> {
+  return apiFetch("/api/csv/preview", csvPreviewResultSchema, {
+    method: "POST",
+    body: JSON.stringify({ fileName, content }),
+  });
+}
+
+const teTableInfoSchema = z.object({
+  table: z.string(),
+  exists: z.boolean(),
+  rowCount: z.number(),
+});
+const teTablesSchema = z.array(teTableInfoSchema);
+export type TeTableInfo = z.infer<typeof teTableInfoSchema>;
+
+export async function listTeTables(): Promise<TeTableInfo[]> {
+  return apiFetch("/api/te/tables", teTablesSchema);
 }
 
 export async function previewCsvTable(

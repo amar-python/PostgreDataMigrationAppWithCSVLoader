@@ -54,7 +54,7 @@ Get-Content env.dev.example | ForEach-Object {
 
 > **Key values in `env.dev.example`:**
 > - `PGPORT=5433` — PG 18 default (change to `5432` if using PG 17)
-> - `PGPASSWORD=devpassword123` — update to match your local install
+> - `PGPASSWORD=changeme_local_only` — update to match your local install
 > - `API_KEY=` — empty is fine for local dev (unauthenticated)
 
 To make `PGPORT=5433` permanent across all PowerShell sessions:
@@ -72,7 +72,7 @@ Requires Git Bash. Pass PG credentials explicitly:
 ```powershell
 & "C:\Program Files\Git\bin\bash.exe" -c "
   cd '/c/Users/User/OneDrive/Desktop/Migration using ai/PostgreDataMigrationAppWithCSVLoader' &&
-  PGUSER=postgres PGHOST=localhost PGPORT=5433 PGPASSWORD=devpassword123
+  PGUSER=postgres PGHOST=localhost PGPORT=5433 PGPASSWORD=changeme_local_only
   bash scripts/provision_full_test_env.sh
 "
 ```
@@ -192,7 +192,7 @@ $hba = "C:\Program Files\PostgreSQL\18\data\pg_hba.conf"
 (Get-Content $hba) -replace "scram-sha-256", "trust" | Set-Content $hba
 Restart-Service postgresql-x64-18
 & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -p 5433 `
-  -c "ALTER USER postgres WITH PASSWORD 'devpassword123';"
+  -c "ALTER USER postgres WITH PASSWORD 'changeme_local_only';"
 (Get-Content $hba) -replace "trust", "scram-sha-256" | Set-Content $hba
 Restart-Service postgresql-x64-18
 ```

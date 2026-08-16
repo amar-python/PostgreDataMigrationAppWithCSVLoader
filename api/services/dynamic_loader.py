@@ -134,7 +134,8 @@ def _do_upload(
             _log(logs, "duplicate_check", "Checking existing filename")
             cur.execute(
                 sql.SQL(
-                    "SELECT id, file_name, table_name, file_hash, row_count FROM {}.csv_files WHERE file_name = %s"
+                    "SELECT id, file_name, table_name, file_hash, row_count, mode "
+                    "FROM {}.csv_files WHERE file_name = %s"
                 ).format(sql.Identifier(schema)),
                 (file_name,),
             )
@@ -151,11 +152,16 @@ def _do_upload(
                         "logs": logs,
                     }
                 _log(logs, "overwrite", f'Overwriting previous upload "{name_match[1]}"', "warn")
-                cur.execute(
-                    sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
-                        sql.Identifier(schema), sql.Identifier(name_match[2])
+                # table_name is only a bare identifier owned by this schema for
+                # dynamic-mode rows (csv_<hash>); TE-mode rows store "schema.table"
+                # pointing at a shared T&E table that must never be dropped here.
+                # Same guard as te_loader._cleanup_prior_registry_entries.
+                if name_match[5] == "dynamic" and name_match[2].startswith("csv_"):
+                    cur.execute(
+                        sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
+                            sql.Identifier(schema), sql.Identifier(name_match[2])
+                        )
                     )
-                )
                 cur.execute(
                     sql.SQL("DELETE FROM {}.csv_files WHERE id = %s").format(sql.Identifier(schema)),
                     (name_match[0],),
@@ -166,7 +172,8 @@ def _do_upload(
             _log(logs, "duplicate_check", "Checking existing content hash")
             cur.execute(
                 sql.SQL(
-                    "SELECT id, file_name, table_name, row_count FROM {}.csv_files WHERE file_hash = %s"
+                    "SELECT id, file_name, table_name, row_count, mode "
+                    "FROM {}.csv_files WHERE file_hash = %s"
                 ).format(sql.Identifier(schema)),
                 (file_hash,),
             )
@@ -183,11 +190,13 @@ def _do_upload(
                         "logs": logs,
                     }
                 _log(logs, "overwrite", f'Overwriting previous content match "{content_match[1]}"', "warn")
-                cur.execute(
-                    sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
-                        sql.Identifier(schema), sql.Identifier(content_match[2])
+                # Same TE-vs-dynamic guard as above.
+                if content_match[4] == "dynamic" and content_match[2].startswith("csv_"):
+                    cur.execute(
+                        sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
+                            sql.Identifier(schema), sql.Identifier(content_match[2])
+                        )
                     )
-                )
                 cur.execute(
                     sql.SQL("DELETE FROM {}.csv_files WHERE id = %s").format(sql.Identifier(schema)),
                     (content_match[0],),

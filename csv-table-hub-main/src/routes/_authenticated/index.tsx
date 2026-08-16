@@ -23,8 +23,8 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  listCsvFiles, previewCsvTable, uploadCsv,
-  type CsvFileSummary, type ColumnType,
+  listCsvFiles, previewCsvTable, previewCsv, listTeTables, uploadCsv,
+  type CsvFileSummary, type ColumnType, type TeTableInfo,
 } from "@/lib/csv.functions";
 import { parseCsvPreview, COLUMN_TYPE_LABEL, sanitizeColumns, type CsvPreview } from "@/lib/csv-preview";
 import { useLocalStorageState } from "@/hooks/use-local-storage";
@@ -105,7 +105,10 @@ const STATUS_LABEL: Record<JobStatus,string> = {
   done:"Imported", duplicate:"Duplicate file", error:"Failed", interrupted:"Interrupted", cancelled:"Cancelled",
 };
 
-type PendingPreview = { file: File; preview: CsvPreview; batchId: string; mapping?: ColumnMapping[]; };
+type PendingPreview = {
+  file: File; preview: CsvPreview; batchId: string; mapping?: ColumnMapping[];
+  mode: "dynamic" | "te"; targetTable?: string; teTableMatch?: string | null;
+};
 
 // ─── notification helper (F12) ────────────────────────────────────────────────
 
@@ -172,11 +175,17 @@ export function Uploader() {
       if (ctrl.signal.aborted) return;
       updateJob(job.id,{status:"processing",progress:90});
 
-      // Build types and renames from mapping
-      const types = mapping?.map(c=>c.type);
-      const headerMapping = mapping ?? undefined;
+      // Build types and renames from mapping — T&E mode ignores both (the
+      // backend matches raw headers against the target table's own columns).
+      const isTe = job.mode==="te";
+      const types = isTe ? undefined : mapping?.map(c=>c.type);
+      const headerMapping = isTe ? undefined : mapping;
 
-      const res = await uploadCsv({ fileName:job.name, content, types, overwrite, headerMapping: headerMapping?.map(c=>({original:c.original,renamed:c.renamed})) });
+      const res = await uploadCsv({
+        fileName:job.name, content, types, overwrite,
+        headerMapping: headerMapping?.map(c=>({original:c.original,renamed:c.renamed})),
+        mode: job.mode, targetTable: job.targetTable,
+      });
       if (ctrl.signal.aborted) return;
       abortMap.current.delete(job.id);
 
@@ -198,7 +207,10 @@ export function Uploader() {
     const newJobs: Job[] = items.map(it=>{
       const id = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
       fileMap.current.set(id,it.file);
-      return {id,batchId:it.batchId,name:it.file.name,size:it.file.size,status:"reading",progress:0,createdAt:Date.now()};
+      return {
+        id,batchId:it.batchId,name:it.file.name,size:it.file.size,status:"reading",progress:0,createdAt:Date.now(),
+        mode:it.mode,targetTable:it.targetTable,
+      };
     });
     setJobs(prev=>[...newJobs,...prev]);
     for (let i=0;i<items.length;i++) {
@@ -221,7 +233,17 @@ export function Uploader() {
           renamed: template?.columns[i]?.renamed ?? "",
           type: template?.columns[i]?.type ?? p.inferredTypes[i],
         }));
-        previews.push({file:f,preview:p,batchId,mapping});
+        // Best-effort T&E table suggestion — never blocks the upload flow.
+        // Reuses the same bounded slice parseCsvPreview reads; only the
+        // header row matters for matching, so truncation is fine.
+        let teTableMatch: string | null = null;
+        try {
+          const slice = f.slice(0, Math.min(f.size, 512 * 1024));
+          const text = await slice.text();
+          const serverPreview = await previewCsv(f.name, text);
+          if (serverPreview.status === "ok") teTableMatch = serverPreview.teTableMatch ?? null;
+        } catch { /* suggestion only — ignore failures */ }
+        previews.push({file:f,preview:p,batchId,mapping,mode:"dynamic",targetTable:teTableMatch??undefined,teTableMatch});
         if (template) toast.info(`Applied mapping template "${template.name}" to ${f.name}`);
       } catch(err) { toast.error(`${f.name}: ${(err as Error).message}`); }
     }
@@ -286,7 +308,14 @@ export function Uploader() {
 
       {jobs.length>0&&<UploadReport jobs={jobs} running={running} onRetry={retryJob} onOverwrite={requestOverwrite} onCancel={cancelJob} onClearFinished={clearFinished}/>}
 
-      <PreviewDialog pending={pending} index={previewIndex} onPrev={()=>setPreviewIndex(i=>Math.max(0,i-1))} onNext={()=>setPreviewIndex(i=>Math.min(pending.length-1,i+1))} onUpdateMapping={(i,m)=>setPending(prev=>prev.map((p,pi)=>pi===i?{...p,mapping:m}:p))} onConfirm={confirmAll} onCancel={cancelAll}/>
+      <PreviewDialog
+        pending={pending} index={previewIndex}
+        onPrev={()=>setPreviewIndex(i=>Math.max(0,i-1))} onNext={()=>setPreviewIndex(i=>Math.min(pending.length-1,i+1))}
+        onUpdateMapping={(i,m)=>setPending(prev=>prev.map((p,pi)=>pi===i?{...p,mapping:m}:p))}
+        onUpdateMode={(i,mode)=>setPending(prev=>prev.map((p,pi)=>pi===i?{...p,mode,targetTable:mode==="te"?(p.targetTable??p.teTableMatch??undefined):undefined}:p))}
+        onUpdateTargetTable={(i,t)=>setPending(prev=>prev.map((p,pi)=>pi===i?{...p,targetTable:t}:p))}
+        onConfirm={confirmAll} onCancel={cancelAll}
+      />
 
       {/* F9: Duplicate diff dialog */}
       <DiffDialog job={diffJob} onConfirm={confirmOverwrite} onCancel={()=>setDiffJob(null)}/>
@@ -433,15 +462,18 @@ function ErrorPanel({job,open,onOpenChange}:{job:Job;open:boolean;onOpenChange:(
 
 // ─── PreviewDialog — with header rename/mapping step (F3) + template save (F11)
 
-function PreviewDialog({pending,index,onPrev,onNext,onUpdateMapping,onConfirm,onCancel}:{pending:PendingPreview[];index:number;onPrev:()=>void;onNext:()=>void;onUpdateMapping:(i:number,m:ColumnMapping[])=>void;onConfirm:()=>void;onCancel:()=>void;}){
+function PreviewDialog({pending,index,onPrev,onNext,onUpdateMapping,onUpdateMode,onUpdateTargetTable,onConfirm,onCancel}:{pending:PendingPreview[];index:number;onPrev:()=>void;onNext:()=>void;onUpdateMapping:(i:number,m:ColumnMapping[])=>void;onUpdateMode:(i:number,mode:"dynamic"|"te")=>void;onUpdateTargetTable:(i:number,table:string)=>void;onConfirm:()=>void;onCancel:()=>void;}){
   const [templates,setTemplates]=useState<MappingTemplate[]>(()=>loadTemplates());
   const [saveName,setSaveName]=useState("");
   const [showSave,setShowSave]=useState(false);
   const open=pending.length>0;
   const current=pending[index];
+  const {data:teTables}=useQuery({queryKey:["te-tables"],queryFn:listTeTables,enabled:open});
   if(!current)return null;
-  const {file,preview,mapping}=current;
+  const {file,preview,mapping,mode,targetTable,teTableMatch}=current;
   const m: ColumnMapping[] = mapping??preview.headers.map((orig,i)=>({original:orig,renamed:"",type:preview.inferredTypes[i]}));
+  const isTe = mode==="te";
+  const allValid = pending.every(p=>p.mode==="dynamic"||(p.mode==="te"&&!!p.targetTable));
 
   const updateMapping=(colIdx:number,patch:Partial<ColumnMapping>)=>{
     const next=[...m];next[colIdx]={...next[colIdx],...patch};
@@ -471,14 +503,14 @@ function PreviewDialog({pending,index,onPrev,onNext,onUpdateMapping,onConfirm,on
       <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-4xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="h-4 w-4"/>Preview: {file.name}</DialogTitle>
-          <DialogDescription>Confirm columns, adjust header names, and set types before importing.</DialogDescription>
+          <DialogDescription>{isTe?"Choose the T&E table this file loads into — columns must match that table exactly.":"Confirm columns, adjust header names, and set types before importing."}</DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col space-y-3 overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <Badge variant="secondary">File {index+1} of {pending.length}</Badge>
             <span>{formatBytes(file.size)}</span>·<span>{preview.headers.length} columns</span>·<span>{preview.truncated?"~":""}{preview.totalRowsApprox} data rows</span>
-            {/* Saved templates dropdown (F11) */}
-            {templates.length>0&&(
+            {/* Saved templates dropdown (F11) — dynamic mode only */}
+            {!isTe&&templates.length>0&&(
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><Button size="sm" variant="outline" className="ml-auto h-7 text-xs"><Bookmark className="mr-1 h-3 w-3"/>Apply template</Button></DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -491,70 +523,108 @@ function PreviewDialog({pending,index,onPrev,onNext,onUpdateMapping,onConfirm,on
             )}
           </div>
 
-          {/* Header rename table (F3) */}
-          <div className="min-h-0 flex-1 overflow-auto rounded border">
-            <Table>
-              <TableHeader className="sticky top-0 z-10 bg-background">
-                <TableRow>
-                  <TableHead className="w-[200px]">Original header</TableHead>
-                  <TableHead className="w-[200px]">Rename to (optional)</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-right text-[10px] font-normal text-muted-foreground">Sample values</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {preview.headers.map((orig,colIdx)=>{
-                  const col=m[colIdx]??{original:orig,renamed:"",type:preview.inferredTypes[colIdx]};
-                  const sanitizedDefault=sanitizeColumns([orig])[0];
-                  const changed=col.renamed&&col.renamed!==sanitizedDefault;
-                  return (
-                    <TableRow key={colIdx}>
-                      <TableCell className="py-1.5">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-xs font-mono">{orig}</span>
-                          {orig!==sanitizedDefault&&<span className="text-[10px] text-muted-foreground">→ {sanitizedDefault}</span>}
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-1.5">
-                        <Input value={col.renamed} onChange={e=>updateMapping(colIdx,{renamed:e.target.value})} placeholder={sanitizedDefault} className={`h-7 text-xs ${changed?"border-primary/50 bg-primary/5":""}`}/>
-                      </TableCell>
-                      <TableCell className="py-1.5">
-                        <Select value={col.type} onValueChange={v=>updateMapping(colIdx,{type:v as ColumnType})}>
-                          <SelectTrigger className="h-7 w-[120px] text-xs"><SelectValue/></SelectTrigger>
-                          <SelectContent>{(["int8","numeric","date","timestamptz","boolean","text"] as ColumnType[]).map(t=><SelectItem key={t} value={t} className="text-xs">{COLUMN_TYPE_LABEL[t]}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="py-1.5 text-right">
-                        <span className="text-xs text-muted-foreground">{preview.sampleRows.slice(0,3).map(r=>r[colIdx]??"").filter(Boolean).join(", ")||"—"}</span>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Save template (F11) */}
-          <div className="flex items-center gap-2">
-            {showSave?(
-              <>
-                <Input value={saveName} onChange={e=>setSaveName(e.target.value)} placeholder="Template name…" className="h-8 text-xs flex-1"/>
-                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleSaveTemplate} disabled={!saveName.trim()}><BookmarkPlus className="mr-1 h-3 w-3"/>Save</Button>
-                <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={()=>{setShowSave(false);setSaveName("");}}>Cancel</Button>
-              </>
-            ):(
-              <Button size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground" onClick={()=>setShowSave(true)}><BookmarkPlus className="mr-1 h-3 w-3"/>Save as template</Button>
+          {/* Mode toggle: dynamic table vs T&E table */}
+          <div className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/30 p-2">
+            <div className="flex overflow-hidden rounded-md border">
+              <button type="button" onClick={()=>onUpdateMode(index,"dynamic")} className={`px-3 py-1 text-xs font-medium ${!isTe?"bg-primary text-primary-foreground":"bg-background text-muted-foreground hover:bg-muted"}`}>Dynamic table</button>
+              <button type="button" onClick={()=>onUpdateMode(index,"te")} className={`px-3 py-1 text-xs font-medium ${isTe?"bg-primary text-primary-foreground":"bg-background text-muted-foreground hover:bg-muted"}`}>T&E table</button>
+            </div>
+            {isTe&&(
+              <div className="flex flex-1 flex-wrap items-center gap-2">
+                <Select value={targetTable??""} onValueChange={v=>onUpdateTargetTable(index,v)}>
+                  <SelectTrigger className="h-8 w-[220px] text-xs"><SelectValue placeholder="Choose a T&E table…"/></SelectTrigger>
+                  <SelectContent>
+                    {(teTables??[]).map(t=>(
+                      <SelectItem key={t.table} value={t.table} className="text-xs">
+                        {t.table}{t.table===teTableMatch?" (suggested)":""}{!t.exists?" — not deployed":""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {teTableMatch&&targetTable!==teTableMatch&&(
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={()=>onUpdateTargetTable(index,teTableMatch)}>Use suggested: {teTableMatch}</Button>
+                )}
+                {!targetTable&&<span className="text-xs text-destructive">Required to import in T&E mode.</span>}
+              </div>
             )}
           </div>
+
+          {isTe?(
+            <div className="rounded-md border bg-muted/20 p-4 text-xs text-muted-foreground">
+              <p>T&E mode loads this file's columns directly into <code className="rounded bg-muted px-1">{targetTable||"the selected table"}</code> — no renaming or type overrides. Every CSV column must already exist on that table, or the import is rejected.</p>
+              <p className="mt-2">Columns in this file: {sanitizeColumns(preview.headers).join(", ")||"—"}</p>
+            </div>
+          ):(
+            <>
+              {/* Header rename table (F3) */}
+              <div className="min-h-0 flex-1 overflow-auto rounded border">
+                <Table>
+                  <TableHeader className="sticky top-0 z-10 bg-background">
+                    <TableRow>
+                      <TableHead className="w-[200px]">Original header</TableHead>
+                      <TableHead className="w-[200px]">Rename to (optional)</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead className="text-right text-[10px] font-normal text-muted-foreground">Sample values</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {preview.headers.map((orig,colIdx)=>{
+                      const col=m[colIdx]??{original:orig,renamed:"",type:preview.inferredTypes[colIdx]};
+                      const sanitizedDefault=sanitizeColumns([orig])[0];
+                      const changed=col.renamed&&col.renamed!==sanitizedDefault;
+                      return (
+                        <TableRow key={colIdx}>
+                          <TableCell className="py-1.5">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-xs font-mono">{orig}</span>
+                              {orig!==sanitizedDefault&&<span className="text-[10px] text-muted-foreground">→ {sanitizedDefault}</span>}
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-1.5">
+                            <Input value={col.renamed} onChange={e=>updateMapping(colIdx,{renamed:e.target.value})} placeholder={sanitizedDefault} className={`h-7 text-xs ${changed?"border-primary/50 bg-primary/5":""}`}/>
+                          </TableCell>
+                          <TableCell className="py-1.5">
+                            <Select value={col.type} onValueChange={v=>updateMapping(colIdx,{type:v as ColumnType})}>
+                              <SelectTrigger className="h-7 w-[120px] text-xs"><SelectValue/></SelectTrigger>
+                              <SelectContent>{(["int8","numeric","date","timestamptz","boolean","text"] as ColumnType[]).map(t=><SelectItem key={t} value={t} className="text-xs">{COLUMN_TYPE_LABEL[t]}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="py-1.5 text-right">
+                            <span className="text-xs text-muted-foreground">{preview.sampleRows.slice(0,3).map(r=>r[colIdx]??"").filter(Boolean).join(", ")||"—"}</span>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Save template (F11) */}
+              <div className="flex items-center gap-2">
+                {showSave?(
+                  <>
+                    <Input value={saveName} onChange={e=>setSaveName(e.target.value)} placeholder="Template name…" className="h-8 text-xs flex-1"/>
+                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleSaveTemplate} disabled={!saveName.trim()}><BookmarkPlus className="mr-1 h-3 w-3"/>Save</Button>
+                    <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={()=>{setShowSave(false);setSaveName("");}}>Cancel</Button>
+                  </>
+                ):(
+                  <Button size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground" onClick={()=>setShowSave(true)}><BookmarkPlus className="mr-1 h-3 w-3"/>Save as template</Button>
+                )}
+              </div>
+            </>
+          )}
         </div>
         <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={onPrev} disabled={index===0}>Previous</Button>
             <Button variant="outline" size="sm" onClick={onNext} disabled={index>=pending.length-1}>Next</Button>
           </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={onCancel}>Cancel</Button>
-            <Button onClick={onConfirm}>Confirm & import{pending.length>1?` all ${pending.length}`:""}</Button>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+              <Button onClick={onConfirm} disabled={!allValid}>Confirm & import{pending.length>1?` all ${pending.length}`:""}</Button>
+            </div>
+            {!allValid&&<span className="text-xs text-destructive">Select a T&E table for every file in T&E mode before importing.</span>}
           </div>
         </DialogFooter>
       </DialogContent>

@@ -64,6 +64,21 @@ def quote_ident(name):
 
 cols = next(csv.reader([sys.argv[1]]))
 sanitized = [sanitize(c, i + 1) for i, c in enumerate(cols)]
+# Dedupe collisions after sanitisation (mirrors sanitize_columns() in
+# api/services/csv_parse.py) — otherwise two headers that sanitise to the
+# same name produce a CREATE TABLE with a duplicate column instead of a
+# clean rejection.
+assigned = set()
+counter = {}
+deduped = []
+for base in sanitized:
+    name = base
+    while name in assigned:
+        counter[base] = counter.get(base, 0) + 1
+        name = f'{base}_{counter[base] + 1}'
+    assigned.add(name)
+    deduped.append(name)
+sanitized = deduped
 bad = [c for c in sanitized if not re.match(r'^[a-z_][a-z0-9_]*\$', c)]
 if bad:
     sys.exit('unsafe column name(s) after sanitisation: ' + ', '.join(bad))
@@ -86,6 +101,21 @@ def quote_ident(name):
 
 cols = next(csv.reader([sys.argv[1]]))
 sanitized = [sanitize(c, i + 1) for i, c in enumerate(cols)]
+# Dedupe collisions after sanitisation (mirrors sanitize_columns() in
+# api/services/csv_parse.py) — otherwise two headers that sanitise to the
+# same name produce a CREATE TABLE with a duplicate column instead of a
+# clean rejection.
+assigned = set()
+counter = {}
+deduped = []
+for base in sanitized:
+    name = base
+    while name in assigned:
+        counter[base] = counter.get(base, 0) + 1
+        name = f'{base}_{counter[base] + 1}'
+    assigned.add(name)
+    deduped.append(name)
+sanitized = deduped
 bad = [c for c in sanitized if not re.match(r'^[a-z_][a-z0-9_]*\$', c)]
 if bad:
     sys.exit('unsafe column name(s) after sanitisation: ' + ', '.join(bad))

@@ -150,7 +150,7 @@ $env:PGPASSWORD = "your-local-postgres-password"
 
 ### Running tests
 ```powershell
-$env:PGPASSWORD = "devpassword123"
+$env:PGPASSWORD = "changeme_local_only"
 python -m pytest tests\ -m "unit or regression or security or snapshot"
 ```
 

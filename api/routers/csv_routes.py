@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from psycopg2 import sql
 from pydantic import BaseModel, Field
@@ -12,6 +14,8 @@ from api.db import Conn
 from api.services.csv_parse import build_preview
 from api.services.dynamic_loader import upload_dynamic
 from api.services.te_loader import match_te_table, upload_te
+
+logger = logging.getLogger(__name__)
 
 # BUG-035: auth is applied here (per-router) instead of at app level in
 # api/main.py, so /api/health can stay unauthenticated for external monitoring.
@@ -46,10 +50,11 @@ def preview(req: PreviewRequest) -> dict:
     try:
         result = build_preview(req.content)
     except Exception as exc:  # noqa: BLE001 — surface any parser failure as structured JSON
+        logger.warning("CSV preview parse failed for %r: %s", req.fileName, exc)
         return {
             "status": "invalid_structure",
             "reason": "parse_failed",
-            "message": f"The CSV couldn't be parsed: {str(exc)[:200]}",
+            "message": "The CSV couldn't be parsed. Check the file's structure and try again.",
         }
     if result.get("status") == "ok":
         # Suggest a T&E table if the columns fit one (drives the mode picker in the UI)

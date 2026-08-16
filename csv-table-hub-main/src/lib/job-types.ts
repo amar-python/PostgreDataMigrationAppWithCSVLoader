@@ -34,7 +34,7 @@ export type Job = {
   invalidReason?: "empty" | "header_only" | "no_columns";
   existingRowCount?: number;
   overwritten?: boolean;
-  replacedFileName?: string;
+  replacedFileName?: string | null;
   errorMessage?: string;
   errorDetails?: string;
   errorStack?: string;
@@ -44,4 +44,6 @@ export type Job = {
   logs?: ProcessingLog[];
   headerMapping?: ColumnMapping[];
   cancellationReason?: string;
+  mode?: "dynamic" | "te";
+  targetTable?: string;
 };

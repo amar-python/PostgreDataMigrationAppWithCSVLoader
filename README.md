@@ -119,7 +119,7 @@ Get-Content env.dev.example | ForEach-Object {
 }
 
 # 4. Provision dev database (Git Bash)
-& "C:\Program Files\Git\bin\bash.exe" -c "PGUSER=postgres PGHOST=localhost PGPORT=5433 PGPASSWORD=devpassword123 bash scripts/provision_full_test_env.sh"
+& "C:\Program Files\Git\bin\bash.exe" -c "PGUSER=postgres PGHOST=localhost PGPORT=5433 PGPASSWORD=changeme_local_only bash scripts/provision_full_test_env.sh"
 
 # 5. Terminal 1 — start the API
 .\scripts\start-api.ps1
@@ -143,7 +143,7 @@ Start-Process "http://localhost:8080"
 | `GET` | `/api/csv/files` | List all uploaded CSVs |
 | `GET` | `/api/csv/tables/{name}/rows` | Preview rows of a dynamic table |
 | `DELETE` | `/api/csv/files/{id}` | Drop a dynamic table (requires `API_ALLOW_DESTRUCTIVE=true`) |
-| `GET` | `/api/audit/log` | Paginated deletion history (who/what/when was dropped) |
+| `GET` | `/api/audit/log` | Paginated deletion history (who/what/when was dropped) — not currently called by the shipped frontend, see note below |
 | `GET` | `/api/te/tables` | Existence + row counts for the 12 fixed T&E tables |
 
 Interactive docs: `http://localhost:8000/docs`
@@ -151,6 +151,16 @@ Interactive docs: `http://localhost:8000/docs`
 ---
 
 ## Frontend Features (13)
+
+> **Naming note:** the "audit log" features below (`/audit` route, `audit.tsx`)
+> operate on **this browser's local import history** (`localStorage`, populated
+> as you run imports in this session) — not the backend's `GET /api/audit/log`
+> endpoint (server-side deletion history), which the shipped frontend never
+> calls. `audit.tsx` also renders a small, separate, hardcoded developer
+> changelog widget (`src/lib/audit-log.ts`) alongside the import-history view;
+> that's app release notes, unrelated to either audit trail above. Three
+> different things share the word "audit" here — worth knowing before you go
+> looking for server-side audit data in the UI.
 
 | Feature | Description |
 |---|---|

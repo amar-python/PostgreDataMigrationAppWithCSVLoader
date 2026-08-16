@@ -103,5 +103,8 @@ def health() -> dict:
             "uploads_schema": settings.UPLOADS_SCHEMA,
         }
     except Exception as exc:  # noqa: BLE001 — surface DB reachability to the UI
+        # Log the real exception server-side, but don't return it: /api/health
+        # is deliberately unauthenticated (see BUG-035 comment above), and
+        # psycopg2's OperationalError text can include host/port/user details.
         logger.warning("Health check failed: %s", exc)
-        return {"status": "degraded", "error": str(exc).split("\n")[0][:200]}
+        return {"status": "degraded", "error": "Database is unreachable or not fully bootstrapped."}

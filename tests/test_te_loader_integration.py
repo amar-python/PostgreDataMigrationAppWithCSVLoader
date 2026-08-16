@@ -26,6 +26,7 @@ import unittest
 import pytest
 from fastapi.testclient import TestClient
 
+from api.config import settings
 from api.main import app
 
 _HELP = (
@@ -225,3 +226,100 @@ class TeUploadOrganisations(unittest.TestCase):
                   "mode": "te"},
         )
         self.assertEqual(r.status_code, 422, r.text[:200])
+
+
+@pytest.mark.integration
+class DynamicOverwriteOfTeOriginFile(unittest.TestCase):
+    """Issue #27 — a dynamic-mode overwrite of a TE-origin registry entry must
+    not attempt to DROP the shared T&E table (table_name is "schema.table" for
+    TE-mode rows, not a bare csv_<hash> identifier this schema owns)."""
+
+    @classmethod
+    def setUpClass(cls):
+        # DELETE cleanup below needs this — see BUG-040 / test_api_coverage.py's
+        # _IntegrationBase for the same pattern.
+        cls._orig_allow_destructive = settings.allow_destructive
+        settings.allow_destructive = True
+        cls.ctx = TestClient(app)
+        try:
+            cls.client = cls.ctx.__enter__()
+        except Exception as exc:  # noqa: BLE001
+            raise AssertionError(
+                f"Could not start the API — database connection failed.\n"
+                f"  {type(exc).__name__}: {str(exc).strip().splitlines()[0]}\n"
+                f"{_HELP}"
+            ) from None
+        r = cls.client.get("/api/health")
+        if r.json().get("status") not in ("ok", "degraded"):
+            cls.ctx.__exit__(None, None, None)
+            raise AssertionError(f"API reports database unreachable.\n{_HELP}")
+        cls._inserted: list[str] = []
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls._inserted:
+            try:
+                from api.db import Conn
+                from psycopg2 import sql
+                with Conn() as conn:
+                    with conn.cursor() as cur:
+                        for name in cls._inserted:
+                            cur.execute(
+                                sql.SQL(
+                                    "DELETE FROM {}.organisations WHERE name = %s"
+                                ).format(sql.Identifier(settings.TE_SCHEMA)),
+                                (name,),
+                            )
+                    conn.commit()
+            except Exception:  # noqa: BLE001
+                pass
+        cls.ctx.__exit__(None, None, None)
+        settings.allow_destructive = cls._orig_allow_destructive
+
+    def test_dynamic_overwrite_of_te_origin_entry_succeeds(self):
+        """A dynamic-mode overwrite of a filename previously registered in
+        TE mode must succeed (not crash, not silently no-op) and the registry
+        must reflect the new dynamic-mode table, not a stale TE reference."""
+        pid = os.getpid()
+        org_name = f"TE_TEST_{pid}_overwrite_origin"
+        self.__class__._inserted.append(org_name)
+        fname = f"cross_mode_{pid}.csv"
+
+        te_body = self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": fname,
+                "content": f"{ORG_HEADER}\n{org_name},government,AU\n",
+                "mode": "te",
+                "targetTable": TARGET,
+            },
+        ).json()
+        self.assertEqual(te_body["status"], "ok", te_body)
+
+        dynamic_body = self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": fname,
+                "content": "col_a\nsome_value\n",
+                "overwrite": True,
+            },
+        ).json()
+        self.assertEqual(
+            dynamic_body["status"], "ok",
+            f"dynamic-mode overwrite of a TE-origin file must succeed: {dynamic_body}",
+        )
+        self.assertTrue(dynamic_body["tableName"].startswith("csv_"), dynamic_body)
+
+        files = self.client.get("/api/csv/files").json()
+        matches = [f for f in files if f["file_name"] == fname]
+        self.assertEqual(
+            len(matches), 1,
+            f"expected exactly one registry entry for {fname!r}, found {matches}",
+        )
+        self.assertEqual(
+            matches[0]["mode"], "dynamic",
+            "registry entry must reflect the new dynamic-mode table, not the stale TE entry",
+        )
+
+        # Clean up the dynamic table this test created.
+        self.client.delete(f"/api/csv/files/{matches[0]['id']}")
