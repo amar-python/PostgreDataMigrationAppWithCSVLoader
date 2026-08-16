@@ -7,4 +7,4 @@ PyYAML>=6.0
 # starlette's TestClient (used by tests/test_api.py) requires httpx2;
 # it falls back to httpx with a deprecation warning, and raises if neither
 # is installed. Nothing else in this file or api/requirements.txt pulls it in.
-httpx2>=2.9.0
+httpx2>=2.10.0
