@@ -85,7 +85,7 @@ def list_files() -> list[dict]:
             cur.execute(
                 sql.SQL(
                     "SELECT id, file_name, table_name, mode, row_count, column_names, created_at "
-                    "FROM {}.csv_files ORDER BY created_at DESC"
+                    "FROM {}.csv_files ORDER BY created_at DESC, id DESC"
                 ).format(sql.Identifier(settings.UPLOADS_SCHEMA))
             )
             return [
