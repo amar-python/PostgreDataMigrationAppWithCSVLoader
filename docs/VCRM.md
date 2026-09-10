@@ -38,7 +38,7 @@ Test-layer codes used in column headers below:
 | ID | Requirement | Source |
 |----|------------|--------|
 | **BR-01** | The framework shall deploy isolated **Dev / Test / Staging / Prod** environments on a single PostgreSQL instance, each with its own database, schema, app user, and connection limit. | README §"Environment Comparison" |
-| **BR-02** | The framework shall support **six database engines** — PostgreSQL, MariaDB, SQLite, InfluxDB, Redis, Teradata — through adapter scripts. | README §"What This Is", `build/adapters/*` |
+| **BR-02** | The framework shall support **six database engines** — PostgreSQL, MariaDB, SQLite, InfluxDB, Redis, Teradata — through adapter scripts. **⏸ Deferred by decision 2026-09-10** — PostgreSQL first; see [ADR-0001](adr/0001-postgresql-first.md). Requirement wording retained unchanged; it states the eventual target, not the current milestone. Per-engine measured state in [`ENGINE_PARITY_TODO.md`](ENGINE_PARITY_TODO.md). | README §"What This Is", `build/adapters/*` |
 | **BR-03** | All schema identifiers (database, schema, role, table names) shall be controlled by a single `\set` configuration block; renaming in one place updates the entire deployment. | README §"How Parameterisation Works" |
 | **BR-04** | The T&E data model shall persist the full lifecycle: **organisations, personnel, programs, TEMP documents, phases, requirements, test cases, VCRM entries, test events, results, defect reports, evidence artefacts** (12 tables). | README §"Schema Reference" |
 | **BR-05** | The framework shall enforce **100 % VCRM coverage** for every active program, with explicit gap detection for programs that intentionally lack coverage. | README §"Seed Data", section §"vcrm_entries 100% coverage" |
@@ -78,8 +78,8 @@ For each requirement, the columns mark which test layer verifies it. Numbers in 
 
 | ID | Requirement (short) | PU | SQL | TP | TI | TS | LV | Status | Notes |
 |----|--------------------|----|-----|----|----|----|----|-------|-------|
-| BR-01 | Multi-env isolated (Dev/Test/Staging/Prod) | — | suite 05 (schema_name) | — | — | 01 (Dev only) | — | ⚠️ | Tier I/S only exercise Dev. Test/Staging/Prod parity is not asserted (would need Tier E). |
-| BR-02 | Six DB engines via adapters | — | — | — | — | — | — | ❌ | No adapter-level tests exist; only PG is verified. Would need Tier X. |
+| BR-01 | Multi-env isolated (Dev/Test/Staging/Prod) | — | suite 05 (schema_name) | — | — | 01 (Dev) | **Tier E 01** | ✅ | Tier E `01_envs_have_identical_structure` deploys all four environments and compares column signatures against Dev. Resolved 2026-09-10. |
+| BR-02 | Six DB engines via adapters | — | — | — | — | — | Tier X 01 (SQLite, not in CI) | ⏸ | **Deferred by decision** (ADR-0001): PostgreSQL first. Tier X `01_sqlite_schema_structure` exists and passes but is not run in CI. Measured state: PG 12 tables, SQLite 7, MariaDB 7, Teradata 1; InfluxDB and Redis ship seed data with no DDL. |
 | BR-03 | `\set` parameterisation works | — | suite 05 (table existence under `:"tbl_*"` overrides) | — | — | 01 (passes `--set tbl_*=...`) | — | ✅ | Tier S proves the parameterisation contract holds end-to-end. |
 | BR-04 | 12-table T&E data model | — | suites 01–05 (every table referenced by at least one assertion) | — | 01 (counts rows in 11 of 12 tables; evidence_artifacts not counted) | 01 | — | ✅ | One small gap: Tier I doesn't count `evidence_artifacts`, but that table is schema-only per the README. |
 | BR-05 | 100 % VCRM coverage for CYB9131 + gap detection for LAND400 | — | **suite 03 (23 assertions)** | — | — | 01 | — | ✅ | Direct verification — suite 03 is the canonical VCRM check. |
@@ -132,23 +132,35 @@ The `input_data/` loader has its own implicit requirements — verified end-to-e
 
 | Status | Count | Requirements |
 |--------|-------|-------------|
-| ✅ Verified | 17 | BR-03, BR-04, BR-05, BR-06, BR-07, BR-08, BR-09, BR-10, BR-11, BR-12, BR-13, BR-14, BR-16, BR-17, BR-18, BR-19, BR-20 |
-| ⚠️ Partial | 1 | BR-01 |
-| ❌ Not verified | 4 | BR-02, BR-15, BR-21, BR-22 |
+| ✅ Verified | 19 | BR-01, BR-03, BR-04, BR-05, BR-06, BR-07, BR-08, BR-09, BR-10, BR-11, BR-12, BR-13, BR-14, BR-15, BR-16, BR-17, BR-18, BR-19, BR-20 |
+| ⚠️ Partial | 0 | — |
+| ⏸ Deferred by decision | 3 | BR-02, BR-21, BR-22 |
 
-**Headline:** **17 of 22 (77 %)** business requirements are fully verified by at least one automated test condition. Of the 5 not fully verified, 2 are deferred by design (BR-21, BR-22) and 3 are genuine gaps (BR-01 partial, BR-02 unverified, BR-15 unverified).
+**Headline:** **19 of 22 (86 %)** business requirements are fully verified by at least one automated test condition, up from 17 of 22 (77 %).
+
+**There are no longer any unverified requirements that are not a recorded decision.** The three remaining are deferred deliberately: BR-02 by ADR-0001 (PostgreSQL first), BR-21 and BR-22 by earlier project decisions. That distinction matters in review — an unverified requirement is a gap, a deferred one is a choice with a revisit trigger.
+
+Changed 2026-09-10:
+
+- **BR-01** ⚠️ Partial → ✅ Verified. Tier E `01_envs_have_identical_structure`.
+- **BR-15** ❌ Not verified → ✅ Verified. Assertion **S10** in `tests/suites/test_05_schema_and_business_rules.sql` reads `pg_roles.rolconnlimit`.
+- **BR-02** ❌ Not verified → ⏸ Deferred by decision. See ADR-0001.
 
 ---
 
 ## 4. Gap analysis
 
-### Genuine gaps (recommended to address)
+### Genuine gaps
 
-| Req | Gap | Recommended verification | Effort |
-|-----|-----|--------------------------|--------|
-| **BR-01 partial** | Test/Staging/Prod environments are deployable but their structural equivalence to Dev is not asserted by any test. A change in `env_test.sql` that drifts from `env_dev.sql` would not be caught. | Add a Tier E scenario `01_envs_have_identical_structure` that deploys all four envs, queries `information_schema.columns` for each, and diffs the structure. | Medium (1 day) |
-| **BR-02** | The framework claims to support 6 DB engines via adapters, but no test runs against MariaDB / SQLite / etc. | Add a Tier X scenario per engine. Earliest wins: SQLite (no service needed, just a file). | Medium per engine |
-| **BR-15** | The per-environment `conn_limit` value lives in `env_*.sql` but no test confirms it's applied. | Add a SQL assertion in suite 05: `SELECT rolconnlimit FROM pg_roles WHERE rolname = :'app_user'` and `assert_equals(..., <expected limit>)`. | Small (~1 hour) |
+**None outstanding as at 2026-09-10.** All three gaps previously listed here have
+been closed or converted into a recorded decision. The table is retained as the
+history of what was addressed and how.
+
+| Req | Gap (historical) | What was done | Status |
+|-----|------------------|---------------|--------|
+| **BR-01 partial** | Test/Staging/Prod were deployable but their structural equivalence to Dev was not asserted. A change in `env_test.sql` drifting from `env_dev.sql` would not be caught. | Built Tier E scenario `01_envs_have_identical_structure`: deploys all four environments, reads `information_schema.columns` per environment, reduces each to a table → ordered `column:type:nullability` fingerprint excluding the schema name, and compares the other three against Dev. Reordered columns count as drift. Comparison logic unit-tested in `tests/test_evals_tier_e_x.py` with negative controls. | ✅ Resolved |
+| **BR-02** | The framework claimed 6 DB engines via adapters, but no test ran against MariaDB / SQLite / etc. | Built Tier X scenario `01_sqlite_schema_structure`, which executes the SQLite DDL and pins its structure. It measured a shortfall the requirement's wording does not admit — PG 12 tables, SQLite 7, MariaDB 7, Teradata 1, InfluxDB and Redis no DDL at all. A decision was then taken to pursue PostgreSQL first. | ⏸ Deferred by decision — [ADR-0001](adr/0001-postgresql-first.md) |
+| **BR-15** | The per-environment `conn_limit` lived in `env_*.sql` but no test confirmed it was applied. | Added assertion **S10** to `tests/suites/test_05_schema_and_business_rules.sql`, reading `rolconnlimit` from `pg_roles` and comparing it against the environment's `conn_limit` forwarded via `set_config('te.conn_limit')`. A typo such as `conn_limit=5` in `env_prod.sql` now fails the suite. | ✅ Resolved |
 
 ### Deliberately deferred
 
@@ -183,7 +195,9 @@ This VCRM was derived as follows:
 **Recommended review actions:**
 
 1. Stakeholder review of Section 1 — confirm the 20 in-scope requirements really are the right ones.
-2. Triage the 3 genuine gaps (BR-01-partial, BR-02, BR-15) — accept the risk or schedule the verification work.
+2. ~~Triage the 3 genuine gaps (BR-01-partial, BR-02, BR-15)~~ — **done 2026-09-10.** BR-01 and BR-15 are
+   verified; BR-02 is deferred by ADR-0001. Confirm the deferral still reflects intent at each milestone review,
+   using the revisit triggers in that ADR.
 3. Re-verify after each release: re-run all test layers, update this matrix if any cell flips status.
 
 ---

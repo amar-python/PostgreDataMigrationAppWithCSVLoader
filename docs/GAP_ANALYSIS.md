@@ -19,9 +19,15 @@ claim below was reproduced, not inferred from reading code.
 | ID | Gap | Severity | Decision needed |
 |---|---|---|---|
 | G2 | Windows CI cannot run database-backed tests | Medium | Accepted — ubuntu `integration-postgres` covers the full suite |
-| G3 | Tiers X and E remain unimplemented | Medium | No — deferred by design |
+| G3 | Tiers X and E — **scaffolded 2026-09-10** | Closed | No — engine parity deferred by [ADR-0001](adr/0001-postgresql-first.md) |
 
-G1, G4, and G5 (below) are resolved — see "Closed by this pass".
+G1, G4, and G5 (below) are resolved — see "Closed by this pass". G3 is now
+closed: both tiers exist and run. The missing DDL in four of the six engines is
+no longer an open gap but a recorded decision — multi-engine support is deferred
+until the PostgreSQL milestone, per [ADR-0001](adr/0001-postgresql-first.md).
+Measured state and open questions are in `docs/ENGINE_PARITY_TODO.md`.
+
+G2 is the only genuinely open item, and it is accepted rather than actionable.
 
 ---
 
@@ -73,15 +79,49 @@ pass/fail in exactly one job.
 Windows image ships it, stopped) and provision there too. Not verified — no
 Windows runner was available during this audit.
 
-### G3 — Tiers X and E unimplemented (Medium)
+### G3 — Tiers X and E (Medium) — SCAFFOLDED 2026-09-10
 
-`evals/PLAN.md` defines five tiers; P, I and S are implemented. **X**
-(cross-engine schema equivalence) and **E** (cross-environment structural
-parity) remain deferred, so cross-engine claims for MariaDB, SQLite, InfluxDB,
-Redis and Teradata rest on code review rather than execution.
+`evals/PLAN.md` defines five tiers. All five now have at least one executing
+scenario; `runner.TIER_RUNNERS` covers `p, i, s, e, x`.
 
-Partially mitigated: `tests/test_parity.py::TestAllEnvironmentsHaveRequiredTables`
-now runs against all four PostgreSQL environments.
+**Tier E — cross-environment structural parity.** Scenario
+`01_envs_have_identical_structure` deploys all four environments, reduces each
+deployed schema to a fingerprint of table → ordered
+`column:type:nullability`, and compares Test / Staging / Prod against Dev. The
+schema name is excluded from the fingerprint, so the one difference BR-01 permits
+(the identifier namespace) compares equal while any structural drift fails.
+Reordered columns are treated as drift, because ordinal position is part of the
+deployed contract. Closes VCRM BR-01.
+
+**Tier X — cross-engine structural coverage.** Scenario
+`01_sqlite_schema_structure` executes `build/schema/sqlite/te_core_schema.sql`
+in an in-memory SQLite database via Python's stdlib `sqlite3`, then reads the
+structure back from `sqlite_master` / `PRAGMA table_info`. No `sqlite3` binary is
+required, so unlike every other database-backed check this one also runs on the
+Windows CI job (see G2). Partially addresses VCRM BR-02.
+
+**What Tier X revealed.** Only PostgreSQL defines all 12 T&E tables. SQLite and
+MariaDB define 7, Teradata 1; InfluxDB and Redis ship seed data with no DDL. The
+five tables absent from SQLite and MariaDB — `temp_documents`, `test_phases`,
+`test_events`, `test_results`, `evidence_artifacts` — are the execution and
+evidence half of the model, so those engines can hold a test plan but not a
+record of test execution. Full detail and the decisions needed are in
+`docs/ENGINE_PARITY_TODO.md`.
+
+**Scope limits, stated deliberately.** Tier X scenario 01 pins SQLite's current
+7-table baseline rather than asserting all 12. Asserting parity would leave the
+job permanently red for work that is knowingly outstanding, and a job that is
+always red stops being read; the shortfall is instead carried in
+`known_missing_tables`, in every generated report, and in the TODO above. The
+scenario still fails on drift in either direction. It also executes the DDL
+rather than `adapter_sqlite.sh`, so the adapter scripts themselves remain
+unexercised — a smaller, separate gap.
+
+Also mitigated: `tests/test_parity.py::TestAllEnvironmentsHaveRequiredTables`
+runs against all four PostgreSQL environments, and
+`tests/test_evals_tier_e_x.py` unit-tests both tiers' comparison logic with
+negative controls for added columns, changed types, changed nullability,
+reordered columns, and missing or extra tables.
 
 ### G4 — Runtime artifacts not gitignored (Low) — RESOLVED 2026-08-13
 

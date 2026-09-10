@@ -1,0 +1,20 @@
+id,gap,status,fixed_by,evidence,decision_needed,notes
+O-01,config.env.example names mismatch loaders and setup.sh,Already closed,Pre-existing (2026-08-12),GAP_ANALYSIS G1; verified both use PG_*_<ENV> scheme,No,Was listed open only because the earlier register used the 7z snapshot
+O-02,BR-15 conn_limit not asserted against pg_roles,Already closed,Pre-existing,Assertion S10 in tests/suites/test_05_schema_and_business_rules.sql,No,Reads pg_roles.rolconnlimit per environment
+O-03,No auth fail-closed and no rate limiting,Fixed this pass,This pass,api/ratelimit.py + API_ENV gate in api/main.py; 24 tests in tests/test_api_hardening.py,No,Dependency-free sliding window; API_ENV != dev with empty API_KEY now refuses to start
+O-04,audit_log written on delete only,Fixed this pass,This pass,api/services/audit.py; upload path audited; delete refactored onto shared writer,No,Known limitation: upload audit is post-commit (documented in module docstring)
+O-05,No migration history endpoint,Already closed,Pre-existing,GET /api/csv/files in csv_routes.py; pagination in commit 269ffe2,No,
+O-06,No dedup layer,Already closed,Pre-existing,Three levels in dynamic_loader.py: filename, content SHA-256, per-row _row_hash UNIQUE,No,
+O-07,BR-01 cross-environment parity unverified,Fixed this pass,This pass,Tier E scenario 01_envs_have_identical_structure; 10 unit tests; wired into integration CI,No,Full 4-env run not yet executed (no PostgreSQL this session); logic unit-tested with negative controls
+O-08,BR-02 non-PG engines unverified,Deferred by decision,This pass (measured) + ADR-0001 (deferred),Tier X scenario 01_sqlite_schema_structure measured the shortfall; docs/adr/0001-postgresql-first.md defers multi-engine,No,PostgreSQL first then apply lessons to other engines. Tier X kept in repo but out of CI (make evals-engines)
+O-09,Windows CI cannot host PostgreSQL,Accepted and improved,This pass,GAP_ANALYSIS G2 accepted; Tier X now runs on the Windows job,No,First cross-engine coverage that job has carried
+O-10,Runtime artifacts not gitignored,Already closed,Pre-existing (2026-08-13),GAP_ANALYSIS G4; all four entries present plus evals/reports/,No,
+O-11,VCRM BR-20 count edited 85 to 142,Already closed,Pre-existing,GAP_ANALYSIS G5; confirmed at 142 matching Tier S expectation JSON,No,
+O-12,Frontend not independently audited,Documented this pass,This pass,Coverage note in docs/VCRM_GAPS.md naming CSV parser parity and CORS preflight risks,No,Cheapest remedy proposed: shared fixture set asserted by both TS and Python tests
+F-01,Engine parity shortfall across 5 non-PG engines,Measured then deferred,This pass,Counted CREATE TABLE per engine in build/schema/*/te_core_schema.sql,No,Deferred by ADR-0001. BR-02 wording retained and annotated deferred; VCRM now 19/22 verified with zero actionable gaps
+F-02,api/auth.py docstring claimed global application in main.py,Fixed this pass,This pass,Docstring corrected; enforcement is per-router via dependencies=[Depends(require_api_key)],No,Enforcement was real; only the documentation was wrong
+F-03,scripts/lint.sh hardcoded file list let new modules escape flake8 and bandit,Fixed this pass,This pass,Added api/ratelimit.py api/services/audit.py and both new test modules,No,
+F-04,docs/VCRM_GAPS.md stale — BR-15 fixed in code without doc update,Fixed this pass,This pass,Status headers and what-changed table added; coverage restated 77% to 86%,No,
+F-05,audit_log had a single writer so log recorded destructions not creations,Fixed this pass,This pass,Same fix as O-04,No,
+F-06,Stale git worktree .claude/worktrees/velvety-chasing-badger holds older copy of api/,Flagged only,Not touched,Appears in repo-wide grep results with its own auth.py and routers/,YES,Prune if dead; it pollutes searches
+D-01,PostgreSQL-first decision recorded as ADR,Recorded,This pass,docs/adr/0001-postgresql-first.md,No,Context + rationale + alternatives rejected + accepted risk + 4 revisit triggers. Tier X dropped from CI and Makefile evals-engines target added
