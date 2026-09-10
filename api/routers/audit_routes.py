@@ -1,6 +1,11 @@
 """BUG-041: csv_uploads.audit_log was write-only (populated by delete_file in
 csv_routes.py, never read back). This router surfaces it as a paginated,
-API-key-guarded feed so the deletion trail is actually consultable."""
+API-key-guarded feed so the trail is actually consultable.
+
+O-04 update: the table is no longer delete-only. Successful uploads also write a
+row, through the shared writer in api/services/audit.py, so this feed now covers
+creations as well as destructions. Integration coverage lives in
+tests/test_api_integration.py::AuditLogTrail."""
 
 from __future__ import annotations
 
