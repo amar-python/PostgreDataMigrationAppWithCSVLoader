@@ -1,0 +1,27 @@
+{
+  "scenario": "01_sqlite_schema_structure",
+  "description": "Execute build/schema/sqlite/te_core_schema.sql in an in-memory SQLite database and pin its structure. Baseline regression guard for VCRM BR-02; passes on the 7 tables SQLite ships today and fails on any drift in either direction.",
+  "engine": "sqlite",
+  "reference_engine": "postgresql",
+  "expected": {
+    "expected_tables": [
+      "defect_reports",
+      "organisations",
+      "personnel",
+      "requirements",
+      "test_cases",
+      "test_programs",
+      "vcrm_entries"
+    ],
+    "expected_columns": {
+      "organisations": ["country", "created_at", "is_active", "name", "org_id", "org_type", "updated_at"]
+    },
+    "known_missing_tables": [
+      "evidence_artifacts",
+      "temp_documents",
+      "test_events",
+      "test_phases",
+      "test_results"
+    ]
+  }
+}

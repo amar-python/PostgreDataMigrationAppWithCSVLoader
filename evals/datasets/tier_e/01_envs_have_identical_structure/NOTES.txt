@@ -1,0 +1,53 @@
+Tier E scenario 01 — cross-environment structural parity
+========================================================
+
+Requirement under test
+----------------------
+VCRM BR-01: "The framework shall deploy isolated Dev / Test / Staging / Prod
+environments on a single PostgreSQL instance, each with its own database,
+schema, app user, and connection limit."
+
+Gap this closes
+---------------
+Before this scenario, only Dev was ever structurally verified. Test, Staging and
+Prod were deployable, but nothing asserted they matched Dev. A hand-edit to
+env_staging.sql that added a column, changed a type, or reordered the DDL would
+deploy with exit 0 and stay invisible until production data met a schema no test
+had ever compared. VCRM_GAPS.md rated this Medium and scoped it at ~1 day.
+
+What it does
+------------
+1. Deploys each of the four environments from build/environments/env_<env>.sql,
+   falling back to env_<env>.example.sql (the concrete files are gitignored and
+   materialised from the templates — see FIXES_APPLIED.md F3).
+2. Reads information_schema.columns for each environment's own schema.
+3. Reduces each to a fingerprint: table -> ordered list of
+   "column:data_type:is_nullable". The schema name is deliberately excluded so
+   two environments with different namespaces compare equal when their structure
+   matches — that namespace difference is the one difference BR-01 permits.
+4. Compares Test, Staging and Prod against Dev. Dev is the reference because it
+   is the environment the other 142 SQL assertions actually exercise, so "drift"
+   means "differs from what the suite validates".
+
+Why it fails rather than skips
+------------------------------
+If PostgreSQL is unreachable the scenario FAILS. That follows the no-skip stance
+adopted in FIXES_APPLIED.md F5: a green run must mean the comparison really ran.
+An eval that quietly skips is worse than no eval, because it reports confidence
+it has not earned.
+
+Ordinal order is treated as drift
+---------------------------------
+Two environments with the same column set in a different order fail. Ordinal
+position is part of the deployed contract: anything doing SELECT * or positional
+COPY would behave differently between the two.
+
+Prerequisites
+-------------
+  bash scripts/provision_full_test_env.sh
+  # or, minimally, a reachable PostgreSQL with PG* env vars set and the four
+  # te_mgmt_<env> databases created (see the CI job in quality-gate.yml).
+
+Run
+---
+  python3 evals/runner.py --tiers e --verbose

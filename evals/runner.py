@@ -18,6 +18,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -542,12 +543,378 @@ def _run_fresh_deploy_then_tests(
 
 
 # ---------------------------------------------------------------------------
+# Tier E — Cross-environment structural parity (VCRM BR-01)
+#
+# BR-01 claims Dev/Test/Staging/Prod are deployed from one parameterised schema
+# and differ only in their identifier namespace. Nothing asserted that. An edit
+# to env_staging.sql that added a column, or dropped a constraint, would deploy
+# cleanly and no test would notice until production data met a schema nobody had
+# compared. This tier compares the four deployed schemas column by column.
+#
+# Only the identifier namespace (database + schema name) may differ. Everything
+# structural — table set, column names, declared types, nullability, ordinal
+# position — must be identical.
+
+ENV_TARGETS = [
+    ("dev",     "te_mgmt_dev",     "te_dev"),
+    ("test",    "te_mgmt_test",    "te_test"),
+    ("staging", "te_mgmt_staging", "te_staging"),
+    ("prod",    "te_mgmt_prod",    "te_prod"),
+]
+
+
+def _deploy_env(env_name: str) -> Dict[str, Any]:
+    """Deploy one environment from its committed launcher. Returns exit info.
+
+    env_<env>.sql is gitignored and materialised from env_<env>.example.sql (see
+    FIXES_APPLIED.md F3), so accept either and say which was used.
+    """
+    env_dir = PROJECT_ROOT / "build" / "environments"
+    launcher = env_dir / ("env_" + env_name + ".sql")
+    if not launcher.exists():
+        launcher = env_dir / ("env_" + env_name + ".example.sql")
+    if not launcher.exists():
+        return {"env": env_name, "exit_code": None,
+                "error": "No env_" + env_name + ".sql or .example.sql found"}
+    r = subprocess.run(
+        ["psql", "-v", "ON_ERROR_STOP=1", "-f", str(launcher)],
+        env=_pg_env(), capture_output=True, text=True, timeout=180,
+    )
+    return {
+        "env": env_name,
+        "launcher": launcher.name,
+        "exit_code": r.returncode,
+        "stderr_tail": r.stderr[-300:],
+    }
+
+
+def _column_signature(db: str, schema: str) -> Dict[str, List[str]]:
+    """Structural fingerprint of one deployed schema.
+
+    Maps table name -> ordered list of "column:type:nullability" strings. The
+    schema name is deliberately absent from the value so two environments with
+    different namespaces compare equal when their structure matches.
+    """
+    # The schema name is bound by psql via --set + :'sch' rather than pasted into
+    # the SQL text, so there is no string interpolation to reason about even
+    # though the value comes from the ENV_TARGETS constant.
+    query = (
+        "SELECT table_name, column_name, data_type, is_nullable "
+        "FROM information_schema.columns "
+        "WHERE table_schema = :'sch' "
+        "ORDER BY table_name, ordinal_position"
+    )
+    r = subprocess.run(
+        ["psql", "-tA", "-d", db, "--set=sch=" + schema, "-c", query],
+        env=_pg_env(), capture_output=True, text=True, timeout=30,
+    )
+    if r.returncode != 0:
+        return {}
+    sig: Dict[str, List[str]] = {}
+    for line in r.stdout.splitlines():
+        parts = line.split("|")
+        if len(parts) != 4:
+            continue
+        table, column, dtype, nullable = (p.strip() for p in parts)
+        sig.setdefault(table, []).append(column + ":" + dtype + ":" + nullable)
+    return sig
+
+
+def _diff_signatures(ref_env: str, ref: Dict[str, List[str]],
+                     other_env: str, other: Dict[str, List[str]]) -> List[str]:
+    """Human-readable differences between two schema fingerprints."""
+    diffs: List[str] = []
+    missing = sorted(set(ref) - set(other))
+    extra   = sorted(set(other) - set(ref))
+    if missing:
+        diffs.append(other_env + " is missing tables present in " + ref_env
+                     + ": " + ", ".join(missing))
+    if extra:
+        diffs.append(other_env + " has tables absent from " + ref_env
+                     + ": " + ", ".join(extra))
+    for table in sorted(set(ref) & set(other)):
+        if ref[table] != other[table]:
+            ref_cols   = set(ref[table])
+            other_cols = set(other[table])
+            only_ref   = sorted(ref_cols - other_cols)
+            only_other = sorted(other_cols - ref_cols)
+            if only_ref or only_other:
+                diffs.append(
+                    "table " + table + " differs: " + ref_env + "-only ["
+                    + ", ".join(only_ref) + "], " + other_env + "-only ["
+                    + ", ".join(only_other) + "]"
+                )
+            else:
+                # Same columns, different order — still drift worth failing on,
+                # because ordinal position is part of the deployed contract.
+                diffs.append("table " + table + " has the same columns in a "
+                             "different ordinal order between " + ref_env
+                             + " and " + other_env)
+    return diffs
+
+
+def run_tier_e_scenario(scenario_dir: Path) -> ScenarioResult:
+    name   = scenario_dir.name
+    result = ScenarioResult(tier="e", name=name)
+
+    expected = _load_expected("e", name)
+    if expected is None:
+        result.errors.append("No expected file at expected/tier_e/" + name + ".json")
+        return result
+    result.expected = expected
+
+    if not _can_connect_pg():
+        # Same no-skip stance as Tiers I and S (FIXES_APPLIED.md F5): a missing
+        # prerequisite fails, so a green run always means the check really ran.
+        result.errors.append(
+            "PostgreSQL not reachable via psql "
+            "(install psql + start PG, or set PG* env vars)."
+        )
+        return result
+
+    if name == "01_envs_have_identical_structure":
+        return _run_envs_have_identical_structure(result, expected)
+
+    result.errors.append("Unknown tier-E scenario: " + name)
+    return result
+
+
+def _run_envs_have_identical_structure(
+    result: ScenarioResult, expected: Dict[str, Any]
+) -> ScenarioResult:
+    exp = expected.get("expected", {})
+    envs_under_test = expected.get("envs_under_test",
+                                   [e[0] for e in ENV_TARGETS])
+    targets = [t for t in ENV_TARGETS if t[0] in envs_under_test]
+
+    deploys = [_deploy_env(env_name) for env_name, _, _ in targets]
+    signatures: Dict[str, Dict[str, List[str]]] = {}
+    for env_name, db, schema in targets:
+        signatures[env_name] = _column_signature(db, schema)
+
+    table_counts = {e: len(sig) for e, sig in signatures.items()}
+    result.actual = {
+        "deploys": deploys,
+        "table_counts": table_counts,
+    }
+
+    errors: List[str] = []
+
+    if exp.get("all_envs_deploy_exit_zero") is True:
+        for d in deploys:
+            if d.get("exit_code") != 0:
+                errors.append(
+                    "deploy of " + d["env"] + " exited "
+                    + str(d.get("exit_code")) + " "
+                    + (d.get("error") or d.get("stderr_tail") or "")
+                )
+
+    min_tables = int(exp.get("min_tables_per_env", 12))
+    for env_name, count in sorted(table_counts.items()):
+        if count < min_tables:
+            errors.append(
+                "env " + env_name + " has " + str(count) + " tables in its "
+                "schema, expected >= " + str(min_tables)
+                + " (deploy may have partially failed)"
+            )
+
+    if exp.get("column_signature_identical_across_envs") is True:
+        # dev is the reference: it is the environment every other test exercises,
+        # so drift is defined as "differs from what the suite actually validates".
+        ref_env = expected.get("reference_env", "dev")
+        ref = signatures.get(ref_env)
+        if not ref:
+            errors.append("reference env " + ref_env + " returned no columns; "
+                          "cannot compare the others against it")
+        else:
+            for env_name in sorted(signatures):
+                if env_name == ref_env:
+                    continue
+                diffs = _diff_signatures(ref_env, ref, env_name,
+                                         signatures[env_name])
+                errors.extend(diffs)
+            result.actual["signature_match"] = not errors
+
+    result.errors = errors
+    result.passed = not errors
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Tier X — Cross-engine structural coverage (VCRM BR-02)
+#
+# BR-02 claims six engines are supported through adapter scripts. Only
+# PostgreSQL was ever executed; the other five rested on code review. This tier
+# starts closing that with SQLite, the cheapest engine to verify because it needs
+# no service.
+#
+# Deliberate scope: this executes the DDL in build/schema/sqlite/, not
+# adapter_sqlite.sh. Two reasons. The DDL is the artifact that drifts — the
+# adapter is a thin sed + sqlite3 wrapper around it. And using Python's stdlib
+# sqlite3 module means no sqlite3 binary is required, so this scenario also runs
+# on the Windows CI job, where GAP_ANALYSIS.md G2 blocks anything needing a
+# database service. The adapter script itself remains unexercised; that is a
+# smaller, separate gap and is recorded rather than glossed over.
+#
+# The comparison is table-set and column-name only. Declared types are
+# deliberately NOT compared across engines: SQLite has no native UUID or
+# TIMESTAMPTZ and stores both as TEXT, so a type diff would fire constantly
+# while telling us nothing. Structural presence is the property BR-02 asserts.
+
+_ENGINE_PLACEHOLDER_TABLES = [
+    "organisations", "personnel", "test_programs", "temp_documents",
+    "test_phases", "requirements", "test_cases", "vcrm_entries",
+    "test_events", "test_results", "defect_reports", "evidence_artifacts",
+]
+
+
+def _substitute_placeholders(ddl: str) -> str:
+    """Replace {{TBL_*}} tokens the way adapter_sqlite.sh's sed pass does.
+
+    Uses the table's own name as its value, which is what every environment file
+    does for the default deployment.
+    """
+    for tbl in _ENGINE_PLACEHOLDER_TABLES:
+        ddl = ddl.replace("{{TBL_" + tbl.upper() + "}}", tbl)
+    return ddl
+
+
+def _sqlite_structure(ddl: str) -> Dict[str, Any]:
+    """Execute DDL in an in-memory SQLite database and read back its structure.
+
+    Returns {"tables": {name: [columns]}} or {"error": "..."} if the DDL is
+    rejected — a syntax error in the SQLite schema is itself a finding.
+    """
+    import sqlite3
+    try:
+        conn = sqlite3.connect(":memory:")
+    except Exception as exc:  # noqa: BLE001
+        return {"error": "cannot open in-memory SQLite: " + str(exc)}
+    try:
+        conn.executescript(ddl)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
+        tables = [r[0] for r in cur.fetchall()]
+        out: Dict[str, List[str]] = {}
+        for t in tables:
+            # Table names come from sqlite_master in this same database, so there
+            # is no external input here.
+            cur.execute('PRAGMA table_info("' + t.replace('"', '""') + '")')
+            out[t] = sorted(r[1] for r in cur.fetchall())
+        return {"tables": out}
+    except Exception as exc:  # noqa: BLE001 — a rejected DDL is a real result
+        return {"error": type(exc).__name__ + ": " + str(exc)}
+    finally:
+        conn.close()
+
+
+def run_tier_x_scenario(scenario_dir: Path) -> ScenarioResult:
+    name   = scenario_dir.name
+    result = ScenarioResult(tier="x", name=name)
+
+    expected = _load_expected("x", name)
+    if expected is None:
+        result.errors.append("No expected file at expected/tier_x/" + name + ".json")
+        return result
+    result.expected = expected
+
+    if name == "01_sqlite_schema_structure":
+        return _run_sqlite_schema_structure(result, expected)
+
+    result.errors.append("Unknown tier-X scenario: " + name)
+    return result
+
+
+def _run_sqlite_schema_structure(
+    result: ScenarioResult, expected: Dict[str, Any]
+) -> ScenarioResult:
+    exp = expected.get("expected", {})
+    ddl_path = PROJECT_ROOT / "build" / "schema" / "sqlite" / "te_core_schema.sql"
+    if not ddl_path.exists():
+        result.errors.append("SQLite DDL not found at " + str(ddl_path))
+        return result
+
+    raw = ddl_path.read_text(encoding="utf-8")
+    leftover = re.findall(r"\{\{[A-Z_]+\}\}", _substitute_placeholders(raw))
+    structure = _sqlite_structure(_substitute_placeholders(raw))
+
+    if "error" in structure:
+        result.actual = structure
+        result.errors.append("SQLite rejected its own DDL: " + structure["error"])
+        return result
+
+    tables = structure["tables"]
+    result.actual = {
+        "table_count": len(tables),
+        "tables_present": sorted(tables),
+        "unsubstituted_placeholders": sorted(set(leftover)),
+    }
+
+    errors: List[str] = []
+
+    # Any {{TBL_*}} the substitution missed would reach sqlite3 as a literal and
+    # silently create a differently-named table.
+    if leftover:
+        errors.append("DDL still contains unsubstituted placeholders: "
+                      + ", ".join(sorted(set(leftover))))
+
+    # Baseline guard. expected_tables is the set SQLite actually ships today, so
+    # this passes on the known state and fails the moment it drifts either way:
+    # a table removed, or a new one added without updating this file.
+    expected_tables = exp.get("expected_tables")
+    if expected_tables is not None:
+        want, have = set(expected_tables), set(tables)
+        missing, extra = sorted(want - have), sorted(have - want)
+        if missing:
+            errors.append("expected tables absent from the SQLite DDL: "
+                          + ", ".join(missing))
+        if extra:
+            errors.append(
+                "SQLite DDL defines tables not in expected_tables: "
+                + ", ".join(extra)
+                + " — if this is intentional progress toward full parity, add "
+                "them to expected_tables and update known_missing_tables"
+            )
+
+    # Column presence per table, where the expectation file pins it.
+    for table, want_cols in (exp.get("expected_columns") or {}).items():
+        have_cols = tables.get(table)
+        if have_cols is None:
+            continue  # already reported by the table-set check above
+        absent = sorted(set(want_cols) - set(have_cols))
+        if absent:
+            errors.append("table " + table + " is missing columns: "
+                          + ", ".join(absent))
+
+    # The parity shortfall is recorded, not asserted — see NOTES.txt. Surfacing
+    # it in actual output keeps it visible in every report without turning the
+    # scenario red for work that is knowingly outstanding.
+    known_missing = exp.get("known_missing_tables") or []
+    if known_missing:
+        result.actual["known_missing_tables"] = known_missing
+        result.actual["parity_note"] = (
+            "SQLite ships " + str(len(tables)) + " of "
+            + str(len(_ENGINE_PLACEHOLDER_TABLES))
+            + " T&E tables. Outstanding work tracked in docs/ENGINE_PARITY_TODO.md."
+        )
+
+    result.errors = errors
+    result.passed = not errors
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 
 TIER_RUNNERS = {
     "p": run_tier_p_scenario,
     "i": run_tier_i_scenario,
     "s": run_tier_s_scenario,
+    "e": run_tier_e_scenario,
+    "x": run_tier_x_scenario,
 }
 
 
