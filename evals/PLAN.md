@@ -1,5 +1,20 @@
 # Evals package — PostgreDataMigrationApp
 
+> **Status update — 2026-09-10.** Tiers **E** and **X** are no longer deferred:
+> both are implemented and have executing scenarios. The text below is preserved
+> as the record of what was planned at the time and is **not** a description of
+> current state. Affected lines are marked inline.
+>
+> - **Tier E** — implemented. `evals/datasets/tier_e/01_envs_have_identical_structure`.
+>   Runs in the `integration-postgres` CI job. Closes VCRM BR-01.
+> - **Tier X** — implemented. `evals/datasets/tier_x/01_sqlite_schema_structure`.
+>   Deliberately **not** in CI per [ADR-0001](../docs/adr/0001-postgresql-first.md)
+>   (PostgreSQL first); run it with `make evals-engines`.
+> - **Tier D** — still deferred. Unchanged.
+>
+> Current tier registrations live in `runner.TIER_RUNNERS`: `p, i, s, e, x`.
+
+
 This folder holds **data-driven evals** for the T&E Database Framework. Evals complement (but don't replace) the existing SQL test suites under `tests/suites/` and the Python unit tests under `tests/test_csv_validator.py`.
 
 ## Why a separate `evals/` folder
@@ -22,10 +37,12 @@ In short: `tests/` proves the **code is correct**; `evals/` proves the **framewo
   - **Tier P** — Python CSV validator (`build/csv/validator.py`). Pure data-in / files-out. No DB.
   - **Tier I** — Idempotency of `deploy_all.sh` against a clean Dev PostgreSQL.
   - **Tier S** — SQL test suite integration: deploy fresh + run all 5 suites and assert 142/142.
-- **Tiers deferred:**
-  - **Tier X** — Cross-DB schema equivalence (MariaDB/SQLite). Out until Postgres is locked in.
-  - **Tier E** — Cross-environment (Dev/Test/Staging/Prod) structural equivalence.
-  - **Tier D** — Extended domain-rule evals beyond what suite 05 already covers.
+- **Tiers deferred:** *(superseded 2026-09-10 — see the status update at the top)*
+  - ~~**Tier X** — Cross-DB schema equivalence (MariaDB/SQLite). Out until Postgres is locked in.~~
+    **Implemented**, but kept out of CI by ADR-0001 rather than unbuilt.
+  - ~~**Tier E** — Cross-environment (Dev/Test/Staging/Prod) structural equivalence.~~
+    **Implemented** and running in CI.
+  - **Tier D** — Extended domain-rule evals beyond what suite 05 already covers. *Still deferred.*
 
 ## Folder layout
 
@@ -117,7 +134,8 @@ Exit code: 0 if all scenarios in selected tiers pass, 1 otherwise. CI-friendly.
 | 3 | Execute Tier P locally; show results | DONE / awaiting your review |
 | 4 | Tier I scaffolding + runner extension | next |
 | 5 | Tier S scaffolding + runner extension | next |
-| 6 | (Future) Tier X across MariaDB/SQLite once Postgres is locked in | deferred |
+| 6 | (Future) Tier X across MariaDB/SQLite once Postgres is locked in | ~~deferred~~ **SQLite scenario built 2026-09-10**; out of CI per ADR-0001 |
+| 7 | Tier E cross-environment structural parity | **DONE 2026-09-10** — in the `integration-postgres` job |
 
 ## What this DOES NOT do
 
