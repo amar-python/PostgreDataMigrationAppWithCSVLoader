@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from api.auth import require_api_key
 from api.config import settings
 from api.db import Conn
+from api.services.audit import coerce_file_id, record_audit, write_audit
 from api.services.csv_parse import build_preview
 from api.services.dynamic_loader import upload_dynamic
 from api.services.te_loader import match_te_table, upload_te
@@ -72,10 +73,25 @@ def upload(req: UploadRequest) -> dict:
     if req.mode == "te":
         if not req.targetTable:
             raise HTTPException(422, "targetTable is required when mode is 'te'")
-        return upload_te(req.fileName, req.content, req.targetTable)
-    if req.mode != "dynamic":
+        result = upload_te(req.fileName, req.content, req.targetTable)
+    elif req.mode == "dynamic":
+        result = upload_dynamic(req.fileName, req.content, req.types, req.overwrite)
+    else:
         raise HTTPException(422, f"Unknown mode '{req.mode}' — use 'dynamic' or 'te'")
-    return upload_dynamic(req.fileName, req.content, req.types, req.overwrite)
+
+    # O-04: record the load so audit_log covers creations, not just deletions.
+    # Only a genuine load is audited: "duplicate_file" and "error" outcomes
+    # changed nothing, so logging them would make the trail read as if data had
+    # landed when it had not.
+    if result.get("status") == "ok":
+        record_audit(
+            action="upload",
+            file_id=coerce_file_id(result.get("fileId")),
+            file_name=req.fileName,
+            table_name=result.get("tableName"),
+            mode=req.mode,
+        )
+    return result
 
 
 @router.get("/files")
@@ -176,14 +192,9 @@ def delete_file(file_id: int) -> dict:
                 ),
                 (file_id,),
             )
-            # Persist audit record so deletions are traceable after the table is gone.
-            cur.execute(
-                sql.SQL(
-                    "INSERT INTO {}.audit_log "
-                    "(action, file_id, file_name, table_name, mode) "
-                    "VALUES ('delete', %s, %s, %s, %s)"
-                ).format(sql.Identifier(settings.UPLOADS_SCHEMA)),
-                (file_id, file_name, table_name, mode),
-            )
+            # Persist audit record so deletions are traceable after the table is
+            # gone. Shares the single writer in api/services/audit.py (O-04), and
+            # rides this transaction so the row and the delete commit together.
+            write_audit(cur, "delete", file_id, file_name, table_name, mode)
             conn.commit()
             return {"status": "ok", "deleted": file_id}
