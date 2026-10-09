@@ -9,11 +9,13 @@ Run (from the repo root):
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import psycopg2.pool
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from api import db
 from api.config import settings
@@ -71,6 +73,12 @@ app.add_middleware(
 app.include_router(csv_routes.router)
 app.include_router(te_routes.router)
 app.include_router(audit_routes.router)
+
+# Plain HTML frontend (web/index.html), served same-origin at /app so it needs
+# no CORS setup. Skipped when web/ isn't shipped (e.g. an API-only image).
+WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+if WEB_DIR.is_dir():
+    app.mount("/app", StaticFiles(directory=WEB_DIR, html=True), name="web")
 
 
 @app.exception_handler(psycopg2.pool.PoolError)

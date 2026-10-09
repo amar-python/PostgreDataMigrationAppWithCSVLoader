@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CSV Migrator</title>
+<style>
+/* Layout: centered 64rem app column, sticky header, cards per task. Tokens: shadcn slate, same as csv-table-hub-main. */
+:root {
+  --background: oklch(1 0 0); --foreground: oklch(0.129 0.042 264.695);
+  --card: oklch(1 0 0); --popover: oklch(1 0 0);
+  --primary: oklch(0.208 0.042 265.755); --primary-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.968 0.007 247.896); --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417); --accent: oklch(0.968 0.007 247.896);
+  --destructive: oklch(0.577 0.245 27.325); --destructive-foreground: oklch(0.984 0.003 247.858);
+  --border: oklch(0.929 0.013 255.508); --input: oklch(0.929 0.013 255.508); --ring: oklch(0.704 0.04 256.788);
+  --success: oklch(0.52 0.13 155); --warning: oklch(0.6 0.15 70);
+  --radius: 0.625rem;
+  --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --background: oklch(0.129 0.042 264.695); --foreground: oklch(0.984 0.003 247.858);
+  --card: oklch(0.208 0.042 265.755); --popover: oklch(0.208 0.042 265.755);
+  --primary: oklch(0.929 0.013 255.508); --primary-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(0.279 0.041 260.031); --muted: oklch(0.279 0.041 260.031);
+  --muted-foreground: oklch(0.704 0.04 256.788); --accent: oklch(0.279 0.041 260.031);
+  --destructive: oklch(0.704 0.191 22.216); --destructive-foreground: oklch(0.208 0.042 265.755);
+  --border: oklch(1 0 0 / 10%); --input: oklch(1 0 0 / 15%); --ring: oklch(0.551 0.027 264.364);
+  --success: oklch(0.75 0.14 155); --warning: oklch(0.8 0.14 80); color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --background: oklch(0.129 0.042 264.695); --foreground: oklch(0.984 0.003 247.858);
+  --card: oklch(0.208 0.042 265.755); --popover: oklch(0.208 0.042 265.755);
+  --primary: oklch(0.929 0.013 255.508); --primary-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(0.279 0.041 260.031); --muted: oklch(0.279 0.041 260.031);
+  --muted-foreground: oklch(0.704 0.04 256.788); --accent: oklch(0.279 0.041 260.031);
+  --destructive: oklch(0.704 0.191 22.216); --destructive-foreground: oklch(0.208 0.042 265.755);
+  --border: oklch(1 0 0 / 10%); --input: oklch(1 0 0 / 15%); --ring: oklch(0.551 0.027 264.364);
+  --success: oklch(0.75 0.14 155); --warning: oklch(0.8 0.14 80); color-scheme: dark;
+}
+* { box-sizing: border-box; border-color: var(--border); }
+html, body { height: 100%; }
+body { margin: 0; background: var(--background); color: var(--foreground); font: 14px/20px var(--font-sans); }
+[hidden] { display: none !important; }
+h1, h2, h3 { margin: 0; text-wrap: balance; letter-spacing: -0.025em; }
+h2 { font-size: 20px; line-height: 28px; font-weight: 600; }
+h3 { font-size: 16px; line-height: 24px; font-weight: 600; }
+p { margin: 0; }
+.muted { color: var(--muted-foreground); }
+.small { font-size: 12px; line-height: 16px; }
+.mono { font-family: var(--font-mono); font-size: 12px; }
+.num { font-variant-numeric: tabular-nums; text-align: right; }
+.stack { display: grid; gap: 16px; } .stack-sm { display: grid; gap: 8px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.between { justify-content: space-between; }
+.grow { flex: 1; min-width: 0; }
+svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; border-bottom: 1px solid var(--border); background: color-mix(in oklab, var(--card) 85%, transparent); backdrop-filter: blur(8px); }
+.wrap { max-width: 64rem; margin: 0 auto; padding-inline: 24px; }
+@media (max-width: 480px) { .wrap { padding-inline: 16px; } }
+.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-block: 14px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius); background: color-mix(in oklab, var(--primary) 10%, transparent); color: var(--primary); }
+.brand h1 { font-size: 18px; line-height: 28px; font-weight: 600; }
+nav a { color: var(--muted-foreground); text-decoration: none; font-size: 12px; font-weight: 500; padding: 6px 8px; border-radius: calc(var(--radius) - 2px); }
+nav a:hover { color: var(--foreground); }
+nav a[aria-current="page"] { color: var(--foreground); background: var(--accent); }
+main.wrap { padding-block: 32px 64px; display: grid; gap: 24px; }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); box-shadow: 0 1px 3px rgb(0 0 0 / 0.06); min-width: 0; }
+.card-h { padding: 20px 24px 0; display: grid; gap: 4px; }
+.card-b { padding: 20px 24px 24px; }
+@media (max-width: 480px) { .card-h { padding: 16px 16px 0; } .card-b { padding: 16px; } }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: calc(var(--radius) - 2px); border: 1px solid transparent; font: 500 14px/20px var(--font-sans); cursor: pointer; white-space: nowrap; background: var(--primary); color: var(--primary-foreground); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); text-decoration: none; }
+.btn:hover { background: color-mix(in oklab, var(--primary) 90%, transparent); }
+.btn.secondary { background: var(--secondary); color: var(--foreground); }
+.btn.secondary:hover { background: color-mix(in oklab, var(--secondary) 80%, transparent); }
+.btn.outline { background: var(--background); border-color: var(--input); color: var(--foreground); }
+.btn.outline:hover, .btn.ghost:hover { background: var(--accent); }
+.btn.ghost { background: transparent; color: var(--foreground); box-shadow: none; }
+.btn.danger { background: var(--destructive); color: var(--destructive-foreground); }
+.btn.danger:hover { background: color-mix(in oklab, var(--destructive) 90%, transparent); }
+.btn.sm { height: 32px; padding: 0 12px; font-size: 12px; }
+.btn.icon { width: 36px; padding: 0; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+.badge { display: inline-flex; align-items: center; gap: 4px; border-radius: calc(var(--radius) - 2px); padding: 2px 8px; font-size: 12px; line-height: 16px; font-weight: 600; background: var(--secondary); color: var(--foreground); border: 1px solid transparent; white-space: nowrap; }
+.badge.outline { background: transparent; border-color: var(--border); }
+.badge.ok { color: var(--success); background: color-mix(in oklab, var(--success) 12%, transparent); }
+.badge.warn { color: var(--warning); background: color-mix(in oklab, var(--warning) 14%, transparent); }
+.badge.err { color: var(--destructive); background: color-mix(in oklab, var(--destructive) 12%, transparent); }
+.badge.dark { background: var(--primary); color: var(--primary-foreground); }
+
+label.f { display: grid; gap: 6px; font-weight: 500; }
+.input, select.input { height: 36px; width: 100%; padding: 0 12px; border: 1px solid var(--input); border-radius: calc(var(--radius) - 2px); background: transparent; color: var(--foreground); font: 14px var(--font-sans); }
+select.input { padding-right: 8px; }
+.input.sm { height: 32px; font-size: 12px; padding: 0 8px; }
+.input::placeholder { color: var(--muted-foreground); }
+
+.tbl { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 500; color: var(--muted-foreground); height: 40px; padding: 0 12px; white-space: nowrap; border-bottom: 1px solid var(--border); }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: color-mix(in oklab, var(--muted) 50%, transparent); }
+tr.click { cursor: pointer; }
+td.wrapcell { max-width: 22rem; overflow-wrap: anywhere; }
+.empty { padding: 32px; text-align: center; color: var(--muted-foreground); }
+
+.drop { display: grid; justify-items: center; gap: 12px; padding: 48px 16px; text-align: center; border: 2px dashed var(--border); border-radius: var(--radius); cursor: pointer; transition: background .15s; }
+.drop:hover, .drop.over { background: color-mix(in oklab, var(--muted) 60%, transparent); }
+.drop .bubble { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: color-mix(in oklab, var(--primary) 10%, transparent); color: var(--primary); }
+.drop .bubble svg { width: 32px; height: 32px; }
+
+.job { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; display: grid; gap: 8px; }
+.stats { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.stats b { color: var(--foreground); font-weight: 600; }
+details > summary { cursor: pointer; font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
+details[open] > summary { margin-bottom: 8px; }
+.log { font-family: var(--font-mono); font-size: 12px; line-height: 18px; background: var(--muted); border-radius: calc(var(--radius) - 2px); padding: 8px 12px; overflow-x: auto; white-space: pre; }
+.log .w { color: var(--warning); } .log .e { color: var(--destructive); }
+
+dialog { border: 1px solid var(--border); border-radius: var(--radius); background: var(--popover); color: var(--foreground); padding: 0; width: min(56rem, calc(100vw - 32px)); max-height: calc(100vh - 48px); box-shadow: 0 10px 30px rgb(0 0 0 / .2); }
+dialog::backdrop { background: rgb(0 0 0 / .6); }
+.dlg { display: grid; gap: 16px; padding: 24px; }
+@media (max-width: 480px) { .dlg { padding: 16px; } }
+.dlg-f { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.colgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 12px; }
+.colcard { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; display: grid; gap: 6px; }
+
+
+.toast-zone { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px; z-index: 20; }
+.toast { background: var(--popover); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; box-shadow: 0 10px 30px rgb(0 0 0 / .15); max-width: 22rem; font-weight: 500; }
+.toast.err { color: var(--destructive); }
+.note { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; display: grid; gap: 4px; }
+.note.err { border-color: color-mix(in oklab, var(--destructive) 50%, transparent); color: var(--destructive); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--muted); border-radius: var(--radius); flex-wrap: wrap; }
+.seg label { padding: 6px 12px; border-radius: calc(var(--radius) - 2px); font-weight: 500; cursor: pointer; color: var(--muted-foreground); }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg input:checked + span { color: var(--foreground); }
+.seg label:has(input:checked) { background: var(--background); box-shadow: 0 1px 2px rgb(0 0 0 / .1); }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 1px; }
+.hdot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted-foreground); flex: none; }
+.hdot.ok { background: var(--success); } .hdot.err { background: var(--destructive); }
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast-zone" id="toasts" aria-live="polite"></div>
+<dialog id="dlg"></dialog>
+
+<script>
+// Plain HTML frontend for the FastAPI backend in api/. Served by the API at /app,
+// so every call is same-origin and needs no CORS setup.
+const IC = {
+  db: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
+  upload: '<path d="M12 13v8"/><path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="m8 17 4-4 4 4"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  key: '<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+};
+const icon = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${IC[n]}</svg>`;
+const TYPES = ["boolean", "int8", "numeric", "date", "timestamptz", "text"];
+const TYPE_LABEL = { int8: "Whole number", numeric: "Number", date: "Date", timestamptz: "Timestamp", boolean: "True/False", text: "Text" };
+const INVALID = { empty: "The file is empty.", header_only: "The file only has a header row, so there is nothing to import.", no_columns: "The first row is blank, so no column names were found.", parse_failed: "The CSV couldn't be parsed. Check the file's structure and try again." };
+
+// ---------- API ----------
+const KEY_STORE = "csv-migrator-api-key";
+let apiKey = ""; try { apiKey = localStorage.getItem(KEY_STORE) || ""; } catch {}
+class ApiError extends Error { constructor(msg, status) { super(msg); this.status = status; } }
+async function api(path, opts = {}) {
+  let res;
+  try {
+    res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", ...(apiKey ? { "X-API-Key": apiKey } : {}), ...opts.headers } });
+  } catch { throw new ApiError("Can't reach the API. Check that it's running (scripts/start-api.ps1).", 0); }
+  let body = null; try { body = await res.json(); } catch {}
+  if (res.ok) return body;
+  const detail = typeof body?.detail === "string" ? body.detail : Array.isArray(body?.detail) ? body.detail.map(d => d.msg).join("; ") : "";
+  const msg = res.status === 401 ? "The API key is missing or wrong. Set it with the key button in the header."
+    : res.status === 413 ? "The file is larger than the API accepts (MAX_UPLOAD_BYTES)."
+    : res.status === 503 ? "The server is busy. Try again in a moment."
+    : detail || `The API returned an error (${res.status}).`;
+  throw new ApiError(msg, res.status);
+}
+const post = (path, data) => api(path, { method: "POST", body: JSON.stringify(data) });
+
+// ---------- state ----------
+const UI = { health: null, files: null, filesErr: "", te: null, teErr: "", log: null, logErr: "", logOffset: 0, page: 0, jobs: [], pending: [], pIdx: 0 };
+const PAGE = 20;
+const HIDDEN_COLS = new Set(["_id", "_row_hash", "_created_at"]); // bookkeeping columns the loader adds
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = n => Number(n || 0).toLocaleString("en-AU");
+const when = iso => new Date(iso).toLocaleString("en-AU", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const bytes = b => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(2)} MB`;
+const plural = (n, w) => `${fmt(n)} ${w}${n === 1 ? "" : "s"}`;
+const toCsv = rows => rows.map(r => r.map(v => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(",")).join("\n");
+function toast(msg, err) {
+  const el = document.createElement("div"); el.className = "toast" + (err ? " err" : ""); el.textContent = msg;
+  document.getElementById("toasts").append(el); setTimeout(() => el.remove(), 5000);
+}
+async function copy(text, what) {
+  try { await navigator.clipboard.writeText(text); toast(`${what} copied`); }
+  catch { openDialog(`<div class="dlg"><h3>Copy ${esc(what.toLowerCase())}</h3><p class="muted">Your browser blocked the clipboard. Select the text and copy it.</p><textarea id="copybox" class="input mono" style="height:16rem;padding:8px" readonly>${esc(text)}</textarea><div class="dlg-f"><button class="btn" data-a="close">Done</button></div></div>`); document.getElementById("copybox").select(); }
+}
+const STATUS = { processing: ["Importing", "warn"], done: ["Imported", "ok"], partial: ["Imported with errors", "warn"], duplicate: ["Already imported", "warn"], invalid: ["Invalid file", "err"], error: ["Failed", "err"] };
+const pill = s => `<span class="badge ${STATUS[s][1]}">${STATUS[s][0]}</span>`;
+
+// ---------- loading ----------
+async function loadHealth() { try { UI.health = await api("/api/health"); } catch (e) { UI.health = { status: "down", error: e.message }; } render(); }
+async function loadFiles() { try { UI.files = await api("/api/csv/files"); UI.filesErr = ""; } catch (e) { UI.filesErr = e.message; } render(); }
+async function loadTe() { try { UI.te = await api("/api/te/tables"); UI.teErr = ""; } catch (e) { UI.teErr = e.message; } render(); }
+async function loadLog() { try { UI.log = await api(`/api/audit/log?limit=50&offset=${UI.logOffset}`); UI.logErr = ""; } catch (e) { UI.logErr = e.message; } render(); }
+
+// ---------- import ----------
+async function addFiles(list) {
+  const csvs = list.filter(f => /\.csv$/i.test(f.name) || f.type === "text/csv");
+  if (csvs.length < list.length) toast("Only .csv files can be imported. Other files were left out.", true);
+  if (!csvs.length) return;
+  if (!UI.te) loadTe();
+  for (const f of csvs) {
+    const content = await f.text();
+    const p = { id: Math.random().toString(36).slice(2), name: f.name, size: f.size, content, overwrite: false, mode: "dynamic", target: "" };
+    if (!content.trim()) { p.problem = INVALID.empty; UI.pending.push(p); continue; }
+    try {
+      const r = await post("/api/csv/preview", { fileName: f.name, content });
+      if (r.status !== "ok") p.problem = r.message || INVALID[r.reason] || "The file can't be imported.";
+      else Object.assign(p, { headers: r.headers, columns: r.columns, types: [...r.inferredTypes], sample: r.sampleRows, rows: r.totalRowsApprox, match: r.teTableMatch, target: r.teTableMatch || "" });
+    } catch (e) { toast(e.message, true); if (e.status === 401) openKeyDialog(); return; }
+    UI.pending.push(p);
+  }
+  UI.pIdx = 0; showPreview();
+}
+async function runImport(p) {
+  const job = { id: p.id, name: p.name, status: "processing", errors: [], logs: [], src: p };
+  UI.jobs = UI.jobs.filter(j => j.id !== p.id); UI.jobs.unshift(job); render();
+  if (p.problem) { job.status = "invalid"; job.message = p.problem; return render(); }
+  try {
+    const body = { fileName: p.name, content: p.content, mode: p.mode, overwrite: p.overwrite };
+    if (p.mode === "te") body.targetTable = p.target; else body.types = p.types;
+    const r = await post("/api/csv/upload", body);
+    job.logs = r.logs || [];
+    if (r.status === "ok") {
+      Object.assign(job, { table: r.tableName, total: r.totalRows, inserted: r.insertedRows, failed: r.failedRows, dups: r.duplicateRowsSkipped, errors: r.rowErrors || [] });
+      job.status = r.failedRows ? "partial" : "done";
+      if (r.overwritten) job.message = `Replaced the earlier upload of ${r.replacedFileName}.`;
+    } else if (r.status === "duplicate_file") {
+      job.status = "duplicate"; job.table = r.tableName;
+      job.message = r.reason === "content" ? `Same content as ${r.existingFileName}, already imported into ${r.tableName} (${plural(r.existingRowCount, "row")}).` : `A file named ${r.existingFileName} was already imported with different content.`;
+    } else if (r.status === "invalid_structure") { job.status = "invalid"; job.message = r.message || INVALID[r.reason]; }
+    else { job.status = "error"; job.message = r.message || "The import failed."; }
+  } catch (e) { job.status = "error"; job.message = e.message; }
+  render();
+}
+
+// ---------- preview dialog ----------
+function showPreview() {
+  const p = UI.pending[UI.pIdx]; if (!p) return closeDialog();
+  const n = UI.pending.length, te = p.mode === "te";
+  const teOpts = (UI.te || []).map(t => `<option value="${esc(t.table)}" ${p.target === t.table ? "selected" : ""} ${t.exists ? "" : "disabled"}>${esc(t.table)}${t.exists ? "" : " (not deployed)"}${p.match === t.table ? " · columns match" : ""}</option>`).join("");
+  openDialog(`<div class="dlg">
+    <div class="stack-sm"><h3>Check ${esc(p.name)} before importing</h3>
+      <p class="muted small">${bytes(p.size)}${p.columns ? ` · ${plural(p.rows, "data row")} · ${plural(p.columns.length, "column")}` : ""}${n > 1 ? ` · file ${UI.pIdx + 1} of ${n}` : ""}</p></div>
+    ${p.problem ? `<div class="note err"><b>This file can't be imported</b><span>${esc(p.problem)}</span></div>` : `
+    <div class="stack-sm"><b>Where should the rows go?</b>
+      <div class="seg" role="radiogroup" aria-label="Destination">
+        <label><input type="radio" name="mode" value="dynamic" data-c="mode" ${te ? "" : "checked"}><span>New table</span></label>
+        <label><input type="radio" name="mode" value="te" data-c="mode" ${te ? "checked" : ""}><span>T&amp;E table</span></label>
+      </div>
+      ${p.match && !te ? `<p class="small muted">These columns match the T&amp;E table <span class="mono">${esc(p.match)}</span>.</p>` : ""}
+    </div>
+    ${te ? `<label class="f" for="target" style="max-width:24rem">T&amp;E table
+        <select id="target" class="input" data-c="target"><option value="">Choose a table…</option>${teOpts}</select></label>
+      <p class="small muted">Rows are added to the existing table one by one; rows that fail are reported and skipped. Loading the same file again replaces its registration, not its rows.</p>`
+    : `<label class="f" for="dup" style="max-width:24rem">If this file was already imported
+        <select id="dup" class="input" data-c="dup"><option value="skip" ${p.overwrite ? "" : "selected"}>Skip it</option><option value="replace" ${p.overwrite ? "selected" : ""}>Replace the existing table</option></select></label>`}
+    ${n > 1 ? `<div><button class="btn outline sm" data-a="apply-all">Use these choices for all ${n} files</button></div>` : ""}
+    <div class="stack-sm"><b>${te ? "Columns" : "Column types"}</b>
+      <div class="colgrid">${p.columns.map((c, i) => `<div class="colcard">
+        <span class="mono">${esc(c)}</span>${p.headers[i] !== c ? `<span class="small muted">from “${esc(p.headers[i])}”</span>` : ""}
+        ${te ? "" : `<select id="t${i}" class="input sm" data-c="type" data-i="${i}" aria-label="Type of ${esc(c)}">${TYPES.map(t => `<option value="${t}" ${p.types[i] === t ? "selected" : ""}>${TYPE_LABEL[t]}</option>`).join("")}</select>`}
+      </div>`).join("")}</div></div>
+    <div class="stack-sm"><b>First ${p.sample.length} rows</b>
+      <div class="tbl"><table><thead><tr>${p.columns.map(c => `<th class="mono">${esc(c)}</th>`).join("")}</tr></thead>
+      <tbody>${p.sample.map(r => `<tr>${r.map(v => `<td class="wrapcell">${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>`}
+    <div class="dlg-f">
+      <button class="btn ghost" data-a="cancel-all">Cancel</button>
+      ${UI.pIdx > 0 ? `<button class="btn outline" data-a="prev">Previous</button>` : ""}
+      ${UI.pIdx < n - 1 ? `<button class="btn outline" data-a="next">Next file</button>` : ""}
+      <button class="btn" data-a="import">${n > 1 ? `Import ${n} files` : "Import file"}</button>
+    </div></div>`);
+}
+function openKeyDialog() {
+  openDialog(`<form class="dlg" id="keyform"><div class="stack-sm"><h3>API key</h3>
+    <p class="muted">Needed when the API runs with <span class="mono">API_KEY</span> set. It's sent as the <span class="mono">X-API-Key</span> header and kept in this browser only.</p></div>
+    <label class="f" for="apikey">Key<input id="apikey" type="password" class="input" autocomplete="off" value="${esc(apiKey)}"></label>
+    <div class="dlg-f"><button type="button" class="btn ghost" data-a="close">Cancel</button>${apiKey ? `<button type="button" class="btn outline" data-a="key-clear">Remove key</button>` : ""}<button class="btn">Save key</button></div></form>`);
+}
+
+// ---------- views ----------
+function headerHtml(r) {
+  const h = UI.health, ok = h?.status === "ok";
+  const link = (x, t) => `<a href="#${x}" ${r === x ? 'aria-current="page"' : ""}>${t}</a>`;
+  const hText = !h ? "Checking database…" : ok ? `Connected · ${esc(h.database)}` : h.status === "degraded" ? "Database unreachable" : "API unreachable";
+  return `<header><div class="wrap bar">
+    <div class="brand"><div class="brand-mark">${icon("db")}</div><div><h1>CSV Migrator</h1><p class="small muted">CSV in, PostgreSQL tables out, no duplicates.</p></div></div>
+    <div class="row">
+      <span class="badge outline" title="${esc(ok ? `${h.postgres} on ${h.host}, schema ${h.uploads_schema}` : h?.error || "")}"><span class="hdot ${h ? (ok ? "ok" : "err") : ""}"></span>${hText}</span>
+      <nav class="row" style="gap:2px">${link("import", "Import")}${link("te", "T&amp;E tables")}${link("log", "Deletion log")}</nav>
+      <button class="btn ghost icon" data-a="key" aria-label="API key" title="API key${apiKey ? " (set)" : ""}">${icon("key")}</button>
+      <button class="btn ghost icon" data-a="theme" aria-label="Switch light or dark theme">${icon("moon")}</button>
+    </div></div></header>`;
+}
+const errorsTable = errs => `<div class="tbl"><table><thead><tr><th class="num">Row</th><th>Column</th><th>Value</th><th>Reason</th></tr></thead><tbody>${errs.map(e => `<tr><td class="num">${esc(e.rowNumber)}</td><td class="mono">${esc(e.column || "—")}</td><td class="mono wrapcell">${esc(e.value)}</td><td>${esc(e.reason)}</td></tr>`).join("")}</tbody></table></div>`;
+function jobHtml(j) {
+  return `<div class="job"><div class="row between"><b class="grow" style="overflow-wrap:anywhere">${esc(j.name)}</b>${pill(j.status)}</div>
+    ${j.message ? `<p class="small">${esc(j.message)}</p>` : ""}
+    ${j.total != null ? `<div class="stats"><span><b>${fmt(j.inserted)}</b> imported</span><span><b>${fmt(j.failed)}</b> failed</span><span><b>${fmt(j.dups)}</b> duplicates skipped</span><span>into <span class="mono">${esc(j.table)}</span></span></div>` : ""}
+    <div class="row">
+      ${j.status === "duplicate" && j.src.mode === "dynamic" ? `<button class="btn sm" data-a="replace" data-id="${j.id}">Replace existing table</button>` : ""}
+      ${j.status === "error" ? `<button class="btn outline sm" data-a="retry" data-id="${j.id}">Try again</button>` : ""}
+      ${j.errors.length ? `<button class="btn outline sm" data-a="copy-invalid" data-id="${j.id}">${icon("copy")}Copy invalid rows (CSV)</button>` : ""}
+    </div>
+    ${j.errors.length ? `<details><summary>Show ${plural(j.errors.length, "row error")}${j.failed > j.errors.length ? ` (first ${j.errors.length} of ${fmt(j.failed)})` : ""}</summary>${errorsTable(j.errors)}</details>` : ""}
+    ${j.logs.length ? `<details><summary>Processing log</summary><div class="log">${j.logs.map(l => `<span class="${l.level === "warn" ? "w" : l.level === "error" ? "e" : ""}">${new Date(l.ts).toLocaleTimeString("en-AU")}  ${esc(l.message)}</span>`).join("\n")}</div></details>` : ""}
+  </div>`;
+}
+function filesHtml() {
+  if (UI.filesErr) return `<div class="note err"><b>Couldn't load imported files</b><span>${esc(UI.filesErr)}</span></div>`;
+  if (!UI.files) return `<div class="empty">Loading…</div>`;
+  if (!UI.files.length) return `<div class="empty">Nothing imported yet. Import a CSV file to create a table.</div>`;
+  const pages = Math.ceil(UI.files.length / PAGE); UI.page = Math.min(UI.page, pages - 1);
+  const start = UI.page * PAGE;
+  return `<div class="tbl"><table><thead><tr><th class="num">S.No.</th><th>File</th><th>Table</th><th>Mode</th><th class="num">Rows</th><th class="num">Columns</th><th>Uploaded</th></tr></thead><tbody>
+    ${UI.files.slice(start, start + PAGE).map((f, i) => `<tr class="click" data-a="view" data-id="${esc(f.id)}" tabindex="0"><td class="num muted">${start + i + 1}</td><td class="wrapcell">${esc(f.file_name)}</td><td class="mono">${esc(f.table_name)}</td><td><span class="badge ${f.mode === "te" ? "dark" : ""}">${f.mode === "te" ? "T&amp;E" : "New table"}</span></td><td class="num">${fmt(f.row_count)}</td><td class="num">${(f.column_names || []).length}</td><td class="muted" style="white-space:nowrap">${when(f.created_at)}</td></tr>`).join("")}
+    </tbody></table></div>
+    ${pages > 1 ? `<div class="pager"><span class="small muted">${start + 1}–${Math.min(start + PAGE, UI.files.length)} of ${fmt(UI.files.length)}</span><div class="row"><button class="btn outline sm" data-a="page" data-d="-1" ${UI.page ? "" : "disabled"}>Previous</button><button class="btn outline sm" data-a="page" data-d="1" ${UI.page < pages - 1 ? "" : "disabled"}>Next</button></div></div>` : ""}`;
+}
+function importView() {
+  return `<section class="card"><div class="card-h"><h2>Import CSV files</h2><p class="muted">Load each file into its own new table, or into one of the T&amp;E tables. Files already imported are detected by name and content.</p></div>
+    <div class="card-b"><label class="drop" id="drop" for="file">
+      <input id="file" type="file" accept=".csv,text/csv" multiple hidden>
+      <div class="bubble">${icon("upload")}</div>
+      <div class="stack-sm"><b>Drop CSV files here or click to choose</b><p class="muted">You'll see the columns and detected types before anything is written to the database.</p></div>
+      <span class="btn">Choose files</span></label></div></section>
+    ${UI.jobs.length ? `<section class="card"><div class="card-h"><div class="row between"><h2>Upload report</h2><div class="row">
+      <button class="btn outline sm" data-a="copy-report">${icon("copy")}Copy report (CSV)</button><button class="btn ghost sm" data-a="clear-jobs">Clear</button></div></div></div>
+      <div class="card-b stack">${UI.jobs.map(jobHtml).join("")}</div></section>` : ""}
+    <section class="card"><div class="card-h"><div class="row between"><h2>Migrated files</h2><button class="btn ghost sm" data-a="reload-files">${icon("refresh")}Refresh</button></div><p class="muted">Every file registered in the database. Select a new table to view its rows.</p></div><div class="card-b">${filesHtml()}</div></section>`;
+}
+function teView() {
+  const body = UI.teErr ? `<div class="note err"><b>Couldn't load the T&amp;E tables</b><span>${esc(UI.teErr)}</span></div>`
+    : !UI.te ? `<div class="empty">Loading…</div>`
+    : `<div class="tbl"><table><thead><tr><th>Table</th><th>Status</th><th class="num">Rows (approx.)</th></tr></thead><tbody>
+      ${UI.te.map(t => `<tr><td class="mono">${esc(t.table)}</td><td>${t.exists ? '<span class="badge ok">Deployed</span>' : '<span class="badge warn">Not deployed</span>'}</td><td class="num">${t.exists ? fmt(t.rowCount) : "—"}</td></tr>`).join("")}
+      </tbody></table></div><p class="small muted" style="margin-top:12px">Row counts come from PostgreSQL's statistics, so they can lag behind recent loads until the table is analysed.</p>`;
+  return `<section class="card"><div class="card-h"><div class="row between"><h2>T&amp;E tables</h2><button class="btn ghost sm" data-a="reload-te">${icon("refresh")}Refresh</button></div><p class="muted">The 12 core Test &amp; Evaluation tables a CSV can be loaded into.</p></div><div class="card-b">${body}</div></section>`;
+}
+function logView() {
+  const L = UI.log;
+  const body = UI.logErr ? `<div class="note err"><b>Couldn't load the deletion log</b><span>${esc(UI.logErr)}</span></div>`
+    : !L ? `<div class="empty">Loading…</div>`
+    : !L.entries.length ? `<div class="empty">No files have been deleted.</div>`
+    : `<div class="tbl"><table><thead><tr><th>When</th><th>File</th><th>Table</th><th>Mode</th><th>Action</th></tr></thead><tbody>
+      ${L.entries.map(e => `<tr><td class="muted" style="white-space:nowrap">${when(e.performedAt)}</td><td class="wrapcell">${esc(e.fileName)}</td><td class="mono">${esc(e.tableName)}</td><td>${esc(e.mode === "te" ? "T&E" : "New table")}</td><td><span class="badge err">${esc(e.action)}</span></td></tr>`).join("")}
+      </tbody></table></div>
+      ${L.total > L.limit ? `<div class="pager"><span class="small muted">${L.offset + 1}–${Math.min(L.offset + L.limit, L.total)} of ${fmt(L.total)}</span><div class="row"><button class="btn outline sm" data-a="log-page" data-d="-1" ${L.offset ? "" : "disabled"}>Newer</button><button class="btn outline sm" data-a="log-page" data-d="1" ${L.offset + L.limit < L.total ? "" : "disabled"}>Older</button></div></div>` : ""}`;
+  return `<section class="card"><div class="card-h"><div class="row between"><h2>Deletion log</h2><button class="btn ghost sm" data-a="reload-log">${icon("refresh")}Refresh</button></div><p class="muted">Files removed from the database, newest first. Kept even after the table is dropped.</p></div><div class="card-b">${body}</div></section>`;
+}
+async function viewFile(id, confirmDel) {
+  const f = UI.files.find(x => x.id === id); if (!f) return;
+  const dyn = f.mode === "dynamic";
+  const footer = confirmDel
+    ? `<span class="grow small" style="align-self:center">${dyn ? `Drop ${esc(f.table_name)} and all its rows?` : `Remove this registration? The rows already in ${esc(f.table_name)} stay.`} This can't be undone.</span><button class="btn outline" data-a="view" data-id="${esc(f.id)}">Keep it</button><button class="btn danger" data-a="del" data-id="${esc(f.id)}">Delete</button>`
+    : `<button class="btn ghost" data-a="del-ask" data-id="${esc(f.id)}">${icon("trash")}Delete</button>${dyn ? `<button class="btn outline" data-a="copy-rows" data-id="${esc(f.id)}">${icon("copy")}Copy rows (CSV)</button>` : ""}<button class="btn" data-a="close">Close</button>`;
+  const shell = inner => `<div class="dlg"><div class="stack-sm"><h3 class="mono" style="font-size:16px;overflow-wrap:anywhere">${esc(f.table_name)}</h3>
+    <p class="muted small">From ${esc(f.file_name)} · ${plural(f.row_count, "row")} · ${when(f.created_at)}</p></div>${inner}<div class="dlg-f">${footer}</div></div>`;
+  if (!dyn) return openDialog(shell(`<p class="muted">This file was loaded into the T&amp;E table above. Its columns: <span class="mono">${(f.column_names || []).map(esc).join(", ")}</span></p>`));
+  if (confirmDel) return openDialog(shell(""));
+  openDialog(shell(`<div class="empty">Loading rows…</div>`));
+  try {
+    const { rows } = await api(`/api/csv/tables/${encodeURIComponent(f.table_name)}/rows?limit=100`);
+    const cols = rows.length ? Object.keys(rows[0]).filter(c => !HIDDEN_COLS.has(c)) : f.column_names;
+    f._rows = rows; f._cols = cols;
+    if (dlg.open) openDialog(shell(`<div class="tbl" style="max-height:50vh;overflow:auto"><table><thead><tr>${cols.map(c => `<th class="mono">${esc(c)}</th>`).join("")}</tr></thead>
+      <tbody>${rows.map(r => `<tr>${cols.map(c => `<td class="wrapcell">${r[c] == null ? '<span class="muted">null</span>' : esc(r[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      ${f.row_count > rows.length ? `<p class="small muted">Showing the first ${rows.length} rows.</p>` : ""}`));
+  } catch (e) { if (dlg.open) openDialog(shell(`<div class="note err"><b>Couldn't load the rows</b><span>${esc(e.message)}</span></div>`)); }
+}
+
+// ---------- render & routing ----------
+const app = document.getElementById("app"), dlg = document.getElementById("dlg");
+const route = () => ({ te: "te", log: "log" }[location.hash.slice(1)] || "import");
+function render() {
+  const r = route(), y = scrollY;
+  app.innerHTML = headerHtml(r) + `<main class="wrap">${r === "te" ? teView() : r === "log" ? logView() : importView()}</main>`;
+  scrollTo(0, y);
+}
+function openDialog(html) { dlg.innerHTML = html; if (!dlg.open) dlg.showModal(); }
+function closeDialog() { if (dlg.open) dlg.close(); }
+dlg.addEventListener("close", () => { UI.pending = []; });
+addEventListener("hashchange", () => { const r = route(); if (r === "te") loadTe(); if (r === "log") loadLog(); render(); });
+
+document.addEventListener("click", async e => {
+  const t = e.target.closest("[data-a]"); if (!t) return;
+  const a = t.dataset.a, id = t.dataset.id, p = UI.pending[UI.pIdx];
+  switch (a) {
+    case "close": closeDialog(); break;
+    case "key": openKeyDialog(); break;
+    case "key-clear": apiKey = ""; try { localStorage.removeItem(KEY_STORE); } catch {} closeDialog(); toast("API key removed"); loadHealth(); loadFiles(); break;
+    case "theme": { const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; root.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("csv-migrator-theme", root.dataset.theme); } catch {} break; }
+    case "prev": UI.pIdx--; showPreview(); break;
+    case "next": UI.pIdx++; showPreview(); break;
+    case "cancel-all": closeDialog(); break;
+    case "apply-all": UI.pending.forEach(x => { if (x.problem) return; x.mode = p.mode; x.overwrite = p.overwrite; if (p.mode === "te" && p.target) x.target = p.target; }); toast(`Choices applied to all ${UI.pending.length} files`); break;
+    case "import": {
+      const missing = UI.pending.findIndex(x => !x.problem && x.mode === "te" && !x.target);
+      if (missing >= 0) { UI.pIdx = missing; showPreview(); return toast(`Choose a T&E table for ${UI.pending[missing].name}.`, true); }
+      const list = UI.pending.slice(); closeDialog(); if (route() !== "import") location.hash = "import";
+      for (const x of list) await runImport(x);
+      const ok = UI.jobs.filter(j => list.some(x => x.id === j.id) && (j.status === "done" || j.status === "partial")).length;
+      toast(`${plural(ok, "file")} imported${ok < list.length ? `, ${list.length - ok} need${list.length - ok === 1 ? "s" : ""} attention` : ""}`);
+      loadFiles(); break; }
+    case "replace": { const j = UI.jobs.find(x => x.id === id); j.src.overwrite = true; await runImport(j.src); loadFiles(); break; }
+    case "retry": { const j = UI.jobs.find(x => x.id === id); await runImport(j.src); loadFiles(); break; }
+    case "clear-jobs": UI.jobs = []; render(); break;
+    case "copy-invalid": { const j = UI.jobs.find(x => x.id === id); copy(toCsv([["row", "column", "value", "reason"], ...j.errors.map(er => [er.rowNumber, er.column || "", er.value, er.reason])]), "Invalid rows"); break; }
+    case "copy-report": copy(toCsv([["file", "result", "table", "imported", "failed", "duplicates", "message"], ...UI.jobs.map(j => [j.name, STATUS[j.status][0], j.table || "", j.inserted ?? "", j.failed ?? "", j.dups ?? "", j.message || ""])]), "Upload report"); break;
+    case "reload-files": UI.files = null; render(); loadFiles(); break;
+    case "reload-te": UI.te = null; render(); loadTe(); break;
+    case "reload-log": UI.log = null; render(); loadLog(); break;
+    case "page": UI.page += +t.dataset.d; render(); break;
+    case "log-page": UI.logOffset = Math.max(0, UI.logOffset + 50 * +t.dataset.d); loadLog(); break;
+    case "view": viewFile(id); break;
+    case "del-ask": viewFile(id, true); break;
+    case "del": {
+      const f = UI.files.find(x => x.id === id);
+      try { await api(`/api/csv/files/${encodeURIComponent(id)}`, { method: "DELETE" }); closeDialog(); toast(`${f.file_name} deleted`); loadFiles(); UI.log = null; }
+      catch (err) { closeDialog(); toast(err.status === 403 ? "Deleting is turned off on this API. Start it with API_ALLOW_DESTRUCTIVE=true to allow it." : err.message, true); }
+      break; }
+    case "copy-rows": { const f = UI.files.find(x => x.id === id); if (!f._rows) return; copy(toCsv([f._cols, ...f._rows.map(r => f._cols.map(c => r[c]))]), "Rows"); break; }
+  }
+});
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches("tr[data-a]")) e.target.click(); });
+document.addEventListener("change", e => {
+  const c = e.target.dataset.c, p = UI.pending[UI.pIdx];
+  if (c === "type") p.types[+e.target.dataset.i] = e.target.value;
+  if (c === "dup") p.overwrite = e.target.value === "replace";
+  if (c === "target") p.target = e.target.value;
+  if (c === "mode") { p.mode = e.target.value; if (p.mode === "te" && !UI.te) loadTe().then(showPreview); showPreview(); }
+  if (e.target.id === "file") { addFiles([...e.target.files]); e.target.value = ""; }
+});
+document.addEventListener("submit", e => {
+  e.preventDefault();
+  if (e.target.id === "keyform") { apiKey = document.getElementById("apikey").value.trim(); try { localStorage.setItem(KEY_STORE, apiKey); } catch {} closeDialog(); toast("API key saved"); loadHealth(); loadFiles(); }
+});
+["dragover", "dragleave", "drop"].forEach(ev => document.addEventListener(ev, e => {
+  const d = document.getElementById("drop"); if (!d || !e.dataTransfer) return;
+  e.preventDefault(); d.classList.toggle("over", ev === "dragover");
+  if (ev === "drop") addFiles([...e.dataTransfer.files]);
+}));
+
+try { const th = localStorage.getItem("csv-migrator-theme"); if (th) document.documentElement.dataset.theme = th; } catch {}
+render(); loadHealth(); loadFiles();
+if (route() === "te") loadTe(); if (route() === "log") loadLog();
+</script>
+</body>
+</html>
