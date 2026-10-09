@@ -131,6 +131,20 @@ Get-Content env.dev.example | ForEach-Object {
 Start-Process "http://localhost:8080"
 ```
 
+### Plain HTML frontend (no Node needed)
+
+`web/index.html` is a single-file frontend with no build step. The API serves
+it at `/app`, so it needs no CORS setup and no second terminal. After step 5:
+
+```powershell
+Start-Process "http://localhost:8000/app"
+```
+
+It covers import (preview, column types, new table or T&E table, skip or
+replace duplicates), migrated files with a row viewer and delete, T&E table
+row counts, and the deletion log. If the API runs with `API_KEY` set, enter
+the same key with the key button in the page header.
+
 ---
 
 ## API Surface

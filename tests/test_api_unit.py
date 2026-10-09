@@ -153,3 +153,14 @@ class TableNameGuards(unittest.TestCase):
                     offenders.append(f"{path.name}:{node.lineno}")
         self.assertEqual(offenders, [],
                          f"execute() called with an f-string at {offenders}")
+
+
+@pytest.mark.unit
+class WebFrontend(unittest.TestCase):
+    """The plain HTML frontend in web/ is served same-origin at /app."""
+
+    def test_app_serves_index_html(self):
+        r = client.get("/app/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("text/html", r.headers["content-type"])
+        self.assertIn("<title>CSV Migrator</title>", r.text)
