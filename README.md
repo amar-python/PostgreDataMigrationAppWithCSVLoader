@@ -245,7 +245,7 @@ See **`docs/ENV_VARIABLES.md`** for the full reference. Key variables:
 | `PGPASSWORD` | _(empty)_ | PostgreSQL password |
 | `PGDATABASE` | `te_mgmt_dev` | Target database |
 | `API_KEY` | _(empty)_ | Shared secret for `X-API-Key` header (empty = unauthenticated) |
-| `CORS_ORIGINS` | `http://localhost:5173,...` | Allowed frontend origins |
+| `CORS_ORIGINS` | `http://localhost:8080,...` | Allowed frontend origins |
 | `TE_SCHEMA` | `te_dev` | Schema for the 12 T&E tables |
 | `API_ALLOW_DESTRUCTIVE` | `false` | Enable `DELETE /api/csv/files/{id}` |
 

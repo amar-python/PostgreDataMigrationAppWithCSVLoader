@@ -13,9 +13,9 @@ the behaviour asserted, and therefore the expected result.
 
 | Category | Folder | Tests | Cases |
 |----------|--------|-------|-------|
-| [Unit tests](#unit-tests) | `tests/unit/` | 236 | 279 |
+| [Unit tests](#unit-tests) | `tests/unit/` | 237 | 280 |
 | [System tests](#system-tests) | `tests/system/` | 68 | 70 |
-| [System integration tests](#system-integration-tests) | `tests/system_integration/` | 61 | 200 |
+| [System integration tests](#system-integration-tests) | `tests/system_integration/` | 63 | 204 |
 | [Performance tests](#performance-tests) | `tests/performance/` | 13 | 16 |
 | [Accessibility tests](#accessibility-tests) | `tests/accessibility/` | 14 | 17 |
 | [User acceptance tests](#user-acceptance-tests) | `tests/uat/` | 31 | 33 |
@@ -132,136 +132,137 @@ Single functions and modules in isolation. No database, no network.
 | UT-104 | `tests/unit/test_db_pool.py` | `TestAppErrorHandling.test_health_degrades_without_leaking_details` | When the DB is unreachable /api/health returns 200 'degraded' with no host/user/driver text in the body. | 1 |
 | UT-105 | `tests/unit/test_db_pool.py` | `TestAppErrorHandling.test_preview_parse_crash_returns_structured_error` | BUG-025: a parser exception never surfaces as a raw 500. | 1 |
 | UT-106 | `tests/unit/test_db_pool.py` | `TestAppErrorHandling.test_preview_te_match_is_best_effort` | If the T&E lookup fails the preview still succeeds with a null match. | 1 |
-| UT-107 | `tests/unit/test_db_pool.py` | `TestAppErrorHandling.test_cors_methods_are_restricted` | Only GET/POST/DELETE are advertised to browsers. | 1 |
-| UT-108 | `tests/unit/test_db_pool.py` | `TestLoaderGuardsWithoutDatabase.test_dynamic_structure_errors` | Empty, header-only and blank-header files are rejected with a message. | 3 |
-| UT-109 | `tests/unit/test_db_pool.py` | `TestLoaderGuardsWithoutDatabase.test_dynamic_row_cap` | BUG-027: files above MAX\_ROWS are rejected up-front. | 1 |
-| UT-110 | `tests/unit/test_db_pool.py` | `TestLoaderGuardsWithoutDatabase.test_dynamic_logs_have_frontend_shape` | Every processing-log entry carries ts/step/level/message. | 1 |
-| UT-111 | `tests/unit/test_db_pool.py` | `TestLoaderGuardsWithoutDatabase.test_te_rejects_unknown_target_table` | Only the 12 whitelisted T&E tables are accepted. | 1 |
-| UT-112 | `tests/unit/test_db_pool.py` | `TestLoaderGuardsWithoutDatabase.test_te_structure_errors` | T&E mode needs a header and at least one data row. | 2 |
-| UT-113 | `tests/unit/test_db_pool.py` | `TestLoaderGuardsWithoutDatabase.test_te_row_cap` | BUG-027: the row cap also applies in T&E mode. | 1 |
-| UT-114 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_load_expected_returns_none_for_missing_scenario` | \_load\_expected with an unknown scenario name should return None without raising. | 1 |
-| UT-115 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_discover_scenarios_filters_only_requested_name` | discover\_scenarios with a name argument should return only the directory whose name matches exactly. | 1 |
-| UT-116 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_tier_p_reports_unknown_runner_action_as_failure` | An expected JSON with an unrecognised runner\_action should produce a failed result containing 'Unknown runner\_action' in errors. | 1 |
-| UT-117 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_tier_p_generated_invalid_utf8_skips_row_cleanly` | The 23\_invalid\_utf8\_bytes eval scenario: an invalid-UTF-8 data row is skipped with a reason while valid rows still pass (exit\_code=0), per the loader's load-what-is-valid contract. No raw Traceback may appear. | 1 |
-| UT-118 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_tier_i_fails_when_postgresql_is_unavailable` | When \_can\_connect\_pg returns False, run\_tier\_i\_scenario must FAIL (not skip): an unavailable prerequisite is a failure, so a green run always means the scenario really executed. | 1 |
-| UT-119 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_count_dev_rows_records_none_for_failed_count_query` | When the count query subprocess exits non-zero, \_count\_dev\_rows should record None for every entry in DEV\_SEED\_TABLES. | 1 |
-| UT-120 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_have_psql_uses_path_lookup` | When shutil.which returns None, \_have\_psql should return False. | 1 |
-| UT-121 | `tests/unit/test_regression.py` | `RegressionBomHandling.test_bom_csv_is_accepted` | Bom csv is accepted | 1 |
-| UT-122 | `tests/unit/test_regression.py` | `RegressionCrlfLineEndings.test_crlf_csv_accepted` | Crlf csv accepted | 1 |
-| UT-123 | `tests/unit/test_regression.py` | `RegressionHeaderOnlyCsv.test_header_only_exits_cleanly` | Header only exits cleanly | 1 |
-| UT-124 | `tests/unit/test_regression.py` | `RegressionSingleColumnCsv.test_single_column_valid_rows_pass` | Single column valid rows pass | 1 |
-| UT-125 | `tests/unit/test_regression.py` | `RegressionNoTraceback.test_missing_env_vars_no_traceback` | Missing env vars no traceback | 1 |
-| UT-126 | `tests/unit/test_regression.py` | `RegressionNoTraceback.test_nonexistent_file_no_traceback` | Nonexistent file no traceback | 1 |
-| UT-127 | `tests/unit/test_regression.py` | `RegressionNoTraceback.test_invalid_utf8_no_traceback` | Invalid utf8 no traceback | 1 |
-| UT-128 | `tests/unit/test_security.py` | `TestNoHardcodedCredentials.test_validator_no_hardcoded_credentials` | Validator no hardcoded credentials | 1 |
-| UT-129 | `tests/unit/test_security.py` | `TestNoHardcodedCredentials.test_runner_no_hardcoded_credentials` | Runner no hardcoded credentials | 1 |
-| UT-130 | `tests/unit/test_security.py` | `TestNoHardcodedCredentials.test_gap_report_no_hardcoded_credentials` | Gap report no hardcoded credentials | 1 |
-| UT-131 | `tests/unit/test_security.py` | `TestNoFStringSql.test_validator_no_fstring_sql` | Validator no fstring sql | 1 |
-| UT-132 | `tests/unit/test_security.py` | `TestNoFStringSql.test_runner_no_fstring_sql` | Runner no fstring sql | 1 |
-| UT-133 | `tests/unit/test_security.py` | `TestConfigEnvExample.test_pg_password_is_empty` | Pg password is empty | 1 |
-| UT-134 | `tests/unit/test_security.py` | `TestShellScriptsNoPrintedPasswords.test_no_echo_password_in_adapters` | No echo password in adapters | 1 |
-| UT-135 | `tests/unit/test_security.py` | `TestShellScriptsNoPrintedPasswords.test_no_echo_password_in_loaders` | No echo password in loaders | 1 |
-| UT-136 | `tests/unit/test_security.py` | `TestSqlFilesNoInlineCredentials.test_env_sql_files_no_hardcoded_passwords` | Env sql files no hardcoded passwords | 1 |
-| UT-137 | `tests/unit/test_service_loader.py` | `ServiceLoaderUnitTests.test_dynamic_upload_rejects_mismatched_type_list_length` | Dynamic upload rejects mismatched type list length | 1 |
-| UT-138 | `tests/unit/test_service_loader.py` | `ServiceLoaderUnitTests.test_te_cleanup_prior_registry_entries_drops_dynamic_table` | Te cleanup prior registry entries drops dynamic table | 1 |
-| UT-139 | `tests/unit/test_snapshot.py` | `SnapshotBasicMixedInput.test_valid_csv_matches_snapshot` | Valid csv matches snapshot | 1 |
-| UT-140 | `tests/unit/test_snapshot.py` | `SnapshotBasicMixedInput.test_skip_csv_matches_snapshot` | Skip csv matches snapshot | 1 |
-| UT-141 | `tests/unit/test_snapshot.py` | `SnapshotAllValidInput.test_all_valid_no_skips` | All valid no skips | 1 |
-| UT-142 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | returns all jobs when search is empty | 1 |
-| UT-143 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | filters by exact substring | 1 |
-| UT-144 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | is case-insensitive | 1 |
-| UT-145 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | returns empty array when nothing matches | 1 |
-| UT-146 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | matches partial filenames | 1 |
-| UT-147 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | 'all' returns every job | 1 |
-| UT-148 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | 'done' returns only done jobs (including overwritten) | 1 |
-| UT-149 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | 'overwritten' returns only done+overwritten jobs | 1 |
-| UT-150 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | 'error' returns only failed jobs | 1 |
-| UT-151 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | 'duplicate' returns only duplicate jobs | 1 |
-| UT-152 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | 'cancelled' returns only cancelled jobs | 1 |
-| UT-153 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | non-overwritten done job does NOT appear under 'overwritten' | 1 |
-| UT-154 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | dateFrom excludes jobs before the date | 1 |
-| UT-155 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | dateTo includes jobs on the specified day; jobs strictly after it are excluded | 1 |
-| UT-156 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | dateFrom + dateTo together form a closed range | 1 |
-| UT-157 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | empty date strings do not filter by date | 1 |
-| UT-158 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | search + status combined narrow correctly | 1 |
-| UT-159 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | search + date + status combined to a single result | 1 |
-| UT-160 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | returns empty when search and status conflict | 1 |
-| UT-161 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | lowercases and trims headers | 1 |
-| UT-162 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | replaces non-alphanumeric chars with underscores | 1 |
-| UT-163 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | strips leading and trailing underscores | 1 |
-| UT-164 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | prefixes numeric-starting names with col\_ | 1 |
-| UT-165 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | generates a name for empty/blank headers | 1 |
-| UT-166 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | deduplicates by appending \_2, \_3, … | 1 |
-| UT-167 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | reserved system column names get a \_col suffix instead of colliding | 1 |
-| UT-168 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | truncates names longer than 55 characters | 1 |
-| UT-169 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | handles a mix of edge cases in one call | 1 |
-| UT-170 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | returns headers and one sample row | 1 |
-| UT-171 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | strips the BOM character | 1 |
-| UT-172 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | handles quoted fields with embedded commas | 1 |
-| UT-173 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | reports zero data rows for a header-only file | 1 |
-| UT-174 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | returns empty arrays for a completely empty file | 1 |
-| UT-175 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | infers int8 for whole-number columns | 1 |
-| UT-176 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | infers numeric for decimal columns | 1 |
-| UT-177 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | infers boolean for true/false columns | 1 |
-| UT-178 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | infers date for YYYY-MM-DD columns | 1 |
-| UT-179 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | falls back to text when column has mixed types | 1 |
-| UT-180 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | infers text for a column with all empty cells | 1 |
-| UT-181 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | ignores empty cells when inferring type | 1 |
-| UT-182 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | has a human label for every inferred type | 1 |
-| UT-183 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | returns empty string for undefined input | 1 |
-| UT-184 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | returns empty string for an empty mapping | 1 |
-| UT-185 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | returns '(no renames)' when every column keeps its original name | 1 |
-| UT-186 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | returns '(no renames)' when renamed is empty string | 1 |
-| UT-187 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | lists renamed columns as 'original→renamed' | 1 |
-| UT-188 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | omits columns that are unchanged | 1 |
-| UT-189 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | returns one row per RowError | 1 |
-| UT-190 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | maps rowNumber, column, value, reason correctly | 1 |
-| UT-191 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | includes the file name in every row | 1 |
-| UT-192 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | includes a mapping summary when mapping is provided | 1 |
-| UT-193 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | when rowErrors is empty but errorMessage is set, emits one structural-error row | 1 |
-| UT-194 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | returns empty array when both rowErrors and errorMessage are absent | 1 |
-| UT-195 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | triggers a download with a .csv filename | 1 |
-| UT-196 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | CSV content contains the header row | 1 |
-| UT-197 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | CSV content contains the error row values | 1 |
-| UT-198 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | escapes commas and quotes in values | 1 |
-| UT-199 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | triggers a download with a .xlsx filename | 1 |
-| UT-200 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | XLSX content is a valid workbook with an Errors sheet | 1 |
-| UT-201 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | CSV: triggers download with audit-report filename | 1 |
-| UT-202 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | XLSX: workbook has an Audit sheet | 1 |
-| UT-203 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | CSV: includes header and data row | 1 |
-| UT-204 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | status ok -&gt; done, success toast, notify, and invalidateRoute | 1 |
-| UT-205 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | status ok with overwritten and failedRows composes the full message | 1 |
-| UT-206 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | status duplicate\_file -&gt; duplicate patch, warning toast, no invalidateRoute | 1 |
-| UT-207 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | status invalid\_structure -&gt; error patch carrying invalidReason | 1 |
-| UT-208 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | status error -&gt; error patch carrying rowErrors | 1 |
-| UT-209 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | passes the header mapping through to the patch on every branch | 1 |
-| UT-210 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | uses the error's message and stack, and never sets \`notify\` | 1 |
-| UT-211 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | falls back to 'Unknown error' when the thrown value has no message | 1 |
-| UT-212 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | defaults the cancellation reason when none is given | 1 |
-| UT-213 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | carries an explicit reason through to both the patch and the toast | 1 |
-| UT-214 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | shows the diff dialog when the job already has a tableName | 1 |
-| UT-215 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | retries directly with overwrite when there is no tableName yet | 1 |
-| UT-216 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | retries directly when the job is undefined (id no longer in the list) | 1 |
-| UT-217 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns an empty array when no templates are stored | 1 |
-| UT-218 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns stored templates | 1 |
-| UT-219 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns [] when localStorage contains invalid JSON | 1 |
-| UT-220 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | persists a new template | 1 |
-| UT-221 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | replaces an existing template with the same id | 1 |
-| UT-222 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | prepends the newest template so it appears first | 1 |
-| UT-223 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | removes the template with the matching id | 1 |
-| UT-224 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | is a no-op when the id does not exist | 1 |
-| UT-225 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns null when there are no templates | 1 |
-| UT-226 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns the template whose column originals match in order | 1 |
-| UT-227 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns null when the header set differs | 1 |
-| UT-228 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns null when the order differs | 1 |
-| UT-229 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | sets lastUsedAt on the targeted template | 1 |
-| UT-230 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | does not affect other templates | 1 |
-| UT-231 | `csv-table-hub-main/src/__tests__/unit/uploader-state-machine.test.ts` | vitest | a successful upload ends in status done and invalidates the router | 1 |
-| UT-232 | `csv-table-hub-main/src/__tests__/unit/uploader-state-machine.test.ts` | vitest | a duplicate\_file response is classified as a duplicate, not an error | 1 |
-| UT-233 | `csv-table-hub-main/src/__tests__/unit/uploader-state-machine.test.ts` | vitest | an invalid\_structure response is classified as an error | 1 |
-| UT-234 | `csv-table-hub-main/src/__tests__/unit/uploader-state-machine.test.ts` | vitest | a rejected upload promise is classified as an error with the thrown message | 1 |
-| UT-235 | `csv-table-hub-main/src/__tests__/unit/uploader-state-machine.test.ts` | vitest | clicking Stop while uploading marks the job cancelled and ignores the late result | 1 |
-| UT-236 | `csv-table-hub-main/src/__tests__/unit/uploader-state-machine.test.ts` | vitest | overwrite flow: confirming the diff dialog re-uploads with overwrite=true | 1 |
+| UT-107 | `tests/unit/test_db_pool.py` | `TestAppErrorHandling.test_cors_allows_frontend_dev_server_by_default` | The Vite dev server origin (localhost, port 8080) is allowed by default. | 1 |
+| UT-108 | `tests/unit/test_db_pool.py` | `TestAppErrorHandling.test_cors_methods_are_restricted` | Only GET/POST/DELETE are advertised to browsers. | 1 |
+| UT-109 | `tests/unit/test_db_pool.py` | `TestLoaderGuardsWithoutDatabase.test_dynamic_structure_errors` | Empty, header-only and blank-header files are rejected with a message. | 3 |
+| UT-110 | `tests/unit/test_db_pool.py` | `TestLoaderGuardsWithoutDatabase.test_dynamic_row_cap` | BUG-027: files above MAX\_ROWS are rejected up-front. | 1 |
+| UT-111 | `tests/unit/test_db_pool.py` | `TestLoaderGuardsWithoutDatabase.test_dynamic_logs_have_frontend_shape` | Every processing-log entry carries ts/step/level/message. | 1 |
+| UT-112 | `tests/unit/test_db_pool.py` | `TestLoaderGuardsWithoutDatabase.test_te_rejects_unknown_target_table` | Only the 12 whitelisted T&E tables are accepted. | 1 |
+| UT-113 | `tests/unit/test_db_pool.py` | `TestLoaderGuardsWithoutDatabase.test_te_structure_errors` | T&E mode needs a header and at least one data row. | 2 |
+| UT-114 | `tests/unit/test_db_pool.py` | `TestLoaderGuardsWithoutDatabase.test_te_row_cap` | BUG-027: the row cap also applies in T&E mode. | 1 |
+| UT-115 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_load_expected_returns_none_for_missing_scenario` | \_load\_expected with an unknown scenario name should return None without raising. | 1 |
+| UT-116 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_discover_scenarios_filters_only_requested_name` | discover\_scenarios with a name argument should return only the directory whose name matches exactly. | 1 |
+| UT-117 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_tier_p_reports_unknown_runner_action_as_failure` | An expected JSON with an unrecognised runner\_action should produce a failed result containing 'Unknown runner\_action' in errors. | 1 |
+| UT-118 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_tier_p_generated_invalid_utf8_skips_row_cleanly` | The 23\_invalid\_utf8\_bytes eval scenario: an invalid-UTF-8 data row is skipped with a reason while valid rows still pass (exit\_code=0), per the loader's load-what-is-valid contract. No raw Traceback may appear. | 1 |
+| UT-119 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_tier_i_fails_when_postgresql_is_unavailable` | When \_can\_connect\_pg returns False, run\_tier\_i\_scenario must FAIL (not skip): an unavailable prerequisite is a failure, so a green run always means the scenario really executed. | 1 |
+| UT-120 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_count_dev_rows_records_none_for_failed_count_query` | When the count query subprocess exits non-zero, \_count\_dev\_rows should record None for every entry in DEV\_SEED\_TABLES. | 1 |
+| UT-121 | `tests/unit/test_evals_runner.py` | `EvalsRunnerTests.test_have_psql_uses_path_lookup` | When shutil.which returns None, \_have\_psql should return False. | 1 |
+| UT-122 | `tests/unit/test_regression.py` | `RegressionBomHandling.test_bom_csv_is_accepted` | Bom csv is accepted | 1 |
+| UT-123 | `tests/unit/test_regression.py` | `RegressionCrlfLineEndings.test_crlf_csv_accepted` | Crlf csv accepted | 1 |
+| UT-124 | `tests/unit/test_regression.py` | `RegressionHeaderOnlyCsv.test_header_only_exits_cleanly` | Header only exits cleanly | 1 |
+| UT-125 | `tests/unit/test_regression.py` | `RegressionSingleColumnCsv.test_single_column_valid_rows_pass` | Single column valid rows pass | 1 |
+| UT-126 | `tests/unit/test_regression.py` | `RegressionNoTraceback.test_missing_env_vars_no_traceback` | Missing env vars no traceback | 1 |
+| UT-127 | `tests/unit/test_regression.py` | `RegressionNoTraceback.test_nonexistent_file_no_traceback` | Nonexistent file no traceback | 1 |
+| UT-128 | `tests/unit/test_regression.py` | `RegressionNoTraceback.test_invalid_utf8_no_traceback` | Invalid utf8 no traceback | 1 |
+| UT-129 | `tests/unit/test_security.py` | `TestNoHardcodedCredentials.test_validator_no_hardcoded_credentials` | Validator no hardcoded credentials | 1 |
+| UT-130 | `tests/unit/test_security.py` | `TestNoHardcodedCredentials.test_runner_no_hardcoded_credentials` | Runner no hardcoded credentials | 1 |
+| UT-131 | `tests/unit/test_security.py` | `TestNoHardcodedCredentials.test_gap_report_no_hardcoded_credentials` | Gap report no hardcoded credentials | 1 |
+| UT-132 | `tests/unit/test_security.py` | `TestNoFStringSql.test_validator_no_fstring_sql` | Validator no fstring sql | 1 |
+| UT-133 | `tests/unit/test_security.py` | `TestNoFStringSql.test_runner_no_fstring_sql` | Runner no fstring sql | 1 |
+| UT-134 | `tests/unit/test_security.py` | `TestConfigEnvExample.test_pg_password_is_empty` | Pg password is empty | 1 |
+| UT-135 | `tests/unit/test_security.py` | `TestShellScriptsNoPrintedPasswords.test_no_echo_password_in_adapters` | No echo password in adapters | 1 |
+| UT-136 | `tests/unit/test_security.py` | `TestShellScriptsNoPrintedPasswords.test_no_echo_password_in_loaders` | No echo password in loaders | 1 |
+| UT-137 | `tests/unit/test_security.py` | `TestSqlFilesNoInlineCredentials.test_env_sql_files_no_hardcoded_passwords` | Env sql files no hardcoded passwords | 1 |
+| UT-138 | `tests/unit/test_service_loader.py` | `ServiceLoaderUnitTests.test_dynamic_upload_rejects_mismatched_type_list_length` | Dynamic upload rejects mismatched type list length | 1 |
+| UT-139 | `tests/unit/test_service_loader.py` | `ServiceLoaderUnitTests.test_te_cleanup_prior_registry_entries_drops_dynamic_table` | Te cleanup prior registry entries drops dynamic table | 1 |
+| UT-140 | `tests/unit/test_snapshot.py` | `SnapshotBasicMixedInput.test_valid_csv_matches_snapshot` | Valid csv matches snapshot | 1 |
+| UT-141 | `tests/unit/test_snapshot.py` | `SnapshotBasicMixedInput.test_skip_csv_matches_snapshot` | Skip csv matches snapshot | 1 |
+| UT-142 | `tests/unit/test_snapshot.py` | `SnapshotAllValidInput.test_all_valid_no_skips` | All valid no skips | 1 |
+| UT-143 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | returns all jobs when search is empty | 1 |
+| UT-144 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | filters by exact substring | 1 |
+| UT-145 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | is case-insensitive | 1 |
+| UT-146 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | returns empty array when nothing matches | 1 |
+| UT-147 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | matches partial filenames | 1 |
+| UT-148 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | 'all' returns every job | 1 |
+| UT-149 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | 'done' returns only done jobs (including overwritten) | 1 |
+| UT-150 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | 'overwritten' returns only done+overwritten jobs | 1 |
+| UT-151 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | 'error' returns only failed jobs | 1 |
+| UT-152 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | 'duplicate' returns only duplicate jobs | 1 |
+| UT-153 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | 'cancelled' returns only cancelled jobs | 1 |
+| UT-154 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | non-overwritten done job does NOT appear under 'overwritten' | 1 |
+| UT-155 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | dateFrom excludes jobs before the date | 1 |
+| UT-156 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | dateTo includes jobs on the specified day; jobs strictly after it are excluded | 1 |
+| UT-157 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | dateFrom + dateTo together form a closed range | 1 |
+| UT-158 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | empty date strings do not filter by date | 1 |
+| UT-159 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | search + status combined narrow correctly | 1 |
+| UT-160 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | search + date + status combined to a single result | 1 |
+| UT-161 | `csv-table-hub-main/src/__tests__/unit/audit-filters.test.ts` | vitest | returns empty when search and status conflict | 1 |
+| UT-162 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | lowercases and trims headers | 1 |
+| UT-163 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | replaces non-alphanumeric chars with underscores | 1 |
+| UT-164 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | strips leading and trailing underscores | 1 |
+| UT-165 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | prefixes numeric-starting names with col\_ | 1 |
+| UT-166 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | generates a name for empty/blank headers | 1 |
+| UT-167 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | deduplicates by appending \_2, \_3, … | 1 |
+| UT-168 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | reserved system column names get a \_col suffix instead of colliding | 1 |
+| UT-169 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | truncates names longer than 55 characters | 1 |
+| UT-170 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | handles a mix of edge cases in one call | 1 |
+| UT-171 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | returns headers and one sample row | 1 |
+| UT-172 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | strips the BOM character | 1 |
+| UT-173 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | handles quoted fields with embedded commas | 1 |
+| UT-174 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | reports zero data rows for a header-only file | 1 |
+| UT-175 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | returns empty arrays for a completely empty file | 1 |
+| UT-176 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | infers int8 for whole-number columns | 1 |
+| UT-177 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | infers numeric for decimal columns | 1 |
+| UT-178 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | infers boolean for true/false columns | 1 |
+| UT-179 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | infers date for YYYY-MM-DD columns | 1 |
+| UT-180 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | falls back to text when column has mixed types | 1 |
+| UT-181 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | infers text for a column with all empty cells | 1 |
+| UT-182 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | ignores empty cells when inferring type | 1 |
+| UT-183 | `csv-table-hub-main/src/__tests__/unit/csv-preview.test.ts` | vitest | has a human label for every inferred type | 1 |
+| UT-184 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | returns empty string for undefined input | 1 |
+| UT-185 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | returns empty string for an empty mapping | 1 |
+| UT-186 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | returns '(no renames)' when every column keeps its original name | 1 |
+| UT-187 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | returns '(no renames)' when renamed is empty string | 1 |
+| UT-188 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | lists renamed columns as 'original→renamed' | 1 |
+| UT-189 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | omits columns that are unchanged | 1 |
+| UT-190 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | returns one row per RowError | 1 |
+| UT-191 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | maps rowNumber, column, value, reason correctly | 1 |
+| UT-192 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | includes the file name in every row | 1 |
+| UT-193 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | includes a mapping summary when mapping is provided | 1 |
+| UT-194 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | when rowErrors is empty but errorMessage is set, emits one structural-error row | 1 |
+| UT-195 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | returns empty array when both rowErrors and errorMessage are absent | 1 |
+| UT-196 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | triggers a download with a .csv filename | 1 |
+| UT-197 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | CSV content contains the header row | 1 |
+| UT-198 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | CSV content contains the error row values | 1 |
+| UT-199 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | escapes commas and quotes in values | 1 |
+| UT-200 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | triggers a download with a .xlsx filename | 1 |
+| UT-201 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | XLSX content is a valid workbook with an Errors sheet | 1 |
+| UT-202 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | CSV: triggers download with audit-report filename | 1 |
+| UT-203 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | XLSX: workbook has an Audit sheet | 1 |
+| UT-204 | `csv-table-hub-main/src/__tests__/unit/export.test.ts` | vitest | CSV: includes header and data row | 1 |
+| UT-205 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | status ok -&gt; done, success toast, notify, and invalidateRoute | 1 |
+| UT-206 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | status ok with overwritten and failedRows composes the full message | 1 |
+| UT-207 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | status duplicate\_file -&gt; duplicate patch, warning toast, no invalidateRoute | 1 |
+| UT-208 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | status invalid\_structure -&gt; error patch carrying invalidReason | 1 |
+| UT-209 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | status error -&gt; error patch carrying rowErrors | 1 |
+| UT-210 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | passes the header mapping through to the patch on every branch | 1 |
+| UT-211 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | uses the error's message and stack, and never sets \`notify\` | 1 |
+| UT-212 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | falls back to 'Unknown error' when the thrown value has no message | 1 |
+| UT-213 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | defaults the cancellation reason when none is given | 1 |
+| UT-214 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | carries an explicit reason through to both the patch and the toast | 1 |
+| UT-215 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | shows the diff dialog when the job already has a tableName | 1 |
+| UT-216 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | retries directly with overwrite when there is no tableName yet | 1 |
+| UT-217 | `csv-table-hub-main/src/__tests__/unit/job-outcome.test.ts` | vitest | retries directly when the job is undefined (id no longer in the list) | 1 |
+| UT-218 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns an empty array when no templates are stored | 1 |
+| UT-219 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns stored templates | 1 |
+| UT-220 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns [] when localStorage contains invalid JSON | 1 |
+| UT-221 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | persists a new template | 1 |
+| UT-222 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | replaces an existing template with the same id | 1 |
+| UT-223 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | prepends the newest template so it appears first | 1 |
+| UT-224 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | removes the template with the matching id | 1 |
+| UT-225 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | is a no-op when the id does not exist | 1 |
+| UT-226 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns null when there are no templates | 1 |
+| UT-227 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns the template whose column originals match in order | 1 |
+| UT-228 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns null when the header set differs | 1 |
+| UT-229 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | returns null when the order differs | 1 |
+| UT-230 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | sets lastUsedAt on the targeted template | 1 |
+| UT-231 | `csv-table-hub-main/src/__tests__/unit/mapping-templates.test.ts` | vitest | does not affect other templates | 1 |
+| UT-232 | `csv-table-hub-main/src/__tests__/unit/uploader-state-machine.test.ts` | vitest | a successful upload ends in status done and invalidates the router | 1 |
+| UT-233 | `csv-table-hub-main/src/__tests__/unit/uploader-state-machine.test.ts` | vitest | a duplicate\_file response is classified as a duplicate, not an error | 1 |
+| UT-234 | `csv-table-hub-main/src/__tests__/unit/uploader-state-machine.test.ts` | vitest | an invalid\_structure response is classified as an error | 1 |
+| UT-235 | `csv-table-hub-main/src/__tests__/unit/uploader-state-machine.test.ts` | vitest | a rejected upload promise is classified as an error with the thrown message | 1 |
+| UT-236 | `csv-table-hub-main/src/__tests__/unit/uploader-state-machine.test.ts` | vitest | clicking Stop while uploading marks the job cancelled and ignores the late result | 1 |
+| UT-237 | `csv-table-hub-main/src/__tests__/unit/uploader-state-machine.test.ts` | vitest | overwrite flow: confirming the diff dialog re-uploads with overwrite=true | 1 |
 
 ## System tests
 
@@ -382,29 +383,31 @@ Contracts between components: API and frontend, API and PostgreSQL, deploy scrip
 | SIT-036 | `tests/system_integration/test_sit_frontend_contract.py` | `TestLiveResponsesSatisfyUiSchemas.test_te_upload` | a T&E-mode response (including DB-side row errors) matches the UI schema. | 1 |
 | SIT-037 | `tests/system_integration/test_sit_frontend_contract.py` | `TestLiveResponsesSatisfyUiSchemas.test_files_list` | /api/csv/files entries match csvFileSummarySchema. | 1 |
 | SIT-038 | `tests/system_integration/test_sit_frontend_contract.py` | `TestLiveResponsesSatisfyUiSchemas.test_preview_ok` | /api/csv/preview ok response matches csvPreviewResultSchema. | 1 |
-| SIT-039 | `tests/system_integration/test_sit_frontend_contract.py` | `TestLiveResponsesSatisfyUiSchemas.test_table_rows_values_are_json_primitives` | row values are string/number/boolean/null as previewRowsSchema requires. | 1 |
-| SIT-040 | `tests/system_integration/test_sit_frontend_contract.py` | `TestLiveResponsesSatisfyUiSchemas.test_te_tables` | /api/te/tables entries match teTableInfoSchema. | 1 |
-| SIT-041 | `tests/system_integration/test_sit_frontend_contract.py` | `TestApiDatabaseIntegration.test_bootstrap_is_idempotent` | running bootstrap again on a live schema is a harmless no-op. | 1 |
-| SIT-042 | `tests/system_integration/test_sit_frontend_contract.py` | `TestApiDatabaseIntegration.test_registry_tables_have_expected_columns` | csv\_files and audit\_log carry every column the API reads/writes. | 1 |
-| SIT-043 | `tests/system_integration/test_sit_frontend_contract.py` | `TestApiDatabaseIntegration.test_dynamic_tables_live_only_in_uploads_schema` | a dynamic upload creates its table in the uploads schema, nowhere else. | 1 |
-| SIT-044 | `tests/system_integration/test_sit_frontend_contract.py` | `TestApiDatabaseIntegration.test_te_row_counts_track_postgres_statistics` | /api/te/tables row counts agree with COUNT(\*) once statistics are fresh. | 1 |
-| SIT-045 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_valid_te_upload_returns_ok` | A well-formed T&E CSV must return status=ok. | 1 |
-| SIT-046 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_inserted_rows_count_matches_data_rows` | insertedRows must equal the number of data rows supplied. | 1 |
-| SIT-047 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_table_name_in_response_is_schema_qualified` | tableName must be schema-qualified (e.g. te\_dev.organisations). | 1 |
-| SIT-048 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_rows_are_queryable_after_upload` | Inserted rows must appear in the T&E table row count. | 1 |
-| SIT-049 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_core_te_tables_undisturbed_after_upload` | A T&E upload must not drop or alter the other 11 core tables. | 1 |
-| SIT-050 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_reupload_cleans_prior_registry_entry` | Re-uploading the same file name must not duplicate registry entries. | 1 |
-| SIT-051 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_invalid_target_table_is_rejected` | A targetTable not in TE\_TABLES must return status=error. | 1 |
-| SIT-052 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_empty_file_is_rejected` | Empty CSV is rejected — 422 from Pydantic min\_length or status=error. | 1 |
-| SIT-053 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_header_only_file_is_rejected` | A header-only CSV (no data rows) must return status=invalid\_structure. | 1 |
-| SIT-054 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_unknown_columns_are_rejected` | Columns not in the target table must return status=error. | 1 |
-| SIT-055 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_missing_target_table_param_is_rejected` | mode=te with no targetTable must return 422 from the API layer. | 1 |
-| SIT-056 | `tests/system_integration/test_te_loader_integration.py` | `DynamicOverwriteOfTeOriginFile.test_dynamic_overwrite_of_te_origin_entry_succeeds` | A dynamic-mode overwrite of a filename previously registered in TE mode must succeed (not crash, not silently no-op) and the registry must reflect the new dynamic-mode table, not a stale TE reference. | 1 |
-| SIT-057 | `tests/suites/test_01_organisations_personnel.sql` | SQL suite | T&E schema constraints and business rules (23 assertions) | 23 |
-| SIT-058 | `tests/suites/test_02_programs_phases.sql` | SQL suite | T&E schema constraints and business rules (25 assertions) | 25 |
-| SIT-059 | `tests/suites/test_03_requirements_vcrm.sql` | SQL suite | T&E schema constraints and business rules (23 assertions) | 23 |
-| SIT-060 | `tests/suites/test_04_execution_defects.sql` | SQL suite | T&E schema constraints and business rules (38 assertions) | 38 |
-| SIT-061 | `tests/suites/test_05_schema_and_business_rules.sql` | SQL suite | T&E schema constraints and business rules (33 assertions) | 33 |
+| SIT-039 | `tests/system_integration/test_sit_frontend_contract.py` | `TestLiveResponsesSatisfyUiSchemas.test_preview_invalid_structure` | every invalid\_structure reason /api/csv/preview returns is one the UI's csvPreviewResultSchema accepts. | 3 |
+| SIT-040 | `tests/system_integration/test_sit_frontend_contract.py` | `TestLiveResponsesSatisfyUiSchemas.test_preview_parse_failure` | a parser crash returns reason=parse\_failed with a message, and the UI's preview schema accepts that reason. | 1 |
+| SIT-041 | `tests/system_integration/test_sit_frontend_contract.py` | `TestLiveResponsesSatisfyUiSchemas.test_table_rows_values_are_json_primitives` | row values are string/number/boolean/null as previewRowsSchema requires. | 1 |
+| SIT-042 | `tests/system_integration/test_sit_frontend_contract.py` | `TestLiveResponsesSatisfyUiSchemas.test_te_tables` | /api/te/tables entries match teTableInfoSchema. | 1 |
+| SIT-043 | `tests/system_integration/test_sit_frontend_contract.py` | `TestApiDatabaseIntegration.test_bootstrap_is_idempotent` | running bootstrap again on a live schema is a harmless no-op. | 1 |
+| SIT-044 | `tests/system_integration/test_sit_frontend_contract.py` | `TestApiDatabaseIntegration.test_registry_tables_have_expected_columns` | csv\_files and audit\_log carry every column the API reads/writes. | 1 |
+| SIT-045 | `tests/system_integration/test_sit_frontend_contract.py` | `TestApiDatabaseIntegration.test_dynamic_tables_live_only_in_uploads_schema` | a dynamic upload creates its table in the uploads schema, nowhere else. | 1 |
+| SIT-046 | `tests/system_integration/test_sit_frontend_contract.py` | `TestApiDatabaseIntegration.test_te_row_counts_track_postgres_statistics` | /api/te/tables row counts agree with COUNT(\*) once statistics are fresh. | 1 |
+| SIT-047 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_valid_te_upload_returns_ok` | A well-formed T&E CSV must return status=ok. | 1 |
+| SIT-048 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_inserted_rows_count_matches_data_rows` | insertedRows must equal the number of data rows supplied. | 1 |
+| SIT-049 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_table_name_in_response_is_schema_qualified` | tableName must be schema-qualified (e.g. te\_dev.organisations). | 1 |
+| SIT-050 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_rows_are_queryable_after_upload` | Inserted rows must appear in the T&E table row count. | 1 |
+| SIT-051 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_core_te_tables_undisturbed_after_upload` | A T&E upload must not drop or alter the other 11 core tables. | 1 |
+| SIT-052 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_reupload_cleans_prior_registry_entry` | Re-uploading the same file name must not duplicate registry entries. | 1 |
+| SIT-053 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_invalid_target_table_is_rejected` | A targetTable not in TE\_TABLES must return status=error. | 1 |
+| SIT-054 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_empty_file_is_rejected` | Empty CSV is rejected — 422 from Pydantic min\_length or status=error. | 1 |
+| SIT-055 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_header_only_file_is_rejected` | A header-only CSV (no data rows) must return status=invalid\_structure. | 1 |
+| SIT-056 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_unknown_columns_are_rejected` | Columns not in the target table must return status=error. | 1 |
+| SIT-057 | `tests/system_integration/test_te_loader_integration.py` | `TeUploadOrganisations.test_missing_target_table_param_is_rejected` | mode=te with no targetTable must return 422 from the API layer. | 1 |
+| SIT-058 | `tests/system_integration/test_te_loader_integration.py` | `DynamicOverwriteOfTeOriginFile.test_dynamic_overwrite_of_te_origin_entry_succeeds` | A dynamic-mode overwrite of a filename previously registered in TE mode must succeed (not crash, not silently no-op) and the registry must reflect the new dynamic-mode table, not a stale TE reference. | 1 |
+| SIT-059 | `tests/suites/test_01_organisations_personnel.sql` | SQL suite | T&E schema constraints and business rules (23 assertions) | 23 |
+| SIT-060 | `tests/suites/test_02_programs_phases.sql` | SQL suite | T&E schema constraints and business rules (25 assertions) | 25 |
+| SIT-061 | `tests/suites/test_03_requirements_vcrm.sql` | SQL suite | T&E schema constraints and business rules (23 assertions) | 23 |
+| SIT-062 | `tests/suites/test_04_execution_defects.sql` | SQL suite | T&E schema constraints and business rules (38 assertions) | 38 |
+| SIT-063 | `tests/suites/test_05_schema_and_business_rules.sql` | SQL suite | T&E schema constraints and business rules (33 assertions) | 33 |
 
 ## Performance tests
 

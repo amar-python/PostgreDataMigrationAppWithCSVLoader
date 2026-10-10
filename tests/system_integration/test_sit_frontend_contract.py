@@ -29,10 +29,11 @@ TS_CONTRACT = ROOT / "csv-table-hub-main" / "src" / "lib" / "csv.functions.ts"
 TE_SCHEMA_SQL = ROOT / "build" / "te_core_schema.sql"
 
 
-def _ts_enum(after: str) -> set[str]:
-    """Values of the first z.enum([...]) that follows ``after`` in the TS file."""
+def _ts_enum(after: str, within: str | None = None) -> set[str]:
+    """Values of the first z.enum([...]) that follows ``after`` in the TS file
+    (searching from ``within`` first, when given, to pick one schema)."""
     src = TS_CONTRACT.read_text(encoding="utf-8")
-    start = src.index(after)
+    start = src.index(after, src.index(within) if within else 0)
     m = re.search(r"z\.enum\(\[(.*?)\]\)", src[start:], re.S)
     assert m, f"no z.enum after {after!r} in {TS_CONTRACT}"
     return set(re.findall(r'"([^"]+)"', m.group(1)))
@@ -46,6 +47,8 @@ def contract():
         "log_levels": _ts_enum("level: z.enum"),
         "invalid_reasons": _ts_enum('status: z.literal("invalid_structure")'),
         "duplicate_reasons": _ts_enum('status: z.literal("duplicate_file")'),
+        "preview_invalid_reasons": _ts_enum('status: z.literal("invalid_structure")',
+                                            within="const csvPreviewResultSchema"),
     }
 
 
@@ -163,6 +166,24 @@ class TestLiveResponsesSatisfyUiSchemas:
         assert set(r["inferredTypes"]) <= contract["column_types"]
         assert all(isinstance(c, str) for row in r["sampleRows"] for c in row)
         assert r["teTableMatch"] == "organisations"
+
+    @pytest.mark.parametrize("content", ["\n", "a,b\n", ",\n1,2\n"])
+    def test_preview_invalid_structure(self, live_api, contract, content):
+        """SIT-17 every invalid_structure reason /api/csv/preview returns is one
+        the UI's csvPreviewResultSchema accepts."""
+        r = live_api.post("/api/csv/preview", json={"fileName": "p.csv", "content": content}).json()
+        assert r["status"] == "invalid_structure"
+        assert r["reason"] in contract["preview_invalid_reasons"]
+
+    def test_preview_parse_failure(self, live_api, contract):
+        """SIT-18 a parser crash returns reason=parse_failed with a message, and
+        the UI's preview schema accepts that reason."""
+        from unittest import mock
+
+        with mock.patch("api.routers.csv_routes.build_preview", side_effect=RecursionError("x")):
+            r = live_api.post("/api/csv/preview", json={"fileName": "p.csv", "content": "a\n1\n"}).json()
+        assert r["reason"] == "parse_failed" and isinstance(r["message"], str)
+        assert r["reason"] in contract["preview_invalid_reasons"]
 
     def test_table_rows_values_are_json_primitives(self, live_api, registry_cleanup, unique_tag):
         """SIT-11 row values are string/number/boolean/null as previewRowsSchema requires."""

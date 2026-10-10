@@ -55,7 +55,7 @@ class TestRequireApiKey:
 class TestSettings:
     def test_defaults(self, monkeypatch):
         """Unset env vars fall back to the documented local-dev defaults."""
-        for key in ("PGHOST", "PGPORT", "API_ALLOW_DESTRUCTIVE", "API_MAX_ROWS",
+        for key in ("PGHOST", "PGPORT", "CORS_ORIGINS", "API_ALLOW_DESTRUCTIVE", "API_MAX_ROWS",
                     "API_MAX_ROW_ERRORS", "MAX_UPLOAD_BYTES", "CSV_UPLOADS_SCHEMA"):
             monkeypatch.delenv(key, raising=False)
         s = _reload_settings(monkeypatch)
@@ -65,6 +65,8 @@ class TestSettings:
         assert s.MAX_ROWS == 100000
         assert s.MAX_ROW_ERRORS_REPORTED == 200
         assert s.MAX_UPLOAD_BYTES == 50 * 1024 * 1024
+        assert s.CORS_ORIGINS == ["http://localhost:8080", "http://localhost:5173",
+                                  "http://localhost:3000"]
 
     def test_destructive_operations_disabled_by_default(self, monkeypatch):
         """BUG-040: DELETE is off unless explicitly enabled."""

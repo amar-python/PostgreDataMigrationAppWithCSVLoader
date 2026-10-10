@@ -174,6 +174,14 @@ class TestAppErrorHandling:
         assert r.json()["status"] == "ok"
         assert r.json()["teTableMatch"] is None
 
+    def test_cors_allows_frontend_dev_server_by_default(self):
+        """The Vite dev server origin (localhost, port 8080) is allowed by default."""
+        assert "http://localhost:8080" in settings.CORS_ORIGINS
+        r = TestClient(app).options("/api/csv/files", headers={
+            "Origin": "http://localhost:8080", "Access-Control-Request-Method": "GET"})
+        assert r.status_code == 200
+        assert r.headers["access-control-allow-origin"] == "http://localhost:8080"
+
     def test_cors_methods_are_restricted(self):
         """Only GET/POST/DELETE are advertised to browsers."""
         origin = settings.CORS_ORIGINS[0]
