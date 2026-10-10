@@ -175,12 +175,20 @@ class TestAppErrorHandling:
         assert r.json()["teTableMatch"] is None
 
     def test_cors_allows_frontend_dev_server_by_default(self):
-        """The Vite dev server origin (localhost, port 8080) is allowed by default."""
+        """The Vite dev server origin (localhost, port 8080) is allowed by default
+        (regression for issue #43)."""
         assert "http://localhost:8080" in settings.CORS_ORIGINS
         r = TestClient(app).options("/api/csv/files", headers={
             "Origin": "http://localhost:8080", "Access-Control-Request-Method": "GET"})
         assert r.status_code == 200
         assert r.headers["access-control-allow-origin"] == "http://localhost:8080"
+
+    def test_cors_still_refuses_unlisted_origins(self):
+        """Adding :8080 did not open CORS up: an unlisted origin is refused (issue #43)."""
+        r = TestClient(app).options("/api/csv/files", headers={
+            "Origin": "http://evil.example", "Access-Control-Request-Method": "GET"})
+        assert r.status_code == 400
+        assert "access-control-allow-origin" not in r.headers
 
     def test_cors_methods_are_restricted(self):
         """Only GET/POST/DELETE are advertised to browsers."""

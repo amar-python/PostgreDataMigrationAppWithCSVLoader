@@ -54,7 +54,8 @@ class TestRequireApiKey:
 
 class TestSettings:
     def test_defaults(self, monkeypatch):
-        """Unset env vars fall back to the documented local-dev defaults."""
+        """Unset env vars fall back to the documented local-dev defaults, including
+        the Vite dev-server origin on port 8080 (issue #43)."""
         for key in ("PGHOST", "PGPORT", "CORS_ORIGINS", "API_ALLOW_DESTRUCTIVE", "API_MAX_ROWS",
                     "API_MAX_ROW_ERRORS", "MAX_UPLOAD_BYTES", "CSV_UPLOADS_SCHEMA"):
             monkeypatch.delenv(key, raising=False)

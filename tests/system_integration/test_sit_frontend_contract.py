@@ -170,14 +170,14 @@ class TestLiveResponsesSatisfyUiSchemas:
     @pytest.mark.parametrize("content", ["\n", "a,b\n", ",\n1,2\n"])
     def test_preview_invalid_structure(self, live_api, contract, content):
         """SIT-17 every invalid_structure reason /api/csv/preview returns is one
-        the UI's csvPreviewResultSchema accepts."""
+        the UI's csvPreviewResultSchema accepts (regression for issue #42)."""
         r = live_api.post("/api/csv/preview", json={"fileName": "p.csv", "content": content}).json()
         assert r["status"] == "invalid_structure"
         assert r["reason"] in contract["preview_invalid_reasons"]
 
     def test_preview_parse_failure(self, live_api, contract):
         """SIT-18 a parser crash returns reason=parse_failed with a message, and
-        the UI's preview schema accepts that reason."""
+        the UI's preview schema accepts that reason (regression for issue #42)."""
         from unittest import mock
 
         with mock.patch("api.routers.csv_routes.build_preview", side_effect=RecursionError("x")):
