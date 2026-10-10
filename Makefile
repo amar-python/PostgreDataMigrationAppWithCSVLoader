@@ -1,4 +1,6 @@
 .PHONY: test-free test-gate test-evals test-e2e test-all \
+        test-unit test-system test-sit test-performance test-accessibility test-uat \
+        test-catalogue \
         lint lint-diff health \
         eval-list eval-compare eval-summary select-tests \
         csv-load csv-list csv-demo
@@ -31,6 +33,37 @@ test-e2e:
 test-all:
 	pytest tests/ --cov=build/csv --cov=evals --cov-report=term-missing
 	python3 evals/runner.py --tiers p,i,s --verbose
+
+# ── Test groups (see tests/README.md) ───────────────────────────────────────────
+
+# Unit: no database, no network. Python + frontend (vitest).
+test-unit:
+	pytest -m unit tests/ -v
+	cd csv-table-hub-main && npx vitest run
+
+# System: whole backend through its public API. Requires PostgreSQL.
+test-system:
+	pytest tests/system -v
+
+# System integration: API <-> frontend contract, API <-> DB, cross-env parity.
+test-sit:
+	pytest tests/system_integration -v
+
+# Performance: throughput / latency budgets. PERF_BUDGET_SCALE=3 on slow machines.
+test-performance:
+	pytest tests/performance -v
+
+# Accessibility: WCAG 2.1 AA with Playwright + axe. Needs csv-table-hub-main/node_modules.
+test-accessibility:
+	pytest tests/accessibility -v
+
+# User acceptance: Given/When/Then user stories. Requires PostgreSQL.
+test-uat:
+	pytest tests/uat -v
+
+# Regenerate docs/TEST_CASES.md from the test sources.
+test-catalogue:
+	python3 scripts/test_catalogue.py
 
 # ── Code quality ──────────────────────────────────────────────────────────────
 

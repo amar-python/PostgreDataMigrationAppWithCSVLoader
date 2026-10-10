@@ -32,7 +32,7 @@ function statusCls(s: JobStatus, ow?: boolean) {
   if (s==="done"&&ow) return "bg-blue-500/10 text-blue-700 dark:text-blue-400";
   if (s==="done") return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
   if (s==="duplicate") return "bg-amber-500/10 text-amber-700 dark:text-amber-400";
-  if (s==="error") return "bg-destructive/10 text-destructive";
+  if (s==="error") return "bg-destructive/10 text-red-700 dark:text-red-400";
   return "bg-slate-500/10 text-slate-600 dark:text-slate-400";
 }
 function fmtBytes(b: number) { if(b<1024) return `${b} B`; if(b<1048576) return `${(b/1024).toFixed(1)} KB`; return `${(b/1048576).toFixed(2)} MB`; }
@@ -110,7 +110,7 @@ function AuditPage() {
           <Input placeholder="Search filename…" value={search} onChange={e=>setSearch(e.target.value)} className="pl-8 h-9 text-sm"/>
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="h-9 w-[180px] text-sm"><SelectValue/></SelectTrigger>
+          <SelectTrigger className="h-9 w-[180px] text-sm" aria-label="Filter by status"><SelectValue/></SelectTrigger>
           <SelectContent>{FILTER_STATUSES.map(s=><SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
         </Select>
         <CalendarRange className="self-center h-3.5 w-3.5 text-muted-foreground"/>
@@ -163,7 +163,7 @@ function AuditPage() {
                     {job.cancellationReason && <p className="mt-0.5 text-[11px] text-muted-foreground">{job.cancellationReason}</p>}
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-xs">
-                    {job.totalRows!=null ? <div className="flex flex-col items-end gap-0.5"><span>{job.totalRows} total</span>{job.insertedRows!=null&&<span className="text-emerald-600 dark:text-emerald-400">{job.insertedRows} ok</span>}{(job.failedRows??0)>0&&<span className="text-destructive">{job.failedRows} failed</span>}</div> : <span className="text-muted-foreground">—</span>}
+                    {job.totalRows!=null ? <div className="flex flex-col items-end gap-0.5"><span>{job.totalRows} total</span>{job.insertedRows!=null&&<span className="text-emerald-700 dark:text-emerald-400">{job.insertedRows} ok</span>}{(job.failedRows??0)>0&&<span className="text-destructive">{job.failedRows} failed</span>}</div> : <span className="text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground" suppressHydrationWarning>{new Date(job.createdAt).toISOString().replace("T"," ").slice(0,19)} UTC</TableCell>
                   <TableCell className="max-w-[160px] text-xs text-muted-foreground">{mappingSummary(job.headerMapping)||<span className="text-muted-foreground/40">—</span>}</TableCell>
@@ -173,7 +173,7 @@ function AuditPage() {
                         <>
                           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={()=>setInvalidRowsJob(job)}>View errors</Button>
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button size="sm" variant="ghost" className="h-7 px-2"><Download className="h-3 w-3"/></Button></DropdownMenuTrigger>
+                            <DropdownMenuTrigger asChild><Button size="sm" variant="ghost" className="h-7 px-2" aria-label={`Download invalid rows for ${job.name}`}><Download className="h-3 w-3"/></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={()=>{const r=buildErrorRows(job.name,job.rowErrors??[],job.errorMessage,job.headerMapping);downloadErrorReport(job.name,r,"csv");toast.success("Downloaded");}}>As CSV</DropdownMenuItem>
                               <DropdownMenuItem onClick={()=>{const r=buildErrorRows(job.name,job.rowErrors??[],job.errorMessage,job.headerMapping);downloadErrorReport(job.name,r,"xlsx");toast.success("Downloaded");}}>As XLSX</DropdownMenuItem>

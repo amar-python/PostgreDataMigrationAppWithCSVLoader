@@ -41,6 +41,11 @@ jobs:
       - name: Component health check
         run: make health
 
+      # docs/TEST_CASES.md is generated from the test sources; fail if a test
+      # was added or changed without regenerating it (make test-catalogue).
+      - name: Test catalogue is up to date
+        run: python3 scripts/test_catalogue.py --check
+
       - name: Evals — Tier P (offline validator scenarios)
         run: python3 evals/runner.py --tiers p --verbose
 
@@ -150,8 +155,14 @@ jobs:
       # Prints a final block accounting for every test: PASSED / FAILED /
       # ERROR / SKIPPED (with reasons) / NOT RUN (deselected). --strict fails
       # the build on any skip.
+      # The T&E schema (te_dev) is deployed into te_mgmt_dev, so the API under
+      # test must connect there; with the job-level PGDATABASE=postgres every
+      # T&E-mode test failed with "relation te_dev.organisations does not exist".
+      # Accessibility tests need Node + a browser and run in their own job below.
       - name: Full test suite — final result with skip accounting
-        run: python3 scripts/test_report.py --strict
+        env:
+          PGDATABASE: te_mgmt_dev
+        run: python3 scripts/test_report.py --markers "not accessibility" --strict
 
       - name: Upload eval reports
         if: always()
@@ -161,3 +172,57 @@ jobs:
           path: evals/reports/
           if-no-files-found: ignore
           retention-days: 30
+
+  # WCAG 2.1 AA checks on the React frontend: Playwright (Chromium) + axe-core.
+  # The backend is mocked inside the tests, so no database is needed.
+  accessibility:
+    name: accessibility (playwright + axe)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements-dev.txt
+            api/requirements.txt
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt -r api/requirements.txt
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend dependencies
+        working-directory: csv-table-hub-main
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Frontend unit tests (vitest)
+        working-directory: csv-table-hub-main
+        run: npx vitest run
+
+      - name: Accessibility tests — final result with skip accounting
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python3 scripts/test_report.py --markers accessibility --strict
+
+      - name: Upload Vite dev-server log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-vite-log
+          path: ${{ runner.temp }}/a11y-vite.log
+          if-no-files-found: ignore
+          retention-days: 14

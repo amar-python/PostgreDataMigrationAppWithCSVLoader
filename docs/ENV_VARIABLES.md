@@ -61,7 +61,7 @@ the environment SQL templates. Copy `build/config.env.example` to
 
 > **Staging and prod must never be seeded.** The `SEED_STAGING` and `SEED_PROD`
 > variables default to `false`. Changing them to `true` will insert test data
-> into production. The `tests/test_parity.py` contract tests verify this.
+> into production. The `tests/system_integration/test_parity.py` contract tests verify this.
 
 ### Additional build-script variables
 

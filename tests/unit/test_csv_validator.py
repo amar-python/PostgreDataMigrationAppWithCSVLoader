@@ -18,7 +18,7 @@ pytestmark = pytest.mark.unit
 
 class CsvValidatorTests(unittest.TestCase):
     def setUp(self):
-        self.validator = Path(__file__).resolve().parents[1] / "build" / "csv" / "validator.py"
+        self.validator = Path(__file__).resolve().parents[2] / "build" / "csv" / "validator.py"
 
     def run_validator(self, env):
         result = subprocess.run(

@@ -27,7 +27,7 @@ function AuthPage() {
           <div className="space-y-2">
             <Label>Next step</Label>
             <p className="text-sm text-muted-foreground">
-              Go back to the home screen and upload CSV files directly. Configure <code className="rounded bg-muted px-1">VITE_API_BASE</code> to point to your backend.
+              Go back to the home screen and upload CSV files directly. Configure <code className="rounded bg-muted px-1 text-foreground">VITE_API_BASE</code> to point to your backend.
             </p>
           </div>
         </CardContent>

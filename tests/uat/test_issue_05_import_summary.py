@@ -23,7 +23,7 @@ displayed.
 
 Run::
 
-    python -m pytest tests/test_issue_05_import_summary.py
+    python -m pytest tests/uat/test_issue_05_import_summary.py
 
 Requires a reachable database; per the repository's no-skip policy a missing
 prerequisite FAILS with remediation text rather than skipping.

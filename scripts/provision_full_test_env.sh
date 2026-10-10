@@ -20,7 +20,7 @@
 # Note on passwords: the generated env_<env>.sql keep the literal
 # '__INJECT_AT_DEPLOY__' placeholder from the template. It is a valid role
 # password for a local test instance and keeps
-# tests/test_security.py::test_env_sql_files_no_hardcoded_passwords green.
+# tests/unit/test_security.py::test_env_sql_files_no_hardcoded_passwords green.
 # Never use these files against a real environment.
 # =============================================================================
 

@@ -1,5 +1,10 @@
 # TEST_CONDITIONS — comprehensive catalog
 
+> **Note:** the pytest suite is now grouped by test category under
+> `tests/<group>/`. The generated per-test catalogue is
+> [`docs/TEST_CASES.md`](TEST_CASES.md), and `tests/README.md` explains the
+> groups. The counts below are a historical snapshot.
+
 Every test condition that runs against the codebase, in one place. Five categories: Python unit tests, SQL test-suite assertions, and Tier P / I / S evals.
 
 ## At a glance
@@ -18,7 +23,7 @@ Every test condition that runs against the codebase, in one place. Five categori
 
 Located in `tests/`, run as `python -m unittest discover -s tests -p "test*.py"`. All currently green.
 
-### `tests/test_csv_validator.py` — 4 tests against `build/csv/validator.py`
+### `tests/unit/test_csv_validator.py` — 4 tests against `build/csv/validator.py`
 
 | # | Test | Asserts |
 |---|------|---------|
@@ -27,7 +32,7 @@ Located in `tests/`, run as `python -m unittest discover -s tests -p "test*.py"`
 | 3 | `test_splits_valid_and_skipped_rows` | Exit 0; valid+skip rows split correctly; reasons captured |
 | 4 | `test_returns_error_when_no_valid_rows` | Exit 1; stderr contains `No valid rows found` |
 
-### `tests/test_evals_runner.py` — 7 tests against `evals/runner.py`
+### `tests/unit/test_evals_runner.py` — 7 tests against `evals/runner.py`
 
 | # | Test | Asserts |
 |---|------|---------|
@@ -208,7 +213,7 @@ psql -d migration_test --set schema_name=te_dev -f tests\run_all_tests.sql
 
 | Kind of thing you want to assert | Add it here |
 |---------------------------------|------------|
-| Single Python function behaves correctly | `tests/test_csv_validator.py` or `tests/test_evals_runner.py` |
+| Single Python function behaves correctly | `tests/unit/test_csv_validator.py` or `tests/unit/test_evals_runner.py` |
 | A SQL business rule holds across seed data | `tests/suites/test_0X_<topic>.sql` using `assert_*` |
 | End-to-end behaviour against the validator binary | `evals/datasets/tier_p/<NN_name>/` + `evals/expected/tier_p/<NN_name>.json` |
 | End-to-end PostgreSQL operational scenario | `evals/datasets/tier_i/<NN_name>/` + runner branch in `evals/runner.py` |

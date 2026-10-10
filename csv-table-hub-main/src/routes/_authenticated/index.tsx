@@ -334,7 +334,7 @@ function StatusPill({status}:{status:JobStatus}){
     processing:{cls:"bg-muted text-muted-foreground",icon:<Loader2 className="h-3 w-3 animate-spin"/>},
     done:{cls:"bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",icon:<CheckCircle2 className="h-3 w-3"/>},
     duplicate:{cls:"bg-amber-500/10 text-amber-700 dark:text-amber-400",icon:<AlertTriangle className="h-3 w-3"/>},
-    error:{cls:"bg-destructive/10 text-destructive",icon:<XCircle className="h-3 w-3"/>},
+    error:{cls:"bg-destructive/10 text-red-700 dark:text-red-400",icon:<XCircle className="h-3 w-3"/>},
     interrupted:{cls:"bg-slate-500/10 text-slate-600 dark:text-slate-400",icon:<PauseCircle className="h-3 w-3"/>},
     cancelled:{cls:"bg-slate-500/10 text-slate-600 dark:text-slate-400",icon:<XIcon className="h-3 w-3"/>},
   };
@@ -387,8 +387,8 @@ function JobRow({job,onRetry,onOverwrite,onCancel}:{job:Job;onRetry:(id:string)=
               {(isError||isDuplicate||isInterrupted)&&<Button size="sm" variant="ghost" className="h-7 px-2" onClick={()=>onRetry(job.id)}><RotateCw className="mr-1 h-3 w-3"/>Retry</Button>}
             </div>
           </div>
-          <div className="mt-2"><Progress value={job.progress} className={`h-1.5 ${isRunning?"animate-pulse":""} ${isError?"[&>div]:bg-destructive":isDuplicate?"[&>div]:bg-amber-500":isInterrupted?"[&>div]:bg-slate-500":isDone?"[&>div]:bg-emerald-500":""}`}/></div>
-          {isDone&&<p className="mt-2 text-xs text-muted-foreground">{job.overwritten?"Overwrote previous upload · ":""}Imported {job.insertedRows} of {job.totalRows??job.insertedRows} rows{job.duplicateRowsSkipped?` · ${job.duplicateRowsSkipped} duplicate rows skipped`:""}{job.failedRows?` · ${job.failedRows} row${job.failedRows===1?"":"s"} failed validation`:""}{job.tableName?<> · stored in <code className="rounded bg-muted px-1">{job.tableName}</code></>:null}</p>}
+          <div className="mt-2"><Progress value={job.progress} aria-label={`${job.name}: ${STATUS_LABEL[job.status]}`} className={`h-1.5 ${isRunning?"animate-pulse":""} ${isError?"[&>div]:bg-destructive":isDuplicate?"[&>div]:bg-amber-500":isInterrupted?"[&>div]:bg-slate-500":isDone?"[&>div]:bg-emerald-500":""}`}/></div>
+          {isDone&&<p className="mt-2 text-xs text-muted-foreground">{job.overwritten?"Overwrote previous upload · ":""}Imported {job.insertedRows} of {job.totalRows??job.insertedRows} rows{job.duplicateRowsSkipped?` · ${job.duplicateRowsSkipped} duplicate rows skipped`:""}{job.failedRows?` · ${job.failedRows} row${job.failedRows===1?"":"s"} failed validation`:""}{job.tableName?<> · stored in <code className="rounded bg-muted px-1 text-foreground">{job.tableName}</code></>:null}</p>}
           {isDuplicate&&<p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{job.duplicateReason==="name"?<>A file named <span className="font-medium">{job.name}</span> is already imported with different contents. Click <span className="font-medium">Overwrite</span> to replace it.</>:<>Already imported{job.existingFileName?<> as <span className="font-medium">"{job.existingFileName}"</span></>:<> previously</>}. Click <span className="font-medium">Overwrite</span> to re-import.</>}</p>}
           {job.status==="cancelled"&&job.cancellationReason&&<p className="mt-2 text-xs text-slate-500">Cancelled: {job.cancellationReason}</p>}
           {isError&&<ErrorPanel job={job} open={detailsOpen} onOpenChange={setDetailsOpen}/>}
@@ -532,7 +532,7 @@ function PreviewDialog({pending,index,onPrev,onNext,onUpdateMapping,onUpdateMode
             {isTe&&(
               <div className="flex flex-1 flex-wrap items-center gap-2">
                 <Select value={targetTable??""} onValueChange={v=>onUpdateTargetTable(index,v)}>
-                  <SelectTrigger className="h-8 w-[220px] text-xs"><SelectValue placeholder="Choose a T&E table…"/></SelectTrigger>
+                  <SelectTrigger className="h-8 w-[220px] text-xs" aria-label="Target T&E table"><SelectValue placeholder="Choose a T&E table…"/></SelectTrigger>
                   <SelectContent>
                     {(teTables??[]).map(t=>(
                       <SelectItem key={t.table} value={t.table} className="text-xs">
@@ -551,7 +551,7 @@ function PreviewDialog({pending,index,onPrev,onNext,onUpdateMapping,onUpdateMode
 
           {isTe?(
             <div className="rounded-md border bg-muted/20 p-4 text-xs text-muted-foreground">
-              <p>T&E mode loads this file's columns directly into <code className="rounded bg-muted px-1">{targetTable||"the selected table"}</code> — no renaming or type overrides. Every CSV column must already exist on that table, or the import is rejected.</p>
+              <p>T&E mode loads this file's columns directly into <code className="rounded bg-muted px-1 text-foreground">{targetTable||"the selected table"}</code> — no renaming or type overrides. Every CSV column must already exist on that table, or the import is rejected.</p>
               <p className="mt-2">Columns in this file: {sanitizeColumns(preview.headers).join(", ")||"—"}</p>
             </div>
           ):(
@@ -585,7 +585,7 @@ function PreviewDialog({pending,index,onPrev,onNext,onUpdateMapping,onUpdateMode
                           </TableCell>
                           <TableCell className="py-1.5">
                             <Select value={col.type} onValueChange={v=>updateMapping(colIdx,{type:v as ColumnType})}>
-                              <SelectTrigger className="h-7 w-[120px] text-xs"><SelectValue/></SelectTrigger>
+                              <SelectTrigger className="h-7 w-[120px] text-xs" aria-label={`Type for column ${orig}`}><SelectValue/></SelectTrigger>
                               <SelectContent>{(["int8","numeric","date","timestamptz","boolean","text"] as ColumnType[]).map(t=><SelectItem key={t} value={t} className="text-xs">{COLUMN_TYPE_LABEL[t]}</SelectItem>)}</SelectContent>
                             </Select>
                           </TableCell>
@@ -647,7 +647,7 @@ function DiffDialog({job,onConfirm,onCancel}:{job:Job|null;onConfirm:()=>void;on
       <DialogContent className="flex max-h-[80vh] w-[95vw] max-w-3xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-amber-500"/>Overwrite confirmation</DialogTitle>
-          <DialogDescription>This will replace the existing data in <code className="rounded bg-muted px-1">{job.tableName}</code>. Here are the first rows currently stored.</DialogDescription>
+          <DialogDescription>This will replace the existing data in <code className="rounded bg-muted px-1 text-foreground">{job.tableName}</code>. Here are the first rows currently stored.</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-auto rounded border">
           {isLoading?<div className="flex items-center justify-center py-8 text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Loading existing rows…</div>:rows.length===0?<p className="p-4 text-sm text-muted-foreground">No rows in this table.</p>:(
@@ -699,7 +699,7 @@ function FilesList({files}:{files:CsvFileSummary[]}){
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span>Rows per page</span>
                 <Select value={String(pageSize)} onValueChange={v=>{setPageSize(Number(v));setPage(1);}}>
-                  <SelectTrigger className="h-8 w-20"><SelectValue/></SelectTrigger>
+                  <SelectTrigger className="h-8 w-20" aria-label="Rows per page"><SelectValue/></SelectTrigger>
                   <SelectContent>{PAGE_SIZE_OPTIONS.map(n=><SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
                 </Select>
               </div>

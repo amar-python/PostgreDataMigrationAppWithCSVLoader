@@ -13,12 +13,21 @@ PY_SRC=(
 )
 
 PY_TESTS=(
-    tests/test_csv_validator.py
-    tests/test_evals_runner.py
-    tests/test_api_unit.py
-    tests/test_api_integration.py
-    tests/test_issue_04_multi_file_upload.py
-    tests/test_issue_05_import_summary.py
+    tests/unit/test_csv_validator.py
+    tests/unit/test_evals_runner.py
+    tests/unit/test_api_unit.py
+    tests/unit/test_csv_parse.py
+    tests/unit/test_config_auth.py
+    tests/unit/test_db_pool.py
+    tests/system/test_system_api.py
+    tests/system_integration/test_api_integration.py
+    tests/system_integration/test_sit_frontend_contract.py
+    tests/performance/test_performance.py
+    tests/accessibility/conftest.py
+    tests/accessibility/test_accessibility.py
+    tests/uat/test_issue_04_multi_file_upload.py
+    tests/uat/test_issue_05_import_summary.py
+    tests/uat/test_uat_user_stories.py
 )
 
 # Collect scripts/*.py dynamically

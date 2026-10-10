@@ -17,7 +17,7 @@ does not block the requirement, not that the feature is visibly complete.
 
 Run::
 
-    python -m pytest tests/test_issue_04_multi_file_upload.py
+    python -m pytest tests/uat/test_issue_04_multi_file_upload.py
 
 Requires a reachable database; per the repository's no-skip policy a missing
 prerequisite FAILS with remediation text rather than skipping.

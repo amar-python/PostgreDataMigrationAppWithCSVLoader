@@ -19,7 +19,7 @@ import pytest
 
 pytestmark = pytest.mark.e2e
 
-ROOT      = Path(__file__).resolve().parents[1]
+ROOT      = Path(__file__).resolve().parents[2]
 VALIDATOR = ROOT / "build" / "csv" / "validator.py"
 RUNNER    = ROOT / "evals" / "runner.py"
 
