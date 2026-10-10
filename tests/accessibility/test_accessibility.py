@@ -23,9 +23,18 @@ PAGES = {
 CSV = b"name,org_type,country\nACME,prime,AU\nBETA,academic,AU\n"
 
 
+def _settle(page):
+    """Wait until no CSS animation/transition is running. Dialogs fade in, and
+    axe measures colour contrast on the current (semi-transparent) frame, so a
+    scan taken mid-animation reports false contrast failures."""
+    page.wait_for_function(
+        "() => document.getAnimations().every(a => a.playState !== 'running')")
+
+
 def _axe(page, context=None):
     from axe_playwright_python.sync_playwright import Axe
 
+    _settle(page)
     options = {"runOnly": {"type": "tag", "values": WCAG_TAGS}}
     return Axe().run(page, context=context, options=options)
 

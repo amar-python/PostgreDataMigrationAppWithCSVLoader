@@ -142,3 +142,15 @@
     color: var(--color-foreground);
   }
 }
+
+/* Sonner "richColors" toasts: the library's light-theme text colours fall below
+   WCAG AA contrast (4.5:1) on their pale backgrounds (success green ~4.3:1,
+   warning orange ~3:1).
+   Darker text, same hues. The extra :root raises specificity above sonner's
+   own [data-sonner-toaster][data-sonner-theme="light"] rule, injected at runtime. */
+:root [data-sonner-toaster][data-sonner-theme="light"] {
+  --success-text: hsl(140, 100%, 24%);
+  --info-text: hsl(210, 92%, 35%);
+  --warning-text: hsl(31, 92%, 28%);
+  --error-text: hsl(360, 100%, 38%);
+}
