@@ -9,7 +9,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-latest-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-76%20vitest%20%7C%20142%20SQL%20assertions-brightgreen)](#test-suite)
+[![Tests](https://img.shields.io/badge/Tests-95%20vitest%20%7C%20142%20SQL%20assertions%20%7C%206%20test%20groups-brightgreen)](#test-suite)
 
 ---
 
@@ -61,7 +61,7 @@ PostgreDataMigrationAppWithCSVLoader/
 │   │   ├── export.ts                 ← CSV / XLSX / PDF export
 │   │   ├── mapping-templates.ts      ← saved column mapping templates
 │   │   └── csv-preview.ts            ← CSV parsing utilities
-│   ├── src/__tests__/                ← 76 vitest tests
+│   ├── src/__tests__/unit/           ← 95 vitest unit tests
 │   ├── .env.local                    ← VITE_API_BASE, VITE_API_KEY (not committed)
 │   └── package.json
 │
@@ -83,12 +83,14 @@ PostgreDataMigrationAppWithCSVLoader/
 │   ├── start-frontend.ps1            ← Terminal 2: Vite on :8080
 │   └── provision_full_test_env.sh    ← one-command DB setup
 │
-├── tests/
-│   ├── test_api_unit.py              ← 12 unit tests (no DB required)
-│   ├── test_api_integration.py       ← 19 integration tests
-│   ├── test_te_loader_integration.py ← 11 T&E mode integration tests
-│   ├── environments/                 ← 4 per-environment contract tests
-│   └── snapshots/                    ← committed CSV test fixtures
+├── tests/                            ← grouped by test category (tests/README.md)
+│   ├── unit/                         ← no DB: parser, config, auth, pool, validator
+│   ├── system/                       ← whole backend through its public API
+│   ├── system_integration/           ← API↔UI contract, API↔DB, env parity
+│   ├── performance/                  ← throughput / latency budgets
+│   ├── accessibility/                ← WCAG 2.1 AA (Playwright + axe-core)
+│   ├── uat/                          ← Given/When/Then user stories
+│   └── suites/, framework/           ← 142-assertion SQL suite (psql)
 │
 ├── env.dev.example                   ← dev environment template
 ├── docs/ENV_VARIABLES.md                  ← all environment variables documented
@@ -184,19 +186,26 @@ Interactive docs: `http://localhost:8000/docs`
 
 ### Python tests
 
+Tests are grouped into unit, system, system integration, performance,
+accessibility and user acceptance tests. See [`tests/README.md`](tests/README.md)
+for what each group covers, and [`docs/TEST_CASES.md`](docs/TEST_CASES.md) for
+the full list of test cases.
+
 ```powershell
 # Unit tests — no database needed (~5 seconds)
 python -m pytest tests\ -m "unit or regression or security or snapshot" -q
 
-# Integration tests — requires running API + provisioned database
-python -m pytest tests\test_api_integration.py -v
-python -m pytest tests\test_te_loader_integration.py -v
+# Need a provisioned dev database ($env:PGDATABASE = "te_mgmt_dev")
+python -m pytest tests\system -v
+python -m pytest tests\system_integration -v
+python -m pytest tests\performance -v
+python -m pytest tests\uat -v
 
-# Per-environment contract tests
-python -m pytest tests\environments\ -v
+# Needs the frontend installed (cd csv-table-hub-main; bun install)
+python -m pytest tests\accessibility -v
 ```
 
-### Frontend tests (76 vitest)
+### Frontend tests (95 vitest)
 
 ```powershell
 cd csv-table-hub-main
@@ -236,7 +245,7 @@ See **`docs/ENV_VARIABLES.md`** for the full reference. Key variables:
 | `PGPASSWORD` | _(empty)_ | PostgreSQL password |
 | `PGDATABASE` | `te_mgmt_dev` | Target database |
 | `API_KEY` | _(empty)_ | Shared secret for `X-API-Key` header (empty = unauthenticated) |
-| `CORS_ORIGINS` | `http://localhost:5173,...` | Allowed frontend origins |
+| `CORS_ORIGINS` | `http://localhost:8080,...` | Allowed frontend origins |
 | `TE_SCHEMA` | `te_dev` | Schema for the 12 T&E tables |
 | `API_ALLOW_DESTRUCTIVE` | `false` | Enable `DELETE /api/csv/files/{id}` |
 
@@ -283,7 +292,7 @@ organisations ──< personnel
 | Connection Limit | 10 | 15 | 25 | 50 |
 | Seed Data | ✅ | ✅ | ❌ | ❌ |
 
-Staging and Prod are **never seeded**. The `tests/environments/` contract tests
+Staging and Prod are **never seeded**. The `tests/system_integration/environments/` contract tests
 verify this automatically.
 
 ---

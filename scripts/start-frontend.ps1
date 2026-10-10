@@ -1,4 +1,4 @@
-# start-frontend.ps1 - Terminal 2: run the React frontend on http://localhost:5173
+# start-frontend.ps1 - Terminal 2: run the React frontend on http://localhost:8080
 # First run installs node_modules automatically.
 
 $ErrorActionPreference = "Stop"
@@ -10,5 +10,5 @@ if (-not (Test-Path "node_modules")) {
     npm install
 }
 
-Write-Host "Frontend starting on http://localhost:5173" -ForegroundColor Green
+Write-Host "Frontend starting on http://localhost:8080" -ForegroundColor Green
 npm run dev

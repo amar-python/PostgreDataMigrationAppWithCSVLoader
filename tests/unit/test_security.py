@@ -14,7 +14,7 @@ import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.security]
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 # ── Python source files to scan ───────────────────────────────────────────────
 PY_SOURCE = [

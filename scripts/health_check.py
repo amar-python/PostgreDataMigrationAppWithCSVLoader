@@ -173,11 +173,15 @@ def check_test_infra() -> None:
     for label, path in files.items():
         _check_file(label, path)
 
-    test_files = list((ROOT / "tests").glob("test_*.py"))
-    if test_files:
-        _pass(f"python test files ({len(test_files)} found)")
-    else:
-        _fail("python test files", "no test_*.py found in tests/")
+    # Tests are grouped by category (see tests/README.md); every group must
+    # exist and hold at least one test module.
+    for group in ("unit", "system", "system_integration", "performance",
+                  "accessibility", "uat"):
+        test_files = list((ROOT / "tests" / group).rglob("test_*.py"))
+        if test_files:
+            _pass(f"tests/{group} ({len(test_files)} test files)")
+        else:
+            _fail(f"tests/{group}", "no test_*.py found")
 
 
 # ── Config template ───────────────────────────────────────────────────────────

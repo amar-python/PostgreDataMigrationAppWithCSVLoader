@@ -4,8 +4,8 @@ On first run, or when UPDATE_SNAPSHOTS=1 is set, the test writes the golden
 file. On subsequent runs it compares the actual output against the stored file
 and fails if they differ.
 
-    UPDATE_SNAPSHOTS=1 pytest -m snapshot tests/test_snapshot.py   # regenerate
-    pytest -m snapshot tests/test_snapshot.py                       # compare
+    UPDATE_SNAPSHOTS=1 pytest -m snapshot tests/unit/test_snapshot.py   # regenerate
+    pytest -m snapshot tests/unit/test_snapshot.py                       # compare
 """
 import os
 import subprocess
@@ -18,7 +18,7 @@ import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.snapshot]
 
-VALIDATOR     = Path(__file__).resolve().parents[1] / "build" / "csv" / "validator.py"
+VALIDATOR     = Path(__file__).resolve().parents[2] / "build" / "csv" / "validator.py"
 SNAPSHOTS_DIR = Path(__file__).resolve().parent / "snapshots"
 UPDATE        = os.environ.get("UPDATE_SNAPSHOTS", "").lower() in ("1", "true", "yes")
 

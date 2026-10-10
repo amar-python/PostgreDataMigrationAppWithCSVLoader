@@ -42,8 +42,8 @@ switch ($Target) {
             "build/csv/validator.py",
             "evals/runner.py",
             "evals/gap_report.py",
-            "tests/test_csv_validator.py",
-            "tests/test_evals_runner.py"
+            "tests/unit/test_csv_validator.py",
+            "tests/unit/test_evals_runner.py"
         )
         $scriptPy = Get-ChildItem scripts/*.py -ErrorAction SilentlyContinue |
             ForEach-Object { $_.FullName }

@@ -21,7 +21,7 @@ import pytest
 
 pytestmark = pytest.mark.integration
 
-ROOT       = Path(__file__).resolve().parents[1]
+ROOT       = Path(__file__).resolve().parents[2]
 LOADER     = ROOT / "build" / "csv_loader.sh"
 UTILISE    = ROOT / "build" / "csv_utilise.sh"
 BUILD_DIR  = ROOT / "build"

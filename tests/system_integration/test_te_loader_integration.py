@@ -13,7 +13,7 @@ remediation text rather than skipping.
 
 Run::
 
-    pytest tests/test_te_loader_integration.py
+    pytest tests/system_integration/test_te_loader_integration.py
 
 Requires a provisioned dev environment:
     bash scripts/provision_full_test_env.sh

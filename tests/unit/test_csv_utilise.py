@@ -15,7 +15,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-SCRIPT = Path(__file__).resolve().parents[1] / "build" / "csv_utilise.sh"
+SCRIPT = Path(__file__).resolve().parents[2] / "build" / "csv_utilise.sh"
 
 
 def _find_bash():

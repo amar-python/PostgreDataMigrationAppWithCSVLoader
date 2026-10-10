@@ -37,7 +37,7 @@ Read by `api/config.py`. Set these in the shell before running
 | `API_MAX_ROWS` | `100000` | No | Maximum data rows accepted per upload. Files over this limit are rejected before any per-row work. |
 | `API_MAX_ROW_ERRORS` | `200` | No | Maximum row errors included in the JSON response body. Summary counts still reflect the true total. |
 | `API_POOL_GETCONN_TIMEOUT` | `5.0` | No | Seconds a request waits to borrow a database connection from the pool. Exceeded = 503 response. |
-| `CORS_ORIGINS` | `http://localhost:5173,http://localhost:3000` | Yes | Comma-separated list of allowed CORS origins. Set to your frontend URL in production. |
+| `CORS_ORIGINS` | `http://localhost:8080,http://localhost:5173,http://localhost:3000` | Yes | Comma-separated list of allowed CORS origins. Set to your frontend URL in production. |
 | `CSV_UPLOADS_SCHEMA` | `csv_uploads` | No | Schema where per-CSV tables and the file registry live. |
 | `TE_SCHEMA` | `te_dev` | No | Schema holding the 12 fixed T&E tables. Switch to `te_test`, `te_staging`, or `te_prod` per environment. |
 | `MAX_UPLOAD_BYTES` | `52428800` (50 MB) | No | Maximum file size accepted by the upload endpoint. |
@@ -61,7 +61,7 @@ the environment SQL templates. Copy `build/config.env.example` to
 
 > **Staging and prod must never be seeded.** The `SEED_STAGING` and `SEED_PROD`
 > variables default to `false`. Changing them to `true` will insert test data
-> into production. The `tests/test_parity.py` contract tests verify this.
+> into production. The `tests/system_integration/test_parity.py` contract tests verify this.
 
 ### Additional build-script variables
 
@@ -134,7 +134,7 @@ Change them by editing the source file directly.
 | `5.0` | `api/config.py` | Default pool connection timeout (seconds) |
 | `52428800` | `api/config.py` | Default max upload size (50 MB) |
 | `8000` | `scripts/start-api.ps1` | API port |
-| `5173` | `api/config.py` (CORS default) | Frontend dev server port |
+| `8080` | `api/config.py` (CORS default) | Frontend dev server port (also allows `5173`, `3000`) |
 | `organisations, personnel, …` | `api/config.py` (TE_TABLES) | The 12 fixed T&E table names |
 
 ---

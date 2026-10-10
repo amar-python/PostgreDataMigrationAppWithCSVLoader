@@ -238,8 +238,8 @@ Per the repository's no-skip policy, the integration group **fails** with
 remediation text when the database is unreachable rather than skipping.
 
 ```bash
-python -m pytest tests/test_api_unit.py -m unit      # no database
-python -m pytest tests/test_api_unit.py tests/test_api_integration.py  # both files
+python -m pytest tests/unit/test_api_unit.py -m unit      # no database
+python -m pytest tests/unit/test_api_unit.py tests/system_integration/test_api_integration.py  # both files
 python scripts/test_report.py --strict                # whole suite
 ```
 
@@ -255,8 +255,8 @@ with remediation text rather than skipping, per the no-skip policy.
 
 ## Also required
 
-CI installs only `requirements-dev.txt`. Because `tests/test_api_unit.py` and
-`tests/test_api_integration.py` import FastAPI at module level, both
+CI installs only `requirements-dev.txt`. Because `tests/unit/test_api_unit.py` and
+`tests/system_integration/test_api_integration.py` import FastAPI at module level, both
 workflows need:
 
 ```yaml

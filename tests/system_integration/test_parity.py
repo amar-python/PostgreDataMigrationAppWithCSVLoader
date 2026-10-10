@@ -17,7 +17,7 @@ import pytest
 
 pytestmark = [pytest.mark.integration, pytest.mark.parity]
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 # Expected minimum seed row counts for the dev environment (from seed data).
 # Adjust these values if the seed SQL is intentionally changed.

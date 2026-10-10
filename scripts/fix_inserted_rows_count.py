@@ -24,7 +24,7 @@ Run from the repository root::
 
 Then verify::
 
-    python -m pytest tests/test_issue_04_multi_file_upload.py
+    python -m pytest tests/uat/test_issue_04_multi_file_upload.py
 """
 from __future__ import annotations
 
@@ -100,8 +100,8 @@ def main() -> int:
     TARGET.write_text(updated, encoding="utf-8")
     print("  rewrote api/services/dynamic_loader.py")
     print("\nNow verify:")
-    print("  python -m pytest tests/test_issue_04_multi_file_upload.py")
-    print("  python -m pytest tests/test_issue_05_import_summary.py")
+    print("  python -m pytest tests/uat/test_issue_04_multi_file_upload.py")
+    print("  python -m pytest tests/uat/test_issue_05_import_summary.py")
     return 0
 
 

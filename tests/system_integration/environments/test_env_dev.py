@@ -1,7 +1,7 @@
 """Contract tests for the dev environment."""
 import unittest
 import pytest
-from tests.environments._contract import EnvironmentContract
+from tests.system_integration.environments._contract import EnvironmentContract
 
 pytestmark = [pytest.mark.integration, pytest.mark.parity]
 
