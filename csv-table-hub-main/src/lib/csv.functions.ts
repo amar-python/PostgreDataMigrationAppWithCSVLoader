@@ -175,7 +175,10 @@ const csvPreviewResultSchema = z.discriminatedUnion("status", [
   }),
   z.object({
     status: z.literal("invalid_structure"),
-    reason: z.enum(["empty", "header_only", "no_columns"]),
+    // "parse_failed" is returned (with a message) when the server-side parser
+    // throws — see the BUG-025 handler in api/routers/csv_routes.py.
+    reason: z.enum(["empty", "header_only", "no_columns", "parse_failed"]),
+    message: z.string().optional(),
   }),
 ]);
 export type CsvPreviewResult = z.infer<typeof csvPreviewResultSchema>;

@@ -16,9 +16,11 @@ class Settings:
     # Schema holding the fixed T&E tables (deploy_all.sh dev creates te_dev).
     TE_SCHEMA: str = os.environ.get("TE_SCHEMA", "te_dev")
 
-    # CORS origins for the frontend dev server.
+    # CORS origins for the frontend dev server. 8080 is the port the Vite dev
+    # server (scripts/start-frontend.ps1) actually listens on; 5173/3000 are
+    # kept for other local setups.
     CORS_ORIGINS: list = os.environ.get(
-        "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
+        "CORS_ORIGINS", "http://localhost:8080,http://localhost:5173,http://localhost:3000"
     ).split(",")
 
     MAX_UPLOAD_BYTES: int = int(os.environ.get("MAX_UPLOAD_BYTES", str(50 * 1024 * 1024)))
