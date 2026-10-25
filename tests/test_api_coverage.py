@@ -122,6 +122,12 @@ class CorsHeaders(unittest.TestCase):
         self.assertEqual(
             r.headers.get("access-control-allow-origin"), "http://localhost:5173")
 
+    def test_default_origins_include_vite_dev_port(self):
+        """Issue #43: the Vite dev server runs on :8080 and must be allowed by default."""
+        r = client.get("/api/health", headers={"Origin": "http://localhost:8080"})
+        self.assertEqual(
+            r.headers.get("access-control-allow-origin"), "http://localhost:8080")
+
     def test_cors_rejects_unconfigured_origin(self):
         r = client.get("/api/health", headers={"Origin": "http://evil.example.com"})
         self.assertNotEqual(
