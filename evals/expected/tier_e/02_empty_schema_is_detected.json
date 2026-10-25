@@ -1,0 +1,7 @@
+{
+  "scenario": "02_empty_schema_is_detected",
+  "description": "Negative control: an empty schema must report 0 tables so the parity eval cannot false-positive on missing deploys.",
+  "expected": {
+    "empty_schema_tables": 0
+  }
+}

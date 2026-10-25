@@ -77,7 +77,8 @@ jobs:
       PGPORT: "5432"
       PGUSER: postgres
       PGPASSWORD: postgres
-      PGDATABASE: postgres
+      PGDATABASE: te_mgmt_dev
+      API_ALLOW_DESTRUCTIVE: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -138,14 +139,17 @@ jobs:
             fi
           done
 
-      - name: Evals — Tiers P, I, S
-        run: python3 evals/runner.py --tiers p,i,s --verbose
-
       - name: Deploy all environments (for cross-env parity)
         run: |
           for env in dev test staging prod; do
             bash build/deploy_all.sh "$env"
           done
+
+      - name: Evals — Tiers X, E (post-deploy, before test artifacts)
+        run: python3 evals/runner.py --tiers x,e --verbose
+
+      - name: Evals — Tiers P, I, S
+        run: python3 evals/runner.py --tiers p,i,s --verbose
 
       # Prints a final block accounting for every test: PASSED / FAILED /
       # ERROR / SKIPPED (with reasons) / NOT RUN (deselected). --strict fails

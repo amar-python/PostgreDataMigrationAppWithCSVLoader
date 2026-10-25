@@ -1,0 +1,8 @@
+{
+  "scenario": "01_csv_round_trip_postgresql",
+  "description": "Load sample CSVs into PostgreSQL, export back, and diff data columns against originals.",
+  "expected": {
+    "all_round_trips_match": true,
+    "min_csvs_tested": 3
+  }
+}

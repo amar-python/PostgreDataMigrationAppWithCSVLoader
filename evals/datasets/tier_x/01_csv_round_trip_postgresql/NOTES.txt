@@ -1,0 +1,11 @@
+Tier X — CSV round-trip through PostgreSQL.
+
+Loads each sample CSV (build/csv/samples/*.csv) into the dev database via
+csv_loader.sh, exports it back via csv_utilise.sh export, and diffs the
+data columns against the original.  Marker columns (_csv_row_id, _loaded_at)
+are excluded from the diff.
+
+Proves that the loader → DB → export pipeline preserves data fidelity for
+arbitrary CSV shapes.
+
+Requires: PostgreSQL reachable via psql, config.local.env present.

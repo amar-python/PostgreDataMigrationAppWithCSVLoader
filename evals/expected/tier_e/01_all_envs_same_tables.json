@@ -1,0 +1,9 @@
+{
+  "scenario": "01_all_envs_same_tables",
+  "description": "All four environments must have identical table structure (names, columns, types).",
+  "expected": {
+    "all_envs_match": true,
+    "min_envs_compared": 4,
+    "min_tables_checked": 12
+  }
+}

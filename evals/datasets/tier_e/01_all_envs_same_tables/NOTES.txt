@@ -1,0 +1,10 @@
+Tier E — Cross-environment structural parity.
+
+After all four environments (dev, test, staging, prod) have been deployed,
+their te_core_schema tables must be structurally identical: same table names,
+same column names, same column types, same column order.
+
+This scenario queries information_schema.columns for each environment and
+asserts the structural fingerprints match.
+
+Requires: PostgreSQL reachable, all four environment databases deployed.

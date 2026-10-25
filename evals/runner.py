@@ -34,6 +34,9 @@ from typing import Any, Dict, List, Optional
 EVALS_DIR    = Path(__file__).resolve().parent
 PROJECT_ROOT = EVALS_DIR.parent
 VALIDATOR    = PROJECT_ROOT / "build" / "csv" / "validator.py"
+CSV_LOADER   = PROJECT_ROOT / "build" / "csv_loader.sh"
+CSV_UTILISE  = PROJECT_ROOT / "build" / "csv_utilise.sh"
+SAMPLES_DIR  = PROJECT_ROOT / "build" / "csv" / "samples"
 
 DATASETS_DIR = EVALS_DIR / "datasets"
 EXPECTED_DIR = EVALS_DIR / "expected"
@@ -542,12 +545,416 @@ def _run_fresh_deploy_then_tests(
 
 
 # ---------------------------------------------------------------------------
+# Tier X — CSV round-trip (load → export → diff)
+
+_ENV_CONFIG = {
+    "dev":     ("te_mgmt_dev",     "te_dev"),
+    "test":    ("te_mgmt_test",    "te_test"),
+    "staging": ("te_mgmt_staging", "te_staging"),
+    "prod":    ("te_mgmt_prod",    "te_prod"),
+}
+
+_REQUIRED_TABLES = [
+    "organisations", "personnel", "test_programs", "temp_documents",
+    "test_phases", "requirements", "test_cases", "vcrm_entries",
+    "test_events", "test_results", "defect_reports", "evidence_artifacts",
+]
+
+
+def _find_bash() -> Optional[str]:
+    if sys.platform == "win32":
+        for c in (r"C:\Program Files\Git\bin\bash.exe",
+                  r"C:\Program Files (x86)\Git\bin\bash.exe"):
+            if Path(c).exists():
+                return c
+        which = shutil.which("bash")
+        if which and "system32" not in which.lower():
+            return which
+        return None
+    return shutil.which("bash") or "bash"
+
+
+def _round_trip_one_csv(
+    csv_path: Path, bash: str, env: Dict[str, str]
+) -> Dict[str, Any]:
+    """Load a CSV into dev, export it, compare data columns."""
+    table_name = csv_path.stem.lower().replace(" ", "_").replace("-", "_")
+    result: Dict[str, Any] = {"csv": csv_path.name, "table": table_name}
+
+    load = subprocess.run(
+        [bash, str(CSV_LOADER), str(csv_path), "--env", "dev"],
+        capture_output=True, text=True, cwd=PROJECT_ROOT,
+        env=env, timeout=60,
+    )
+    if load.returncode != 0:
+        result["error"] = "loader failed: " + load.stderr[-300:]
+        return result
+
+    with tempfile.NamedTemporaryFile(
+        suffix=".csv", delete=False, mode="w"
+    ) as tmp:
+        export_path = tmp.name
+
+    try:
+        export = subprocess.run(
+            [bash, str(CSV_UTILISE), "export", table_name, export_path,
+             "--env", "dev"],
+            capture_output=True, text=True, cwd=PROJECT_ROOT,
+            env=env, timeout=30,
+        )
+        if export.returncode != 0:
+            result["error"] = "export failed: " + export.stderr[-300:]
+            return result
+
+        original_rows = _read_csv_rows(csv_path)
+        exported_rows = _read_csv_rows(Path(export_path))
+
+        if not exported_rows:
+            result["error"] = "exported CSV is empty"
+            return result
+
+        exported_header = exported_rows[0]
+        orig_header = original_rows[0] if original_rows else []
+
+        orig_col_names = [h.strip().lower().replace(" ", "_") for h in orig_header]
+        marker_indices = set()
+        data_indices = []
+        for i, col in enumerate(exported_header):
+            if col in ("_csv_row_id", "_loaded_at"):
+                marker_indices.add(i)
+            else:
+                data_indices.append(i)
+
+        exported_data_header = [exported_header[i] for i in data_indices]
+        if exported_data_header != orig_col_names:
+            result["error"] = (
+                "column name mismatch: original=" + str(orig_col_names)
+                + " exported=" + str(exported_data_header)
+            )
+            return result
+
+        orig_data = [row for row in original_rows[1:]]
+        exported_data = [
+            [row[i] for i in data_indices]
+            for row in exported_rows[1:]
+        ]
+
+        if len(orig_data) != len(exported_data):
+            result["error"] = (
+                "row count mismatch: original=" + str(len(orig_data))
+                + " exported=" + str(len(exported_data))
+            )
+            return result
+
+        mismatches = []
+        for row_idx, (orig_row, exp_row) in enumerate(
+            zip(orig_data, exported_data)
+        ):
+            if orig_row != exp_row:
+                mismatches.append({
+                    "row": row_idx + 1,
+                    "original": orig_row,
+                    "exported": exp_row,
+                })
+        if mismatches:
+            result["error"] = "data mismatch in " + str(len(mismatches)) + " row(s)"
+            result["mismatches"] = mismatches[:5]
+            return result
+
+        result["match"] = True
+        result["rows_compared"] = len(orig_data)
+    finally:
+        subprocess.run(
+            [bash, str(CSV_UTILISE), "drop", table_name, "--yes", "--env", "dev"],
+            capture_output=True, text=True, cwd=PROJECT_ROOT,
+            env=env, timeout=15,
+        )
+        try:
+            os.unlink(export_path)
+        except OSError:
+            pass
+
+    return result
+
+
+def run_tier_x_scenario(scenario_dir: Path) -> ScenarioResult:
+    name   = scenario_dir.name
+    result = ScenarioResult(tier="x", name=name)
+
+    expected = _load_expected("x", name)
+    if expected is None:
+        result.errors.append("No expected file at expected/tier_x/" + name + ".json")
+        return result
+    result.expected = expected
+
+    if not _can_connect_pg():
+        result.errors.append(
+            "PostgreSQL not reachable via psql — needed for round-trip eval."
+        )
+        return result
+
+    bash = _find_bash()
+    if bash is None:
+        result.errors.append("No working bash found.")
+        return result
+
+    if name == "01_csv_round_trip_postgresql":
+        return _run_csv_round_trip(result, expected, bash)
+
+    result.errors.append("Unknown tier-X scenario: " + name)
+    return result
+
+
+def _run_csv_round_trip(
+    result: ScenarioResult, expected: Dict[str, Any], bash: str
+) -> ScenarioResult:
+    sample_csvs = sorted(SAMPLES_DIR.glob("*.csv"))
+    if not sample_csvs:
+        result.errors.append("No sample CSVs in " + str(SAMPLES_DIR))
+        return result
+
+    env = _pg_env()
+    trip_results = []
+    for csv_path in sample_csvs:
+        trip = _round_trip_one_csv(csv_path, bash, env)
+        trip_results.append(trip)
+
+    actual = {
+        "csvs_tested": len(trip_results),
+        "all_round_trips_match": all(t.get("match") for t in trip_results),
+        "details": trip_results,
+    }
+    result.actual = actual
+
+    exp = expected.get("expected", {})
+    errors: List[str] = []
+
+    if exp.get("all_round_trips_match") and not actual["all_round_trips_match"]:
+        failed = [t for t in trip_results if not t.get("match")]
+        for t in failed:
+            errors.append(t["csv"] + ": " + t.get("error", "unknown failure"))
+
+    min_csvs = exp.get("min_csvs_tested", 0)
+    if actual["csvs_tested"] < min_csvs:
+        errors.append(
+            "csvs_tested: expected >= " + str(min_csvs)
+            + ", got " + str(actual["csvs_tested"])
+        )
+
+    result.errors = errors
+    result.passed = not errors
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Tier E — Cross-environment structural parity
+
+
+def _get_schema_fingerprint(
+    db: str, schema: str
+) -> Optional[List[Dict[str, str]]]:
+    # schema comes from the hardcoded _ENV_CONFIG constant — not injectable
+    query = (
+        "SELECT table_name, column_name, data_type, ordinal_position "
+        "FROM information_schema.columns "
+        "WHERE table_schema = '" + schema + "' "  # nosec B608
+        "ORDER BY table_name, ordinal_position;"
+    )
+    r = subprocess.run(
+        ["psql", "-tA", "-F", "|", "-d", db, "-c", query],
+        env=_pg_env(), capture_output=True, text=True, timeout=10,
+    )
+    if r.returncode != 0:
+        return None
+    rows = []
+    for line in r.stdout.strip().splitlines():
+        parts = line.split("|")
+        if len(parts) >= 4:
+            rows.append({
+                "table": parts[0],
+                "column": parts[1],
+                "type": parts[2],
+                "position": parts[3],
+            })
+    return rows
+
+
+def run_tier_e_scenario(scenario_dir: Path) -> ScenarioResult:
+    name   = scenario_dir.name
+    result = ScenarioResult(tier="e", name=name)
+
+    expected = _load_expected("e", name)
+    if expected is None:
+        result.errors.append("No expected file at expected/tier_e/" + name + ".json")
+        return result
+    result.expected = expected
+
+    if not _can_connect_pg():
+        result.errors.append(
+            "PostgreSQL not reachable via psql — needed for cross-env parity eval."
+        )
+        return result
+
+    if name == "01_all_envs_same_tables":
+        return _run_all_envs_same_tables(result, expected)
+
+    if name == "02_empty_schema_is_detected":
+        return _run_empty_schema_negative_control(result, expected)
+
+    result.errors.append("Unknown tier-E scenario: " + name)
+    return result
+
+
+def _run_all_envs_same_tables(
+    result: ScenarioResult, expected: Dict[str, Any]
+) -> ScenarioResult:
+    fingerprints: Dict[str, Optional[List[Dict[str, str]]]] = {}
+    for env_name, (db, schema) in _ENV_CONFIG.items():
+        fingerprints[env_name] = _get_schema_fingerprint(db, schema)
+
+    available = {k: v for k, v in fingerprints.items() if v is not None}
+    unavailable = [k for k, v in fingerprints.items() if v is None]
+
+    tables_per_env = {}
+    for env_name, cols in available.items():
+        tables_per_env[env_name] = sorted(set(c["table"] for c in cols))
+
+    ref_env = "dev" if "dev" in available else next(iter(available), None)
+
+    actual: Dict[str, Any] = {
+        "envs_compared": len(available),
+        "envs_unavailable": unavailable,
+        "tables_per_env": {k: len(v) for k, v in tables_per_env.items()},
+    }
+
+    errors: List[str] = []
+    exp = expected.get("expected", {})
+
+    if not ref_env:
+        errors.append("No environments reachable.")
+        result.actual = actual
+        result.errors = errors
+        return result
+
+    ref_fingerprint = available[ref_env]
+    ref_tables = tables_per_env[ref_env]
+
+    def _cols_for_table(fp: List[Dict[str, str]], tbl: str) -> List[Dict[str, str]]:
+        return [c for c in fp if c["table"] == tbl]
+
+    all_match = True
+    diffs: List[str] = []
+    for env_name, fp in available.items():
+        if env_name == ref_env:
+            continue
+        env_tables = tables_per_env[env_name]
+        missing_in_env = set(ref_tables) - set(env_tables)
+        extra_in_env = set(env_tables) - set(ref_tables)
+        if missing_in_env:
+            all_match = False
+            diffs.append(
+                env_name + " missing tables vs " + ref_env + ": "
+                + ", ".join(sorted(missing_in_env))
+            )
+        if extra_in_env:
+            all_match = False
+            diffs.append(
+                env_name + " has extra tables vs " + ref_env + ": "
+                + ", ".join(sorted(extra_in_env))
+            )
+        for tbl in set(ref_tables) & set(env_tables):
+            ref_cols = _cols_for_table(ref_fingerprint, tbl)
+            env_cols = _cols_for_table(fp, tbl)
+            if ref_cols != env_cols:
+                all_match = False
+                diffs.append(
+                    env_name + "." + tbl + " columns differ from "
+                    + ref_env + "." + tbl
+                )
+
+    actual["all_envs_match"] = all_match
+    actual["diffs"] = diffs
+    actual["tables_checked"] = len(ref_tables)
+    result.actual = actual
+
+    if exp.get("all_envs_match") and not all_match:
+        for d in diffs:
+            errors.append(d)
+
+    min_envs = exp.get("min_envs_compared", 0)
+    if len(available) < min_envs:
+        errors.append(
+            "envs_compared: expected >= " + str(min_envs)
+            + ", got " + str(len(available))
+        )
+
+    min_tables = exp.get("min_tables_checked", 0)
+    if actual["tables_checked"] < min_tables:
+        errors.append(
+            "tables_checked: expected >= " + str(min_tables)
+            + ", got " + str(actual["tables_checked"])
+        )
+
+    result.errors = errors
+    result.passed = not errors
+    return result
+
+
+def _run_empty_schema_negative_control(
+    result: ScenarioResult, expected: Dict[str, Any]
+) -> ScenarioResult:
+    """Negative control: an empty schema must yield 0 tables from the
+    fingerprint query, proving the parity eval would catch a silent
+    deploy failure."""
+    db = "te_mgmt_dev"
+    schema = "_te_empty_neg_ctrl"
+    exp = expected.get("expected", {})
+    errors: List[str] = []
+
+    try:
+        subprocess.run(
+            ["psql", "-d", db, "-v", "ON_ERROR_STOP=1",
+             "-c", "CREATE SCHEMA IF NOT EXISTS \"" + schema + "\""],
+            env=_pg_env(), capture_output=True, text=True, timeout=10, check=True,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        result.errors = ["Failed to create empty schema: " + str(exc)]
+        return result
+
+    try:
+        fp = _get_schema_fingerprint(db, schema)
+        if fp is None:
+            errors.append("psql returned non-zero for the empty schema query")
+        else:
+            table_count = len(set(r["table"] for r in fp))
+            result.actual = {"empty_schema_tables": table_count}
+            expected_count = exp.get("empty_schema_tables", 0)
+            if table_count != expected_count:
+                errors.append(
+                    "empty_schema_tables: expected "
+                    + str(expected_count) + ", got " + str(table_count)
+                )
+    finally:
+        subprocess.run(
+            ["psql", "-d", db, "-c",
+             "DROP SCHEMA IF EXISTS \"" + schema + "\" CASCADE"],
+            env=_pg_env(), capture_output=True, text=True, timeout=10,
+        )
+
+    result.errors = errors
+    result.passed = not errors
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 
 TIER_RUNNERS = {
     "p": run_tier_p_scenario,
     "i": run_tier_i_scenario,
     "s": run_tier_s_scenario,
+    "x": run_tier_x_scenario,
+    "e": run_tier_e_scenario,
 }
 
 

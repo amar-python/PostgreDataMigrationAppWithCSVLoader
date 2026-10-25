@@ -1,0 +1,3 @@
+Negative control: verify that _get_schema_fingerprint returns zero tables
+for an empty schema, so 01_all_envs_same_tables would correctly fail if a
+deploy silently wrote nothing.
