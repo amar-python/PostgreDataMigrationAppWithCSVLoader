@@ -6,10 +6,50 @@
 
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17%2B-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-latest-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.140%E2%80%930.141-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-76%20vitest%20%7C%20142%20SQL%20assertions-brightgreen)](#test-suite)
+[![Tests](https://img.shields.io/badge/Tests-95%20vitest%20%7C%20142%20SQL%20assertions-brightgreen)](#test-suite)
+
+---
+
+## Status
+
+- Actively developed by a single maintainer.
+- PostgreSQL is the only supported engine for now. The other five engine
+  adapters in `build/adapters/` are kept but not maintained
+  ([ADR-0001](docs/adr/0001-postgresql-first.md)).
+- CI (`.github/workflows/quality-gate.yml`) runs on every push to `main` and on pull requests:
+  unit tests, lint and Tier P evals, plus an integration job that deploys all
+  four environments to PostgreSQL 16 and runs eval Tiers P, I, S and E and the
+  full pytest suite.
+- Requirement-by-requirement verification status is in [`docs/VCRM.md`](docs/VCRM.md).
+
+## Known Limitations
+
+- **Engines:** six-engine support (BR-02) is deferred by decision. Tier X
+  cross-engine evals run on demand only (`make evals-engines`).
+- **Scale:** performance at ≥ 1 M rows (BR-22) and cross-engine equivalence
+  (BR-21) are deferred and untested.
+- **Audit timing:** the upload audit row is written after the load commits.
+  A crash in that window leaves a loaded table with no audit row.
+- **Authentication:** a single shared API key, optional in `dev`. The API
+  refuses to start outside `dev` without `API_KEY`. Per-user roles are not
+  built yet.
+- **Rate limiting:** in-process only, so it suits a single API instance.
+- **Frontend audit page:** shows this browser's local import history, not the
+  server audit log (see the naming note under Frontend Features).
+- **Offline install:** no documented air-gapped install procedure yet.
+
+## For Reviewers
+
+| To check | Look at |
+|---|---|
+| Requirements traced to tests | [`docs/VCRM.md`](docs/VCRM.md) |
+| Why things are the way they are | [`docs/adr/`](docs/adr/) and [`DECISIONS/`](DECISIONS/) |
+| Eval scenarios and expected outcomes | `evals/datasets/` and `evals/expected/` |
+| SQL assertion suites | `tests/suites/` |
+| What CI actually runs | `.github/workflows/quality-gate.yml` and the Actions tab |
 
 ---
 
@@ -61,7 +101,7 @@ PostgreDataMigrationAppWithCSVLoader/
 │   │   ├── export.ts                 ← CSV / XLSX / PDF export
 │   │   ├── mapping-templates.ts      ← saved column mapping templates
 │   │   └── csv-preview.ts            ← CSV parsing utilities
-│   ├── src/__tests__/                ← 76 vitest tests
+│   ├── src/__tests__/                ← 95 vitest tests
 │   ├── .env.local                    ← VITE_API_BASE, VITE_API_KEY (not committed)
 │   └── package.json
 │
@@ -118,8 +158,12 @@ Get-Content env.dev.example | ForEach-Object {
     }
 }
 
-# 4. Provision dev database (Git Bash)
-& "C:\Program Files\Git\bin\bash.exe" -c "PGUSER=postgres PGHOST=localhost PGPORT=5433 PGPASSWORD=changeme_local_only bash scripts/provision_full_test_env.sh"
+# 4. Provision dev database. Needs bash on PATH; on Windows make sure it is
+#    Git Bash, not the WSL bash.exe in System32.
+#    Replace REPLACE_ME with your local postgres password. If 5432 is taken
+#    by another PostgreSQL instance, use the port your target instance uses.
+#    See env.dev.example for the configuration template.
+bash -c "PGUSER=postgres PGHOST=localhost PGPORT=5432 PGPASSWORD=REPLACE_ME bash scripts/provision_full_test_env.sh"
 
 # 5. Terminal 1 — start the API
 .\scripts\start-api.ps1
@@ -143,7 +187,7 @@ Start-Process "http://localhost:8080"
 | `GET` | `/api/csv/files` | List all uploaded CSVs |
 | `GET` | `/api/csv/tables/{name}/rows` | Preview rows of a dynamic table |
 | `DELETE` | `/api/csv/files/{id}` | Drop a dynamic table (requires `API_ALLOW_DESTRUCTIVE=true`) |
-| `GET` | `/api/audit/log` | Paginated deletion history (who/what/when was dropped) — not currently called by the shipped frontend, see note below |
+| `GET` | `/api/audit/log` | Paginated audit trail of uploads and deletions (action, file, table, mode, time) — not currently called by the shipped frontend, see note below |
 | `GET` | `/api/te/tables` | Existence + row counts for the 12 fixed T&E tables |
 
 Interactive docs: `http://localhost:8000/docs`
@@ -155,7 +199,7 @@ Interactive docs: `http://localhost:8000/docs`
 > **Naming note:** the "audit log" features below (`/audit` route, `audit.tsx`)
 > operate on **this browser's local import history** (`localStorage`, populated
 > as you run imports in this session) — not the backend's `GET /api/audit/log`
-> endpoint (server-side deletion history), which the shipped frontend never
+> endpoint (server-side upload and deletion history), which the shipped frontend never
 > calls. `audit.tsx` also renders a small, separate, hardcoded developer
 > changelog widget (`src/lib/audit-log.ts`) alongside the import-history view;
 > that's app release notes, unrelated to either audit trail above. Three
@@ -196,7 +240,7 @@ python -m pytest tests\test_te_loader_integration.py -v
 python -m pytest tests\environments\ -v
 ```
 
-### Frontend tests (76 vitest)
+### Frontend tests (95 vitest)
 
 ```powershell
 cd csv-table-hub-main
@@ -206,13 +250,13 @@ npm test
 ### SQL assertion suite (142 assertions)
 
 ```powershell
-& "C:\Program Files\Git\bin\bash.exe" -c "bash tests/run_tests.sh dev"
+bash tests/run_tests.sh dev
 ```
 
 ### Eval suite
 
 ```powershell
-python evals\runner.py --tiers p,i,s   # 25 scenarios, all should pass
+python evals\runner.py --tiers p,i,s,e   # 26 scenarios: Tier P 23, I 1, S 1, E 1
 ```
 
 ### CI
@@ -232,7 +276,7 @@ See **`docs/ENV_VARIABLES.md`** for the full reference. Key variables:
 | Variable | Default | Description |
 |---|---|---|
 | `PGHOST` | `localhost` | PostgreSQL host |
-| `PGPORT` | `5432` | PostgreSQL port (`5433` on this machine — PG 18) |
+| `PGPORT` | `5432` | PostgreSQL port. Set it to your instance's port if 5432 is taken |
 | `PGPASSWORD` | _(empty)_ | PostgreSQL password |
 | `PGDATABASE` | `te_mgmt_dev` | Target database |
 | `API_KEY` | _(empty)_ | Shared secret for `X-API-Key` header (empty = unauthenticated) |
@@ -291,9 +335,11 @@ verify this automatically.
 ## Azure Deployment
 
 See `docs/AZURE_DEPLOY.md` and `infra/` for full deployment instructions. The API
-and frontend run as separate Azure Container Apps in the same environment. The
-PostgreSQL Container App has `external_enabled = false` so the database is not
-publicly reachable.
+and frontend run as separate Azure Container Apps in the same environment.
+Dev (`infra/terraform`) runs PostgreSQL as a Container App with
+`external_enabled = false`, so the database is not publicly reachable. Test,
+staging and prod (`infra/terraform-test`, `-staging`, `-prod`) use Azure
+Database for PostgreSQL Flexible Server.
 
 ---
 
