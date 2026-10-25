@@ -699,19 +699,10 @@ def _run_envs_have_identical_structure(
             signatures[env_name] = {}
             query_errors.append("env " + env_name + ": " + str(exc))
 
-    # Tables the SQL test harness creates in the schema it tests (Tier S runs
-    # tests/framework/test_framework.sql in te_dev). Not deployed schema, so
-    # not drift. Listed in the expectation file, never silently.
-    ignored = set(expected.get("ignore_tables", []))
-    for sig in signatures.values():
-        for table in ignored:
-            sig.pop(table, None)
-
     table_counts = {e: len(sig) for e, sig in signatures.items()}
     result.actual = {
         "deploys": deploys,
         "table_counts": table_counts,
-        "ignored_tables": sorted(ignored),
     }
 
     # A failed query is not an empty schema; report it as what it is.

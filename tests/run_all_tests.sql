@@ -32,11 +32,17 @@
 
 -- ── Step 1: Load the test framework (results table + assertion functions) ─────
 
--- Set search_path so framework objects and assertions resolve without schema prefix.
+-- The harness keeps its own objects (test_run_results, assert_*, report_*) in
+-- te_test_harness so they never land in the schema under test, where Tier E
+-- would see them as drift (issue #45). It comes first on search_path, so the
+-- framework's unqualified CREATEs go there; T&E tables still resolve unqualified
+-- from the env schema, and the suites address it via te.schema_name anyway.
+CREATE SCHEMA IF NOT EXISTS te_test_harness;
+
 -- Expose per-env vars via current_setting() for PL/pgSQL DO blocks (:'var' doesn't
 -- substitute inside $dollar-quoted$ strings in psql 18).
 SELECT
-   set_config('search_path',    :'schema_name' || ',public', false),
+   set_config('search_path',    'te_test_harness,' || :'schema_name' || ',public', false),
    set_config('te.schema_name', :'schema_name',              false),
    set_config('te.app_user',    :'app_user',                 false),
    set_config('te.conn_limit',  :'conn_limit',               false);
@@ -70,7 +76,7 @@ SELECT
    skipped,
    pass_rate,
    suite_status
-FROM :"schema_name".report_suite_summary();
+FROM te_test_harness.report_suite_summary();
 
 \echo ''
 \echo '============================================================'
@@ -83,7 +89,7 @@ SELECT
    expected,
    actual,
    message
-FROM :"schema_name".report_failures();
+FROM te_test_harness.report_failures();
 
 \echo ''
 \echo '============================================================'
@@ -97,7 +103,7 @@ SELECT
    expected,
    actual,
    message
-FROM :"schema_name".report_detail();
+FROM te_test_harness.report_detail();
 
 \echo ''
 \echo '============================================================'
@@ -111,7 +117,7 @@ SELECT
    skipped,
    pass_rate,
    overall
-FROM :"schema_name".report_totals();
+FROM te_test_harness.report_totals();
 
 \echo ''
 \echo '============================================================'

@@ -118,18 +118,6 @@ class TierEColumnSignatureQuery(unittest.TestCase):
         self.assertTrue(any("schema query" in e and "syntax error" in e
                             for e in result.errors), result.errors)
 
-    def test_only_listed_harness_tables_are_ignored(self):
-        two = subprocess.CompletedProcess(
-            [], 0, stdout="test_run_results|id|bigint|NO\nstray|id|bigint|NO\n", stderr="")
-        expected = {"expected": {"min_tables_per_env": 1},
-                    "envs_under_test": ["dev"], "ignore_tables": ["test_run_results"]}
-        result = runner.ScenarioResult(tier="e", name="t")
-        with patch.object(runner, "_deploy_env",
-                          return_value={"env": "dev", "exit_code": 0}), \
-             patch.object(runner.subprocess, "run", return_value=two):
-            runner._run_envs_have_identical_structure(result, expected)
-        self.assertEqual(result.actual["table_counts"], {"dev": 1})
-
     def test_genuinely_empty_schema_still_fails(self):
         empty = subprocess.CompletedProcess([], 0, stdout="", stderr="")
         result, _ = self._scenario(empty)

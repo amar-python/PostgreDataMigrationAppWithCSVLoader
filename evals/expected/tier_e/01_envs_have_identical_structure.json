@@ -3,8 +3,6 @@
   "description": "Deploy all four environments and assert their deployed schemas are structurally identical; only the database/schema namespace may differ. Closes VCRM BR-01.",
   "envs_under_test": ["dev", "test", "staging", "prod"],
   "reference_env": "dev",
-  "ignore_tables": ["test_run_results"],
-  "ignore_tables_reason": "Created in te_dev by tests/framework/test_framework.sql when Tier S runs; test-harness state, not deployed schema.",
   "expected": {
     "all_envs_deploy_exit_zero": true,
     "column_signature_identical_across_envs": true,
