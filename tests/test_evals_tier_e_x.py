@@ -9,8 +9,10 @@ ones: each asserts that a specific kind of drift is actually caught.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import pytest
@@ -81,6 +83,47 @@ class TierEDiffSignatures(unittest.TestCase):
         # environments" is not what is actually deployed.
         self.assertEqual(len({e[1] for e in runner.ENV_TARGETS}), 4)
         self.assertEqual(len({e[2] for e in runner.ENV_TARGETS}), 4)
+
+
+@pytest.mark.unit
+class TierEColumnSignatureQuery(unittest.TestCase):
+    """Issue #45: the schema query itself, not just the comparison.
+
+    psql never interpolates :'var' inside -c, so the query must go on stdin, and
+    a failed query must not be reported as an empty schema.
+    """
+
+    def _scenario(self, completed):
+        expected = {"expected": {"min_tables_per_env": 12},
+                    "envs_under_test": ["dev"]}
+        result = runner.ScenarioResult(tier="e", name="t")
+        with patch.object(runner, "_deploy_env",
+                          return_value={"env": "dev", "exit_code": 0}), \
+             patch.object(runner.subprocess, "run", return_value=completed) as run:
+            runner._run_envs_have_identical_structure(result, expected)
+        return result, run
+
+    def test_query_is_sent_on_stdin_not_via_dash_c(self):
+        ok = subprocess.CompletedProcess([], 0, stdout="t|c|text|NO\n", stderr="")
+        _, run = self._scenario(ok)
+        args, kwargs = run.call_args
+        self.assertNotIn("-c", args[0])
+        self.assertIn(":'sch'", kwargs["input"])
+
+    def test_query_failure_is_reported_as_a_query_error(self):
+        bad = subprocess.CompletedProcess([], 1, stdout="",
+                                          stderr='ERROR:  syntax error at or near ":"')
+        result, _ = self._scenario(bad)
+        self.assertFalse(result.passed)
+        self.assertTrue(any("schema query" in e and "syntax error" in e
+                            for e in result.errors), result.errors)
+
+    def test_genuinely_empty_schema_still_fails(self):
+        empty = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+        result, _ = self._scenario(empty)
+        self.assertFalse(result.passed)
+        self.assertIn("env dev has 0 tables in its schema, expected >= 12 "
+                      "(deploy may have partially failed)", result.errors)
 
 
 @pytest.mark.unit

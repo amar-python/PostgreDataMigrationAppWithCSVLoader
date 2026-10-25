@@ -596,8 +596,9 @@ def _column_signature(db: str, schema: str) -> Dict[str, List[str]]:
     different namespaces compare equal when their structure matches.
     """
     # The schema name is bound by psql via --set + :'sch' rather than pasted into
-    # the SQL text, so there is no string interpolation to reason about even
-    # though the value comes from the ENV_TARGETS constant.
+    # the SQL text. psql only interpolates variables in SQL it reads from a file
+    # or stdin, never in -c, so the query goes on stdin (issue #45: under -c it
+    # was a syntax error that this function used to report as "0 tables").
     query = (
         "SELECT table_name, column_name, data_type, is_nullable "
         "FROM information_schema.columns "
@@ -605,11 +606,12 @@ def _column_signature(db: str, schema: str) -> Dict[str, List[str]]:
         "ORDER BY table_name, ordinal_position"
     )
     r = subprocess.run(
-        ["psql", "-tA", "-d", db, "--set=sch=" + schema, "-c", query],
-        env=_pg_env(), capture_output=True, text=True, timeout=30,
+        ["psql", "-tA", "-v", "ON_ERROR_STOP=1", "-d", db, "--set=sch=" + schema],
+        input=query, env=_pg_env(), capture_output=True, text=True, timeout=30,
     )
     if r.returncode != 0:
-        return {}
+        raise RuntimeError("schema query on " + db + "." + schema + " failed: "
+                           + r.stderr.strip()[-300:])
     sig: Dict[str, List[str]] = {}
     for line in r.stdout.splitlines():
         parts = line.split("|")
@@ -689,8 +691,13 @@ def _run_envs_have_identical_structure(
 
     deploys = [_deploy_env(env_name) for env_name, _, _ in targets]
     signatures: Dict[str, Dict[str, List[str]]] = {}
+    query_errors: List[str] = []
     for env_name, db, schema in targets:
-        signatures[env_name] = _column_signature(db, schema)
+        try:
+            signatures[env_name] = _column_signature(db, schema)
+        except RuntimeError as exc:
+            signatures[env_name] = {}
+            query_errors.append("env " + env_name + ": " + str(exc))
 
     table_counts = {e: len(sig) for e, sig in signatures.items()}
     result.actual = {
@@ -698,7 +705,8 @@ def _run_envs_have_identical_structure(
         "table_counts": table_counts,
     }
 
-    errors: List[str] = []
+    # A failed query is not an empty schema; report it as what it is.
+    errors: List[str] = list(query_errors)
 
     if exp.get("all_envs_deploy_exit_zero") is True:
         for d in deploys:

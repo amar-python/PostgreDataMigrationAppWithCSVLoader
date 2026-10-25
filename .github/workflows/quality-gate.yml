@@ -158,7 +158,11 @@ jobs:
       # Prints a final block accounting for every test: PASSED / FAILED /
       # ERROR / SKIPPED (with reasons) / NOT RUN (deselected). --strict fails
       # the build on any skip.
+      # The API reads PGDATABASE (api/config.py). The schema lives in
+      # te_mgmt_dev, not the job-level default "postgres" (issue #45).
       - name: Full test suite — final result with skip accounting
+        env:
+          PGDATABASE: te_mgmt_dev
         run: python3 scripts/test_report.py --strict
 
       - name: Upload eval reports
