@@ -1,0 +1,11 @@
+{
+  "scenario": "01_envs_have_identical_structure",
+  "description": "Deploy all four environments and assert their deployed schemas are structurally identical; only the database/schema namespace may differ. Closes VCRM BR-01.",
+  "envs_under_test": ["dev", "test", "staging", "prod"],
+  "reference_env": "dev",
+  "expected": {
+    "all_envs_deploy_exit_zero": true,
+    "column_signature_identical_across_envs": true,
+    "min_tables_per_env": 12
+  }
+}

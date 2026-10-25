@@ -315,6 +315,166 @@ class CsvPipelineWithDatabase(unittest.TestCase):
 
 
 @pytest.mark.integration
+class AuditLogTrail(unittest.TestCase):
+    """Coverage for the real ``csv_uploads.audit_log`` table (O-04).
+
+    Distinct from the "BR-15 audit trail" tests in ``CsvPipelineWithDatabase``
+    above: those read ``GET /api/csv/files``, which is the upload *registry*
+    (``csv_files``). This class reads ``GET /api/audit/log``, which is the
+    ``audit_log`` table — a different table with a different purpose. The naming
+    overlap is pre-existing and easy to trip over.
+
+    Why these tests exist: until O-04, ``audit_log`` had exactly one writer
+    (``delete_file``), so it recorded destructions but never creations. Uploads
+    now write to it as well, and that behaviour had only unit coverage against a
+    mock cursor — nothing asserted a row actually lands.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # DELETE is gated by API_ALLOW_DESTRUCTIVE, which defaults to false
+        # (BUG-040). Enable it for this class rather than requiring an env var,
+        # matching the pattern in test_api_coverage.py and
+        # test_issue_05_import_summary.py — otherwise the delete half of the
+        # trail could not be tested, and tearDown's cleanup would silently 403
+        # and leave rows behind for the next run to trip over.
+        from api.config import settings as _settings
+        cls._settings = _settings
+        cls._orig_allow_destructive = _settings.allow_destructive
+        _settings.allow_destructive = True
+
+        cls.ctx = TestClient(app)
+        try:
+            cls.client = cls.ctx.__enter__()
+        except Exception as exc:  # noqa: BLE001
+            _settings.allow_destructive = cls._orig_allow_destructive
+            raise AssertionError(
+                f"Could not start the API — database connection failed.\n"
+                f"  {type(exc).__name__}: {str(exc).strip().splitlines()[0]}\n"
+                f"{_HELP}"
+            ) from None
+        if cls.client.get("/api/health").json().get("status") != "ok":
+            cls.ctx.__exit__(None, None, None)
+            _settings.allow_destructive = cls._orig_allow_destructive
+            raise AssertionError(f"API reports the database is unreachable. {_HELP}")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.ctx.__exit__(None, None, None)
+        cls._settings.allow_destructive = cls._orig_allow_destructive
+
+    def setUp(self):
+        # Unique per test so the content-hash dedup cannot collide with rows a
+        # previous run left behind.
+        self.name = f"audit_{os.getpid()}_{self._testMethodName}.csv"
+        self.content = f"col_a,col_b\n{os.getpid()},{self._testMethodName}\n"
+
+    def tearDown(self):
+        for f in self.client.get("/api/csv/files").json():
+            if f["file_name"] == self.name:
+                self.client.delete(f"/api/csv/files/{f['id']}")
+
+    def _entries_for(self, file_name: str) -> list[dict]:
+        """Audit entries for one file name, newest first.
+
+        limit is set near the endpoint's 200 cap because audit_log accumulates
+        across runs and the default of 50 could push a fresh row off the page.
+        """
+        resp = self.client.get("/api/audit/log", params={"limit": 200})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertIn("entries", body)
+        return [e for e in body["entries"] if e.get("fileName") == file_name]
+
+    def test_successful_upload_writes_an_audit_row(self):
+        """O-04: the gap this closes — a load used to leave no audit trace."""
+        up = self.client.post("/api/csv/upload",
+                              json={"fileName": self.name, "content": self.content})
+        self.assertEqual(up.json()["status"], "ok", up.text)
+
+        uploads = [e for e in self._entries_for(self.name) if e["action"] == "upload"]
+        self.assertEqual(
+            len(uploads), 1,
+            f"expected exactly one 'upload' audit row for {self.name}, got {len(uploads)}",
+        )
+
+    def test_audit_row_fields_match_the_upload_response(self):
+        """The row must identify what was loaded and where, not merely that
+        something happened — an audit trail that cannot be tied back to the
+        artefact it describes is not evidence."""
+        up = self.client.post("/api/csv/upload",
+                              json={"fileName": self.name, "content": self.content})
+        body = up.json()
+        self.assertEqual(body["status"], "ok", up.text)
+
+        row = next(e for e in self._entries_for(self.name) if e["action"] == "upload")
+        self.assertEqual(row["mode"], "dynamic")
+        self.assertEqual(row["tableName"], body["tableName"])
+        # fileId is coerced from the loader's string form into the BIGINT column.
+        self.assertEqual(str(row["fileId"]), str(body["fileId"]))
+        self.assertTrue(row["performedAt"], "performedAt must not be empty")
+
+    def test_upload_then_delete_leaves_both_rows(self):
+        """The full lifecycle. Before O-04 only the second half was recorded,
+        so a table could be seen to vanish with no record of its arrival."""
+        up = self.client.post("/api/csv/upload",
+                              json={"fileName": self.name, "content": self.content})
+        self.assertEqual(up.json()["status"], "ok", up.text)
+
+        file_id = next(f["id"] for f in self.client.get("/api/csv/files").json()
+                       if f["file_name"] == self.name)
+        delete = self.client.delete(f"/api/csv/files/{file_id}")
+        # setUpClass enables API_ALLOW_DESTRUCTIVE for this class, so a 403 here
+        # means the gate itself changed, not that the environment is misconfigured.
+        self.assertEqual(
+            delete.status_code, 200,
+            f"delete was refused despite the class enabling it: {delete.text}",
+        )
+
+        actions = [e["action"] for e in self._entries_for(self.name)]
+        self.assertIn("upload", actions)
+        self.assertIn("delete", actions)
+
+    def test_duplicate_upload_writes_no_second_audit_row(self):
+        """Only a genuine load is audited. A refused duplicate changed nothing,
+        so logging it would make the trail read as if data had landed twice."""
+        first = self.client.post("/api/csv/upload",
+                                 json={"fileName": self.name, "content": self.content})
+        self.assertEqual(first.json()["status"], "ok", first.text)
+
+        second = self.client.post("/api/csv/upload",
+                                  json={"fileName": self.name, "content": self.content})
+        self.assertEqual(second.json()["status"], "duplicate_file", second.text)
+
+        uploads = [e for e in self._entries_for(self.name) if e["action"] == "upload"]
+        self.assertEqual(
+            len(uploads), 1,
+            "a refused duplicate must not add a second 'upload' row",
+        )
+
+    def test_failed_upload_writes_no_audit_row(self):
+        """A header-only file is rejected before any rows land, so there is
+        nothing to audit."""
+        bad = f"audit_fail_{os.getpid()}.csv"
+        resp = self.client.post("/api/csv/upload",
+                                json={"fileName": bad, "content": "col_a\n"})
+        self.assertIn(resp.json()["status"], ("invalid_structure", "error"))
+        self.assertEqual(
+            self._entries_for(bad), [],
+            "a failed upload must not leave an audit row",
+        )
+
+    def test_audit_endpoint_reports_a_total_and_respects_limit(self):
+        """Pagination contract, so a grower table stays consultable."""
+        self.client.post("/api/csv/upload",
+                         json={"fileName": self.name, "content": self.content})
+        body = self.client.get("/api/audit/log", params={"limit": 1}).json()
+        self.assertGreaterEqual(body["total"], 1)
+        self.assertEqual(body["limit"], 1)
+        self.assertLessEqual(len(body["entries"]), 1)
+
+
+@pytest.mark.integration
 class PoolTimeout(unittest.TestCase):
     """BUG-030 regression: an exhausted pool must 503 within POOL_GETCONN_TIMEOUT
     instead of blocking the request thread forever.
