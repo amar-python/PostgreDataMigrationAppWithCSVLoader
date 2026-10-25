@@ -1,0 +1,65 @@
+Tier X scenario 01 — SQLite schema structure
+============================================
+
+Requirement under test
+----------------------
+VCRM BR-02: "The framework shall support six database engines — PostgreSQL,
+MariaDB, SQLite, InfluxDB, Redis, Teradata — through adapter scripts."
+
+Why SQLite first
+----------------
+It is the only engine that needs no service: embedded, file- or memory-based, so
+the scenario runs anywhere the runner runs. VCRM_GAPS.md Gap 2 ranked it first
+for exactly this reason.
+
+What it does
+------------
+1. Reads build/schema/sqlite/te_core_schema.sql.
+2. Substitutes the {{TBL_*}} placeholders the way adapter_sqlite.sh's sed pass
+   does, then asserts none were left behind — an unsubstituted token would reach
+   sqlite3 as a literal and quietly create a wrongly-named table.
+3. Executes the DDL in an in-memory SQLite database via Python's stdlib sqlite3.
+   A DDL that SQLite rejects is itself a finding, and is reported as one.
+4. Reads the resulting structure back from sqlite_master and PRAGMA table_info,
+   and compares it against the expectation file.
+
+Deliberate scope limits
+-----------------------
+DDL, not adapter. This executes the schema file rather than shelling out to
+adapter_sqlite.sh. The DDL is the artifact that drifts; the adapter is a thin
+sed + sqlite3 wrapper around it. Avoiding the adapter also avoids needing a
+sqlite3 binary on PATH, which means this scenario runs on the Windows CI job
+where GAP_ANALYSIS.md G2 blocks anything requiring a database service. The
+adapter script itself therefore remains unexercised — a smaller, separate gap,
+recorded here rather than glossed over.
+
+Table and column names, not types. SQLite has no native UUID or TIMESTAMPTZ and
+stores both as TEXT, so comparing declared types against PostgreSQL would fire
+on every column while telling us nothing. Structural presence is the property
+BR-02 actually asserts.
+
+Known shortfall — this is a baseline guard, not a parity assertion
+-----------------------------------------------------------------
+SQLite ships 7 of the 12 T&E tables. Missing: temp_documents, test_phases,
+test_events, test_results, evidence_artifacts.
+
+expected_tables therefore pins the 7 that exist today rather than the 12 that
+full parity would require. The scenario passes on the known state and fails on
+drift in either direction:
+
+  - a table disappearing from the SQLite DDL, or
+  - a table being added without updating expected_tables and
+    known_missing_tables.
+
+That choice is deliberate. Asserting 12 would make this permanently red for work
+that is knowingly outstanding, and a CI job that is always red stops being read.
+The shortfall stays visible instead in known_missing_tables, in every generated
+report's `actual` block, and in docs/ENGINE_PARITY_TODO.md.
+
+When the missing tables are written, move them from known_missing_tables into
+expected_tables in the same commit — the scenario will fail until you do, which
+is the reminder working as intended.
+
+Run
+---
+  python3 evals/runner.py --tiers x --verbose

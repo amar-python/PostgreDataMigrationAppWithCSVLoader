@@ -19,7 +19,7 @@ test-gate:
 # Evals: Tier P (offline) + Tier I/S (skip cleanly if no PostgreSQL).
 # Mirrors: bun run test:evals
 test-evals:
-	python3 evals/runner.py --tiers p,i,s --verbose
+	python3 evals/runner.py --tiers p,i,s,e --verbose
 
 # E2E: full pipeline tests that require a running PostgreSQL instance.
 # Mirrors: bun run test:e2e
@@ -30,7 +30,7 @@ test-e2e:
 # Mirrors: bun run test:evals:all
 test-all:
 	pytest tests/ --cov=build/csv --cov=evals --cov-report=term-missing
-	python3 evals/runner.py --tiers p,i,s --verbose
+	python3 evals/runner.py --tiers p,i,s,e --verbose
 
 # ── Code quality ──────────────────────────────────────────────────────────────
 
@@ -94,3 +94,11 @@ csv-demo:
 	bash build/csv_loader.sh build/csv/samples/orders.csv    --env $(or $(ENV),dev)
 	bash build/csv_loader.sh build/csv/samples/inventory.csv --env $(or $(ENV),dev)
 	bash build/csv_utilise.sh list --env $(or $(ENV),dev)
+
+# ── Cross-engine evals (opt-in) ───────────────────────────────────────────────
+# Multi-engine support is deferred by docs/adr/0001-postgresql-first.md, so Tier X
+# is not part of the default tiers or of CI. It needs no database service, so it
+# can be run on demand at any time.
+.PHONY: evals-engines
+evals-engines:
+	python3 evals/runner.py --tiers x --verbose
