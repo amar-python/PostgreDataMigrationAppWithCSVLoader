@@ -9,7 +9,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.140%E2%80%930.141-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-95%20vitest%20%7C%20142%20SQL%20assertions-brightgreen)](#test-suite)
+[![Tests](https://img.shields.io/badge/Tests-102%20vitest%20%7C%20142%20SQL%20assertions-brightgreen)](#test-suite)
 
 ---
 
@@ -101,7 +101,7 @@ PostgreDataMigrationAppWithCSVLoader/
 │   │   ├── export.ts                 ← CSV / XLSX / PDF export
 │   │   ├── mapping-templates.ts      ← saved column mapping templates
 │   │   └── csv-preview.ts            ← CSV parsing utilities
-│   ├── src/__tests__/                ← 95 vitest tests
+│   ├── src/__tests__/                ← 102 vitest tests
 │   ├── .env.local                    ← VITE_API_BASE, VITE_API_KEY (not committed)
 │   └── package.json
 │
@@ -240,7 +240,7 @@ python -m pytest tests\test_te_loader_integration.py -v
 python -m pytest tests\environments\ -v
 ```
 
-### Frontend tests (95 vitest)
+### Frontend tests (102 vitest)
 
 ```powershell
 cd csv-table-hub-main
