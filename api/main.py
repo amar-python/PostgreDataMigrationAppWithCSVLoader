@@ -17,18 +17,39 @@ from fastapi.responses import JSONResponse
 
 from api import db
 from api.config import settings
+from api.ratelimit import rate_limit_middleware
 from api.routers import audit_routes, csv_routes, te_routes
 
 logger = logging.getLogger(__name__)
 
 
+def assert_auth_configured(api_env: str, api_key: str) -> None:
+    """Fail closed when a deployed environment has no API key (O-03).
+
+    Split out of ``lifespan`` so the rule can be unit-tested without a database:
+    ``lifespan`` also opens the connection pool, which would make every test of
+    this check an integration test.
+
+    Only ``dev`` may run unauthenticated. Raises RuntimeError otherwise.
+    """
+    if not api_key and api_env != "dev":
+        raise RuntimeError(
+            f"API_KEY is not set but API_ENV is '{api_env}'. "
+            "Refusing to start: every endpoint would be unauthenticated. "
+            "Set API_KEY, or set API_ENV=dev for local development."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # O-03: fail closed. A warning was not enough — an unset key left every
+    # router open, and a warning in a container log is easy to miss.
+    assert_auth_configured(settings.API_ENV, settings.API_KEY)
     if not settings.API_KEY:
         logger.warning(
             "API_KEY is not set - every endpoint is unauthenticated. "
-            "Set the API_KEY environment variable before deploying anywhere "
-            "reachable beyond localhost."
+            "Tolerated because API_ENV=dev. Set the API_KEY environment "
+            "variable before deploying anywhere reachable beyond localhost."
         )
     else:
         # Fingerprint (first 4 chars + length) so mismatches with the frontend's
@@ -67,6 +88,11 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type", "X-API-Key"],
 )
+
+# O-03: rate limiting. Registered after CORSMiddleware so it sits outside it in
+# Starlette's onion (last added = outermost) and a 429 still carries CORS headers,
+# which the browser needs in order to read the status at all.
+app.middleware("http")(rate_limit_middleware)
 
 app.include_router(csv_routes.router)
 app.include_router(te_routes.router)

@@ -70,9 +70,15 @@ Tier S initial scope: only S1.
 
 ## What this catalogue does NOT yet cover
 
-- **Multi-DB equivalence** (cross-engine schema parity) — deferred until PG is locked in.
+- **Multi-DB equivalence** (cross-engine schema parity) — ~~deferred until PG is locked in.~~
+  *Updated 2026-09-10:* partially covered. Tier X scenario 01 executes and pins the
+  SQLite schema. Full parity is deferred by
+  [ADR-0001](../docs/adr/0001-postgresql-first.md), and four of the six engines have
+  incomplete or absent DDL — see `../docs/ENGINE_PARITY_TODO.md`. Tier X is out of CI.
 - **Performance / scale** (1M-row load timing) — separate suite if needed later.
-- **Cross-environment structural equivalence** (Dev vs Test vs Staging vs Prod) — Tier E, future.
+- ~~**Cross-environment structural equivalence** (Dev vs Test vs Staging vs Prod) — Tier E, future.~~
+  *Now covered as of 2026-09-10:* Tier E scenario 01 compares all four deployed
+  schemas column by column and treats reordered columns as drift. Closes VCRM BR-01.
 - **Domain-rule deep dives beyond suite 05** — Tier D, future.
 - **Validator behaviour on >128KB single field** — beyond the current 50KB eval and Python `csv` default field-size assumptions.
 

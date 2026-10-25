@@ -20,6 +20,28 @@ from api.main import app  # noqa: E402
 
 app.dependency_overrides[require_api_key] = lambda: None
 
+# O-03: the rate-limit middleware is real for every TestClient request, and all
+# tests share one bucket (TestClient always presents the same client identity).
+# Left enabled, the write budget would start returning 429 partway through
+# upload-heavy modules and fail tests for reasons unrelated to what they assert.
+# Disable both budgets for the session — the same stance taken above for auth —
+# and let tests that specifically exercise limiting set their own budgets.
+from api.config import settings as _settings  # noqa: E402
+from api.ratelimit import limiter as _limiter  # noqa: E402
+
+
+_settings.RATE_LIMIT_READS_PER_MINUTE = 0
+_settings.RATE_LIMIT_WRITES_PER_MINUTE = 0
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """Clear limiter buckets so one test's request history cannot fail another."""
+    _limiter.reset()
+    yield
+    _limiter.reset()
+
+
 # Env vars tests are allowed to mutate; restored after every test.
 _RESTORE_KEYS = (
     "CSV_FILE",

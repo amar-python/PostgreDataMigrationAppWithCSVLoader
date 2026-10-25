@@ -1,6 +1,8 @@
 # TEST_CONDITIONS — comprehensive catalog
 
-Every test condition that runs against the codebase, in one place. Five categories: Python unit tests, SQL test-suite assertions, and Tier P / I / S evals.
+Every test condition that runs against the codebase, in one place. Python unit tests, SQL test-suite assertions, and Tier P / I / S / E / X evals.
+
+> **Updated 2026-09-10.** Tiers **E** (cross-environment structural parity) and **X** (cross-engine structural coverage) were added. Tier E runs in CI; Tier X is out of CI by [ADR-0001](adr/0001-postgresql-first.md) and runs via `make evals-engines`. Counts for the pre-existing categories are as previously recorded and were not re-measured in this pass.
 
 ## At a glance
 
@@ -11,6 +13,8 @@ Every test condition that runs against the codebase, in one place. Five categori
 | Tier P eval scenarios | 23 | `evals/datasets/tier_p/` | `evals/runner.py` |
 | Tier I eval scenarios | 1 | `evals/datasets/tier_i/` | `evals/runner.py` |
 | Tier S eval scenarios | 1 | `evals/datasets/tier_s/` | `evals/runner.py` |
+| Tier E eval scenarios | 1 | `evals/datasets/tier_e/` | `evals/runner.py` |
+| Tier X eval scenarios | 1 | `evals/datasets/tier_x/` | `evals/runner.py` (not in CI — ADR-0001) |
 
 ---
 
@@ -35,7 +39,7 @@ Located in `tests/`, run as `python -m unittest discover -s tests -p "test*.py"`
 | 6 | `test_discover_scenarios_filters_only_requested_name` | `--only <name>` filter returns just the named scenario |
 | 7 | `test_tier_p_reports_unknown_runner_action_as_failure` | Unknown `runner_action` value produces a failed scenario, not a crash |
 | 8 | `test_tier_p_generated_invalid_utf8_fails_cleanly` | Invalid-UTF8 generated scenario exits 1 with no traceback |
-| 9 | `test_tier_i_skips_when_postgresql_is_unavailable` | Tier I returns `skipped=True` when psql/PG isn't reachable |
+| 9 | `test_tier_i_fails_when_postgresql_is_unavailable` | Tier I **fails** (not skips) when psql/PG isn't reachable — asserts `result.skipped` is False and `result.passed` is False. An unavailable prerequisite is a failure, so a green run always means the scenario really executed. *(Corrected 2026-09-10: this row previously named a test that no longer exists and stated the opposite contract; the behaviour was inverted by fix F5 in `FIXES_APPLIED.md`.)* |
 | 10 | `test_count_dev_rows_records_none_for_failed_count_query` | `_count_dev_rows` records `None` per table on query failure |
 | 11 | `test_have_psql_uses_path_lookup` | `_have_psql()` uses `shutil.which("psql")` |
 
