@@ -1,5 +1,20 @@
 # Hand-off summary — evals/ package
 
+> **Status update — 2026-09-10.** Tiers **E** and **X** are no longer deferred:
+> both are implemented and have executing scenarios. The text below is preserved
+> as the record of what was planned at the time and is **not** a description of
+> current state. Affected lines are marked inline.
+>
+> - **Tier E** — implemented. `evals/datasets/tier_e/01_envs_have_identical_structure`.
+>   Runs in the `integration-postgres` CI job. Closes VCRM BR-01.
+> - **Tier X** — implemented. `evals/datasets/tier_x/01_sqlite_schema_structure`.
+>   Deliberately **not** in CI per [ADR-0001](../docs/adr/0001-postgresql-first.md)
+>   (PostgreSQL first); run it with `make evals-engines`.
+> - **Tier D** — still deferred. Unchanged.
+>
+> Current tier registrations live in `runner.TIER_RUNNERS`: `p, i, s, e, x`.
+
+
 **Date:** 2026-05-26
 **Scope this round:** PostgreSQL only (Tiers P + I + S). MariaDB / SQLite / etc. deferred.
 
@@ -94,8 +109,8 @@ Tier I and S can be added when you have PostgreSQL in your CI runner.
 
 | Item | Why deferred |
 |------|--------------|
-| Tier X — cross-DB schema equivalence (MariaDB / SQLite / Teradata) | You explicitly said "ignore them for now" |
-| Tier E — cross-environment (Dev/Test/Staging/Prod) structural parity | Not needed until you ship beyond Dev |
+| ~~Tier X — cross-DB schema equivalence (MariaDB / SQLite / Teradata)~~ **Built 2026-09-10 (SQLite)** | Originally: you explicitly said "ignore them for now". Now: SQLite scenario exists; deferred from CI by ADR-0001, which records the same intent as a formal decision |
+| ~~Tier E — cross-environment (Dev/Test/Staging/Prod) structural parity~~ **Built 2026-09-10** | Originally: not needed until you ship beyond Dev. Now: implemented and running in the `integration-postgres` job |
 | Tier D — extended domain-rule evals beyond suite 05 | Existing 142 assertions already cover the high-value rules |
 | Performance / scale (1M+ rows) | Would need a fixture generator — separate round |
 | AI-assisted anomaly detection | Out of scope for deterministic evals |
@@ -119,6 +134,6 @@ Catalogued in `FAILURE_MODES.md` so they're not lost.
 Nothing blocking. If you want me to take the next step, ask for:
 
 - "extend Tier P to N more scenarios" (e.g. RTL, very-long-row, latin-1)
-- "add Tier X — cross-DB equivalence" once you have other DB engines installed
+- ~~"add Tier X — cross-DB equivalence" once you have other DB engines installed~~ — the SQLite scenario is built; the remaining work is DDL parity per engine, tracked in `../docs/ENGINE_PARITY_TODO.md`
 - "wire the evals into the GitHub Actions workflow"
 - "build a sample-data generator that produces 100 K / 1 M row CSVs for perf"

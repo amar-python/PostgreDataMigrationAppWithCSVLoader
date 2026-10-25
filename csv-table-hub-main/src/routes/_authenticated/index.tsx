@@ -54,7 +54,7 @@ import { toast, Toaster } from "sonner";
 import {
   Loader2, UploadCloud, FileSpreadsheet, Database, Eye, CheckCircle2, AlertTriangle,
   XCircle, RotateCw, ChevronDown, ChevronRight, Copy, Download, PauseCircle,
-  BookmarkPlus, Bookmark, X as XIcon,
+  BookmarkPlus, Bookmark, X as XIcon, ChevronLeft,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -669,17 +669,54 @@ function DiffDialog({job,onConfirm,onCancel}:{job:Job|null;onConfirm:()=>void;on
 
 // ─── FilesList (unchanged from original) ─────────────────────────────────────
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+
 function FilesList({files}:{files:CsvFileSummary[]}){
   const [preview,setPreview]=useState<CsvFileSummary|null>(null);
+  const [page,setPage]=useState(1);
+  const [pageSize,setPageSize]=useState<number>(50);
+
+  const totalPages=Math.max(1,Math.ceil(files.length/pageSize));
+  // Clamp page when the file list shrinks (e.g. after a delete) or page size grows.
+  const safePage=Math.min(page,totalPages);
+  const startIndex=(safePage-1)*pageSize;
+  const visible=files.slice(startIndex,startIndex+pageSize);
+
+  const goTo=(n:number)=>setPage(Math.min(Math.max(1,n),totalPages));
+
   return (
     <Card>
       <CardHeader><CardTitle className="flex items-center gap-2 text-base"><FileSpreadsheet className="h-4 w-4"/>Migrated files</CardTitle></CardHeader>
       <CardContent>
         {files.length===0?<p className="py-8 text-center text-sm text-muted-foreground">No files yet — upload a CSV above to get started.</p>:(
-          <div className="overflow-x-auto"><Table>
-            <TableHeader><TableRow><TableHead>File</TableHead><TableHead>Table</TableHead><TableHead className="text-right">Columns</TableHead><TableHead className="text-right">Rows</TableHead><TableHead>Uploaded</TableHead><TableHead/></TableRow></TableHeader>
-            <TableBody>{files.map(f=><TableRow key={f.id}><TableCell className="font-medium">{f.file_name}</TableCell><TableCell><code className="rounded bg-muted px-1.5 py-0.5 text-xs">{f.table_name}</code></TableCell><TableCell className="text-right tabular-nums">{f.column_names.length}</TableCell><TableCell className="text-right tabular-nums">{f.row_count}</TableCell><TableCell className="text-muted-foreground" suppressHydrationWarning><time dateTime={f.created_at}>{new Date(f.created_at).toISOString().replace("T"," ").slice(0,19)+" UTC"}</time></TableCell><TableCell className="text-right"><Button size="sm" variant="ghost" onClick={()=>setPreview(f)}><Eye className="mr-1 h-4 w-4"/>Preview</Button></TableCell></TableRow>)}</TableBody>
-          </Table></div>
+          <>
+            <div className="overflow-x-auto"><Table>
+              <TableHeader><TableRow className="[&>th]:h-8 [&>th]:py-1"><TableHead className="w-12 text-right">#</TableHead><TableHead>File</TableHead><TableHead>Table</TableHead><TableHead className="w-16 text-right">Cols</TableHead><TableHead className="w-16 text-right">Rows</TableHead><TableHead className="w-40">Uploaded</TableHead><TableHead className="w-24"/></TableRow></TableHeader>
+              <TableBody>{visible.map((f,i)=><TableRow key={f.id} className="[&>td]:py-1.5"><TableCell className="text-right tabular-nums text-xs text-muted-foreground">{startIndex+i+1}</TableCell><TableCell className="max-w-[22rem] truncate font-medium" title={f.file_name}>{f.file_name}</TableCell><TableCell><code className="rounded bg-muted px-1.5 py-0.5 text-xs">{f.table_name}</code></TableCell><TableCell className="text-right tabular-nums">{f.column_names.length}</TableCell><TableCell className="text-right tabular-nums">{f.row_count}</TableCell><TableCell className="whitespace-nowrap text-xs text-muted-foreground" suppressHydrationWarning><time dateTime={f.created_at} title={new Date(f.created_at).toISOString()}>{new Date(f.created_at).toISOString().replace("T"," ").slice(0,16)}</time></TableCell><TableCell className="text-right"><Button size="sm" variant="ghost" className="h-7 px-2" onClick={()=>setPreview(f)}><Eye className="mr-1 h-3.5 w-3.5"/>Preview</Button></TableCell></TableRow>)}</TableBody>
+            </Table></div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Rows per page</span>
+                <Select value={String(pageSize)} onValueChange={v=>{setPageSize(Number(v));setPage(1);}}>
+                  <SelectTrigger className="h-8 w-20"><SelectValue/></SelectTrigger>
+                  <SelectContent>{PAGE_SIZE_OPTIONS.map(n=><SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+
+              <p className="text-sm text-muted-foreground tabular-nums">
+                {startIndex+1}–{Math.min(startIndex+pageSize,files.length)} of {files.length}
+              </p>
+
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="outline" className="h-8" disabled={safePage<=1} onClick={()=>goTo(1)}>First</Button>
+                <Button size="sm" variant="outline" className="h-8 px-2" disabled={safePage<=1} onClick={()=>goTo(safePage-1)} aria-label="Previous page"><ChevronLeft className="h-4 w-4"/></Button>
+                <span className="px-2 text-sm tabular-nums">Page {safePage} of {totalPages}</span>
+                <Button size="sm" variant="outline" className="h-8 px-2" disabled={safePage>=totalPages} onClick={()=>goTo(safePage+1)} aria-label="Next page"><ChevronRight className="h-4 w-4"/></Button>
+                <Button size="sm" variant="outline" className="h-8" disabled={safePage>=totalPages} onClick={()=>goTo(totalPages)}>Last</Button>
+              </div>
+            </div>
+          </>
         )}
       </CardContent>
       <Dialog open={!!preview} onOpenChange={o=>!o&&setPreview(null)}>

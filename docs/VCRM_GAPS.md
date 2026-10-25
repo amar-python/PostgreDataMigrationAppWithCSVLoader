@@ -8,24 +8,78 @@ Companion to `docs/VCRM.md`. Lists only the 5 business requirements that are **n
 
 ## Executive summary
 
+**Status as at 2026-09-10.** Three of the five gaps below have been closed or
+substantially narrowed since this document was first written. The per-gap sections
+are kept rather than deleted, each headed with its current status and the evidence
+that changed it, so the traceability history stays readable.
+
 | Category | Count | Requirement IDs |
 |----------|-------|-----------------|
-| ⚠️ **Partial coverage** — some aspects verified, some open | 1 | BR-01 |
-| ❌ **Genuine gap** — no automated coverage, work needed | 2 | BR-02, BR-15 |
-| ❌ **Deferred by design** — out of scope by project decision | 2 | BR-21, BR-22 |
-| **Total gaps** | **5 of 22** (23 %) | |
+| ✅ **Resolved** — automated coverage now exists | 2 | BR-01, BR-15 |
+| ⏸ **Deferred by decision** — out of scope by recorded project decision | 3 | BR-02, BR-21, BR-22 |
+| ❌ **Actionable gap** — no coverage and no decision | **0** | — |
+| **Total not fully verified** | **3 of 22** (14 %) | all deferred |
 
-**Coverage from the VCRM:** 17 of 22 (77 %) requirements fully verified by ≥ 1 automated test condition.
+**Coverage from the VCRM:** 19 of 22 (86 %) requirements fully verified by ≥ 1
+automated test condition, up from 17 of 22 (77 %).
 
-Recommended remediation priority across the 3 actionable gaps (excluding the 2 deferred ones):
+### What changed
 
-1. **BR-15** — 1 hour, blocks nothing, removes a documented claim with no current test. **Do first.**
-2. **BR-01** — 1 day, closes the Tier E gap, raises confidence in non-Dev environments.
-3. **BR-02** — 1 day per non-PG engine, but the project README still says "PostgreSQL only" in the eval scope, so timing depends on when multi-DB becomes a real goal.
+| Requirement | Was | Now | Evidence |
+|---|---|---|---|
+| **BR-15** conn_limit | No coverage | ✅ Resolved | Assertion **S10** in `tests/suites/test_05_schema_and_business_rules.sql` reads `pg_roles.rolconnlimit` and compares it against the env's `conn_limit`, forwarded via `set_config('te.conn_limit')`. A typo such as `conn_limit=5` in `env_prod.sql` now fails the suite. |
+| **BR-01** env isolation | ⚠️ Partial | ✅ Resolved | **Tier E scenario 01** `01_envs_have_identical_structure` compares all four deployed schemas column by column. Logic unit-tested in `tests/test_evals_tier_e_x.py` with negative controls. |
+| **BR-02** six engines | ❌ Not verified | ⏸ Deferred by decision | **Tier X scenario 01** `01_sqlite_schema_structure` executes and pins the SQLite schema, and measured a shortfall nobody had counted before. On that evidence a decision was taken to reach a PostgreSQL milestone first — [ADR-0001](adr/0001-postgresql-first.md). Tier X remains in the repo but is out of CI. |
+
+### BR-02 — deferred by decision (settled 2026-09-10)
+
+Building Tier X measured what each engine actually defines:
+
+| Engine | Tables defined | Against PostgreSQL's 12 |
+|---|---|---|
+| postgresql | 12 | reference |
+| sqlite | 7 | 5 missing |
+| mariadb | 7 | 5 missing |
+| teradata | 1 | 11 missing |
+| influxdb | no DDL (seed `.lp` only) | n/a |
+| redis | no DDL (seed `.sh` only) | n/a |
+
+The five absent from SQLite and MariaDB — `temp_documents`, `test_phases`,
+`test_events`, `test_results`, `evidence_artifacts` — are the execution and
+evidence half of the model. Those engines can hold a test plan and its
+traceability but not a record of test execution.
+
+**Decision taken:** pursue PostgreSQL to a working milestone first, then apply
+what that teaches to the other engines. Recorded in
+[ADR-0001](adr/0001-postgresql-first.md) with the full rationale, the alternatives
+rejected, the accepted risk, and four revisit triggers.
+
+BR-02's wording in `docs/VCRM.md` is **retained unchanged** and annotated as
+deferred: it states the eventual target, not the current milestone. Its VCRM
+status moved from ❌ Not verified to ⏸ Deferred by decision — which is a
+different thing, and the distinction is the point. An unverified requirement is a
+gap; a deferred one is a choice with a trigger to revisit.
+
+### Remaining actionable work
+
+**No requirement-level work outstanding.** All three not-fully-verified
+requirements — BR-02, BR-21, BR-22 — are deferred by recorded decision.
+
+Two items sit outside the BR set:
+
+1. **Frontend** — see "Coverage note — frontend" at the end of this document. Not
+   covered by any BR.
+2. **G2** in `docs/GAP_ANALYSIS.md` — Windows CI cannot host PostgreSQL. Accepted;
+   the ubuntu `integration-postgres` job carries the database-backed suite.
 
 ---
 
-## Gap 1 — BR-01 (⚠️ Partial)
+## Gap 1 — BR-01 (✅ RESOLVED 2026-09-10)
+
+> **Closed by Tier E scenario 01** `01_envs_have_identical_structure`. The
+> "What's NOT verified" section below is retained as the historical record of
+> why the scenario was written; it no longer describes current state. The
+> recommended implementation outline further down is what was built.
 
 ### Requirement
 
@@ -82,7 +136,16 @@ Recommended remediation priority across the 3 actionable gaps (excluding the 2 d
 
 ---
 
-## Gap 2 — BR-02 (❌ Not verified)
+## Gap 2 — BR-02 (⏸ DEFERRED BY DECISION 2026-09-10)
+
+> **Measured by Tier X scenario 01** `01_sqlite_schema_structure`, then
+> **deferred by [ADR-0001](adr/0001-postgresql-first.md)**: PostgreSQL first, with
+> the lessons applied to other engines afterwards.
+>
+> The recommendation below — Tier X scenarios per engine, cheapest first — remains
+> the right approach for when this resumes, and scenario 01 for SQLite is already
+> built. It is simply not scheduled. Tier X stays in the repository but is out of
+> CI; run it with `make evals-engines`.
 
 ### Requirement
 
@@ -133,7 +196,12 @@ Recommended remediation priority across the 3 actionable gaps (excluding the 2 d
 
 ---
 
-## Gap 3 — BR-15 (❌ Not verified)
+## Gap 3 — BR-15 (✅ RESOLVED)
+
+> **Closed by assertion S10** in
+> `tests/suites/test_05_schema_and_business_rules.sql`, which reads
+> `pg_roles.rolconnlimit` and compares it against the environment's
+> `conn_limit`. Implemented as the "even cheaper alternative" sketched below.
 
 ### Requirement
 
@@ -260,8 +328,34 @@ Closing the remaining 3 engines of BR-02 (Influx, Redis, Teradata) would take an
 | 2026-05-26 | Defer performance suite | `evals/HANDOFF.md` | Project team |
 | 2026-06-01 | BR-15 (conn_limit verification) flagged as cheap actionable gap | this file | (pending) |
 | 2026-06-01 | BR-01 (cross-env structural parity) flagged as medium-priority gap | this file | (pending) |
+| 2026-09-10 | BR-15 resolved — assertion S10 added to SQL suite 05 | `docs/VCRM.md`, `docs/RECONCILED_GAPS.md` | Amarnath |
+| 2026-09-10 | BR-01 resolved — Tier E scenario 01 built | `docs/VCRM.md`, `docs/RECONCILED_GAPS.md` | Amarnath |
+| 2026-09-10 | **BR-02 deferred by decision — PostgreSQL first, multi-engine after the PG milestone** | [`docs/adr/0001-postgresql-first.md`](adr/0001-postgresql-first.md) | Amarnath |
+| 2026-09-10 | Tier X retained in repo but removed from CI, per the decision above | `.github/workflows/*`, `Makefile` (`evals-engines`) | Amarnath |
 
 Append to this log whenever a gap is accepted as risk, scheduled for verification, or marked won't-fix.
+
+---
+
+## Coverage note — frontend (not a BR, recorded for completeness)
+
+`csv-table-hub-main/` has **not been independently audited** and no BR covers it.
+Two specific risks follow from that, both recorded rather than measured:
+
+- **CSV parser parity.** The frontend parses CSV in TypeScript; the backend path
+  uses `build/csv/validator.py` (shell/eval-covered) and `api/services/csv_parse.py`
+  (API path). Nothing asserts the implementations agree on delimiter detection,
+  quoted fields with embedded newlines, BOM handling, or type inference. A file
+  the browser previews as valid could be rejected server-side, or worse, loaded
+  with different column typing than the preview showed.
+- **CORS wiring end to end.** `settings.CORS_ORIGINS` is env-driven and the
+  allowed methods and headers are pinned in `api/main.py`, but no test drives a
+  real browser preflight against a running API.
+
+Cheapest useful coverage would be a shared fixture set: a directory of CSV files
+with one expected-parse JSON each, asserted by both a TypeScript test and a Python
+test. That turns parity from an assumption into a check without merging the two
+parsers.
 
 ---
 
