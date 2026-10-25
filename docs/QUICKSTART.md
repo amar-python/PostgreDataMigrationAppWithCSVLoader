@@ -259,6 +259,8 @@ PostgreDataMigrationAppWithCSVLoader/
 
 ## Next steps
 
+- `docs/STARTER_GUIDE.md` — orientation, key concepts, and a guided first
+  walkthrough (dynamic mode vs T&E mode, running the test suite end to end)
 - `docs/ENV_VARIABLES.md` — full list of every environment variable
 - `docs/API_INTEGRATION.md` — frontend ↔ backend endpoint mapping and gaps
 - `docs/VCRM.md` — business requirement traceability (142 SQL assertions)
