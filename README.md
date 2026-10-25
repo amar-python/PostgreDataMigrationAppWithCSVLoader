@@ -13,6 +13,9 @@
 
 ---
 
+> **New to this repo?** Start with **[`docs/STARTER_GUIDE.md`](docs/STARTER_GUIDE.md)**
+> — orientation, key concepts, and a guided first walkthrough.
+
 ## What This Is
 
 A unified platform combining a T&E database framework with a browser-based
