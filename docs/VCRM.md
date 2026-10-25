@@ -78,7 +78,7 @@ For each requirement, the columns mark which test layer verifies it. Numbers in 
 
 | ID | Requirement (short) | PU | SQL | TP | TI | TS | LV | Status | Notes |
 |----|--------------------|----|-----|----|----|----|----|-------|-------|
-| BR-01 | Multi-env isolated (Dev/Test/Staging/Prod) | — | suite 05 (schema_name) | — | — | 01 (Dev) | **Tier E 01** | ✅ | Tier E `01_envs_have_identical_structure` deploys all four environments and compares column signatures against Dev. Resolved 2026-09-10. |
+| BR-01 | Multi-env isolated (Dev/Test/Staging/Prod) | — | suite 05 (schema_name) | — | — | 01 (Dev) | **Tier E 01** | ✅ | Tier E `01_envs_have_identical_structure` deploys all four environments and compares column signatures against Dev. Resolved 2026-09-10. First real run passed in CI run [40186756039](https://github.com/amar-python/PostgreDataMigrationAppWithCSVLoader/actions/runs/40186756039) on `main` 59aab1a, 2026-10-25. |
 | BR-02 | Six DB engines via adapters | — | — | — | — | — | Tier X 01 (SQLite, not in CI) | ⏸ | **Deferred by decision** (ADR-0001): PostgreSQL first. Tier X `01_sqlite_schema_structure` exists and passes but is not run in CI. Measured state: PG 12 tables, SQLite 7, MariaDB 7, Teradata 1; InfluxDB and Redis ship seed data with no DDL. |
 | BR-03 | `\set` parameterisation works | — | suite 05 (table existence under `:"tbl_*"` overrides) | — | — | 01 (passes `--set tbl_*=...`) | — | ✅ | Tier S proves the parameterisation contract holds end-to-end. |
 | BR-04 | 12-table T&E data model | — | suites 01–05 (every table referenced by at least one assertion) | — | 01 (counts rows in 11 of 12 tables; evidence_artifacts not counted) | 01 | — | ✅ | One small gap: Tier I doesn't count `evidence_artifacts`, but that table is schema-only per the README. |
@@ -92,7 +92,7 @@ For each requirement, the columns mark which test layer verifies it. Numbers in 
 | BR-12 | Clearance enum {baseline, NV1, NV2, PV} | — | suite 01 (CHECK / enum assertions on personnel) | — | — | 01 | — | ✅ | |
 | BR-13 | ISM classification marking enum | — | suite 02 (classification assertions on test_programs) | — | — | 01 | — | ✅ | |
 | BR-14 | Phase type enum | — | suite 02 (phase_type assertions on test_phases) | — | — | 01 | — | ✅ | |
-| BR-15 | Per-env connection limits | — | — | — | — | — | — | ❌ | The limit is set in `env_*.sql` but no test asserts it. Would need a `\d` introspection check. |
+| BR-15 | Per-env connection limits | — | suite 05 (S10, `pg_roles.rolconnlimit`) | — | — | 01 | — | ✅ | Assertion S10 compares the app role's `rolconnlimit` with the environment's `conn_limit`. Passed in CI run [40186756039](https://github.com/amar-python/PostgreDataMigrationAppWithCSVLoader/actions/runs/40186756039) on `main` 59aab1a, 2026-10-25. |
 | BR-16 | Automated single-command regression | — | — | All TP (single `runner.py` invocation) | 01 | 01 | — | ✅ | Combined `runner.py --tiers p,i,s` is the entry point. |
 | BR-17 | Graceful degradation when PG unavailable | 9, 11 | — | — | (skip behaviour) | (skip behaviour) | — | ✅ | Python unit tests directly assert the skip path. |
 | BR-18 | Machine-readable JSON report per run | 5, 6 | — | — | — | — | — | ✅ | Verified by `_load_expected` and `discover_scenarios` unit tests; the report write itself is exercised by every Tier P run. |
@@ -122,10 +122,10 @@ The `input_data/` loader has its own implicit requirements — verified end-to-e
 | Layer | Requirements with at least one cell ticked | % of in-scope requirements (BR-01..BR-20) |
 |-------|-------------------------------------------|-------------------------------------------|
 | Python unit (PU) | 5 (BR-10/11/17/18) | 25 % |
-| SQL suites (SQL) | 11 (BR-01/03/04/05/06/07/08/12/13/14/20) | 55 % |
+| SQL suites (SQL) | 12 (BR-01/03/04/05/06/07/08/12/13/14/15/20) | 60 % |
 | Tier P (TP) | 4 (BR-10/11/16/18) | 20 % |
 | Tier I (TI) | 4 (BR-04/09/16/17) | 20 % |
-| Tier S (TS) | 13 (BR-01/03/04/05/06/07/08/09/12/13/14/16/20) | 65 % |
+| Tier S (TS) | 14 (BR-01/03/04/05/06/07/08/09/12/13/14/15/16/20) | 70 % |
 | Load-verify (LV) | 5 implicit (BR-D1..D5) | n/a — separate domain |
 
 ### By verification status
@@ -145,6 +145,12 @@ Changed 2026-09-10:
 - **BR-01** ⚠️ Partial → ✅ Verified. Tier E `01_envs_have_identical_structure`.
 - **BR-15** ❌ Not verified → ✅ Verified. Assertion **S10** in `tests/suites/test_05_schema_and_business_rules.sql` reads `pg_roles.rolconnlimit`.
 - **BR-02** ❌ Not verified → ⏸ Deferred by decision. See ADR-0001.
+
+Confirmed in CI 2026-10-25 (CI run [40186756039](https://github.com/amar-python/PostgreDataMigrationAppWithCSVLoader/actions/runs/40186756039) on `main` 59aab1a, 2026-10-25):
+
+- Evals Tiers P, I, S, E: 26 of 26 passed, including Tier E `01_envs_have_identical_structure` (O-07) on its first real run. #45 is resolved.
+- `scripts/test_report.py --strict` against PostgreSQL 16: 238 collected, 238 passed, 0 failed, 0 skipped. This includes the `mode=te` integration tests and the audit-trail tests.
+- The BR-15 matrix row above previously still read ❌ although this summary counted it as verified; it now shows the S10 evidence.
 
 ---
 
