@@ -70,6 +70,20 @@ class UnitCsvParse(unittest.TestCase):
         for name in out:
             self.assertNotIn(name, {"_id", "_row_hash", "_created_at"})
 
+        # The assertNotIn above is too weak to be a regression guard: it also
+        # passed under the bug this test is named for. The reserved check once
+        # ran *after* underscores were stripped, so "_id" became "id", never
+        # matched _RESERVED, and lost its "_col" suffix — and "id" is not in the
+        # reserved set either, so the loop above stayed green. Pin the exact
+        # output so the ordering cannot silently regress.
+        self.assertEqual(out, ["id_col", "row_hash_col", "created_at_col"])
+
+        # The case that makes the bug bite. Under the old ordering "_id" and
+        # "id" both sanitised to "id", so the de-duplicator renamed one to
+        # "id_1" — two distinct source columns silently became near-identical
+        # names, and which one won depended on header order.
+        self.assertEqual(sanitize_columns(["_id", "id"]), ["id_col", "id"])
+
 
 @pytest.mark.unit
 class RequestValidation(unittest.TestCase):

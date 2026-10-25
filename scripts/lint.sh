@@ -10,6 +10,8 @@ PY_SRC=(
     evals/runner.py
     evals/gap_report.py
     api/main.py
+    api/ratelimit.py
+    api/services/audit.py
 )
 
 PY_TESTS=(
@@ -19,6 +21,8 @@ PY_TESTS=(
     tests/test_api_integration.py
     tests/test_issue_04_multi_file_upload.py
     tests/test_issue_05_import_summary.py
+    tests/test_api_hardening.py
+    tests/test_evals_tier_e_x.py
 )
 
 # Collect scripts/*.py dynamically

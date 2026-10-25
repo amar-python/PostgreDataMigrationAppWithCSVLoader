@@ -55,6 +55,24 @@ class Settings:
     # beyond localhost.
     API_KEY: str = os.environ.get("API_KEY", "")
 
+    # O-03: which deployment this process believes it is. Only "dev" tolerates an
+    # empty API_KEY; every other value makes a missing key a startup failure
+    # (see the fail-closed check in api/main.py lifespan). Keeping the default at
+    # "dev" means local workflows are unchanged, while any deployed environment
+    # must set both API_ENV and API_KEY or refuse to boot.
+    API_ENV: str = os.environ.get("API_ENV", "dev").strip().lower()
+
+    # O-03: per-client sliding-window rate limits, requests per minute.
+    # Writes are budgeted far lower than reads because an upload costs orders of
+    # magnitude more server work than a SELECT. Set either to 0 to disable that
+    # limit (documented escape hatch for load testing).
+    RATE_LIMIT_READS_PER_MINUTE: int = int(
+        os.environ.get("API_RATE_LIMIT_READS", "120")
+    )
+    RATE_LIMIT_WRITES_PER_MINUTE: int = int(
+        os.environ.get("API_RATE_LIMIT_WRITES", "20")
+    )
+
 
 settings = Settings()
 
@@ -73,4 +91,3 @@ TE_TABLES = [
     "defect_reports",
     "evidence_artifacts",
 ]
-
