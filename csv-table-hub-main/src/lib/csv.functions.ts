@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { QueryClient } from "@tanstack/react-query";
 
 const columnTypeSchema = z.enum(["int8", "numeric", "date", "timestamptz", "boolean", "text"]);
 export type ColumnType = z.infer<typeof columnTypeSchema>;
@@ -162,6 +163,13 @@ export async function uploadCsv(input: {
 export async function listCsvFiles(): Promise<CsvFileSummary[]> {
   return apiFetch("/api/csv/files", csvFileSummaryListSchema);
 }
+
+export const filesQuery = { queryKey: ["csv-files"], queryFn: listCsvFiles };
+
+// Route loader for the files list. revalidateIfStale makes router.invalidate()
+// (called after each upload) refetch instead of returning the cached list (#64).
+export const loadFiles = (queryClient: QueryClient) =>
+  queryClient.ensureQueryData({ ...filesQuery, revalidateIfStale: true });
 
 const csvPreviewResultSchema = z.discriminatedUnion("status", [
   z.object({

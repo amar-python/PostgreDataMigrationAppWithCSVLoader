@@ -23,7 +23,7 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  listCsvFiles, previewCsvTable, previewCsv, listTeTables, uploadCsv,
+  filesQuery, loadFiles, previewCsvTable, previewCsv, listTeTables, uploadCsv,
   type CsvFileSummary, type ColumnType, type TeTableInfo,
 } from "@/lib/csv.functions";
 import { parseCsvPreview, COLUMN_TYPE_LABEL, sanitizeColumns, type CsvPreview } from "@/lib/csv-preview";
@@ -59,13 +59,9 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-// ─── query ───────────────────────────────────────────────────────────────────
-
-const filesQuery = { queryKey: ["csv-files"], queryFn: () => listCsvFiles() };
-
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({ meta: [{ title: "CSV Migrator — Upload CSV files to your database" }, { name: "description", content: "Upload any number of CSV files. Each becomes its own database table, with duplicates automatically skipped." }, { property: "og:title", content: "CSV Migrator" }] }),
-  loader: ({ context }) => context.queryClient.ensureQueryData(filesQuery),
+  loader: ({ context }) => loadFiles(context.queryClient),
   component: Home,
 });
 
