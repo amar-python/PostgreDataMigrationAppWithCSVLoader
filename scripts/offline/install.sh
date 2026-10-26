@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# install.sh: install from the offline bundle on an Ubuntu 24.04 VM with no internet (#60).
+#
+# From inside the extracted bundle directory:
+#   sudo bash app/scripts/offline/install.sh [API_HOST]
+# API_HOST is the address browsers use to reach the API (default: localhost).
+# Installs to /opt/te-migration, deploys database te_mgmt_prod (schema te_prod),
+# writes /opt/te-migration/env, and installs systemd units te-api and te-frontend.
+set -euo pipefail
+
+BUNDLE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+API_HOST="${1:-localhost}"
+DEST=/opt/te-migration
+
+echo "== 1/6 verify bundle checksums"
+( cd "$BUNDLE" && sha256sum --quiet -c SHA256SUMS )
+
+echo "== 2/6 install Ubuntu packages from the bundle only"
+# Use the bundle as the only apt source; the VM's own sources are ignored.
+APTDIR="$(mktemp -d)"; mkdir -p "$APTDIR/lists/partial"
+echo "deb [trusted=yes] file:$BUNDLE/debs ./" > "$APTDIR/sources.list"
+APT_OPTS=(-o Dir::Etc::SourceList="$APTDIR/sources.list" -o Dir::Etc::SourceParts=/dev/null
+          -o Dir::State::Lists="$APTDIR/lists")
+apt-get "${APT_OPTS[@]}" update -qq
+apt-get "${APT_OPTS[@]}" install -y -qq --no-install-recommends \
+  postgresql-16 postgresql-client-16 python3.12-venv nodejs >/dev/null
+systemctl enable --now postgresql >/dev/null
+
+echo "== 3/6 application files and Python environment"
+id te-app >/dev/null 2>&1 || useradd --system --home "$DEST" --shell /usr/sbin/nologin te-app
+rm -rf "$DEST"; mkdir -p "$DEST"
+cp -r "$BUNDLE/app" "$DEST/app"; cp -r "$BUNDLE/frontend" "$DEST/frontend"
+python3.12 -m venv "$DEST/venv"
+"$DEST/venv/bin/pip" install -q --no-index --find-links "$BUNDLE/wheels" -r "$DEST/app/api/requirements.txt"
+
+echo "== 4/6 database, T&E schema and application role"
+DB_PASS="$(openssl rand -hex 24)"; API_KEY="$(openssl rand -hex 32)"
+# env_prod.sql creates te_mgmt_prod, schema te_prod and login role te_prod_user.
+sed "s/__INJECT_AT_DEPLOY__/$DB_PASS/" "$DEST/app/build/environments/env_prod.example.sql" \
+  > "$DEST/app/build/environments/env_prod.sql"
+( cd "$DEST/app" && sudo -u postgres env PGHOST=/var/run/postgresql bash build/deploy_all.sh prod >/dev/null )
+rm "$DEST/app/build/environments/env_prod.sql"   # it holds the password
+
+echo "== 5/6 configuration and services"
+cat > "$DEST/env" <<ENV
+API_ENV=prod
+API_KEY=$API_KEY
+PGHOST=localhost
+PGPORT=5432
+PGUSER=te_prod_user
+PGPASSWORD=$DB_PASS
+PGDATABASE=te_mgmt_prod
+TE_SCHEMA=te_prod
+CORS_ORIGINS=http://$API_HOST:3000
+PORT=3000
+ENV
+chmod 600 "$DEST/env"
+# The frontend still sends the shared key from the browser (replaced by sign-in in M2, #96).
+grep -rl "__OFFLINE_API_" "$DEST/frontend" | xargs sed -i \
+  -e "s#__OFFLINE_API_BASE__#http://$API_HOST:8000#g" -e "s#__OFFLINE_API_KEY__#$API_KEY#g"
+chown -R te-app:te-app "$DEST"
+cat > /etc/systemd/system/te-api.service <<UNIT
+[Unit]
+Description=T&E migration API
+After=postgresql.service
+[Service]
+User=te-app
+EnvironmentFile=$DEST/env
+WorkingDirectory=$DEST/app
+ExecStart=$DEST/venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+UNIT
+cat > /etc/systemd/system/te-frontend.service <<UNIT
+[Unit]
+Description=T&E migration frontend
+After=te-api.service
+[Service]
+User=te-app
+EnvironmentFile=$DEST/env
+ExecStart=/usr/bin/node $DEST/frontend/server/index.mjs
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now te-api te-frontend >/dev/null
+
+echo "== 6/6 smoke test"
+bash "$DEST/app/scripts/offline/smoke_test.sh" "$API_KEY"

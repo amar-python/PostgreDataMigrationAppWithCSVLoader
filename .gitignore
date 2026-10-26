@@ -62,3 +62,4 @@ terraform-provider-*.log
 .coverage
 .coverage.*
 htmlcov/
+dist/
