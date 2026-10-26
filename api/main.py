@@ -53,13 +53,13 @@ async def lifespan(app: FastAPI):
             "variable before deploying anywhere reachable beyond localhost."
         )
     else:
-        # Fingerprint (first 4 chars + length) so mismatches with the frontend's
-        # VITE_API_KEY are diagnosable without leaking the secret to the log.
-        # Fixes BUG-006 in docs/BUG_REPORT.md.
+        # Fingerprint (first 4 chars + length) so a script's key mismatch is
+        # diagnosable without leaking the secret to the log (BUG-006). Browsers
+        # no longer hold this key; they sign in per user (#96).
         fp = settings.API_KEY[:4] + "..." if len(settings.API_KEY) >= 4 else "***"
         logger.info(
             "API_KEY is set (fingerprint: %s, length: %d). "
-            "Frontend must send matching VITE_API_KEY via the X-API-Key header.",
+            "Scripts and services send it in the X-API-Key header; browsers sign in.",
             fp, len(settings.API_KEY),
         )
     if not settings.PG_PASSWORD:

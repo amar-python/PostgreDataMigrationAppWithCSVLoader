@@ -54,19 +54,27 @@ sudo bash app/scripts/offline/install.sh localhost 2>&1 | tee ~/install.log
 
 The argument is the address browsers use to reach the API. Use `localhost` when the browser runs on the VM itself; otherwise use the VM's hostname or IP address.
 
+The first tenant and its admin come from three optional variables, set before `sudo` with `sudo -E` or on the same line:
+
+| Variable | Default |
+|---|---|
+| `TE_TENANT` | `main` |
+| `TE_ADMIN_USER` | `admin` |
+| `TE_ADMIN_PASSWORD` | Generated and written to `/root/te-initial-admin` (mode 600, root only). It is not printed, so it stays out of `install.log`. |
+
 The script runs six steps:
 1. Checks every file against `SHA256SUMS`.
 2. Installs the Ubuntu packages, using the bundle as the only apt source. The VM's own apt sources are ignored.
 3. Copies the app to `/opt/te-migration`, creates the `te-app` system user, and builds a Python virtual environment from `wheels/` without network access.
 4. Deploys database `te_mgmt_prod` with schema `te_prod` and its login role `te_prod_user`, using a generated password.
-5. Writes `/opt/te-migration/env` (mode 600) with that password and a generated API key, and starts the `te-api` (port 8000) and `te-frontend` (port 3000) services under systemd.
-6. Runs the smoke test.
+5. Writes `/opt/te-migration/env` (mode 600) with that password and a generated API key, and starts the `te-api` (port 8000) and `te-frontend` (port 3000) services under systemd. The API key is for scripts only. The frontend holds no key; people sign in.
+6. Creates the first tenant and its tenant admin, then runs the smoke test.
 
 During step 2, apt may print `W: Download is performed unsandboxed as root`. This only means apt's sandbox user can't read the bundle folder, and it's harmless.
 
 ## 4. Verify
 
-The install finishes by printing these five lines. Every one must read PASS:
+The install finishes by printing these seven lines. Every one must read PASS:
 
 ```
 PASS  API health
@@ -74,7 +82,11 @@ PASS  API rejects a missing key
 PASS  upload a CSV (2 rows inserted)
 PASS  upload listed with persisted counts
 PASS  frontend serves the app
+PASS  admin signs in
+PASS  session is tenant_admin
 ```
+
+Then open `http://<API_HOST>:3000` in a browser. You should land on the sign-in page. Sign in with the tenant, username and password from `/root/te-initial-admin`, or the values you set.
 
 You can re-run the check at any time:
 
@@ -87,7 +99,7 @@ sudo bash app/scripts/offline/smoke_test.sh "$(sudo sed -n 's/^API_KEY=//p' env)
 
 Attach the following to #60:
 
-1. `~/install.log` from step 3, showing all five PASS lines.
+1. `~/install.log` from step 3, showing all seven PASS lines.
 2. Proof that the VM has no outside network. This command should print `000` or a connection error:
    ```bash
    cd ~
@@ -100,11 +112,27 @@ Once that evidence is on #60, the README can move to the "fully offline" wording
 ## Known limits
 
 - **Fresh VM only.** Re-running `install.sh` replaces `/opt/te-migration`. The database script has only been run against an empty database.
-- **The API key is shared and visible to browsers.** The frontend still sends one API key from the browser, so anyone who can load the page can read it. Per-user sign-in replaces it in ART Milestone 2 (#92, #96). Until then, run this only on a trusted network.
+- **Change the first admin's password.** The installer generates it. There's no self-service password change yet, so rerun `scripts/create_tenant_admin.py` for a new admin if needed.
 - **The API address is fixed at install.** It's written into the frontend files. To change it, re-run the install.
 - **Ubuntu 24.04 x86_64 only.** Other operating systems need different packages and wheels.
 
-## How it was rehearsed (26 Oct 2026)
+## How it was rehearsed
+
+### Second rehearsal (26 Oct 2026, with frontend sign-in, #96)
+
+The second rehearsal ran the same way as the first: inside a network namespace with only a loopback interface, where `curl https://pypi.org` returned `000`.
+
+- **Install:** `install.sh` ran end to end. The first admin was created in tenant `main`, and `/root/te-initial-admin` was mode 600, owned by root.
+- **Smoke test:** the in-install run had 6 of 7 pass. The frontend check ran before Node had finished starting, because the test only waited for the API. The smoke test now waits for both. Rerun against the same install, it passed **7 of 7**.
+- **Browser (Playwright, inside the same namespace):**
+  - signed out, both `/` and `/audit` land on `/auth`;
+  - a wrong password shows the generic error;
+  - signing in reaches the upload page, with the header showing `admin · main` (role `tenant_admin`);
+  - the page contains no API key, and the token is in `sessionStorage`;
+  - signing out returns to `/auth`, and `/` redirects there again.
+- **Upload through the UI:** every API call carried `Authorization: Bearer` and none carried `X-API-Key`. The file landed in `tenant_main.csv_files` with 2 rows.
+
+### First rehearsal (26 Oct 2026)
 
 The rehearsal ran in Claude's Ubuntu 24.04 workspace, inside a Linux network namespace that had only a loopback interface. `curl https://pypi.org` returned `000` from inside it.
 

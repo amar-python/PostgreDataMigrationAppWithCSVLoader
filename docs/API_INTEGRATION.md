@@ -47,17 +47,19 @@ CSV content is sent as a JSON string, not multipart.
 
 ## Authentication
 
-Every endpoint (including `/api/health`) requires an `X-API-Key` header
-matching the `API_KEY` environment variable. If `API_KEY` is unset the check
-is skipped — that's the local-dev default, and `api/main.py` logs a warning
-at startup when it's unset so this isn't silently forgotten in a real
-deployment. Set `API_KEY` (backend) and `VITE_API_KEY` (frontend, same value)
-before deploying anywhere reachable beyond localhost. See
-`csv-table-hub-main/.env.local`.
+Two kinds of caller (ART Milestone 2, BR-36):
 
-> **Known DX gap** — if `API_KEY` and `VITE_API_KEY` don't match, every request
-> returns 401 with no hint from either process. Tracked as BUG-006 in
-> `docs/BUG_REPORT.md`.
+- **People, through the browser,** sign in per user with `POST /api/auth/login`
+  (local accounts) or `POST /api/auth/oidc` (the deployment's IdP). They send
+  `Authorization: Bearer <token>`. Each request runs in the user's tenant
+  schema and is checked against the role matrix in `docs/ROLES.md`. The
+  browser never holds the shared key (#96).
+- **Scripts and services** send `X-API-Key` matching `API_KEY`. These requests
+  use the deployment's default schemas, not any tenant's. If `API_KEY` is unset
+  the check is skipped. That's the local-dev default, and the API refuses to
+  start outside `dev` without it.
+
+`/api/health` needs neither.
 
 ## What it does well
 

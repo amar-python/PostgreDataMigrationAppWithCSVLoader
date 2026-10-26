@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { SessionMenu } from "@/components/session-menu";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({ meta: [{ title: "CSV Migrator — Upload CSV files to your database" }, { name: "description", content: "Upload any number of CSV files. Each becomes its own database table, with duplicates automatically skipped." }, { property: "og:title", content: "CSV Migrator" }] }),
@@ -82,6 +83,7 @@ function Home() {
           <div className="flex items-center gap-3">
             <Badge variant="secondary" className="hidden sm:inline-flex">{files.length} file{files.length===1?"":"s"} migrated</Badge>
             <Link to="/audit" className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">Import history</Link>
+            <SessionMenu/>
           </div>
         </div>
       </header>

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { QueryClient } from "@tanstack/react-query";
+import { apiBase, authHeaders, clearSession } from "@/lib/session";
 
 const columnTypeSchema = z.enum(["int8", "numeric", "date", "timestamptz", "boolean", "text"]);
 export type ColumnType = z.infer<typeof columnTypeSchema>;
@@ -98,18 +99,23 @@ const previewRowsSchema = z.object({
   rows: z.array(z.record(previewRowValueSchema)),
 });
 
-const apiBase = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
-const apiKey = import.meta.env.VITE_API_KEY ?? "";
-
 async function apiFetch<T>(path: string, schema: z.ZodType<T>, options?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
     ...options,
     headers: {
       "content-type": "application/json",
-      ...(apiKey ? { "X-API-Key": apiKey } : {}),
+      ...authHeaders(),
       ...options?.headers,
     },
   });
+
+  // #96: an expired or revoked session ends here; the route guard then sends
+  // the user to the sign-in page.
+  if (response.status === 401) {
+    clearSession();
+    if (typeof window !== "undefined") window.location.assign("/auth");
+    throw new Error("Your session has ended. Please sign in again.");
+  }
 
   const text = await response.text();
   let payload: unknown = null;
@@ -122,7 +128,8 @@ async function apiFetch<T>(path: string, schema: z.ZodType<T>, options?: Request
   }
 
   if (!response.ok) {
-    const message = (payload as any)?.message || (payload as any)?.error || response.statusText;
+    const body = payload as { message?: unknown; error?: unknown; detail?: unknown } | null;
+    const message = body?.message || body?.error || body?.detail || response.statusText;
     throw new Error(typeof message === "string" ? message : String(payload));
   }
 

@@ -104,8 +104,19 @@ Verify it's running: open `http://localhost:8000/api/health` — should return
 
 > **Expected startup warnings (safe to ignore):**
 > - `API_KEY is not set` — fine for local dev
-> - `alembic.ini not found — skipping migration` — schema managed by
->   `provision_full_test_env.sh`, not Alembic
+
+### Create your sign-in (first run only)
+
+The frontend requires signing in (#96). Create a tenant and its admin once:
+
+```powershell
+cd "C:\Users\User\OneDrive\Desktop\Migration using ai\PostgreDataMigrationAppWithCSVLoader"
+python scripts\create_tenant_admin.py --tenant dev --name "Dev tenant" --username admin
+```
+
+It prompts for a password of at least 12 characters, or reads it from
+`TE_ADMIN_PASSWORD`. Sign in with tenant `dev`, username `admin` and that
+password.
 
 ---
 
@@ -117,7 +128,6 @@ cd csv-table-hub-main
 # First run only — create the env file
 @"
 VITE_API_BASE=http://localhost:8000
-VITE_API_KEY=
 "@ | Set-Content .env.local
 
 # Install dependencies (first run only)
@@ -128,7 +138,7 @@ npm run dev
 ```
 
 The frontend starts on **`http://localhost:8080`**. Open that URL in your
-browser — you should see the CSV Table Hub upload interface.
+browser. You should see the sign-in page; after signing in, the upload page.
 
 Or use the convenience script from the repo root:
 
@@ -235,7 +245,7 @@ PostgreDataMigrationAppWithCSVLoader/
 │   ├── src/routes/               ← file-based routes
 │   ├── src/lib/                  ← export, mapping-templates, csv-preview
 │   ├── src/__tests__/            ← 76 vitest tests
-│   ├── .env.local                ← VITE_API_BASE, VITE_API_KEY (not committed)
+│   ├── .env.local                ← VITE_API_BASE (not committed)
 │   └── package.json
 │
 ├── build/                        ← SQL schema, loaders, deploy scripts
