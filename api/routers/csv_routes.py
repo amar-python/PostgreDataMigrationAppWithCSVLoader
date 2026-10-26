@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from psycopg2 import sql
 from pydantic import BaseModel, Field
 
-from api.auth import tenant_scope
+from api.auth import allow, tenant_scope
 from api.config import settings
 from api.tenancy import current_schema, uploads_schema
 from api.db import Conn
@@ -42,7 +42,7 @@ class UploadRequest(BaseModel):
     targetTable: str | None = None  # required when mode == "te"
 
 
-@router.post("/preview")
+@router.post("/preview", dependencies=[Depends(allow("preview"))])
 def preview(req: PreviewRequest) -> dict:
     if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
@@ -67,7 +67,7 @@ def preview(req: PreviewRequest) -> dict:
     return result
 
 
-@router.post("/upload")
+@router.post("/upload", dependencies=[Depends(allow("upload"))])
 def upload(req: UploadRequest) -> dict:
     if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
@@ -98,7 +98,7 @@ def upload(req: UploadRequest) -> dict:
     return result
 
 
-@router.get("/files")
+@router.get("/files", dependencies=[Depends(allow("list_files"))])
 def list_files() -> list[dict]:
     with Conn() as conn:
         with conn.cursor() as cur:
@@ -126,7 +126,7 @@ def list_files() -> list[dict]:
             ]
 
 
-@router.get("/tables/{table_name}/rows")
+@router.get("/tables/{table_name}/rows", dependencies=[Depends(allow("read_rows"))])
 def table_rows(table_name: str, limit: int = 50) -> dict:
     if not table_name.startswith("csv_") or len(table_name) > 64:
         raise HTTPException(422, "Invalid table name")
@@ -158,7 +158,7 @@ def table_rows(table_name: str, limit: int = 50) -> dict:
     return {"rows": rows}
 
 
-@router.delete("/files/{file_id}")
+@router.delete("/files/{file_id}", dependencies=[Depends(allow("delete_file"))])
 def delete_file(file_id: int) -> dict:
     if not settings.allow_destructive:
         raise HTTPException(

@@ -1,6 +1,6 @@
 """Standing cross-tenant negative tests (M2b, #93, BR-36; ADR-0003).
 
-Two tenants, each with an uploader. Nothing one tenant does may be visible to
+Two tenants, each with a tenant admin (the most privileged role). Nothing one tenant does may be visible to
 or changeable by the other, or by a request that has no session.
 Integration: needs a live PostgreSQL. Fails (never skips) without one.
 """
@@ -46,7 +46,7 @@ class CrossTenantIsolation(unittest.TestCase):
                 for key, slug in cls.slugs.items():
                     tid = accounts.create_tenant(cur, slug, f"Tenant {key}")
                     uid = accounts.create_user(cur, f"{slug}_user", _PW)
-                    accounts.add_membership(cur, uid, tid, "uploader")
+                    accounts.add_membership(cur, uid, tid, "tenant_admin")  # full rights: isolation must still hold
             conn.commit()
         for slug in cls.slugs.values():
             migrate_tenant(slug)
