@@ -2,7 +2,7 @@
 
 **Branch:** `art-milestone-0` · **Baseline commit:** `main` @ 032b522 · **Date:** 2026-10-26
 **Prompt:** [`docs/prompts/ART_FRAMEWORK.md`](../prompts/ART_FRAMEWORK.md) (v2) · **Issue:** #53
-**Status:** For product-owner approval. No production code has been changed.
+**Status:** Approved by the product owner on 2026-10-26: ADR-0002, ADR-0003 and all nine §6 recommended defaults. No production code was changed in Milestone 0.
 
 This document covers Milestone 0 steps 1, 2, 3, 5 and 6. Step 4 is the two proposed ADRs:
 [ADR-0002](../adr/0002-transactional-staged-import.md) and [ADR-0003](../adr/0003-customer-facing-multi-tenant.md).
@@ -170,4 +170,4 @@ M7's offline-install part can run in parallel with M1 to meet the 15 Nov deadlin
 | 8 | Performance targets and environment | 100,000-row import under 60 s and first preview page under 2 s on a 2 vCPU / 4 GB instance; Azure Container Apps plus an on-prem docker compose | Targets need a perf harness (M7); BR-22 stays deferred |
 | 9 | PR #40 and csv-table-hub PR #1 | **Close both:** outside the React/TS constraint | Loses the plain-HTML fallback (#50) |
 
-**Next step:** approve or amend ADR-0002, ADR-0003 and the nine decisions. M1 starts only after approval.
+**Approved 2026-10-26:** all nine recommended defaults, recorded in [`DECISIONS/2026-10-26-art-milestone-0.md`](../../DECISIONS/2026-10-26-art-milestone-0.md). M1 starts next.

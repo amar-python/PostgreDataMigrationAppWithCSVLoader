@@ -1,6 +1,6 @@
 # ADR-0002 — Transactional, staged, approved import
 
-- **Status:** Proposed (awaiting product-owner approval)
+- **Status:** Accepted (product owner, 2026-10-26)
 - **Date:** 2026-10-26
 - **Decision maker:** Amarnath Rasineni
 - **Affects:** BR-24, BR-32, BR-33, BR-34, BR-35; `api/services/dynamic_loader.py`, `api/services/te_loader.py`, `api/services/audit.py`
@@ -57,7 +57,7 @@ The import runs in a worker process, with the job state in PostgreSQL. Promotion
 - **For:** handles large files and concurrency without tying up API requests.
 - **Against:** a new process to deploy and monitor, which counts against the air-gapped simplicity goal. Not needed at the current 100,000-row cap.
 
-## Decision (proposed)
+## Decision
 
 **Adopt A.** Keep D as the documented upgrade path if decision 1 (file size and concurrency) later rises beyond what one request transaction can handle.
 

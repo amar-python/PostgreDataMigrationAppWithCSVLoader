@@ -1,6 +1,6 @@
 # ADR-0003 — Customer-facing, multi-tenant scope
 
-- **Status:** Proposed (awaiting product-owner approval)
+- **Status:** Accepted (product owner, 2026-10-26)
 - **Date:** 2026-10-26
 - **Decision maker:** Amarnath Rasineni
 - **Affects:** BR-23 to BR-37 (new); `api/auth.py`, `api/config.py`, `api/db.py`; the frontend; deployment docs
@@ -35,10 +35,10 @@ The platform is repositioned from a single-operator internal tool to a **multi-t
 **Identity and access (BR-36)**
 - Per-user authentication replaces the shared key for interactive use. The key gate can remain for service-to-service calls.
 - Roles at minimum: *uploader*, *reviewer/approver*, *tenant admin*, *auditor (read-only)*.
-- The sovereignty constraint (D6) rules out SaaS identity providers at runtime. The proposed approach is OIDC against an IdP the deployment controls, plus a local-account fallback for air-gapped installs. **Needs your confirmation.**
+- The sovereignty constraint (D6) rules out SaaS identity providers at runtime. Approved approach (2026-10-26): OIDC against an IdP the deployment controls, plus a local-account fallback for air-gapped installs.
 
 **Tenant isolation (BR-36)**
-- Proposed model: schema per tenant (Milestone 0, decision 6). Dynamic tables already live in a configurable schema, so this extends an existing pattern.
+- Approved model (2026-10-26): schema per tenant (Milestone 0, decision 6). Dynamic tables already live in a configurable schema, so this extends an existing pattern.
 - Every request resolves to exactly one tenant, and the database session is scoped to it.
 - Cross-tenant read and write attempts are standing negative tests from Milestone 2 onwards.
 
