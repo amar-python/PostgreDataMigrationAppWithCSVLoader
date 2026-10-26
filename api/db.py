@@ -204,7 +204,10 @@ def _bootstrap_fallback_schema() -> None:
                         mode TEXT NOT NULL,
                         row_count INTEGER NOT NULL DEFAULT 0,
                         column_names TEXT[] NOT NULL DEFAULT '{{}}',
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        total_rows INTEGER,
+                        duplicate_rows_skipped INTEGER,
+                        failed_rows INTEGER
                     )
                     """
                 ).format(sql.Identifier(schema))

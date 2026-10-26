@@ -340,10 +340,12 @@ def _do_upload(
             try:
                 cur.execute(
                     sql.SQL(
-                        "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names) "
-                        "VALUES (%s, %s, %s, 'dynamic', %s, %s) RETURNING id"
+                        "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names, "
+                        "total_rows, duplicate_rows_skipped, failed_rows) "
+                        "VALUES (%s, %s, %s, 'dynamic', %s, %s, %s, %s, %s) RETURNING id"
                     ).format(sql.Identifier(schema)),
-                    (file_name, file_hash, table_name, inserted, columns),
+                    (file_name, file_hash, table_name, inserted, columns,
+                     len(data_rows), duplicates, failed_row_count),
                 )
                 file_id = cur.fetchone()[0]
             except psycopg2.errors.UniqueViolation:

@@ -294,10 +294,12 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
             try:
                 cur.execute(
                     sql.SQL(
-                        "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names) "
-                        "VALUES (%s, %s, %s, 'te', %s, %s) RETURNING id"
+                        "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names, "
+                        "total_rows, duplicate_rows_skipped, failed_rows) "
+                        "VALUES (%s, %s, %s, 'te', %s, %s, %s, 0, %s) RETURNING id"
                     ).format(sql.Identifier(settings.UPLOADS_SCHEMA)),
-                    (file_name, file_hash, f"{settings.TE_SCHEMA}.{target_table}", inserted, columns),
+                    (file_name, file_hash, f"{settings.TE_SCHEMA}.{target_table}", inserted, columns,
+                     len(data_rows), failed_row_count),
                 )
             except psycopg2.errors.UniqueViolation:
                 # #81: a concurrent load of the same file registered first.
