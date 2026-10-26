@@ -6,3 +6,6 @@ pydantic>=2.13.4,<3.0.0
 # BUG-032: schema migrations for csv_uploads.* — auto-runs at API startup
 # via alembic upgrade head (see api/db.py bootstrap and alembic/ directory).
 alembic>=1.19.1,<2.0.0
+# #95: OIDC ID-token verification (RS256 via cryptography). Only used when
+# OIDC_ISSUER is set; air-gapped installs can rely on local accounts.
+PyJWT[crypto]>=2.10,<3.0

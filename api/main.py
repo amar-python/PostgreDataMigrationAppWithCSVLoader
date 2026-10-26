@@ -15,7 +15,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api import db
+from api import db, oidc
 from api.config import settings
 from api.ratelimit import rate_limit_middleware
 from api.routers import audit_routes, auth_routes, csv_routes, te_routes
@@ -45,6 +45,7 @@ async def lifespan(app: FastAPI):
     # O-03: fail closed. A warning was not enough — an unset key left every
     # router open, and a warning in a container log is easy to miss.
     assert_auth_configured(settings.API_ENV, settings.API_KEY)
+    oidc.check_config()
     if not settings.API_KEY:
         logger.warning(
             "API_KEY is not set - every endpoint is unauthenticated. "

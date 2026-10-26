@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from api.auth import bearer_token, require_session
 from api.db import Conn
+from api import oidc
 from api.services import accounts
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -31,6 +32,28 @@ def login(req: LoginRequest) -> dict:
         conn.commit()
     if session is None:
         raise HTTPException(status_code=401, detail="Invalid tenant, username or password")
+    return session
+
+
+class OidcLoginRequest(BaseModel):
+    tenant: str = Field(min_length=1, max_length=64)
+    idToken: str = Field(min_length=1, max_length=16384)
+
+
+@router.post("/oidc")
+def oidc_login(req: OidcLoginRequest) -> dict:
+    """Exchange an IdP ID token for a session (#95). 404 when OIDC isn't configured."""
+    if not oidc.enabled():
+        raise HTTPException(status_code=404, detail="OIDC sign-in is not configured")
+    username = oidc.username_from(req.idToken)
+    session = None
+    if username:
+        with Conn() as conn:
+            with conn.cursor() as cur:
+                session = accounts.login_trusted(cur, req.tenant, username)
+            conn.commit()
+    if session is None:
+        raise HTTPException(status_code=401, detail="Invalid token, or no access to that tenant")
     return session
 
 

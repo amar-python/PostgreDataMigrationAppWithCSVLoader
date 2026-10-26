@@ -87,7 +87,25 @@ def login(cur, tenant_slug: str, username: str, password: str) -> dict | None:
         return None
     cur.execute(_q("UPDATE {c}.users SET failed_logins = 0, first_failed_at = NULL, "
                    "locked_until = NULL WHERE id = %s"), (row[0],))
-    user_id, tenant_id, role = row[0], row[3], row[4]
+    return _new_session(cur, row[0], row[3], username, tenant_slug, row[4])
+
+
+def login_trusted(cur, tenant_slug: str, username: str) -> dict | None:
+    """Session for a user whose identity an IdP has already proven (OIDC, #95).
+
+    Authorisation stays local: the user must already exist, be active and be a
+    member of the tenant. Nobody is created from IdP claims.
+    """
+    cur.execute(_q(
+        "SELECT u.id, t.id, m.role FROM {c}.users u "
+        "JOIN {c}.tenants t ON t.slug = %s "
+        "JOIN {c}.memberships m ON m.user_id = u.id AND m.tenant_id = t.id "
+        "WHERE u.username = %s AND u.is_active"), (tenant_slug, username))
+    row = cur.fetchone()
+    return _new_session(cur, row[0], row[1], username, tenant_slug, row[2]) if row else None
+
+
+def _new_session(cur, user_id: int, tenant_id: int, username: str, tenant_slug: str, role: str) -> dict:
     token = secrets.token_urlsafe(32)
     cur.execute(_q(
         "INSERT INTO {c}.sessions (token_hash, user_id, tenant_id, expires_at) "

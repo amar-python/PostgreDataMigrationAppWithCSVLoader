@@ -20,6 +20,13 @@ class Settings:
     # for the same number of minutes.
     LOGIN_MAX_FAILURES: int = int(os.environ.get("LOGIN_MAX_FAILURES", "10"))
     LOGIN_LOCKOUT_MINUTES: int = int(os.environ.get("LOGIN_LOCKOUT_MINUTES", "15"))
+    # #95: OIDC sign-in against an IdP the deployment controls. Off unless
+    # OIDC_ISSUER is set. OIDC_JWKS_URL may be https:// or, for an enclave with
+    # a published key file, file://.
+    OIDC_ISSUER: str = os.environ.get("OIDC_ISSUER", "")
+    OIDC_AUDIENCE: str = os.environ.get("OIDC_AUDIENCE", "")
+    OIDC_JWKS_URL: str = os.environ.get("OIDC_JWKS_URL", "")
+    OIDC_USERNAME_CLAIM: str = os.environ.get("OIDC_USERNAME_CLAIM", "preferred_username")
 
     # Schema holding the fixed T&E tables (deploy_all.sh dev creates te_dev).
     TE_SCHEMA: str = os.environ.get("TE_SCHEMA", "te_dev")
