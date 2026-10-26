@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import time
 
+import psycopg2.errors
 from psycopg2 import sql
 from psycopg2.extras import execute_values
 
@@ -290,13 +291,24 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
             # *dynamic*-mode upload of the same file also has its csv_<hash>
             # table dropped instead of orphaned.
             _cleanup_prior_registry_entries(cur, file_name, file_hash)
-            cur.execute(
-                sql.SQL(
-                    "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names) "
-                    "VALUES (%s, %s, %s, 'te', %s, %s) RETURNING id"
-                ).format(sql.Identifier(settings.UPLOADS_SCHEMA)),
-                (file_name, file_hash, f"{settings.TE_SCHEMA}.{target_table}", inserted, columns),
-            )
+            try:
+                cur.execute(
+                    sql.SQL(
+                        "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names) "
+                        "VALUES (%s, %s, %s, 'te', %s, %s) RETURNING id"
+                    ).format(sql.Identifier(settings.UPLOADS_SCHEMA)),
+                    (file_name, file_hash, f"{settings.TE_SCHEMA}.{target_table}", inserted, columns),
+                )
+            except psycopg2.errors.UniqueViolation:
+                # #81: a concurrent load of the same file registered first.
+                # Roll back this load's rows too, so nothing lands twice.
+                conn.rollback()
+                _log(logs, "duplicate_check", "Lost race to a concurrent load of the same file", "warn")
+                return {
+                    "status": "error",
+                    "message": "The same file was loaded concurrently and that load finished first. Nothing was imported by this request.",
+                    "logs": logs,
+                }
             file_id = cur.fetchone()[0]
         conn.commit()
 
