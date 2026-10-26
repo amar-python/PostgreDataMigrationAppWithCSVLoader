@@ -105,6 +105,19 @@ def upload_dynamic(
 
     try:
         return _do_upload(file_name, types, overwrite, logs, schema, rows, file_hash)
+    except psycopg2.errors.UniqueViolation:
+        # #81: an identical concurrent upload won a race that _do_upload could
+        # not settle itself (e.g. both creating csv_<hash> at once). Nothing
+        # from this request was committed.
+        _log(logs, "duplicate_check", "Lost race to a concurrent identical upload", "warn")
+        return {
+            "status": "duplicate_file",
+            "reason": "content",
+            "existingFileName": file_name,
+            "tableName": f"csv_{file_hash[:16]}",
+            "existingRowCount": 0,
+            "logs": logs,
+        }
     except psycopg2.Error as exc:
         # Mirror te_loader's structured-error contract: an unexpected DB error
         # (e.g. a column type edge case not caught by cast_value) should not
