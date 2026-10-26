@@ -12,6 +12,10 @@ class Settings:
 
     # Schema where dynamically created per-CSV tables + the registry live.
     UPLOADS_SCHEMA: str = os.environ.get("CSV_UPLOADS_SCHEMA", "csv_uploads")
+    # M2 (#92): tenants, users, memberships and sessions, shared by all tenants.
+    CONTROL_SCHEMA: str = os.environ.get("CONTROL_SCHEMA", "control")
+    # Lifetime of a sign-in session, in hours.
+    SESSION_TTL_HOURS: int = int(os.environ.get("SESSION_TTL_HOURS", "12"))
 
     # Schema holding the fixed T&E tables (deploy_all.sh dev creates te_dev).
     TE_SCHEMA: str = os.environ.get("TE_SCHEMA", "te_dev")

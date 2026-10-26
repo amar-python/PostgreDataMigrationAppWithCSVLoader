@@ -13,9 +13,11 @@ function can never silently wave traffic through in a deployed environment.
 
 import secrets
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
 
 from api.config import settings
+from api.db import Conn
+from api.services.accounts import session_for
 
 
 def require_api_key(x_api_key: str = Header(default="")) -> None:
@@ -24,3 +26,24 @@ def require_api_key(x_api_key: str = Header(default="")) -> None:
         return
     if not secrets.compare_digest(x_api_key, settings.API_KEY):
         raise HTTPException(status_code=401, detail="Missing or invalid X-API-Key header")
+
+
+def bearer_token(authorization: str = Header(default="")) -> str:
+    """The token from an ``Authorization: Bearer <token>`` header, or 401."""
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(status_code=401, detail="Sign in required")
+    return token.strip()
+
+
+def require_session(token: str = Depends(bearer_token)) -> dict:
+    """The caller's live session (user, tenant, role), or 401 (M2a, #92).
+
+    Not yet applied to the data routers; tenant routing (#93) and the role
+    matrix (#94) switch them over.
+    """
+    with Conn() as conn, conn.cursor() as cur:
+        session = session_for(cur, token)
+    if session is None:
+        raise HTTPException(status_code=401, detail="Session expired or invalid; sign in again")
+    return session
