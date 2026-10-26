@@ -4,6 +4,9 @@
 # From inside the extracted bundle directory:
 #   sudo bash app/scripts/offline/install.sh [API_HOST]
 # API_HOST is the address browsers use to reach the API (default: localhost).
+# The first tenant and its admin come from TE_TENANT (default: main),
+# TE_ADMIN_USER (default: admin) and TE_ADMIN_PASSWORD (default: generated and
+# written to /root/te-initial-admin, readable by root only).
 # Installs to /opt/te-migration, deploys database te_mgmt_prod (schema te_prod),
 # writes /opt/te-migration/env, and installs systemd units te-api and te-frontend.
 set -euo pipefail
@@ -55,9 +58,8 @@ CORS_ORIGINS=http://$API_HOST:3000
 PORT=3000
 ENV
 chmod 600 "$DEST/env"
-# The frontend still sends the shared key from the browser (replaced by sign-in in M2, #96).
-grep -rl "__OFFLINE_API_" "$DEST/frontend" | xargs sed -i \
-  -e "s#__OFFLINE_API_BASE__#http://$API_HOST:8000#g" -e "s#__OFFLINE_API_KEY__#$API_KEY#g"
+# Browsers sign in per user (#96); the API key stays server-side for scripts.
+grep -rl "__OFFLINE_API_BASE__" "$DEST/frontend" | xargs sed -i "s#__OFFLINE_API_BASE__#http://$API_HOST:8000#g"
 chown -R te-app:te-app "$DEST"
 cat > /etc/systemd/system/te-api.service <<UNIT
 [Unit]
@@ -87,5 +89,16 @@ UNIT
 systemctl daemon-reload
 systemctl enable --now te-api te-frontend >/dev/null
 
-echo "== 6/6 smoke test"
-bash "$DEST/app/scripts/offline/smoke_test.sh" "$API_KEY"
+echo "== 6/6 first tenant admin and smoke test"
+TE_TENANT="${TE_TENANT:-main}"; TE_ADMIN_USER="${TE_ADMIN_USER:-admin}"
+if [ -z "${TE_ADMIN_PASSWORD:-}" ]; then
+  TE_ADMIN_PASSWORD="$(openssl rand -base64 18)"
+  ( umask 077; printf 'tenant=%s\nusername=%s\npassword=%s\n' "$TE_TENANT" "$TE_ADMIN_USER" "$TE_ADMIN_PASSWORD" \
+      > /root/te-initial-admin )
+  echo "First admin's password written to /root/te-initial-admin (root only). Change it after first sign-in."
+fi
+( cd "$DEST/app" && set -a && . "$DEST/env" && set +a && export TE_ADMIN_PASSWORD &&
+  runuser -u te-app -- "$DEST/venv/bin/python" scripts/create_tenant_admin.py \
+    --tenant "$TE_TENANT" --name "$TE_TENANT" --username "$TE_ADMIN_USER" )
+SMOKE_TENANT="$TE_TENANT" SMOKE_USER="$TE_ADMIN_USER" SMOKE_PASSWORD="$TE_ADMIN_PASSWORD" \
+  bash "$DEST/app/scripts/offline/smoke_test.sh" "$API_KEY"

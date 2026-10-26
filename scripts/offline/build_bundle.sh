@@ -26,11 +26,12 @@ python3 -m pip download -q -r api/requirements.txt -d "$OUT/wheels" \
 python3 -m pip download -q pip -d "$OUT/wheels" --only-binary=:all: --python-version 3.12
 
 echo "== 3/4 frontend, built for a plain Node server"
-# Placeholders are replaced by install.sh with the real API address and key.
+# The placeholder is replaced by install.sh with the real API address. No API key
+# is built in: browsers sign in per user (#96).
 ( cd csv-table-hub-main
   [ -d node_modules ] || npm ci
   rm -rf .output
-  NITRO_PRESET=node-server VITE_API_BASE=__OFFLINE_API_BASE__ VITE_API_KEY=__OFFLINE_API_KEY__ npm run build >/dev/null
+  NITRO_PRESET=node-server VITE_API_BASE=__OFFLINE_API_BASE__ npm run build >/dev/null
   cp -r .output "$OUT/frontend" )
 
 echo "== 4/4 Ubuntu packages: PostgreSQL 16, Python venv, Node.js, with dependencies"

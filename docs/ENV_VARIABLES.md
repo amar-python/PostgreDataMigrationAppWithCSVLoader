@@ -90,19 +90,19 @@ Create it by copying the table below.
 | Variable | Default | Required | Description |
 |---|---|---|---|
 | `VITE_API_BASE` | _(empty — same origin)_ | Yes in prod | Base URL of the FastAPI backend. Empty = calls relative to the page origin (works when frontend and API are served from the same host). Set to `https://your-api.example.com` when they are separate. |
-| `VITE_API_KEY` | _(empty)_ | Yes if API_KEY is set | API key sent in `X-API-Key` header. Must match `API_KEY` on the backend. |
 
 **Example `csv-table-hub-main/.env.local` for local development:**
 ```
 VITE_API_BASE=http://localhost:8000
-VITE_API_KEY=
 ```
 
 **Example for production:**
 ```
 VITE_API_BASE=https://your-api.azurecontainerapps.io
-VITE_API_KEY=your-strong-api-key-here
 ```
+
+There is no `VITE_API_KEY` any more: the browser signs in per user (#96) and
+never holds the shared `API_KEY`, which is for scripts and services.
 
 ---
 
@@ -180,5 +180,4 @@ API_ALLOW_DESTRUCTIVE = false
 And in the frontend build / Static Web App settings:
 ```
 VITE_API_BASE  = https://your-api.azurecontainerapps.io
-VITE_API_KEY   = <same value as API_KEY above>
 ```

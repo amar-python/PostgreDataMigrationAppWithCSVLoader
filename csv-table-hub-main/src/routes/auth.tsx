@@ -1,41 +1,99 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState, type FormEvent } from "react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { signIn } from "@/lib/session";
 
+// #96: per-user sign-in. The account and tenant come from the API's local
+// accounts (scripts/create_tenant_admin.py creates the first admin).
 export const Route = createFileRoute("/auth")({
-  head: () => ({
-    meta: [
-      { title: "CSV Migrator — Upload without authentication" },
-      { name: "description", content: "Authentication is disabled. Upload CSV files directly to your backend." },
-    ],
-  }),
-  component: AuthPage,
+  ssr: false,
+  head: () => ({ meta: [{ title: "Sign in — CSV Migrator" }] }),
+  component: SignInPage,
 });
 
-function AuthPage() {
+export function SignInPage() {
+  const navigate = useNavigate();
+  const [tenant, setTenant] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await signIn(tenant.trim(), username.trim(), password);
+      navigate({ to: "/" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setPassword("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30 px-6">
-      <Card className="w-full max-w-lg">
-        <CardHeader>
-          <CardTitle>Authentication disabled</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            This Lovable frontend has been configured to use a PostgreSQL-backed backend API directly, so user sign-in is not required.
-          </p>
-          <div className="space-y-2">
-            <Label>Next step</Label>
-            <p className="text-sm text-muted-foreground">
-              Go back to the home screen and upload CSV files directly. Configure <code className="rounded bg-muted px-1">VITE_API_BASE</code> to point to your backend.
-            </p>
-          </div>
-        </CardContent>
-        <CardFooter>
-          <Button asChild>
-            <a href="/">Back to upload</a>
-          </Button>
-        </CardFooter>
+      <Card className="w-full max-w-sm">
+        <form onSubmit={onSubmit} noValidate>
+          <CardHeader>
+            <CardTitle>Sign in to CSV Migrator</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tenant">Tenant</Label>
+              <Input
+                id="tenant"
+                autoComplete="organization"
+                required
+                value={tenant}
+                onChange={(e) => setTenant(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                autoComplete="username"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+          </CardContent>
+          <CardFooter>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={busy || !tenant || !username || !password}
+            >
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Sign in
+            </Button>
+          </CardFooter>
+        </form>
       </Card>
     </div>
   );

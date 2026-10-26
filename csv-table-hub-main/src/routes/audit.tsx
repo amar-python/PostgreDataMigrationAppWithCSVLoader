@@ -16,8 +16,14 @@ import { CheckCircle2, AlertTriangle, XCircle, PauseCircle, ChevronDown, Chevron
 import { toast } from "sonner";
 import { downloadErrorReport, downloadAuditReport, buildErrorRows, mappingSummary, type ExportFormat, type AuditReportRow } from "@/lib/export";
 import type { Job, JobStatus } from "@/lib/job-types";
+import { requireSession } from "@/lib/session";
 
-export const Route = createFileRoute("/audit")({ head: () => ({ meta: [{ title: "Audit log — CSV Migrator" }] }), component: AuditPage });
+export const Route = createFileRoute("/audit")({
+  ssr: false,
+  beforeLoad: requireSession,
+  head: () => ({ meta: [{ title: "Audit log — CSV Migrator" }] }),
+  component: AuditPage,
+});
 
 const STATUS_LABEL: Record<JobStatus,string> = { reading:"Reading", uploading:"Uploading", processing:"Processing", done:"Imported", duplicate:"Skipped duplicate", error:"Invalid structure", interrupted:"Interrupted", cancelled:"Cancelled" };
 const FILTER_STATUSES = [ {value:"all",label:"All statuses"}, {value:"done",label:"Imported"}, {value:"overwritten",label:"Overwritten"}, {value:"duplicate",label:"Skipped duplicate"}, {value:"error",label:"Invalid structure"}, {value:"interrupted",label:"Interrupted"}, {value:"cancelled",label:"Cancelled"} ];
