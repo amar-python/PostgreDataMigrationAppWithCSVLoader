@@ -21,6 +21,7 @@ PY_SRC=(
     api/auth.py
     api/services/accounts.py
     api/routers/auth_routes.py
+    api/tenancy.py
     scripts/create_tenant_admin.py
 )
 
@@ -36,6 +37,7 @@ PY_TESTS=(
     tests/test_migrations.py
     tests/test_import_counts.py
     tests/test_accounts.py
+    tests/test_tenant_isolation.py
 )
 
 # Collect scripts/*.py dynamically

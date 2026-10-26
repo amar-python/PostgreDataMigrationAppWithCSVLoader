@@ -18,6 +18,7 @@ from psycopg2 import sql
 from psycopg2.extras import execute_values
 
 from api.config import settings
+from api.tenancy import uploads_schema
 from api.db import Conn
 from api.services.csv_parse import (
     ALLOWED_TYPES,
@@ -103,7 +104,7 @@ def upload_dynamic(
             "logs": logs,
         }
 
-    schema = settings.UPLOADS_SCHEMA
+    schema = uploads_schema()
 
     try:
         return _do_upload(file_name, types, overwrite, logs, schema, rows, file_hash)

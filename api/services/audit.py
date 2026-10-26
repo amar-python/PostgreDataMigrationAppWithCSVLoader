@@ -28,7 +28,7 @@ import logging
 
 from psycopg2 import sql
 
-from api.config import settings
+from api.tenancy import uploads_schema
 from api.db import Conn
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ def write_audit(cur, action: str, file_id: int | None, file_name: str | None,
             "INSERT INTO {}.audit_log "
             "(action, file_id, file_name, table_name, mode) "
             "VALUES (%s, %s, %s, %s, %s)"
-        ).format(sql.Identifier(settings.UPLOADS_SCHEMA)),
+        ).format(sql.Identifier(uploads_schema())),
         (action, file_id, file_name, table_name, mode),
     )
 

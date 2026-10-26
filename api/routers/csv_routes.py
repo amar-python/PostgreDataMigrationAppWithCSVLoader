@@ -8,8 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from psycopg2 import sql
 from pydantic import BaseModel, Field
 
-from api.auth import require_api_key
+from api.auth import tenant_scope
 from api.config import settings
+from api.tenancy import current_schema, uploads_schema
 from api.db import Conn
 from api.services.audit import coerce_file_id, record_audit, write_audit
 from api.services.csv_parse import build_preview
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/csv",
     tags=["csv"],
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(tenant_scope)],
 )
 
 
@@ -71,6 +72,9 @@ def upload(req: UploadRequest) -> dict:
     if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
     if req.mode == "te":
+        if current_schema() is not None:
+            raise HTTPException(409, "T&E mode isn't available for tenants yet; it arrives with "
+                                     "per-tenant T&E tables (#99). Use dynamic mode.")
         if not req.targetTable:
             raise HTTPException(422, "targetTable is required when mode is 'te'")
         result = upload_te(req.fileName, req.content, req.targetTable)
@@ -103,7 +107,7 @@ def list_files() -> list[dict]:
                     "SELECT id, file_name, table_name, mode, row_count, column_names, created_at, "
                     "total_rows, duplicate_rows_skipped, failed_rows "
                     "FROM {}.csv_files ORDER BY created_at DESC, id DESC"
-                ).format(sql.Identifier(settings.UPLOADS_SCHEMA))
+                ).format(sql.Identifier(uploads_schema()))
             )
             return [
                 {
@@ -132,7 +136,7 @@ def table_rows(table_name: str, limit: int = 50) -> dict:
             # Only serve tables that are registered uploads
             cur.execute(
                 sql.SQL("SELECT 1 FROM {}.csv_files WHERE table_name = %s").format(
-                    sql.Identifier(settings.UPLOADS_SCHEMA)
+                    sql.Identifier(uploads_schema())
                 ),
                 (table_name,),
             )
@@ -140,7 +144,7 @@ def table_rows(table_name: str, limit: int = 50) -> dict:
                 raise HTTPException(404, "Table not found")
             cur.execute(
                 sql.SQL("SELECT * FROM {}.{} ORDER BY _id LIMIT %s").format(
-                    sql.Identifier(settings.UPLOADS_SCHEMA), sql.Identifier(table_name)
+                    sql.Identifier(uploads_schema()), sql.Identifier(table_name)
                 ),
                 (limit,),
             )
@@ -167,7 +171,7 @@ def delete_file(file_id: int) -> dict:
             cur.execute(
                 sql.SQL(
                     "SELECT table_name, mode, file_name FROM {}.csv_files WHERE id = %s"
-                ).format(sql.Identifier(settings.UPLOADS_SCHEMA)),
+                ).format(sql.Identifier(uploads_schema())),
                 (file_id,),
             )
             row = cur.fetchone()
@@ -181,18 +185,18 @@ def delete_file(file_id: int) -> dict:
                     SELECT 1 FROM information_schema.tables
                     WHERE table_schema = %s AND table_name = %s
                     """,
-                    (settings.UPLOADS_SCHEMA, table_name),
+                    (uploads_schema(), table_name),
                 )
                 if cur.fetchone() is not None:
                     cur.execute(
                         sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
-                            sql.Identifier(settings.UPLOADS_SCHEMA),
+                            sql.Identifier(uploads_schema()),
                             sql.Identifier(table_name),
                         )
                     )
             cur.execute(
                 sql.SQL("DELETE FROM {}.csv_files WHERE id = %s").format(
-                    sql.Identifier(settings.UPLOADS_SCHEMA)
+                    sql.Identifier(uploads_schema())
                 ),
                 (file_id,),
             )

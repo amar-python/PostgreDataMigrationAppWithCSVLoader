@@ -8,7 +8,7 @@ Revises: 0003
 Create Date: 2026-10-26
 """
 
-from alembic import op
+from alembic import context, op
 
 from api.config import settings
 
@@ -22,7 +22,14 @@ def _schema() -> str:
     return op.get_bind().dialect.identifier_preparer.quote(settings.CONTROL_SCHEMA)
 
 
+def _tenant_run() -> bool:
+    # Shared objects are created once, not in every tenant schema (api/tenancy.py).
+    return context.config.attributes.get("scope") == "tenant"
+
+
 def upgrade() -> None:
+    if _tenant_run():
+        return
     s = _schema()
     op.execute(f"CREATE SCHEMA IF NOT EXISTS {s}")
     op.execute(f"""
@@ -59,4 +66,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if _tenant_run():
+        return
     op.execute(f"DROP SCHEMA IF EXISTS {_schema()} CASCADE")

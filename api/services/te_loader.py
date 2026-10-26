@@ -27,6 +27,7 @@ from psycopg2 import sql
 from psycopg2.extras import execute_values
 
 from api.config import TE_TABLES, settings
+from api.tenancy import te_schema, uploads_schema
 from api.db import Conn
 from api.services.csv_parse import (
     cast_value,
@@ -56,7 +57,7 @@ def te_table_columns(table: str) -> list[str]:
                 WHERE table_schema = %s AND table_name = %s
                 ORDER BY ordinal_position
                 """,
-                (settings.TE_SCHEMA, table),
+                (te_schema(), table),
             )
             return [r[0] for r in cur.fetchall()]
 
@@ -69,7 +70,7 @@ def _te_column_types(cur, table: str) -> dict[str, str]:
         FROM information_schema.columns
         WHERE table_schema = %s AND table_name = %s
         """,
-        (settings.TE_SCHEMA, table),
+        (te_schema(), table),
     )
     return {r[0]: r[1] for r in cur.fetchall()}
 
@@ -89,7 +90,7 @@ def _cleanup_prior_registry_entries(cur, file_name, file_hash):
         sql.SQL(
             "SELECT table_name, mode FROM {s}.csv_files"
             " WHERE file_name = %s OR file_hash = %s"
-        ).format(s=sql.Identifier(settings.UPLOADS_SCHEMA)),
+        ).format(s=sql.Identifier(uploads_schema())),
         (file_name, file_hash),
     )
     for table_name, mode in cur.fetchall():
@@ -99,14 +100,14 @@ def _cleanup_prior_registry_entries(cur, file_name, file_hash):
             # miss the table (it lives in csv_uploads, not public/default).
             cur.execute(
                 sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
-                    sql.Identifier(settings.UPLOADS_SCHEMA),
+                    sql.Identifier(uploads_schema()),
                     sql.Identifier(table_name),
                 )
             )
     cur.execute(
         sql.SQL(
             "DELETE FROM {s}.csv_files WHERE file_name = %s OR file_hash = %s"
-        ).format(s=sql.Identifier(settings.UPLOADS_SCHEMA)),
+        ).format(s=sql.Identifier(uploads_schema())),
         (file_name, file_hash),
     )
 
@@ -154,7 +155,7 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
     if not table_cols:
         return {
             "status": "error",
-            "message": f'T&E table "{target_table}" not found in schema {settings.TE_SCHEMA}. '
+            "message": f'T&E table "{target_table}" not found in schema {te_schema()}. '
             "Run deploy_all.sh dev first.",
             "logs": logs,
         }
@@ -162,7 +163,7 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
     if unknown:
         return {
             "status": "error",
-            "message": f'CSV columns not present in {settings.TE_SCHEMA}.{target_table}: {", ".join(unknown)}',
+            "message": f'CSV columns not present in {te_schema()}.{target_table}: {", ".join(unknown)}',
             "logs": logs,
         }
     _log(logs, "validate_columns", f"All {len(columns)} CSV columns exist on {target_table}")
@@ -172,13 +173,13 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
     inserted = 0
 
     insert_stmt = sql.SQL("INSERT INTO {}.{} ({}) VALUES ({})").format(
-        sql.Identifier(settings.TE_SCHEMA),
+        sql.Identifier(te_schema()),
         sql.Identifier(target_table),
         sql.SQL(", ").join(sql.Identifier(c) for c in columns),
         sql.SQL(", ").join(sql.Placeholder() for _ in columns),
     )
     batch_insert_stmt = sql.SQL("INSERT INTO {}.{} ({}) VALUES %s").format(
-        sql.Identifier(settings.TE_SCHEMA),
+        sql.Identifier(te_schema()),
         sql.Identifier(target_table),
         sql.SQL(", ").join(sql.Identifier(c) for c in columns),
     )
@@ -304,8 +305,8 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
                         "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names, "
                         "total_rows, duplicate_rows_skipped, failed_rows) "
                         "VALUES (%s, %s, %s, 'te', %s, %s, %s, 0, %s) RETURNING id"
-                    ).format(sql.Identifier(settings.UPLOADS_SCHEMA)),
-                    (file_name, file_hash, f"{settings.TE_SCHEMA}.{target_table}", inserted, columns,
+                    ).format(sql.Identifier(uploads_schema())),
+                    (file_name, file_hash, f"{te_schema()}.{target_table}", inserted, columns,
                      len(data_rows), failed_row_count),
                 )
             except psycopg2.errors.UniqueViolation:
@@ -325,7 +326,7 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
     return {
         "status": "ok",
         "fileId": str(file_id),
-        "tableName": f"{settings.TE_SCHEMA}.{target_table}",
+        "tableName": f"{te_schema()}.{target_table}",
         "totalRows": len(data_rows),
         "insertedRows": inserted,
         "duplicateRowsSkipped": 0,

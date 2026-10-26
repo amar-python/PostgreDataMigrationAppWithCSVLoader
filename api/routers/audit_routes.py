@@ -12,14 +12,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from psycopg2 import sql
 
-from api.auth import require_api_key
-from api.config import settings
+from api.auth import tenant_scope
+from api.tenancy import uploads_schema
 from api.db import Conn
 
 router = APIRouter(
     prefix="/api/audit",
     tags=["audit"],
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(tenant_scope)],
 )
 
 
@@ -31,7 +31,7 @@ def audit_log(limit: int = 50, offset: int = 0) -> dict:
         with conn.cursor() as cur:
             cur.execute(
                 sql.SQL("SELECT COUNT(*) FROM {}.audit_log").format(
-                    sql.Identifier(settings.UPLOADS_SCHEMA)
+                    sql.Identifier(uploads_schema())
                 )
             )
             total = cur.fetchone()[0]
@@ -39,7 +39,7 @@ def audit_log(limit: int = 50, offset: int = 0) -> dict:
                 sql.SQL(
                     "SELECT id, action, file_id, file_name, table_name, mode, performed_at "
                     "FROM {}.audit_log ORDER BY performed_at DESC LIMIT %s OFFSET %s"
-                ).format(sql.Identifier(settings.UPLOADS_SCHEMA)),
+                ).format(sql.Identifier(uploads_schema())),
                 (limit, offset),
             )
             entries = [

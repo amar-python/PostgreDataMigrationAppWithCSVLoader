@@ -2,15 +2,16 @@
 
 from fastapi import APIRouter, Depends
 
-from api.auth import require_api_key
-from api.config import TE_TABLES, settings
+from api.auth import tenant_scope
+from api.config import TE_TABLES
+from api.tenancy import te_schema
 from api.db import Conn
 
 # BUG-035: auth is applied per-router (see csv_routes.py for the rationale).
 router = APIRouter(
     prefix="/api/te",
     tags=["te"],
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(tenant_scope)],
 )
 
 
@@ -30,7 +31,7 @@ def te_tables() -> list[dict]:
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = %s AND table_name = ANY(%s)
                 """,
-                (settings.TE_SCHEMA, tables),
+                (te_schema(), tables),
             )
             existing = {r[0] for r in cur.fetchall()}
             cur.execute(
@@ -38,7 +39,7 @@ def te_tables() -> list[dict]:
                 SELECT relname, n_live_tup FROM pg_stat_user_tables
                 WHERE schemaname = %s AND relname = ANY(%s)
                 """,
-                (settings.TE_SCHEMA, tables),
+                (te_schema(), tables),
             )
             row_counts = {r[0]: max(r[1], 0) for r in cur.fetchall()}
     return [
