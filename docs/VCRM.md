@@ -63,6 +63,28 @@ Test-layer codes used in column headers below:
 | **BR-19** | The build, test, and eval layers shall be **physically segregated** so a change to one cannot inadvertently break the others' contract. | `docs/ARCHITECTURE.md` |
 | **BR-20** | The full SQL test suite shall reach **142 of 142 assertions passing** (100.0 % pass rate) on every release. | README §"142 assertions", `tests/run_all_tests.sql` |
 
+### ART extension requirements (added 2026-10-26)
+
+Added by ART Milestone 0 (#53) and approved by the product owner on 2026-10-26. Source: [`docs/art/milestone-0-assessment.md`](art/milestone-0-assessment.md), [ADR-0002](adr/0002-transactional-staged-import.md), [ADR-0003](adr/0003-customer-facing-multi-tenant.md), [`DECISIONS/2026-10-26-art-milestone-0.md`](../DECISIONS/2026-10-26-art-milestone-0.md).
+
+| ID | Requirement | Source |
+|----|------------|--------|
+| **BR-23** | Every upload shall be registered with a unique ID, original filename, SHA-256, uploader, tenant, timestamp and processing status. | ART v2 |
+| **BR-24** | The original file and its parsed source rows shall be preserved immutably, separate from edits and approved data. | ART v2, D2 |
+| **BR-25** | Users shall be able to page through every row and column of an upload, with inferred types and validation results. | ART v2 |
+| **BR-26** | Rows shall be includable or excludable; each decision records actor and reason. | ART v2 |
+| **BR-27** | Cell edits shall be stored as versions over the original, with old and new value, actor, time and reason. | ART v2, D2 |
+| **BR-28** | Exact-file duplicates shall be detected by SHA-256 within and across uploads, per tenant. | ART v2 |
+| **BR-29** | Duplicate records shall be detected within and across uploads using a configurable rule (default: exact match, flagged). | ART v2, decision 3 |
+| **BR-30** | Table names shall be safely derived from filenames, and repeated uploads of a filename create versioned datasets without overwriting. | ART v2, decision 2 |
+| **BR-31** | Imports shall check schema compatibility and never make destructive schema changes. | ART v2 |
+| **BR-32** | Imports shall require submission and an approve or reject decision with a recorded approver; by default an uploader cannot approve their own data. | ART v2, D3, decision 5 |
+| **BR-33** | Imports shall be staged, transactional and idempotent with safe retries; every imported row traces to its source row and approved version; partial imports are not permitted. | ART v2, D4, ADR-0002, decision 4 |
+| **BR-34** | Rows in, excluded, edited and imported shall reconcile exactly and be persisted per import. | ART v2 |
+| **BR-35** | Audit events shall be append-only at database level; reports shall be filterable; exports shall neutralise spreadsheet formula injection. | ART v2, D7 |
+| **BR-36** | Users shall authenticate; access shall be role-based; no tenant shall read or affect another tenant's data. | ART v2, D1, ADR-0003, decision 6 |
+| **BR-37** | Data shall stay inside the deployment boundary, with no runtime external services, and the stack shall install offline. | ART v2, D6, decision 7 |
+
 ### Out of scope (recorded for completeness)
 
 | ID | Requirement | Status / why |
@@ -113,6 +135,28 @@ The `input_data/` loader has its own implicit requirements — verified end-to-e
 | BR-D4 | Duplicate primary keys in source are reported, not silently dropped | 4 (duplicate detection) | ✅ |
 | BR-D5 | Loaded data is browsable (sample peek) | 1 (sample rows) | ✅ |
 
+### ART extension traceability (BR-23 to BR-37)
+
+Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" until a test run proves it (D5).
+
+| ID | Status | Reason | Planned verification | Milestone |
+|----|--------|--------|----------------------|-----------|
+| BR-23 | ⚠️ Partial | Registry exists without uploader, tenant or status | Integration + DB constraint tests | M1, M3 |
+| BR-24 | ❌ Not started | Original never stored; overwrite drops data | DB negative tests | M3 |
+| BR-25 | ⚠️ Partial | 10-row preview sample; 200-row cap on table view | API paging + e2e | M4 |
+| BR-26 | ❌ Not started | No code | API + e2e | M4 |
+| BR-27 | ❌ Not started | No code | API + DB tests | M4 |
+| BR-28 | ⚠️ Partial | Global, not per tenant; race guard missing (#81) | Concurrency + cross-tenant tests | M1, M5 |
+| BR-29 | ⚠️ Partial | In-file exact match only | Unit + integration | M5 |
+| BR-30 | ⚠️ Partial | Content-derived names; repeats refused or destructive | Unit + integration | M5 |
+| BR-31 | ⚠️ Partial | T&E mode only; overwrite drops tables | Integration | M5 |
+| BR-32 | ❌ Not started | No code | API + e2e | M6 |
+| BR-33 | ⚠️ Partial | Single-transaction load; no staging or lineage | Integration incl. failure injection | M6 |
+| BR-34 | ⚠️ Partial | Counts returned, not persisted; extra cells dropped (#82) | Integration | M1, M6 |
+| BR-35 | ⚠️ Partial | Plain audit table, no actor, no filters; export formula injection (#83) | DB negative tests + unit | M1, M3, M7 |
+| BR-36 | ❌ Not started | Shared API key only | Cross-tenant negative tests | M2 |
+| BR-37 | ⚠️ Partial | No external calls found; no automated check; no offline doc (#60) | Egress-blocked run + offline dry run | M7 |
+
 ---
 
 ## 3. Coverage summary
@@ -133,10 +177,13 @@ The `input_data/` loader has its own implicit requirements — verified end-to-e
 | Status | Count | Requirements |
 |--------|-------|-------------|
 | ✅ Verified | 19 | BR-01, BR-03, BR-04, BR-05, BR-06, BR-07, BR-08, BR-09, BR-10, BR-11, BR-12, BR-13, BR-14, BR-15, BR-16, BR-17, BR-18, BR-19, BR-20 |
-| ⚠️ Partial | 0 | — |
+| ⚠️ Partial | 10 | BR-23, BR-25, BR-28, BR-29, BR-30, BR-31, BR-33, BR-34, BR-35, BR-37 (ART, added 2026-10-26) |
+| ❌ Not started | 5 | BR-24, BR-26, BR-27, BR-32, BR-36 (ART, added 2026-10-26) |
 | ⏸ Deferred by decision | 3 | BR-02, BR-21, BR-22 |
 
-**Headline:** **19 of 22 (86 %)** business requirements are fully verified by at least one automated test condition, up from 17 of 22 (77 %).
+**Headline (2026-10-26):** with the 15 ART requirements added, **19 of 37 (51 %)** are verified, 3 are deferred by decision, and the other 15 are partial or not started.
+
+**Headline before ART:** **19 of 22 (86 %)** business requirements are fully verified by at least one automated test condition, up from 17 of 22 (77 %).
 
 **There are no longer any unverified requirements that are not a recorded decision.** The three remaining are deferred deliberately: BR-02 by ADR-0001 (PostgreSQL first), BR-21 and BR-22 by earlier project decisions. That distinction matters in review — an unverified requirement is a gap, a deferred one is a choice with a revisit trigger.
 
