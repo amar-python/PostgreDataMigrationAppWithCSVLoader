@@ -175,6 +175,32 @@ describe("downloadErrorReport CSV", () => {
     // value should be quoted
     expect(text).toContain('"say ""hello"", world"');
   });
+
+  // #83: user-supplied values must not run as formulas when the CSV is opened.
+  it.each([
+    ['=HYPERLINK("http://x","y")', '\'=HYPERLINK(""http://x"",""y"")'],
+    ["+cmd|' /C calc'!A0", "'+cmd|' /C calc'!A0"],
+    ["-2+3", "'-2+3"],
+    ["@SUM(A1:A2)", "'@SUM(A1:A2)"],
+  ])("neutralises formula payload %s", async (value, expected) => {
+    const rows = buildErrorRows("data.csv", [{ rowNumber: 1, column: "c", value, reason: "test" }]);
+    downloadErrorReport("data.csv", rows, "csv");
+    const text = await cap.blob!.text();
+    expect(text).toContain(expected);
+    expect(text).not.toMatch(
+      new RegExp(`,${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(,|$)`, "m"),
+    );
+  });
+
+  it("leaves plain negative and signed numbers unchanged", async () => {
+    const rows = buildErrorRows("data.csv", [
+      { rowNumber: 1, column: "n", value: "-5", reason: "+3.2" },
+    ]);
+    downloadErrorReport("data.csv", rows, "csv");
+    const text = await cap.blob!.text();
+    expect(text).toContain(",-5,");
+    expect(text).toContain(",+3.2,");
+  });
 });
 
 // ─── downloadErrorReport — XLSX ────────────────────────────────────────────────

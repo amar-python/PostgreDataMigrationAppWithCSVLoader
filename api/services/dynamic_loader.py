@@ -107,6 +107,19 @@ def upload_dynamic(
 
     try:
         return _do_upload(file_name, types, overwrite, logs, schema, rows, file_hash)
+    except psycopg2.errors.UniqueViolation:
+        # #81: an identical concurrent upload won a race that _do_upload could
+        # not settle itself (e.g. both creating csv_<hash> at once). Nothing
+        # from this request was committed.
+        _log(logs, "duplicate_check", "Lost race to a concurrent identical upload", "warn")
+        return {
+            "status": "duplicate_file",
+            "reason": "content",
+            "existingFileName": file_name,
+            "tableName": f"csv_{file_hash[:16]}",
+            "existingRowCount": 0,
+            "logs": logs,
+        }
     except psycopg2.Error as exc:
         # Mirror te_loader's structured-error contract: an unexpected DB error
         # (e.g. a column type edge case not caught by cast_value) should not
@@ -336,10 +349,12 @@ def _do_upload(
             try:
                 cur.execute(
                     sql.SQL(
-                        "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names) "
-                        "VALUES (%s, %s, %s, 'dynamic', %s, %s) RETURNING id"
+                        "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names, "
+                        "total_rows, duplicate_rows_skipped, failed_rows) "
+                        "VALUES (%s, %s, %s, 'dynamic', %s, %s, %s, %s, %s) RETURNING id"
                     ).format(sql.Identifier(schema)),
-                    (file_name, file_hash, table_name, inserted, columns),
+                    (file_name, file_hash, table_name, inserted, columns,
+                     len(data_rows), duplicates, failed_row_count),
                 )
                 file_id = cur.fetchone()[0]
             except psycopg2.errors.UniqueViolation:
