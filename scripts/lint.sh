@@ -38,6 +38,7 @@ PY_TESTS=(
     tests/test_import_counts.py
     tests/test_accounts.py
     tests/test_tenant_isolation.py
+    tests/test_roles.py
 )
 
 # Collect scripts/*.py dynamically

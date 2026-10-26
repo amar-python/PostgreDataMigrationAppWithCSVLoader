@@ -73,3 +73,31 @@ async def tenant_scope(authorization: str = Header(default=""),
     session = await run_in_threadpool(_live_session, bearer_token(authorization))
     with scoped(schema_for(session["tenant"])):
         yield session
+
+
+# M2c (#94): which roles may perform each action. docs/ROLES.md shows the same
+# table, and tests/test_roles.py checks that the two agree.
+PERMISSIONS: dict[str, frozenset[str]] = {
+    "preview":     frozenset({"uploader", "tenant_admin"}),
+    "upload":      frozenset({"uploader", "tenant_admin"}),
+    "list_files":  frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
+    "read_rows":   frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
+    "list_te":     frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
+    "delete_file": frozenset({"tenant_admin"}),
+    "read_audit":  frozenset({"tenant_admin", "auditor"}),
+}
+
+
+def allow(action: str):
+    """Route dependency: 403 unless the signed-in role may perform ``action``.
+
+    Requests without a session (API key or dev) are not role-checked; they keep
+    today's single-operator access until the shared key is retired.
+    """
+    roles = PERMISSIONS[action]
+
+    def check(session: dict | None = Depends(tenant_scope)) -> None:
+        if session is not None and session["role"] not in roles:
+            raise HTTPException(status_code=403,
+                                detail=f"Role '{session['role']}' may not {action.replace('_', ' ')}")
+    return check

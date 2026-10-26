@@ -12,7 +12,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from psycopg2 import sql
 
-from api.auth import tenant_scope
+from api.auth import allow, tenant_scope
 from api.tenancy import uploads_schema
 from api.db import Conn
 
@@ -23,7 +23,7 @@ router = APIRouter(
 )
 
 
-@router.get("/log")
+@router.get("/log", dependencies=[Depends(allow("read_audit"))])
 def audit_log(limit: int = 50, offset: int = 0) -> dict:
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
