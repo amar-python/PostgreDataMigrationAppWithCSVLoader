@@ -146,7 +146,7 @@ Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" 
 | BR-25 | ⚠️ Partial | 10-row preview sample; 200-row cap on table view | API paging + e2e | M4 |
 | BR-26 | ❌ Not started | No code | API + e2e | M4 |
 | BR-27 | ❌ Not started | No code | API + DB tests | M4 |
-| BR-28 | ⚠️ Partial | Race guard now enforced by UNIQUE constraints (M1: #87, `tests/test_migrations.py`); still global, not per tenant | Concurrency + cross-tenant tests | M1, M5 |
+| BR-28 | ⚠️ Partial | Race guard enforced by UNIQUE constraints (M1: #87, `tests/test_migrations.py`). For signed-in tenants the registry is per tenant, so the same file in two tenants is not a duplicate (M2: #100, `test_duplicate_detection_is_per_tenant`). Requests without a session still share the default registry; M5 finishes the per-tenant model | Concurrency + cross-tenant tests | M1, M5 |
 | BR-29 | ⚠️ Partial | In-file exact match only | Unit + integration | M5 |
 | BR-30 | ⚠️ Partial | Content-derived names; repeats refused or destructive | Unit + integration | M5 |
 | BR-31 | ⚠️ Partial | T&E mode only; overwrite drops tables | Integration | M5 |
@@ -154,7 +154,7 @@ Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" 
 | BR-33 | ⚠️ Partial | Single-transaction load; no staging or lineage | Integration incl. failure injection | M6 |
 | BR-34 | ⚠️ Partial | Total, inserted, duplicate and failed counts persisted per import (M1: #90, `tests/test_import_counts.py`); over-wide rows reported, not dropped (M1: #88, `tests/test_ragged_rows.py`); excluded and edited rows not yet tracked (M6) | Integration | M1, M6 |
 | BR-35 | ⚠️ Partial | Export formula injection neutralised (M1: #86, `export.test.ts`); audit table still plain, no actor, no filters | DB negative tests + unit | M1, M3, M7 |
-| BR-36 | ❌ Not started | Shared API key only | Cross-tenant negative tests | M2 |
+| BR-36 | ⚠️ Partial | Backend done in M2:<br>• local accounts with lockout (#98, #103)<br>• OIDC (#105)<br>• per-tenant schemas, T&E tables included (#100, #104)<br>• role matrix in `docs/ROLES.md` (#101)<br><br>Tests: `tests/test_accounts.py`, `test_tenant_isolation.py`, `test_roles.py`, `test_oidc.py`. Each failed with its control removed.<br><br>Open: frontend sign-in (#96); the shared key still grants non-tenant access until it is retired from the browser | Cross-tenant negative tests; role matrix tests | M2 |
 | BR-37 | ⚠️ Partial | No external calls found; no automated check; no offline doc (#60) | Egress-blocked run + offline dry run | M7 |
 
 ---
@@ -177,8 +177,8 @@ Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" 
 | Status | Count | Requirements |
 |--------|-------|-------------|
 | ✅ Verified | 19 | BR-01, BR-03, BR-04, BR-05, BR-06, BR-07, BR-08, BR-09, BR-10, BR-11, BR-12, BR-13, BR-14, BR-15, BR-16, BR-17, BR-18, BR-19, BR-20 |
-| ⚠️ Partial | 10 | BR-23, BR-25, BR-28, BR-29, BR-30, BR-31, BR-33, BR-34, BR-35, BR-37 (ART, added 2026-10-26) |
-| ❌ Not started | 5 | BR-24, BR-26, BR-27, BR-32, BR-36 (ART, added 2026-10-26) |
+| ⚠️ Partial | 11 | BR-23, BR-25, BR-28, BR-29, BR-30, BR-31, BR-33, BR-34, BR-35, BR-36, BR-37 (ART, added 2026-10-26) |
+| ❌ Not started | 4 | BR-24, BR-26, BR-27, BR-32 (ART, added 2026-10-26) |
 | ⏸ Deferred by decision | 3 | BR-02, BR-21, BR-22 |
 
 **Headline (2026-10-26):** with the 15 ART requirements added, **19 of 37 (51 %)** are verified, 3 are deferred by decision, and the other 15 are partial or not started.
