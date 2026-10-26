@@ -40,8 +40,9 @@ class Passwords(unittest.TestCase):
             self.assertFalse(accounts.verify_password(_PW, bad), bad)
 
 
-@pytest.mark.integration
-class SignIn(unittest.TestCase):
+class _Accounts(unittest.TestCase):
+    """Shared setup: one tenant with one uploader, plus an unrelated tenant."""
+
     @classmethod
     def setUpClass(cls):
         cls.ctx = TestClient(app)
@@ -78,6 +79,9 @@ class SignIn(unittest.TestCase):
     def _me(self, token: str):
         return self.client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
 
+
+@pytest.mark.integration
+class SignIn(_Accounts):
     def test_login_returns_a_session_for_the_tenant_and_role(self):
         res = self._login()
         self.assertEqual(res.status_code, 200, res.text)
@@ -133,3 +137,37 @@ class SignIn(unittest.TestCase):
             stored = [r[0] for r in cur.fetchall()]
         self.assertEqual(len(stored), 1)
         self.assertNotIn(token, stored)
+
+
+@pytest.mark.integration
+class Lockout(_Accounts):
+    """Accounts lock after LOGIN_MAX_FAILURES wrong passwords in the window (#102)."""
+
+    def _fail(self, n: int) -> None:
+        for _ in range(n):
+            self.assertEqual(self._login(password="wrong").status_code, 401)
+
+    def test_eleventh_attempt_is_refused_even_with_the_right_password(self):
+        self._fail(settings.LOGIN_MAX_FAILURES)
+        res = self._login()
+        self.assertEqual((res.status_code, res.json()["detail"]),
+                         (401, "Invalid tenant, username or password"))
+
+    def test_one_short_of_the_limit_still_signs_in_and_resets_the_count(self):
+        self._fail(settings.LOGIN_MAX_FAILURES - 1)
+        self.assertEqual(self._login().status_code, 200)
+        self._fail(settings.LOGIN_MAX_FAILURES - 1)
+        self.assertEqual(self._login().status_code, 200, "a success must reset the count")
+
+    def test_sign_in_works_again_after_the_lock_expires(self):
+        self._fail(settings.LOGIN_MAX_FAILURES)
+        self._exec("UPDATE {c}.users SET locked_until = now() - interval '1 second' WHERE id = %s",
+                   self.user_id)
+        self.assertEqual(self._login().status_code, 200)
+
+    def test_failures_outside_the_window_start_a_new_count(self):
+        self._fail(settings.LOGIN_MAX_FAILURES - 1)
+        self._exec("UPDATE {c}.users SET first_failed_at = now() - make_interval(mins => %s) "
+                   "WHERE id = %s", settings.LOGIN_LOCKOUT_MINUTES + 1, self.user_id)
+        self._fail(1)
+        self.assertEqual(self._login().status_code, 200)

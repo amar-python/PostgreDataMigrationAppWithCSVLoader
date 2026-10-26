@@ -41,6 +41,8 @@ Read by `api/config.py`. Set these in the shell before running
 | `CSV_UPLOADS_SCHEMA` | `csv_uploads` | No | Schema where per-CSV tables and the file registry live. |
 | `CONTROL_SCHEMA` | `control` | No | Schema for tenants, users, memberships and sign-in sessions (M2, #92). |
 | `SESSION_TTL_HOURS` | `12` | No | How long a sign-in session lasts before the user must sign in again. |
+| `LOGIN_MAX_FAILURES` | `10` | No | Failed sign-ins within the window that lock an account (#102). |
+| `LOGIN_LOCKOUT_MINUTES` | `15` | No | Length of the failure window and of the lock. |
 | `TE_SCHEMA` | `te_dev` | No | Schema holding the 12 fixed T&E tables. Switch to `te_test`, `te_staging`, or `te_prod` per environment. |
 | `MAX_UPLOAD_BYTES` | `52428800` (50 MB) | No | Maximum file size accepted by the upload endpoint. |
 

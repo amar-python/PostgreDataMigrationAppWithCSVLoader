@@ -16,6 +16,10 @@ class Settings:
     CONTROL_SCHEMA: str = os.environ.get("CONTROL_SCHEMA", "control")
     # Lifetime of a sign-in session, in hours.
     SESSION_TTL_HOURS: int = int(os.environ.get("SESSION_TTL_HOURS", "12"))
+    # #102: lock an account after this many failed sign-ins within the window,
+    # for the same number of minutes.
+    LOGIN_MAX_FAILURES: int = int(os.environ.get("LOGIN_MAX_FAILURES", "10"))
+    LOGIN_LOCKOUT_MINUTES: int = int(os.environ.get("LOGIN_LOCKOUT_MINUTES", "15"))
 
     # Schema holding the fixed T&E tables (deploy_all.sh dev creates te_dev).
     TE_SCHEMA: str = os.environ.get("TE_SCHEMA", "te_dev")

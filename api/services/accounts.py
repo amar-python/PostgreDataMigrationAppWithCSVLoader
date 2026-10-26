@@ -68,19 +68,25 @@ def add_membership(cur, user_id: int, tenant_id: int, role: str) -> None:
 def login(cur, tenant_slug: str, username: str, password: str) -> dict | None:
     """Return a new session for an active member of the tenant, else None.
 
-    The caller commits. Wrong tenant, unknown user, wrong password and inactive
-    user all return None, so a caller cannot tell which one failed.
+    The caller commits, including on failure so failed attempts are counted.
+    Wrong tenant, unknown user, wrong password, inactive user and locked
+    account (#102) all return None, so a caller cannot tell which one failed.
     """
     cur.execute(_q(
-        "SELECT u.id, u.password_hash, u.is_active, t.id, m.role "
+        "SELECT u.id, u.password_hash, u.is_active, t.id, m.role, "
+        "COALESCE(u.locked_until > now(), false) "
         "FROM {c}.users u "
         "LEFT JOIN {c}.tenants t ON t.slug = %s "
         "LEFT JOIN {c}.memberships m ON m.user_id = u.id AND m.tenant_id = t.id "
         "WHERE u.username = %s"), (tenant_slug, username))
     row = cur.fetchone()
     ok = verify_password(password, row[1] if row else _DUMMY_HASH)
-    if not (row and ok and row[2] and row[4]):
+    if row and not ok:
+        _record_failure(cur, row[0])
+    if not (row and ok and row[2] and row[4]) or row[5]:
         return None
+    cur.execute(_q("UPDATE {c}.users SET failed_logins = 0, first_failed_at = NULL, "
+                   "locked_until = NULL WHERE id = %s"), (row[0],))
     user_id, tenant_id, role = row[0], row[3], row[4]
     token = secrets.token_urlsafe(32)
     cur.execute(_q(
@@ -90,6 +96,21 @@ def login(cur, tenant_slug: str, username: str, password: str) -> dict | None:
     expires_at = cur.fetchone()[0]
     return {"token": token, "expiresAt": expires_at.isoformat(), "username": username,
             "tenant": tenant_slug, "role": role}
+
+
+def _record_failure(cur, user_id: int) -> None:
+    """Count a wrong password; lock the account once the window's limit is reached (#102)."""
+    cur.execute(_q(
+        "UPDATE {c}.users SET "
+        "failed_logins = CASE WHEN first_failed_at > now() - make_interval(mins => %(m)s) "
+        "                     THEN failed_logins + 1 ELSE 1 END, "
+        "first_failed_at = CASE WHEN first_failed_at > now() - make_interval(mins => %(m)s) "
+        "                       THEN first_failed_at ELSE now() END "
+        "WHERE id = %(id)s RETURNING failed_logins"),
+        {"m": settings.LOGIN_LOCKOUT_MINUTES, "id": user_id})
+    if cur.fetchone()[0] >= settings.LOGIN_MAX_FAILURES:
+        cur.execute(_q("UPDATE {c}.users SET locked_until = now() + make_interval(mins => %s) "
+                       "WHERE id = %s"), (settings.LOGIN_LOCKOUT_MINUTES, user_id))
 
 
 def session_for(cur, token: str) -> dict | None:

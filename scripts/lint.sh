@@ -18,6 +18,7 @@ PY_SRC=(
     alembic/versions/0002_registry_unique.py
     alembic/versions/0003_import_counts.py
     alembic/versions/0004_control_schema.py
+    alembic/versions/0005_login_lockout.py
     api/auth.py
     api/services/accounts.py
     api/routers/auth_routes.py
