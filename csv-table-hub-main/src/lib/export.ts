@@ -40,9 +40,16 @@ export type AuditReportRow = {
 
 // ─── CSV ──────────────────────────────────────────────────────────────────────
 
+// Cells starting with these characters are run as formulas by Excel/Sheets
+// (OWASP "CSV injection"). Report cells hold user-supplied CSV values, so
+// prefix them with a quote. Plain numbers like -5 or +3.2 are left alone.
+const FORMULA_START = /^[=+\-@\t\r]/;
+const PLAIN_NUMBER = /^[+-]?\d+(\.\d+)?$/;
+
 function escapeCsv(v: unknown): string {
-  const s = v === undefined || v === null ? "" : String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  let s = v === undefined || v === null ? "" : String(v);
+  if (FORMULA_START.test(s) && !PLAIN_NUMBER.test(s)) s = `'${s}`;
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 function toCsvBlob(headers: string[], rows: Record<string, unknown>[]): Blob {
