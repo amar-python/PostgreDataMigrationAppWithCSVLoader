@@ -157,6 +157,21 @@ def sanitize_columns(headers: list[str]) -> list[str]:
     return out
 
 
+def extra_cells(raw: list[str], width: int) -> list[str]:
+    """Non-empty cells beyond the header width (#82).
+
+    A row wider than its header would otherwise lose those values silently.
+    Empty trailing cells (a trailing comma, common in spreadsheet exports)
+    carry no data and are ignored.
+    """
+    return [c for c in raw[width:] if c.strip()]
+
+
+def ragged_row_reason(raw: list[str], width: int) -> str:
+    return (f"Row has {len(raw)} cells but the header has {width}; "
+            f"the extra value(s) would be lost, so the row was not imported.")
+
+
 def valid_identifier(name: str) -> bool:
     return bool(_IDENT_RE.match(name))
 
