@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from api.auth import allow, tenant_scope
 from api.config import settings
-from api.tenancy import current_schema, uploads_schema
+from api.tenancy import uploads_schema
 from api.db import Conn
 from api.services.audit import coerce_file_id, record_audit, write_audit
 from api.services.csv_parse import build_preview
@@ -72,9 +72,6 @@ def upload(req: UploadRequest) -> dict:
     if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
     if req.mode == "te":
-        if current_schema() is not None:
-            raise HTTPException(409, "T&E mode isn't available for tenants yet; it arrives with "
-                                     "per-tenant T&E tables (#99). Use dynamic mode.")
         if not req.targetTable:
             raise HTTPException(422, "targetTable is required when mode is 'te'")
         result = upload_te(req.fileName, req.content, req.targetTable)
