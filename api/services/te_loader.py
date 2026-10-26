@@ -29,8 +29,10 @@ from api.config import TE_TABLES, settings
 from api.db import Conn
 from api.services.csv_parse import (
     cast_value,
+    extra_cells,
     parse_csv,
     pg_type_to_allowed_type,
+    ragged_row_reason,
     sanitize_columns,
 )
 
@@ -217,6 +219,11 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
                 row_number = r + 1
                 values: list = []
                 failed = False
+                extra = extra_cells(raw, len(columns))
+                if extra:
+                    _err(row_number, "(beyond header)", extra[0], ragged_row_reason(raw, len(columns)))
+                    failed_row_count += 1
+                    continue
                 for c, col_type in enumerate(col_types):
                     cell = raw[c].strip() if c < len(raw) else ""
                     if cell == "":
