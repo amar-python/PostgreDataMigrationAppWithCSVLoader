@@ -11,6 +11,7 @@ import os
 import unittest
 import uuid
 
+import psycopg2.errors
 import pytest
 from fastapi.testclient import TestClient
 from psycopg2 import sql
@@ -136,11 +137,58 @@ class CrossTenantIsolation(unittest.TestCase):
         self.assertNotIn(name, names("b"))
         self.assertNotIn(name, names(None))
 
-    def test_te_mode_is_refused_for_tenants_until_99(self):
-        res = self.client.post("/api/csv/upload", headers=self.headers["a"], json={
-            "fileName": "t.csv", "content": "name,org_type,country\nX,government,AU\n",
+    def _te_upload(self, who: str, org: str) -> dict:
+        res = self.client.post("/api/csv/upload", headers=self.headers[who], json={
+            "fileName": f"{org}.csv", "content": f"name,org_type,country\n{org},government,AU\n",
             "mode": "te", "targetTable": "organisations"})
-        self.assertEqual(res.status_code, 409, res.text)
+        self.assertEqual(res.status_code, 200, res.text)
+        return res.json()
+
+    def _orgs(self, schema: str) -> list[str]:
+        with Conn() as conn, conn.cursor() as cur:
+            cur.execute(sql.SQL("SELECT name FROM {}.organisations").format(sql.Identifier(schema)))
+            return [r[0] for r in cur.fetchall()]
+
+    def test_te_mode_loads_into_the_tenants_own_te_tables(self):
+        org = f"ORG_{uuid.uuid4().hex[:10]}"
+        res = self._te_upload("a", org)
+        self.assertEqual((res["status"], res["insertedRows"]), ("ok", 1), res)
+        self.assertEqual(res["tableName"], f"{schema_for(self.slugs['a'])}.organisations")
+        self.assertIn(org, self._orgs(schema_for(self.slugs["a"])))
+        self.assertNotIn(org, self._orgs(schema_for(self.slugs["b"])))
+        self.assertNotIn(org, self._orgs(settings.TE_SCHEMA), "must not touch the shared T&E schema")
+
+    def test_te_table_counts_are_per_tenant(self):
+        def count(who):
+            tables = self.client.get("/api/te/tables", headers=self.headers[who]).json()
+            self.assertTrue(all(t["exists"] for t in tables), tables)  # all 12 provisioned
+            return next(t["rowCount"] for t in tables if t["table"] == "organisations")
+
+        before_b = count("b")
+        self._te_upload("a", f"ORG_{uuid.uuid4().hex[:10]}")
+        self.assertEqual(count("b"), before_b)
+
+    def test_tenant_te_tables_keep_their_foreign_keys_and_triggers(self):
+        schema = schema_for(self.slugs["b"])
+        with Conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM information_schema.table_constraints "
+                        "WHERE table_schema = %s AND constraint_type = 'FOREIGN KEY'", (schema,))
+            tenant_fks = cur.fetchone()[0]
+            cur.execute("SELECT count(*) FROM information_schema.table_constraints "
+                        "WHERE table_schema = %s AND constraint_type = 'FOREIGN KEY'", (settings.TE_SCHEMA,))
+            self.assertEqual(tenant_fks, cur.fetchone()[0])
+            cur.execute("SELECT count(*) FROM information_schema.referential_constraints rc "
+                        "JOIN information_schema.table_constraints tc USING (constraint_schema, constraint_name) "
+                        "WHERE rc.constraint_schema = %s AND rc.unique_constraint_schema <> %s", (schema, schema))
+            self.assertEqual(cur.fetchone()[0], 0, "foreign keys must point inside the tenant schema")
+            cur.execute("SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = %s", (schema,))
+            self.assertGreater(cur.fetchone()[0], 0)
+            with self.assertRaises(psycopg2.errors.ForeignKeyViolation):
+                cur.execute(sql.SQL(
+                    "INSERT INTO {}.personnel (org_id, full_name, email, te_role, password_hash) "
+                    "VALUES (gen_random_uuid(), 'x', %s, 'observer', 'x')").format(sql.Identifier(schema)),
+                    (f"{uuid.uuid4().hex}@example.com",))
+            conn.rollback()
 
     def test_invalid_session_is_401_not_a_fallback_to_default(self):
         res = self.client.get("/api/csv/files", headers={"Authorization": "Bearer not-a-token"})
@@ -171,3 +219,10 @@ class CrossTenantIsolation(unittest.TestCase):
             results = list(pool.map(visible, ["a", "b", None] * 20))
         for who, seen in results:
             self.assertEqual(seen, {marks[who]} if who else set(), who)
+
+    def test_provisioning_is_idempotent(self):
+        from api.tenancy import provision_te_tables
+
+        with Conn() as conn, conn.cursor() as cur:
+            self.assertEqual(provision_te_tables(cur, schema_for(self.slugs["a"]), settings.TE_SCHEMA), 0)
+            conn.rollback()
