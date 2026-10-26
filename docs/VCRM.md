@@ -141,19 +141,19 @@ Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" 
 
 | ID | Status | Reason | Planned verification | Milestone |
 |----|--------|--------|----------------------|-----------|
-| BR-23 | ⚠️ Partial | Registry exists without uploader, tenant or status | Integration + DB constraint tests | M1, M3 |
+| BR-23 | ⚠️ Partial | Registry has UNIQUE file hash and name and a migration history (M1: #87); still no uploader, tenant or status | Integration + DB constraint tests | M1, M3 |
 | BR-24 | ❌ Not started | Original never stored; overwrite drops data | DB negative tests | M3 |
 | BR-25 | ⚠️ Partial | 10-row preview sample; 200-row cap on table view | API paging + e2e | M4 |
 | BR-26 | ❌ Not started | No code | API + e2e | M4 |
 | BR-27 | ❌ Not started | No code | API + DB tests | M4 |
-| BR-28 | ⚠️ Partial | Global, not per tenant; race guard missing (#81) | Concurrency + cross-tenant tests | M1, M5 |
+| BR-28 | ⚠️ Partial | Race guard now enforced by UNIQUE constraints (M1: #87, `tests/test_migrations.py`); still global, not per tenant | Concurrency + cross-tenant tests | M1, M5 |
 | BR-29 | ⚠️ Partial | In-file exact match only | Unit + integration | M5 |
 | BR-30 | ⚠️ Partial | Content-derived names; repeats refused or destructive | Unit + integration | M5 |
 | BR-31 | ⚠️ Partial | T&E mode only; overwrite drops tables | Integration | M5 |
 | BR-32 | ❌ Not started | No code | API + e2e | M6 |
 | BR-33 | ⚠️ Partial | Single-transaction load; no staging or lineage | Integration incl. failure injection | M6 |
-| BR-34 | ⚠️ Partial | Counts returned, not persisted; extra cells dropped (#82) | Integration | M1, M6 |
-| BR-35 | ⚠️ Partial | Plain audit table, no actor, no filters; export formula injection (#83) | DB negative tests + unit | M1, M3, M7 |
+| BR-34 | ⚠️ Partial | Total, inserted, duplicate and failed counts persisted per import (M1: #90, `tests/test_import_counts.py`); over-wide rows reported, not dropped (M1: #88, `tests/test_ragged_rows.py`); excluded and edited rows not yet tracked (M6) | Integration | M1, M6 |
+| BR-35 | ⚠️ Partial | Export formula injection neutralised (M1: #86, `export.test.ts`); audit table still plain, no actor, no filters | DB negative tests + unit | M1, M3, M7 |
 | BR-36 | ❌ Not started | Shared API key only | Cross-tenant negative tests | M2 |
 | BR-37 | ⚠️ Partial | No external calls found; no automated check; no offline doc (#60) | Egress-blocked run + offline dry run | M7 |
 
