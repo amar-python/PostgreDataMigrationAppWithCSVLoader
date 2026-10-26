@@ -33,9 +33,10 @@
   (BR-21) are deferred and untested.
 - **Audit timing:** the upload audit row is written after the load commits.
   A crash in that window leaves a loaded table with no audit row.
-- **Authentication:** a single shared API key, optional in `dev`. The API
-  refuses to start outside `dev` without `API_KEY`. Per-user roles are not
-  built yet.
+- **Authentication:** per-user sign-in exists in the API: local accounts with
+  lockout, OIDC, four roles (`docs/ROLES.md`) and a schema per tenant. The
+  browser still uses the shared API key until frontend sign-in (#96) lands.
+  The API refuses to start outside `dev` without `API_KEY`.
 - **Rate limiting:** in-process only, so it suits a single API instance.
 - **Frontend audit page:** shows this browser's local import history, not the
   server audit log (see the naming note under Frontend Features).
