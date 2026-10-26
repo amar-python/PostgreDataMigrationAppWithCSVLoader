@@ -50,8 +50,10 @@ class MigrationsOnScratchSchema(unittest.TestCase):
     """Upgrade and downgrade run against a throwaway schema, never the live one."""
 
     def setUp(self):
-        self.original = settings.UPLOADS_SCHEMA
-        settings.UPLOADS_SCHEMA = f"mig_test_{uuid.uuid4().hex[:10]}"
+        self.original = (settings.UPLOADS_SCHEMA, settings.CONTROL_SCHEMA)
+        tag = uuid.uuid4().hex[:10]
+        settings.UPLOADS_SCHEMA = f"mig_test_{tag}"
+        settings.CONTROL_SCHEMA = f"mig_ctl_{tag}"   # never touch the live control schema
         self.cfg = Config(_ALEMBIC_INI)
         self.conn = _connect()
         self.conn.autocommit = True
@@ -59,8 +61,9 @@ class MigrationsOnScratchSchema(unittest.TestCase):
     def tearDown(self):
         with self.conn.cursor() as cur:
             cur.execute(f'DROP SCHEMA IF EXISTS "{settings.UPLOADS_SCHEMA}" CASCADE')
+            cur.execute(f'DROP SCHEMA IF EXISTS "{settings.CONTROL_SCHEMA}" CASCADE')
         self.conn.close()
-        settings.UPLOADS_SCHEMA = self.original
+        settings.UPLOADS_SCHEMA, settings.CONTROL_SCHEMA = self.original
 
     def _constraints(self) -> set[str]:
         with self.conn.cursor() as cur:
@@ -79,6 +82,17 @@ class MigrationsOnScratchSchema(unittest.TestCase):
         command.upgrade(self.cfg, "head")
         self.assertTrue({"csv_files", "audit_log", "alembic_version"} <= self._tables())
         self.assertEqual(self._constraints(), {"csv_files_file_hash_key", "csv_files_file_name_key"})
+
+    def test_control_schema_is_created_and_removed(self):
+        command.upgrade(self.cfg, "head")
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = %s",
+                        (settings.CONTROL_SCHEMA,))
+            self.assertEqual({r[0] for r in cur.fetchall()}, {"tenants", "users", "memberships", "sessions"})
+        command.downgrade(self.cfg, "0003")
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM pg_namespace WHERE nspname = %s", (settings.CONTROL_SCHEMA,))
+            self.assertIsNone(cur.fetchone())
 
     def test_downgrade_reverses_each_step(self):
         command.upgrade(self.cfg, "head")
@@ -134,7 +148,7 @@ class RegistryUniqueness(unittest.TestCase):
     def test_bootstrap_brings_the_schema_to_head(self):
         with Conn() as conn, conn.cursor() as cur:
             cur.execute(f'SELECT version_num FROM "{settings.UPLOADS_SCHEMA}".alembic_version')
-            self.assertEqual(cur.fetchone()[0], "0003")
+            self.assertEqual(cur.fetchone()[0], "0004")
 
     def test_duplicate_hash_is_rejected_by_the_database(self):
         insert = (f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode) '

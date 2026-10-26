@@ -17,6 +17,11 @@ PY_SRC=(
     alembic/versions/0001_baseline.py
     alembic/versions/0002_registry_unique.py
     alembic/versions/0003_import_counts.py
+    alembic/versions/0004_control_schema.py
+    api/auth.py
+    api/services/accounts.py
+    api/routers/auth_routes.py
+    scripts/create_tenant_admin.py
 )
 
 PY_TESTS=(
@@ -30,6 +35,7 @@ PY_TESTS=(
     tests/test_evals_tier_e_x.py
     tests/test_migrations.py
     tests/test_import_counts.py
+    tests/test_accounts.py
 )
 
 # Collect scripts/*.py dynamically

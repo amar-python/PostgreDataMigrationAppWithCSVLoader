@@ -39,6 +39,8 @@ Read by `api/config.py`. Set these in the shell before running
 | `API_POOL_GETCONN_TIMEOUT` | `5.0` | No | Seconds a request waits to borrow a database connection from the pool. Exceeded = 503 response. |
 | `CORS_ORIGINS` | `http://localhost:8080,http://localhost:5173,http://localhost:3000` | Yes | Comma-separated list of allowed CORS origins. Set to your frontend URL in production. |
 | `CSV_UPLOADS_SCHEMA` | `csv_uploads` | No | Schema where per-CSV tables and the file registry live. |
+| `CONTROL_SCHEMA` | `control` | No | Schema for tenants, users, memberships and sign-in sessions (M2, #92). |
+| `SESSION_TTL_HOURS` | `12` | No | How long a sign-in session lasts before the user must sign in again. |
 | `TE_SCHEMA` | `te_dev` | No | Schema holding the 12 fixed T&E tables. Switch to `te_test`, `te_staging`, or `te_prod` per environment. |
 | `MAX_UPLOAD_BYTES` | `52428800` (50 MB) | No | Maximum file size accepted by the upload endpoint. |
 
