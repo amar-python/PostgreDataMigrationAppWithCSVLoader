@@ -39,7 +39,7 @@
 - **Rate limiting:** in-process only, so it suits a single API instance.
 - **Frontend audit page:** shows this browser's local import history, not the
   server audit log (see the naming note under Frontend Features).
-- **Offline install:** no documented air-gapped install procedure yet.
+- **Offline install:** procedure in `docs/offline-install.md`, rehearsed with networking off. The clean-VM dry run (#60) is still to do.
 
 ## For Reviewers
 
