@@ -22,7 +22,9 @@ from api.db import Conn
 from api.services.csv_parse import (
     ALLOWED_TYPES,
     cast_value,
+    extra_cells,
     parse_csv,
+    ragged_row_reason,
     sanitize_columns,
     valid_identifier,
 )
@@ -273,6 +275,13 @@ def _do_upload(
                 values: list = []
                 raw_joined: list[str] = []
                 failed = False
+                extra = extra_cells(raw, len(columns))
+                if extra:
+                    if len(row_errors) < settings.MAX_ROW_ERRORS_REPORTED:
+                        row_errors.append({"rowNumber": row_number, "column": "(beyond header)",
+                                           "value": extra[0], "reason": ragged_row_reason(raw, len(columns))})
+                    failed_row_count += 1
+                    continue
                 for c in range(len(columns)):
                     cell = raw[c] if c < len(raw) else ""
                     raw_joined.append(cell)
