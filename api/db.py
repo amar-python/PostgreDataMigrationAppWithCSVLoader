@@ -159,8 +159,7 @@ def bootstrap() -> None:
     from alembic import command
     from alembic.config import Config
 
-    repo_root = Path(__file__).resolve().parent.parent
-    alembic_ini = repo_root / "alembic.ini"
+    alembic_ini = alembic_ini_path()
 
     if not alembic_ini.exists():
         logger.warning(
@@ -177,7 +176,26 @@ def bootstrap() -> None:
                 settings.PG_USER, settings.PG_HOST, settings.PG_PORT,
                 settings.PG_DATABASE)
     command.upgrade(cfg, "head")
+    _migrate_existing_tenants()
     logger.info("Alembic migrations complete")
+
+
+def alembic_ini_path() -> Path:
+    return Path(__file__).resolve().parent.parent / "alembic.ini"
+
+
+def _migrate_existing_tenants() -> None:
+    """Bring every tenant schema to head too (decision 6: migrations run across N schemas)."""
+    from api.tenancy import migrate_tenant
+
+    with Conn() as conn, conn.cursor() as cur:
+        cur.execute(sql.SQL("SELECT slug FROM {}.tenants ORDER BY id").format(
+            sql.Identifier(settings.CONTROL_SCHEMA)))
+        slugs = [r[0] for r in cur.fetchall()]
+    for slug in slugs:
+        migrate_tenant(slug)
+    if slugs:
+        logger.info("Migrated %d tenant schema(s)", len(slugs))
 
 
 def _bootstrap_fallback_schema() -> None:

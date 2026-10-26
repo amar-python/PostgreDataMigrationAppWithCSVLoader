@@ -4,7 +4,7 @@ Run from the repo root with the API's PG* environment set:
     python scripts/create_tenant_admin.py --tenant acme --name "Acme Pty Ltd" --username alice
 
 The password is read from TE_ADMIN_PASSWORD if set, otherwise prompted for.
-Brings the database to the current migration first.
+Brings the database to the current migration first, then creates the tenant's schema.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from api import db  # noqa: E402
 from api.services import accounts  # noqa: E402
+from api.tenancy import migrate_tenant, schema_for  # noqa: E402
 
 
 def main() -> int:
@@ -40,9 +41,11 @@ def main() -> int:
                 user_id = accounts.create_user(cur, args.username, password)
                 accounts.add_membership(cur, user_id, tenant_id, "tenant_admin")
             conn.commit()
+        migrate_tenant(args.tenant)
     finally:
         db.close_pool()
-    print(f"Created tenant '{args.tenant}' with tenant admin '{args.username}'.")
+    print(f"Created tenant '{args.tenant}' (schema {schema_for(args.tenant)}) "
+          f"with tenant admin '{args.username}'.")
     return 0
 
 
