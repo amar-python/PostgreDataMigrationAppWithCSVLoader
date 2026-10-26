@@ -100,7 +100,8 @@ def list_files() -> list[dict]:
         with conn.cursor() as cur:
             cur.execute(
                 sql.SQL(
-                    "SELECT id, file_name, table_name, mode, row_count, column_names, created_at "
+                    "SELECT id, file_name, table_name, mode, row_count, column_names, created_at, "
+                    "total_rows, duplicate_rows_skipped, failed_rows "
                     "FROM {}.csv_files ORDER BY created_at DESC, id DESC"
                 ).format(sql.Identifier(settings.UPLOADS_SCHEMA))
             )
@@ -113,6 +114,9 @@ def list_files() -> list[dict]:
                     "row_count": r[4],
                     "column_names": r[5],
                     "created_at": r[6].isoformat(),
+                    "total_rows": r[7],
+                    "duplicate_rows_skipped": r[8],
+                    "failed_rows": r[9],
                 }
                 for r in cur.fetchall()
             ]
