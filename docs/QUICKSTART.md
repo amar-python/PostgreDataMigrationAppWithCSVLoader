@@ -96,7 +96,7 @@ Or manually:
 
 ```powershell
 $env:CORS_ORIGINS = "http://localhost:8080,http://localhost:5173,http://localhost:3000"
-uvicorn api.main:app --reload --port 8000
+uvicorn api.main:app --reload --reload-dir api --port 8000
 ```
 
 Verify it's running: open `http://localhost:8000/api/health` — should return

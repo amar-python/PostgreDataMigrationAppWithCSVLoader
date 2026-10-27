@@ -40,4 +40,6 @@ if ($busy) {
 Set-Location (Join-Path $PSScriptRoot "..")
 $host.UI.RawUI.WindowTitle = "API (port 8000)"
 Write-Host "API starting on http://localhost:8000  (docs: /docs)" -ForegroundColor Green
-python -m uvicorn api.main:app --reload --port 8000
+# #118: watch only api/ for code changes. Watching the whole repo meant a OneDrive
+# sync anywhere in the folder could restart (or stop) the API.
+python -m uvicorn api.main:app --reload --reload-dir api --port 8000
