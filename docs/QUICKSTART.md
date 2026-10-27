@@ -230,9 +230,10 @@ Restart-Service postgresql-x64-18
 |---|---|---|
 | `password authentication failed` | Wrong `PGPASSWORD` | Reset password using admin steps above |
 | `Connection refused` on port 5433 | PG 18 not running | Open Services → start `postgresql-x64-18` |
-| `alembic.ini not found` on API start | Expected — no Alembic in this repo | Safe to ignore |
 | Frontend shows "This page didn't load" | API not running | Start the API first (Terminal 1) |
 | `ERR_CONNECTION_REFUSED` in browser console | API stopped | Restart `uvicorn` |
+| "Can't reach the API at http://localhost:8000. Is it running?" | API not running | Start it with `.\scripts\start-api.ps1` |
+| `start-api.ps1` says "Port 8000 is already in use by PID …" | An older API is still running, maybe in a window you've forgotten (#118) | Close that window, or run the `taskkill` line it prints, then start again |
 | `npm run dev` fails with "Missing script" | Wrong directory | Must run from `csv-table-hub-main\`, not repo root |
 | Deployment shows `[✗] failed for dev` | DB already exists | False positive — run `bash build/deploy_all.sh dev` to confirm |
 

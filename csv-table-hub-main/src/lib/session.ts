@@ -18,6 +18,19 @@ const KEY = "te.session";
 
 export const apiBase = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 
+/** fetch() that says when the API can't be reached (#118), instead of the
+ *  browser's bare "Failed to fetch". Aborts (cancelled uploads) pass through. */
+export async function callApi(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    if (err instanceof TypeError) {
+      throw new Error(`Can't reach the API at ${apiBase || "this site"}. Is it running?`);
+    }
+    throw err;
+  }
+}
+
 export function getSession(now: Date = new Date()): Session | null {
   try {
     const raw = sessionStorage.getItem(KEY);
@@ -43,7 +56,7 @@ export function clearSession(): void {
 
 /** Sign in with a local account. Throws with the server's message on failure. */
 export async function signIn(tenant: string, username: string, password: string): Promise<Session> {
-  const res = await fetch(`${apiBase}/api/auth/login`, {
+  const res = await callApi(`${apiBase}/api/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ tenant, username, password }),
@@ -72,7 +85,7 @@ export async function signOut(): Promise<void> {
   const s = getSession();
   clearSession();
   if (s) {
-    await fetch(`${apiBase}/api/auth/logout`, {
+    await callApi(`${apiBase}/api/auth/logout`, {
       method: "POST",
       headers: { Authorization: `Bearer ${s.token}` },
     }).catch(() => undefined);
@@ -92,7 +105,7 @@ export function requireSession(): void {
 
 /** Change your own password (#117). This session stays; the server ends all others. */
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
-  const res = await fetch(`${apiBase}/api/auth/password`, {
+  const res = await callApi(`${apiBase}/api/auth/password`, {
     method: "POST",
     headers: { "content-type": "application/json", ...authHeaders() },
     body: JSON.stringify({ currentPassword, newPassword }),

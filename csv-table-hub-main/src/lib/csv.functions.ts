@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { QueryClient } from "@tanstack/react-query";
-import { apiBase, authHeaders, clearSession } from "@/lib/session";
+import { apiBase, authHeaders, callApi, clearSession } from "@/lib/session";
 
 const columnTypeSchema = z.enum(["int8", "numeric", "date", "timestamptz", "boolean", "text"]);
 export type ColumnType = z.infer<typeof columnTypeSchema>;
@@ -102,7 +102,7 @@ const previewRowsSchema = z.object({
 });
 
 async function apiFetch<T>(path: string, schema: z.ZodType<T>, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBase}${path}`, {
+  const response = await callApi(`${apiBase}${path}`, {
     ...options,
     headers: {
       "content-type": "application/json",
