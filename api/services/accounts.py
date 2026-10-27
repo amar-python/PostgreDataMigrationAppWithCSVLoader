@@ -15,6 +15,7 @@ from psycopg2 import sql
 from api.config import settings
 
 ROLES = ("uploader", "reviewer", "tenant_admin", "auditor")
+MIN_PASSWORD = 12
 _N, _R, _P = 2**14, 8, 1
 
 
@@ -151,3 +152,54 @@ def session_for(cur, token: str) -> dict | None:
 def revoke(cur, token: str) -> None:
     cur.execute(_q("UPDATE {c}.sessions SET revoked_at = now() "
                    "WHERE token_hash = %s AND revoked_at IS NULL"), (_token_hash(token),))
+
+
+def _set_password(cur, user_id: int, password: str, keep_token: str | None = None) -> None:
+    """New hash, lockout cleared, and every session revoked except ``keep_token`` (#117)."""
+    cur.execute(_q("UPDATE {c}.users SET password_hash = %s, failed_logins = 0, "
+                   "first_failed_at = NULL, locked_until = NULL WHERE id = %s"),
+                (hash_password(password), user_id))
+    cur.execute(_q("UPDATE {c}.sessions SET revoked_at = now() WHERE user_id = %s "
+                   "AND revoked_at IS NULL AND token_hash IS DISTINCT FROM %s"),
+                (user_id, _token_hash(keep_token) if keep_token else None))
+
+
+def change_password(cur, user_id: int, token: str, current: str, new: str) -> bool:
+    """A signed-in user changes their own password; other sessions end. False if
+    ``current`` is wrong, which counts towards the lockout (#102)."""
+    cur.execute(_q("SELECT password_hash FROM {c}.users WHERE id = %s"), (user_id,))
+    row = cur.fetchone()
+    if not (row and verify_password(current, row[0])):
+        if row:
+            _record_failure(cur, user_id)
+        return False
+    _set_password(cur, user_id, new, keep_token=token)
+    return True
+
+
+def reset_password(cur, tenant_id: int, username: str, new: str) -> str:
+    """An admin sets a member's password; it also unlocks the account and ends all
+    of its sessions. Returns "ok", "missing" (not a member of ``tenant_id``) or
+    "shared": a user who is also in another tenant is refused, because the
+    password is global and one tenant's admin must not take over the others."""
+    cur.execute(_q("SELECT u.id, EXISTS (SELECT 1 FROM {c}.memberships o "
+                   "WHERE o.user_id = u.id AND o.tenant_id <> %s) "
+                   "FROM {c}.users u JOIN {c}.memberships m "
+                   "ON m.user_id = u.id AND m.tenant_id = %s WHERE u.username = %s"),
+                (tenant_id, tenant_id, username))
+    row = cur.fetchone()
+    if not row:
+        return "missing"
+    if row[1]:
+        return "shared"
+    _set_password(cur, row[0], new)
+    return "ok"
+
+
+def set_password(cur, username: str, new: str) -> bool:
+    """Break-glass reset by username, for an operator with database access (#117)."""
+    cur.execute(_q("SELECT id FROM {c}.users WHERE username = %s"), (username,))
+    row = cur.fetchone()
+    if row:
+        _set_password(cur, row[0], new)
+    return bool(row)

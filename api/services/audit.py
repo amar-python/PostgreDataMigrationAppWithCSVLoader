@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 # Actions the log is allowed to record. A typo becomes a loud failure here rather
 # than an unqueryable string in the table.
-VALID_ACTIONS = frozenset({"upload", "delete"})
+VALID_ACTIONS = frozenset({"upload", "delete", "password_reset"})
 
 
 def write_audit(cur, action: str, file_id: int | None, file_name: str | None,

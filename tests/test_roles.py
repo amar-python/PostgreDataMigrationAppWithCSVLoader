@@ -34,6 +34,7 @@ _ROUTES = {
     "list_te": ("GET", "/api/te/tables"),
     "delete_file": ("DELETE", "/api/csv/files/{id}"),
     "read_audit": ("GET", "/api/audit/log"),
+    "reset_password": ("POST", "/api/auth/users/{user}/password"),
 }
 
 
@@ -105,11 +106,22 @@ class RoleMatrixOverTheApi(unittest.TestCase):
     def _call(self, role: str, action: str) -> int:
         method, path = _ROUTES[action]
         table, file_id = self._file()
-        body = None
+        body, user = None, None
         if action in ("preview", "upload"):
             tag = uuid.uuid4().hex[:10]
             body = {"fileName": f"p_{tag}.csv", "content": f"k\n{tag}\n"}
-        res = self.client.request(method, path.format(table=table, id=file_id),
+        if action == "reset_password":
+            # A fresh member to reset, so no role's own session is revoked mid-test.
+            user = f"{self.slug}_t{uuid.uuid4().hex[:6]}"
+            with Conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql.SQL("SELECT id FROM {}.tenants WHERE slug = %s").format(
+                        sql.Identifier(settings.CONTROL_SCHEMA)), (self.slug,))
+                    tid = cur.fetchone()[0]
+                    accounts.add_membership(cur, accounts.create_user(cur, user, _PW), tid, "uploader")
+                conn.commit()
+            body = {"newPassword": "a brand new passphrase"}
+        res = self.client.request(method, path.format(table=table, id=file_id, user=user),
                                   headers=self.headers[role], json=body)
         return res.status_code
 

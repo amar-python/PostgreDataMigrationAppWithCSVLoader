@@ -1,8 +1,9 @@
-// Signed-in user, tenant and role, with sign-out (#96).
+// Signed-in user, tenant and role, with change password (#117) and sign-out (#96).
 import { useNavigate } from "@tanstack/react-router";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getSession, signOut } from "@/lib/session";
+import { ChangePasswordDialog } from "@/components/change-password";
 
 export function SessionMenu() {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ export function SessionMenu() {
       <span title={`Role: ${s.role}`}>
         {s.username} · {s.tenant}
       </span>
+      <ChangePasswordDialog />
       <Button
         variant="ghost"
         size="sm"
