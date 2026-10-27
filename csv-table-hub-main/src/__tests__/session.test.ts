@@ -138,3 +138,26 @@ describe("requireSession (route guard)", () => {
     expect(() => requireSession()).not.toThrow();
   });
 });
+
+describe("API unreachable (#118)", () => {
+  const down = () => vi.fn(async () => { throw new TypeError("Failed to fetch"); });
+
+  it("sign-in says the API can't be reached instead of 'Failed to fetch'", async () => {
+    vi.stubGlobal("fetch", down());
+    await expect(signIn("acme", "alice", "pw")).rejects.toThrow(/Can't reach the API at .*Is it running\?/);
+    expect(getSession()).toBeNull();
+  });
+
+  it("other API calls say the same and keep the session", async () => {
+    store(session());
+    vi.stubGlobal("fetch", down());
+    await expect(listCsvFiles()).rejects.toThrow(/Can't reach the API/);
+    expect(getSession()?.token).toBe("tok-123");
+  });
+
+  it("a cancelled request is not reported as the API being down", async () => {
+    const abort = new DOMException("The operation was aborted.", "AbortError");
+    vi.stubGlobal("fetch", vi.fn(async () => { throw abort; }));
+    await expect(signIn("acme", "alice", "pw")).rejects.toBe(abort);
+  });
+});

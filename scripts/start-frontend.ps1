@@ -10,5 +10,6 @@ if (-not (Test-Path "node_modules")) {
     npm install
 }
 
+$host.UI.RawUI.WindowTitle = "Frontend (port 8080)"
 Write-Host "Frontend starting on http://localhost:8080" -ForegroundColor Green
 npm run dev
