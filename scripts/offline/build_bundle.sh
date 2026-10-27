@@ -2,7 +2,7 @@
 # build_bundle.sh: build the offline install bundle (#60).
 #
 # Run on an INTERNET-CONNECTED Ubuntu 24.04 x86_64 machine with git, python3-pip,
-# Node.js 20+ and apt-utils installed, from the repo root:
+# Node.js 22.12+ and apt-utils installed, from the repo root:
 #   bash scripts/offline/build_bundle.sh
 # Output: dist/offline-bundle-<commit>.tar.gz plus its .sha256 file.
 # Copy both to the offline VM and follow docs/offline-install.md.
@@ -29,7 +29,7 @@ echo "== 3/4 frontend, built for a plain Node server"
 # The placeholder is replaced by install.sh with the real API address. No API key
 # is built in: browsers sign in per user (#96).
 ( cd csv-table-hub-main
-  [ -d node_modules ] || npm ci
+  npm ci   # always clean: a reused node_modules hid a stale lock file (see #130)
   rm -rf .output
   NITRO_PRESET=node-server VITE_API_BASE=__OFFLINE_API_BASE__ npm run build >/dev/null
   cp -r .output "$OUT/frontend" )
