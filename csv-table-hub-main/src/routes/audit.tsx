@@ -3,6 +3,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { AUDIT_LOG } from "@/lib/audit-log";
+import { formatLocalTime, formatUtc } from "@/lib/utils";
 import { useLocalStorageState } from "@/hooks/use-local-storage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -171,7 +172,7 @@ function AuditPage() {
                   <TableCell className="text-right tabular-nums text-xs">
                     {job.totalRows!=null ? <div className="flex flex-col items-end gap-0.5"><span>{job.totalRows} total</span>{job.insertedRows!=null&&<span className="text-emerald-600 dark:text-emerald-400">{job.insertedRows} ok</span>}{(job.failedRows??0)>0&&<span className="text-destructive">{job.failedRows} failed</span>}</div> : <span className="text-muted-foreground">—</span>}
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground" suppressHydrationWarning>{new Date(job.createdAt).toISOString().replace("T"," ").slice(0,19)} UTC</TableCell>
+                  <TableCell className="text-xs text-muted-foreground" suppressHydrationWarning><time dateTime={new Date(job.createdAt).toISOString()} title={formatUtc(job.createdAt)}>{formatLocalTime(job.createdAt)}</time></TableCell>
                   <TableCell className="max-w-[160px] text-xs text-muted-foreground">{mappingSummary(job.headerMapping)||<span className="text-muted-foreground/40">—</span>}</TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">

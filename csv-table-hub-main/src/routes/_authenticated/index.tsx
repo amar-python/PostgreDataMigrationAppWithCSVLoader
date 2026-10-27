@@ -34,6 +34,7 @@ import {
 } from "@/lib/mapping-templates";
 import { downloadErrorReport, buildErrorRows, type ExportFormat } from "@/lib/export";
 import type { Job, JobStatus } from "@/lib/job-types";
+import { formatLocalTime, formatUtc } from "@/lib/utils";
 import {
   classifyUploadResult, classifyThrownError, buildCancelPatch, buildCancelToastMessage,
   decideOverwriteAction, failedRowsNote,
@@ -690,7 +691,7 @@ function FilesList({files}:{files:CsvFileSummary[]}){
           <>
             <div className="overflow-x-auto"><Table>
               <TableHeader><TableRow className="[&>th]:h-8 [&>th]:py-1"><TableHead className="w-12 text-right">#</TableHead><TableHead>File</TableHead><TableHead>Table</TableHead><TableHead className="w-16 text-right">Cols</TableHead><TableHead className="w-16 text-right">Rows</TableHead><TableHead className="w-40">Uploaded</TableHead><TableHead className="w-24"/></TableRow></TableHeader>
-              <TableBody>{visible.map((f,i)=><TableRow key={f.id} className="[&>td]:py-1.5"><TableCell className="text-right tabular-nums text-xs text-muted-foreground">{startIndex+i+1}</TableCell><TableCell className="max-w-[22rem] truncate font-medium" title={f.file_name}>{f.file_name}</TableCell><TableCell><code className="rounded bg-muted px-1.5 py-0.5 text-xs">{f.table_name}</code></TableCell><TableCell className="text-right tabular-nums">{f.column_names.length}</TableCell><TableCell className="text-right tabular-nums">{f.row_count}{failedRowsNote(f)&&<span className="block text-xs text-destructive">{failedRowsNote(f)}</span>}</TableCell><TableCell className="whitespace-nowrap text-xs text-muted-foreground" suppressHydrationWarning><time dateTime={f.created_at} title={new Date(f.created_at).toISOString()}>{new Date(f.created_at).toISOString().replace("T"," ").slice(0,16)}</time></TableCell><TableCell className="text-right"><Button size="sm" variant="ghost" className="h-7 px-2" onClick={()=>setPreview(f)}><Eye className="mr-1 h-3.5 w-3.5"/>Preview</Button></TableCell></TableRow>)}</TableBody>
+              <TableBody>{visible.map((f,i)=><TableRow key={f.id} className="[&>td]:py-1.5"><TableCell className="text-right tabular-nums text-xs text-muted-foreground">{startIndex+i+1}</TableCell><TableCell className="max-w-[22rem] truncate font-medium" title={f.file_name}>{f.file_name}</TableCell><TableCell><code className="rounded bg-muted px-1.5 py-0.5 text-xs">{f.table_name}</code></TableCell><TableCell className="text-right tabular-nums">{f.column_names.length}</TableCell><TableCell className="text-right tabular-nums">{f.row_count}{failedRowsNote(f)&&<span className="block text-xs text-destructive">{failedRowsNote(f)}</span>}</TableCell><TableCell className="whitespace-nowrap text-xs text-muted-foreground" suppressHydrationWarning><time dateTime={f.created_at} title={formatUtc(f.created_at)}>{formatLocalTime(f.created_at)}</time></TableCell><TableCell className="text-right"><Button size="sm" variant="ghost" className="h-7 px-2" onClick={()=>setPreview(f)}><Eye className="mr-1 h-3.5 w-3.5"/>Preview</Button></TableCell></TableRow>)}</TableBody>
             </Table></div>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
