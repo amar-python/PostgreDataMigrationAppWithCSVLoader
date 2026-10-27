@@ -9,7 +9,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.140%E2%80%930.141-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-102%20vitest%20%7C%20142%20SQL%20assertions-brightgreen)](#test-suite)
+[![Tests](https://img.shields.io/badge/Tests-139%20vitest%20%7C%20142%20SQL%20assertions-brightgreen)](#test-suite)
 
 ---
 
@@ -38,10 +38,16 @@
   `API_KEY` is for scripts and services only; the browser never holds it. The
   API refuses to start outside `dev` without `API_KEY`. Requests that use the
   key reach the default schemas, not any tenant's.
+  Users change their own password from the header; a tenant admin can reset
+  members of their own tenant only. A user who belongs to more than one tenant
+  can be reset only by an operator with `scripts/reset_password.py` (#117).
+- **Upload failure reasons:** the per-row reasons and step log for an upload
+  are kept in the uploading browser's Import history, not on the server; the
+  server keeps only the counts. Server-side storage is planned for M3 (#107).
 - **Rate limiting:** in-process only, so it suits a single API instance.
 - **Frontend audit page:** shows this browser's local import history, not the
   server audit log (see the naming note under Frontend Features).
-- **Offline install:** procedure in `docs/offline-install.md`, rehearsed with networking off. The clean-VM dry run (#60) is still to do.
+- **Offline install:** procedure in `docs/offline-install.md`, rehearsed with networking off. The clean-VM dry run (#60) is still to do. It targets Ubuntu 24.04 only; an offline container bundle for Windows, macOS and Linux is tracked as #128 (BR-38).
 
 ## For Reviewers
 
@@ -103,7 +109,7 @@ PostgreDataMigrationAppWithCSVLoader/
 │   │   ├── export.ts                 ← CSV / XLSX / PDF export
 │   │   ├── mapping-templates.ts      ← saved column mapping templates
 │   │   └── csv-preview.ts            ← CSV parsing utilities
-│   ├── src/__tests__/                ← 102 vitest tests
+│   ├── src/__tests__/                ← 139 vitest tests
 │   ├── .env.local                    ← VITE_API_BASE (not committed)
 │   └── package.json
 │
@@ -242,7 +248,7 @@ python -m pytest tests\test_te_loader_integration.py -v
 python -m pytest tests\environments\ -v
 ```
 
-### Frontend tests (102 vitest)
+### Frontend tests (139 vitest)
 
 ```powershell
 cd csv-table-hub-main
