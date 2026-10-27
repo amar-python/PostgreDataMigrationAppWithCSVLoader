@@ -8,7 +8,7 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyUploadResult, classifyThrownError, buildCancelPatch,
-  buildCancelToastMessage, decideOverwriteAction,
+  buildCancelToastMessage, decideOverwriteAction, failedRowsNote,
 } from "@/lib/job-outcome";
 import type { UploadResult } from "@/lib/csv.functions";
 import type { Job } from "@/lib/job-types";
@@ -40,6 +40,8 @@ describe("classifyUploadResult", () => {
       "widgets.csv: overwrote · 8 of 10 rows imported · 2 failed",
     );
     expect(outcome.patch.overwritten).toBe(true);
+    expect(outcome.toast.type).toBe("warning"); // #123: failed rows are not a plain success
+    expect(outcome.notify?.title).toBe("Import complete with failed rows");
   });
 
   it("status duplicate_file -> duplicate patch, warning toast, no invalidateRoute", () => {
@@ -132,5 +134,16 @@ describe("decideOverwriteAction", () => {
 
   it("retries directly when the job is undefined (id no longer in the list)", () => {
     expect(decideOverwriteAction(undefined)).toEqual({ action: "retry-overwrite" });
+  });
+});
+
+describe("failedRowsNote (#123)", () => {
+  it("names failed rows out of the total", () => {
+    expect(failedRowsNote({ failed_rows: 51, total_rows: 171 })).toBe("51 of 171 rows failed");
+  });
+  it("is null when nothing failed or counts predate #89", () => {
+    expect(failedRowsNote({ failed_rows: 0, total_rows: 10 })).toBeNull();
+    expect(failedRowsNote({ failed_rows: null, total_rows: null })).toBeNull();
+    expect(failedRowsNote({})).toBeNull();
   });
 });

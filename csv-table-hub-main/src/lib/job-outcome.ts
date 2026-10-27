@@ -43,8 +43,11 @@ export function classifyUploadResult(
         replacedFileName: res.replacedFileName,
         headerMapping: mapping,
       },
-      toast: { type: "success", message: msg },
-      notify: { title: "Import complete", body: msg },
+      toast: { type: res.failedRows ? "warning" : "success", message: msg },
+      notify: {
+        title: res.failedRows ? "Import complete with failed rows" : "Import complete",
+        body: msg,
+      },
       invalidateRoute: true,
     };
   }
@@ -131,4 +134,15 @@ export type OverwriteAction = { action: "show-diff"; job: Job } | { action: "ret
 export function decideOverwriteAction(job: Job | undefined): OverwriteAction {
   if (job?.tableName) return { action: "show-diff", job };
   return { action: "retry-overwrite" };
+}
+
+/** "51 of 171 rows failed", for a registered upload with failures (#123); else null. */
+export function failedRowsNote(f: {
+  failed_rows?: number | null;
+  total_rows?: number | null;
+}): string | null {
+  if (!f.failed_rows) return null;
+  return f.total_rows
+    ? `${f.failed_rows} of ${f.total_rows} rows failed`
+    : `${f.failed_rows} rows failed`;
 }

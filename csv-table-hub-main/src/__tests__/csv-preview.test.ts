@@ -125,6 +125,22 @@ describe("parseCsvPreview — type inference", () => {
     expect(preview.inferredTypes[0]).toBe("date");
   });
 
+  // #123: only types the API's cast accepts may be inferred.
+  it("keeps non-ISO dates such as '27 Oct 26' as text", async () => {
+    const preview = await parseCsvPreview(makeFile("Date,Processed On\n27 Oct 26,27 Oct 26 10:15\n28 Oct 26,28 Oct 26 11:00\n"));
+    expect(preview.inferredTypes).toEqual(["text", "text"]);
+  });
+
+  it("still infers timestamptz for ISO timestamps", async () => {
+    const preview = await parseCsvPreview(makeFile("at\n2026-10-27 10:15:00\n2026-10-28T11:00:00Z\n"));
+    expect(preview.inferredTypes[0]).toBe("timestamptz");
+  });
+
+  it("does not infer date for impossible dates the API would reject", async () => {
+    const preview = await parseCsvPreview(makeFile("d\n2026-02-30\n"));
+    expect(preview.inferredTypes[0]).toBe("text");
+  });
+
   it("falls back to text when column has mixed types", async () => {
     const preview = await parseCsvPreview(makeFile("col\n1\ntwo\n3\n"));
     expect(preview.inferredTypes[0]).toBe("text");

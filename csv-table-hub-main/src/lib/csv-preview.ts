@@ -69,20 +69,28 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const BOOL_TRUE = new Set(["true", "t", "yes", "y", "1"]);
 const BOOL_FALSE = new Set(["false", "f", "no", "n", "0"]);
 
+// #123: date and timestamptz are inferred only for values the API's cast_value
+// accepts (ISO 8601). new Date() also reads "27 Oct 26", which the API rejects,
+// so a looser check here made every row of such a file fail on upload.
+const ISO_TS_RE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}(:?\d{2})?)?$/;
+
+function realDate(s: string): boolean {
+  const d = new Date(`${s.slice(0, 10)}T00:00:00Z`);
+  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s.slice(0, 10);
+}
+
 function inferCell(v: string): Set<ColumnType> {
   const s = v.trim();
   if (s === "") return new Set(["int8", "numeric", "date", "timestamptz", "boolean", "text"]);
   const out = new Set<ColumnType>(["text"]);
   if (INT_RE.test(s)) out.add("int8");
   if (NUM_RE.test(s)) out.add("numeric");
-  if (DATE_RE.test(s)) out.add("date");
   const lower = s.toLowerCase();
   if (BOOL_TRUE.has(lower) || BOOL_FALSE.has(lower)) out.add("boolean");
-  // timestamptz: anything Date parses that also has a T or space + colon
-  if (!DATE_RE.test(s) && /[T ]\d/.test(s) && !isNaN(new Date(s).getTime())) {
+  if (DATE_RE.test(s) && realDate(s)) {
+    out.add("date");
     out.add("timestamptz");
-  } else if (DATE_RE.test(s)) {
-    // date is already added; also timestamptz-compatible
+  } else if (ISO_TS_RE.test(s) && realDate(s) && !isNaN(new Date(s).getTime())) {
     out.add("timestamptz");
   }
   return out;

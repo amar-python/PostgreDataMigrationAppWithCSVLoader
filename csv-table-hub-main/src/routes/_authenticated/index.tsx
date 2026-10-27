@@ -36,7 +36,7 @@ import { downloadErrorReport, buildErrorRows, type ExportFormat } from "@/lib/ex
 import type { Job, JobStatus } from "@/lib/job-types";
 import {
   classifyUploadResult, classifyThrownError, buildCancelPatch, buildCancelToastMessage,
-  decideOverwriteAction,
+  decideOverwriteAction, failedRowsNote,
 } from "@/lib/job-outcome";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -690,7 +690,7 @@ function FilesList({files}:{files:CsvFileSummary[]}){
           <>
             <div className="overflow-x-auto"><Table>
               <TableHeader><TableRow className="[&>th]:h-8 [&>th]:py-1"><TableHead className="w-12 text-right">#</TableHead><TableHead>File</TableHead><TableHead>Table</TableHead><TableHead className="w-16 text-right">Cols</TableHead><TableHead className="w-16 text-right">Rows</TableHead><TableHead className="w-40">Uploaded</TableHead><TableHead className="w-24"/></TableRow></TableHeader>
-              <TableBody>{visible.map((f,i)=><TableRow key={f.id} className="[&>td]:py-1.5"><TableCell className="text-right tabular-nums text-xs text-muted-foreground">{startIndex+i+1}</TableCell><TableCell className="max-w-[22rem] truncate font-medium" title={f.file_name}>{f.file_name}</TableCell><TableCell><code className="rounded bg-muted px-1.5 py-0.5 text-xs">{f.table_name}</code></TableCell><TableCell className="text-right tabular-nums">{f.column_names.length}</TableCell><TableCell className="text-right tabular-nums">{f.row_count}</TableCell><TableCell className="whitespace-nowrap text-xs text-muted-foreground" suppressHydrationWarning><time dateTime={f.created_at} title={new Date(f.created_at).toISOString()}>{new Date(f.created_at).toISOString().replace("T"," ").slice(0,16)}</time></TableCell><TableCell className="text-right"><Button size="sm" variant="ghost" className="h-7 px-2" onClick={()=>setPreview(f)}><Eye className="mr-1 h-3.5 w-3.5"/>Preview</Button></TableCell></TableRow>)}</TableBody>
+              <TableBody>{visible.map((f,i)=><TableRow key={f.id} className="[&>td]:py-1.5"><TableCell className="text-right tabular-nums text-xs text-muted-foreground">{startIndex+i+1}</TableCell><TableCell className="max-w-[22rem] truncate font-medium" title={f.file_name}>{f.file_name}</TableCell><TableCell><code className="rounded bg-muted px-1.5 py-0.5 text-xs">{f.table_name}</code></TableCell><TableCell className="text-right tabular-nums">{f.column_names.length}</TableCell><TableCell className="text-right tabular-nums">{f.row_count}{failedRowsNote(f)&&<span className="block text-xs text-destructive">{failedRowsNote(f)}</span>}</TableCell><TableCell className="whitespace-nowrap text-xs text-muted-foreground" suppressHydrationWarning><time dateTime={f.created_at} title={new Date(f.created_at).toISOString()}>{new Date(f.created_at).toISOString().replace("T"," ").slice(0,16)}</time></TableCell><TableCell className="text-right"><Button size="sm" variant="ghost" className="h-7 px-2" onClick={()=>setPreview(f)}><Eye className="mr-1 h-3.5 w-3.5"/>Preview</Button></TableCell></TableRow>)}</TableBody>
             </Table></div>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
@@ -741,7 +741,7 @@ function PreviewTable({file}:{file:CsvFileSummary}){
           {rows.length===0&&<TableRow><TableCell colSpan={file.column_names.length} className="text-center text-muted-foreground">No rows.</TableCell></TableRow>}
         </TableBody>
       </Table>
-      <p className="p-2 text-xs text-muted-foreground">Showing up to 50 rows. Table has {file.row_count} row{file.row_count===1?"":"s"} total.</p>
+      <p className="p-2 text-xs text-muted-foreground">Showing up to 50 rows. Table has {file.row_count} row{file.row_count===1?"":"s"} total.{failedRowsNote(file)&&<span className="text-destructive"> {failedRowsNote(file)} validation and weren't imported.</span>}</p>
     </div>
   );
 }
