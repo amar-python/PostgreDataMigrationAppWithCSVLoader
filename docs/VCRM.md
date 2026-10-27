@@ -84,6 +84,7 @@ Added by ART Milestone 0 (#53) and approved by the product owner on 2026-10-26. 
 | **BR-35** | Audit events shall be append-only at database level; reports shall be filterable; exports shall neutralise spreadsheet formula injection. | ART v2, D7 |
 | **BR-36** | Users shall authenticate; access shall be role-based; no tenant shall read or affect another tenant's data. | ART v2, D1, ADR-0003, decision 6 |
 | **BR-37** | Data shall stay inside the deployment boundary, with no runtime external services, and the stack shall install offline. | ART v2, D6, decision 7 |
+| **BR-38** | The platform shall install and run without internet access on Windows, macOS and Linux hosts that have a container runtime (Docker or Podman) installed. | Product owner, 27 Oct 2026; #128 |
 
 ### Out of scope (recorded for completeness)
 
@@ -135,7 +136,7 @@ The `input_data/` loader has its own implicit requirements — verified end-to-e
 | BR-D4 | Duplicate primary keys in source are reported, not silently dropped | 4 (duplicate detection) | ✅ |
 | BR-D5 | Loaded data is browsable (sample peek) | 1 (sample rows) | ✅ |
 
-### ART extension traceability (BR-23 to BR-37)
+### ART extension and later requirements, traceability (BR-23 to BR-38)
 
 Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" until a test run proves it (D5).
 
@@ -156,6 +157,7 @@ Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" 
 | BR-35 | ⚠️ Partial | Export formula injection neutralised (M1: #86, `export.test.ts`); audit table still plain, no actor, no filters | DB negative tests + unit | M1, M3, M7 |
 | BR-36 | ⚠️ Partial | Done in M2:<br>• local accounts with lockout (#98, #103)<br>• OIDC (#105)<br>• per-tenant schemas, T&E tables included (#100, #104)<br>• role matrix in `docs/ROLES.md` (#101)<br><br>Tests: `tests/test_accounts.py`, `test_tenant_isolation.py`, `test_roles.py`, `test_oidc.py`, `test_password_reset.py`. Each failed with its control removed.<br>• frontend sign-in; the browser no longer holds the shared key (#115)<br>• password change, admin reset and break-glass reset (#117; `tests/test_password_reset.py`)<br><br>Open: the shared key still grants non-tenant access to scripts and services; security review (#112); real-IdP OIDC check (#113) | Cross-tenant negative tests; role matrix tests | M2 |
 | BR-37 | ⚠️ Partial | No external calls found; no automated check; no offline doc (#60) | Egress-blocked run + offline dry run | M7 |
+| BR-38 | ❌ Not started | No container bundle for the application yet (`infra/Dockerfile` is the schema and evals runner only) | Offline smoke test 7/7 on Windows, macOS and Linux | #128 |
 
 ---
 
@@ -178,8 +180,10 @@ Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" 
 |--------|-------|-------------|
 | ✅ Verified | 19 | BR-01, BR-03, BR-04, BR-05, BR-06, BR-07, BR-08, BR-09, BR-10, BR-11, BR-12, BR-13, BR-14, BR-15, BR-16, BR-17, BR-18, BR-19, BR-20 |
 | ⚠️ Partial | 11 | BR-23, BR-25, BR-28, BR-29, BR-30, BR-31, BR-33, BR-34, BR-35, BR-36, BR-37 (ART, added 2026-10-26) |
-| ❌ Not started | 4 | BR-24, BR-26, BR-27, BR-32 (ART, added 2026-10-26) |
+| ❌ Not started | 5 | BR-24, BR-26, BR-27, BR-32 (ART, added 2026-10-26); BR-38 (added 2026-10-27) |
 | ⏸ Deferred by decision | 3 | BR-02, BR-21, BR-22 |
+
+**Headline (2026-10-27):** with BR-38 added (cross-platform offline install, #128), **19 of 38 (50 %)** are verified, 3 are deferred by decision, and the other 16 are partial or not started.
 
 **Headline (2026-10-26):** with the 15 ART requirements added, **19 of 37 (51 %)** are verified, 3 are deferred by decision, and the other 15 are partial or not started.
 
