@@ -89,3 +89,25 @@ export function authHeaders(): Record<string, string> {
 export function requireSession(): void {
   if (!getSession()) throw redirect({ to: "/auth" });
 }
+
+/** Change your own password (#117). This session stays; the server ends all others. */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const res = await fetch(`${apiBase}/api/auth/password`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  if (res.ok) return;
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    clearSession();
+    throw new Error("Your session has ended. Sign in again.");
+  }
+  throw new Error(
+    res.status === 422
+      ? `The new password must be at least ${MIN_PASSWORD} characters`
+      : (body?.detail ?? res.statusText),
+  );
+}
+
+export const MIN_PASSWORD = 12;

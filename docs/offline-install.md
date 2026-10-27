@@ -112,7 +112,11 @@ Once that evidence is on #60, the README can move to the "fully offline" wording
 ## Known limits
 
 - **Fresh VM only.** Re-running `install.sh` replaces `/opt/te-migration`. The database script has only been run against an empty database.
-- **Change the first admin's password.** The installer generates it. There's no self-service password change yet, so rerun `scripts/create_tenant_admin.py` for a new admin if needed.
+- **Change the first admin's password.** The installer generates it. Sign in and change it with the key icon in the header. If it's lost, reset it on the VM (bash, as root). This is the same way the installer runs its admin script:
+  ```bash
+  cd /opt/te-migration/app
+  sudo bash -c 'set -a; . /opt/te-migration/env; set +a; runuser -u te-app -- /opt/te-migration/venv/bin/python scripts/reset_password.py --username admin'
+  ```
 - **The API address is fixed at install.** It's written into the frontend files. To change it, re-run the install.
 - **Ubuntu 24.04 x86_64 only.** Other operating systems need different packages and wheels.
 

@@ -118,6 +118,21 @@ It prompts for a password of at least 12 characters, or reads it from
 `TE_ADMIN_PASSWORD`. Sign in with tenant `dev`, username `admin` and that
 password.
 
+### Change or reset a password (#117)
+
+- **Your own password:** sign in, then click the key icon in the header.
+- **Someone else in your tenant:** a tenant admin calls
+  `POST /api/auth/users/<username>/password` (see `docs/ROLES.md`).
+- **No admin can sign in** (forgotten password or locked out):
+
+```powershell
+cd "C:\Users\User\OneDrive\Desktop\Migration using ai\PostgreDataMigrationAppWithCSVLoader"
+python scripts\reset_password.py --username admin
+```
+
+It prompts for the new password (at least 12 characters), or reads it from
+`TE_NEW_PASSWORD`. It also clears any lockout and signs the user out everywhere.
+
 ---
 
 ## 6. Start the frontend (Terminal 2)
