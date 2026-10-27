@@ -320,6 +320,18 @@ def _do_upload(
                 count=len(to_insert),
             )
 
+            # #123: if every row failed, nothing was migrated. Roll back the new
+            # table (and any overwrite) and report a failed upload, not a success.
+            if data_rows and failed_row_count == len(data_rows):
+                conn.rollback()
+                msg = f"None of the {len(data_rows)} rows could be imported, so nothing was saved."
+                if row_errors:
+                    e = row_errors[0]
+                    msg += f' First problem: row {e["rowNumber"]}, column "{e["column"]}": {e["reason"]}'
+                _log(logs, "error", msg, "error")
+                return {"status": "error", "message": msg, "rowErrors": row_errors,
+                        "totalRows": len(data_rows), "failedRows": failed_row_count, "logs": logs}
+
             # Insert
             inserted = 0
             if to_insert:

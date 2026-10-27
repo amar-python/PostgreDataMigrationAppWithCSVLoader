@@ -87,6 +87,8 @@ const csvFileSummarySchema = z.object({
   file_name: z.string(),
   table_name: z.string(),
   row_count: z.number(),
+  total_rows: z.number().nullable().optional(),
+  failed_rows: z.number().nullable().optional(),
   column_names: z.array(z.string()),
   created_at: z.string(),
 });
