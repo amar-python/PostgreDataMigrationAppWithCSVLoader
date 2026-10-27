@@ -25,7 +25,7 @@ The bundle is about 140 MB.
 
 ## 1. Build the bundle (connected machine)
 
-You need Ubuntu 24.04 x86_64 with `git`, `python3-pip`, Node.js 20 or later and `apt-utils`. WSL Ubuntu 24.04 on Windows works.
+You need Ubuntu 24.04 x86_64 with `git`, `python3-pip`, Node.js 22.12 or later and `apt-utils`. WSL Ubuntu 24.04 on Windows works. It must be 24.04, not a newer release, because the Ubuntu packages are downloaded from the build machine's own sources.
 
 ```bash
 cd ~/PostgreDataMigrationAppWithCSVLoader
