@@ -4,7 +4,7 @@
 > **Test & Evaluation (T&E)** programme management — with a FastAPI backend,
 > React frontend, and a 142-assertion SQL test suite.
 
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17%2B-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%2B-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.140%E2%80%930.141-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
@@ -16,7 +16,7 @@
 ## Status
 
 - Actively developed by a single maintainer.
-- PostgreSQL is the only supported engine for now. The other five engine
+- PostgreSQL 16 or later is the only supported engine for now. The other five engine
   adapters in `build/adapters/` are kept but not maintained
   ([ADR-0001](docs/adr/0001-postgresql-first.md)).
 - CI (`.github/workflows/quality-gate.yml`) runs on every push to `main` and on pull requests:
@@ -359,4 +359,4 @@ MIT — see [LICENSE](LICENSE) for full text.
 
 ## Acknowledgements
 
-Built with [PostgreSQL](https://www.postgresql.org/) 17+, [FastAPI](https://fastapi.tiangolo.com/), [React 19](https://react.dev/), and [Lovable](https://lovable.dev/).
+Built with [PostgreSQL](https://www.postgresql.org/) 16+, [FastAPI](https://fastapi.tiangolo.com/), [React 19](https://react.dev/), and [Lovable](https://lovable.dev/).
