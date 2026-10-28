@@ -89,6 +89,8 @@ const csvFileSummarySchema = z.object({
   row_count: z.number(),
   total_rows: z.number().nullable().optional(),
   failed_rows: z.number().nullable().optional(),
+  uploader: z.string().nullable().optional(),
+  upload_id: z.string().nullable().optional(),
   column_names: z.array(z.string()),
   created_at: z.string(),
 });
@@ -230,4 +232,20 @@ export async function previewCsvTable(
     `/api/csv/tables/${encodeURIComponent(tableName)}/rows?limit=${limit}`,
     previewRowsSchema,
   );
+}
+
+// M3c (#107): an upload's failure reasons and step log, stored on the server.
+const uploadDetailSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  fileName: z.string(),
+  uploader: z.string().nullable(),
+  failedRows: z.number().nullable(),
+  rowErrors: z.array(rowErrorSchema).nullable(),
+  logs: z.array(processingLogSchema).nullable(),
+});
+export type UploadDetail = z.infer<typeof uploadDetailSchema>;
+
+export async function getUploadDetail(uploadId: string): Promise<UploadDetail> {
+  return apiFetch(`/api/csv/uploads/${encodeURIComponent(uploadId)}`, uploadDetailSchema);
 }
