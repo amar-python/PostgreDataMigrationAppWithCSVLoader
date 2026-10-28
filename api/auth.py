@@ -20,6 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from api.config import settings
 from api.db import Conn
 from api.services.accounts import session_for
+from api.services.audit import acting_as
 from api.tenancy import schema_for, scoped
 
 
@@ -68,10 +69,11 @@ async def tenant_scope(authorization: str = Header(default=""),
     """
     if not authorization:
         require_api_key(x_api_key)
-        yield None
+        with acting_as("api_key"):
+            yield None
         return
     session = await run_in_threadpool(_live_session, bearer_token(authorization))
-    with scoped(schema_for(session["tenant"])):
+    with scoped(schema_for(session["tenant"])), acting_as(session["username"]):
         yield session
 
 

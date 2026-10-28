@@ -414,6 +414,17 @@ class AuditLogTrail(unittest.TestCase):
         self.assertEqual(str(row["fileId"]), str(body["fileId"]))
         self.assertTrue(row["performedAt"], "performedAt must not be empty")
 
+    def test_audit_row_names_the_actor_and_the_chain_verifies(self):
+        """M3a (#107): who acted is recorded, and the hash chain checks out."""
+        up = self.client.post("/api/csv/upload",
+                              json={"fileName": self.name, "content": self.content})
+        self.assertEqual(up.json()["status"], "ok", up.text)
+        row = next(e for e in self._entries_for(self.name) if e["action"] == "upload")
+        self.assertEqual(row["actor"], "api_key")
+        check = self.client.get("/api/audit/verify").json()
+        self.assertTrue(check["intact"], check)
+        self.assertGreaterEqual(check["rows"], 1)
+
     def test_upload_then_delete_leaves_both_rows(self):
         """The full lifecycle. Before O-04 only the second half was recorded,
         so a table could be seen to vanish with no record of its arrival."""

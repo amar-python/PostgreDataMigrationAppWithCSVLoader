@@ -101,9 +101,9 @@ class AdminReset(_Accounts):
     def test_reset_is_written_to_the_tenants_audit_log(self):
         self.assertEqual(self._reset(self.user).status_code, 200)
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("SELECT action, file_name, mode FROM {}.audit_log").format(
+            cur.execute(sql.SQL("SELECT action, file_name, mode, actor FROM {}.audit_log").format(
                 sql.Identifier(schema_for(self.tenant))))
-            self.assertEqual(cur.fetchall(), [("password_reset", self.user, f"by {self.admin}")])
+            self.assertEqual(cur.fetchall(), [("password_reset", self.user, None, self.admin)])
 
     def test_non_admin_cannot_reset(self):
         user_token = self._login().json()["token"]
