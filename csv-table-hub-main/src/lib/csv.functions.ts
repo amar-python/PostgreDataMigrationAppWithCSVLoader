@@ -98,7 +98,7 @@ const csvFileSummaryListSchema = z.array(csvFileSummarySchema);
 
 const previewRowValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 const previewRowsSchema = z.object({
-  rows: z.array(z.record(previewRowValueSchema)),
+  rows: z.array(z.record(z.string(), previewRowValueSchema)),
 });
 
 async function apiFetch<T>(path: string, schema: z.ZodType<T>, options?: RequestInit): Promise<T> {
