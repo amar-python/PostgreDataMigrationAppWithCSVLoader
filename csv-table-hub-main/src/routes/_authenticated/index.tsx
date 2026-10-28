@@ -23,7 +23,7 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  filesQuery, loadFiles, previewCsvTable, previewCsv, listTeTables, uploadCsv,
+  filesQuery, loadFiles, previewCsvTable, getUploadDetail, previewCsv, listTeTables, uploadCsv,
   type CsvFileSummary, type ColumnType, type TeTableInfo,
 } from "@/lib/csv.functions";
 import { parseCsvPreview, COLUMN_TYPE_LABEL, sanitizeColumns, type CsvPreview } from "@/lib/csv-preview";
@@ -743,6 +743,28 @@ function PreviewTable({file}:{file:CsvFileSummary}){
         </TableBody>
       </Table>
       <p className="p-2 text-xs text-muted-foreground">Showing up to 50 rows. Table has {file.row_count} row{file.row_count===1?"":"s"} total.{failedRowsNote(file)&&<span className="text-destructive"> {failedRowsNote(file)} validation and weren't imported.</span>}</p>
+      {file.upload_id&&(file.failed_rows??0)>0&&<StoredRowErrors uploadId={file.upload_id} fileName={file.file_name}/>}
+    </div>
+  );
+}
+
+// M3c (#107): why rows failed, read from the server, so every user in the tenant sees the same reasons.
+export function StoredRowErrors({uploadId,fileName}:{uploadId:string;fileName:string}){
+  const {data,isLoading,error}=useQuery({queryKey:["upload-detail",uploadId],queryFn:()=>getUploadDetail(uploadId)});
+  if(isLoading)return<p className="p-2 text-xs text-muted-foreground">Loading failure reasons…</p>;
+  if(error)return<p className="p-2 text-xs text-destructive">{(error as Error).message}</p>;
+  const errors=data?.rowErrors??[];
+  if(errors.length===0)return<p className="p-2 text-xs text-muted-foreground">No failure reasons were stored for this upload.</p>;
+  return (
+    <div className="border-t">
+      <div className="flex items-center justify-between p-2">
+        <p className="text-xs font-medium">Rows that failed{(data?.failedRows??0)>errors.length&&` (first ${errors.length} of ${data?.failedRows})`}</p>
+        <Button size="sm" variant="outline" className="h-7" onClick={()=>downloadErrorReport(fileName,buildErrorRows(fileName,errors),"csv")}><Download className="mr-1 h-3.5 w-3.5"/>Error report</Button>
+      </div>
+      <Table>
+        <TableHeader><TableRow><TableHead>Row</TableHead><TableHead>Column</TableHead><TableHead>Value</TableHead><TableHead>Reason</TableHead></TableRow></TableHeader>
+        <TableBody>{errors.slice(0,50).map((re,i)=><TableRow key={i}><TableCell className="tabular-nums text-xs">{re.rowNumber}</TableCell><TableCell className="text-xs">{re.column??"—"}</TableCell><TableCell className="max-w-[180px] truncate font-mono text-xs">{re.value??"—"}</TableCell><TableCell className="text-xs text-destructive">{re.reason}</TableCell></TableRow>)}</TableBody>
+      </Table>
     </div>
   );
 }
