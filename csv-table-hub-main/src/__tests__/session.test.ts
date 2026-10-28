@@ -130,7 +130,10 @@ describe("requireSession (route guard)", () => {
       thrown = e;
     }
     expect(isRedirect(thrown)).toBe(true);
-    expect((thrown as { options: { to: string } }).options.to).toBe("/auth");
+    const { options } = thrown as { options: { to: string; reloadDocument?: boolean } };
+    expect(options.to).toBe("/auth");
+    // #133: a client-side redirect during hydration crashed the router (React #520/#422).
+    expect(options.reloadDocument).toBe(true);
   });
 
   it("lets a signed-in user through", () => {
