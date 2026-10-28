@@ -148,7 +148,7 @@ class RegistryUniqueness(unittest.TestCase):
     def test_bootstrap_brings_the_schema_to_head(self):
         with Conn() as conn, conn.cursor() as cur:
             cur.execute(f'SELECT version_num FROM "{settings.UPLOADS_SCHEMA}".alembic_version')
-            self.assertEqual(cur.fetchone()[0], "0005")
+            self.assertEqual(cur.fetchone()[0], "0006")
 
     def test_duplicate_hash_is_rejected_by_the_database(self):
         insert = (f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode) '

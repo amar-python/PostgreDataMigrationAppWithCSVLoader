@@ -198,7 +198,7 @@ class CrossTenantIsolation(unittest.TestCase):
         with Conn() as conn, conn.cursor() as cur:
             cur.execute(sql.SQL("SELECT version_num FROM {}.alembic_version").format(
                 sql.Identifier(schema_for(self.slugs["b"]))))
-            self.assertEqual(cur.fetchone()[0], "0005")
+            self.assertEqual(cur.fetchone()[0], "0006")
             cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = %s",
                         (schema_for(self.slugs["b"]),))
             self.assertTrue({"csv_files", "audit_log"} <= {r[0] for r in cur.fetchall()})

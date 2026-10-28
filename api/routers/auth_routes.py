@@ -14,7 +14,7 @@ from api.auth import PERMISSIONS, bearer_token, require_session
 from api.db import Conn
 from api import oidc
 from api.services import accounts
-from api.services.audit import write_audit
+from api.services.audit import acting_as, write_audit
 from api.tenancy import schema_for, scoped
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -114,10 +114,9 @@ def reset_password(username: str, req: ResetPasswordRequest,
         with conn.cursor() as cur:
             result = accounts.reset_password(cur, session["tenantId"], username, req.newPassword)
             if result == "ok":
-                # ponytail: audit_log has file columns only; target in file_name and actor
-                # in mode until M3's audit_events (#107) adds actor and object.
-                with scoped(schema_for(session["tenant"])):
-                    write_audit(cur, "password_reset", None, username, None, f"by {session['username']}")
+                # The target user goes in file_name, the feed's object column (M3a, #107).
+                with scoped(schema_for(session["tenant"])), acting_as(session["username"]):
+                    write_audit(cur, "password_reset", None, username, None, None)
         conn.commit()
     if result == "missing":
         raise HTTPException(status_code=404, detail="No such user in this tenant")

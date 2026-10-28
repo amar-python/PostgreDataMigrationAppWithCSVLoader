@@ -15,6 +15,7 @@ from psycopg2 import sql
 from api.auth import allow, tenant_scope
 from api.tenancy import uploads_schema
 from api.db import Conn
+from api.services.audit import verify_chain
 
 router = APIRouter(
     prefix="/api/audit",
@@ -37,7 +38,7 @@ def audit_log(limit: int = 50, offset: int = 0) -> dict:
             total = cur.fetchone()[0]
             cur.execute(
                 sql.SQL(
-                    "SELECT id, action, file_id, file_name, table_name, mode, performed_at "
+                    "SELECT id, action, file_id, file_name, table_name, mode, performed_at, actor "
                     "FROM {}.audit_log ORDER BY performed_at DESC LIMIT %s OFFSET %s"
                 ).format(sql.Identifier(uploads_schema())),
                 (limit, offset),
@@ -51,7 +52,17 @@ def audit_log(limit: int = 50, offset: int = 0) -> dict:
                     "tableName": r[4],
                     "mode": r[5],
                     "performedAt": r[6].isoformat(),
+                    "actor": r[7],
                 }
                 for r in cur.fetchall()
             ]
     return {"total": total, "limit": limit, "offset": offset, "entries": entries}
+
+
+@router.get("/verify", dependencies=[Depends(allow("read_audit"))])
+def audit_verify() -> dict:
+    """Recompute this tenant's audit hash chain (M3a, #107). ``intact`` is false
+    if any row was changed, removed or inserted out of order."""
+    with Conn() as conn:
+        with conn.cursor() as cur:
+            return verify_chain(cur)

@@ -209,7 +209,8 @@ class AuditWriterContract(unittest.TestCase):
                 captured["params"] = params
 
         write_audit(RecordingCursor(), "upload", 7, "f.csv", "csv_abc", "dynamic")
-        self.assertEqual(captured["params"], ("upload", 7, "f.csv", "csv_abc", "dynamic"))
+        self.assertEqual(captured["params"],
+                         ("upload", 7, "f.csv", "csv_abc", "dynamic", None, None, None))
 
     def test_file_id_is_coerced_from_the_loaders_string_form(self):
         self.assertEqual(coerce_file_id("42"), 42)
