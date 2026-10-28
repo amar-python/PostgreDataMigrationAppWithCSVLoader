@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from psycopg2 import sql
 from pydantic import BaseModel, Field
 
@@ -15,6 +16,7 @@ from api.db import Conn
 from api.services.audit import coerce_file_id, record_audit, write_audit
 from api.services.csv_parse import build_preview
 from api.services.dynamic_loader import upload_dynamic
+from api.services.originals import record_upload
 from api.services.te_loader import match_te_table, upload_te
 
 logger = logging.getLogger(__name__)
@@ -80,6 +82,10 @@ def upload(req: UploadRequest) -> dict:
     else:
         raise HTTPException(422, f"Unknown mode '{req.mode}' — use 'dynamic' or 'te'")
 
+    # M3b (#107): keep the original and its outcome, whatever the outcome was.
+    upload_id = record_upload(req.fileName, req.content, req.mode, result)
+    result["uploadId"] = None if upload_id is None else str(upload_id)
+
     # O-04: record the load so audit_log covers creations, not just deletions.
     # Only a genuine load is audited: "duplicate_file" and "error" outcomes
     # changed nothing, so logging them would make the trail read as if data had
@@ -101,10 +107,12 @@ def list_files() -> list[dict]:
         with conn.cursor() as cur:
             cur.execute(
                 sql.SQL(
-                    "SELECT id, file_name, table_name, mode, row_count, column_names, created_at, "
-                    "total_rows, duplicate_rows_skipped, failed_rows "
-                    "FROM {}.csv_files ORDER BY created_at DESC, id DESC"
-                ).format(sql.Identifier(uploads_schema()))
+                    "SELECT f.id, f.file_name, f.table_name, f.mode, f.row_count, f.column_names, f.created_at, "
+                    "f.total_rows, f.duplicate_rows_skipped, f.failed_rows, u.uploader, u.id "
+                    "FROM {s}.csv_files f LEFT JOIN LATERAL (SELECT uploader, id FROM {s}.uploads "
+                    "  WHERE csv_file_id = f.id ORDER BY id DESC LIMIT 1) u ON true "
+                    "ORDER BY f.created_at DESC, f.id DESC"
+                ).format(s=sql.Identifier(uploads_schema()))
             )
             return [
                 {
@@ -118,9 +126,46 @@ def list_files() -> list[dict]:
                     "total_rows": r[7],
                     "duplicate_rows_skipped": r[8],
                     "failed_rows": r[9],
+                    "uploader": r[10],
+                    "upload_id": None if r[11] is None else str(r[11]),
                 }
                 for r in cur.fetchall()
             ]
+
+
+@router.get("/uploads", dependencies=[Depends(allow("list_files"))])
+def list_uploads(limit: int = 100, offset: int = 0) -> list[dict]:
+    """Every upload attempt and its outcome, newest first (M3b, #107; BR-23)."""
+    with Conn() as conn, conn.cursor() as cur:
+        cur.execute(sql.SQL(
+            "SELECT id, file_name, sha256, byte_size, uploader, mode, status, total_rows, imported_rows, "
+            "failed_rows, csv_file_id, uploaded_at FROM {}.uploads ORDER BY id DESC LIMIT %s OFFSET %s"
+        ).format(sql.Identifier(uploads_schema())), (max(1, min(limit, 500)), max(0, offset)))
+        keys = ("id", "file_name", "sha256", "byte_size", "uploader", "mode", "status", "total_rows",
+                "imported_rows", "failed_rows", "csv_file_id", "uploaded_at")
+        out = [dict(zip(keys, r)) for r in cur.fetchall()]
+    for u in out:
+        u["id"] = str(u["id"])
+        u["csv_file_id"] = None if u["csv_file_id"] is None else str(u["csv_file_id"])
+        u["uploaded_at"] = u["uploaded_at"].isoformat()
+    return out
+
+
+@router.get("/uploads/{upload_id}/original", dependencies=[Depends(allow("read_rows"))])
+def upload_original(upload_id: int) -> Response:
+    """The file exactly as it was uploaded (M3b; BR-24)."""
+    with Conn() as conn, conn.cursor() as cur:
+        cur.execute(sql.SQL(
+            "SELECT u.file_name, u.sha256, b.content FROM {s}.uploads u "
+            "JOIN {s}.upload_blobs b ON b.upload_id = u.id WHERE u.id = %s"
+        ).format(s=sql.Identifier(uploads_schema())), (upload_id,))
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(404, "No such upload")
+    name, digest, content = row
+    return Response(bytes(content), media_type="text/csv", headers={
+        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}",
+        "X-Content-SHA256": digest})
 
 
 @router.get("/tables/{table_name}/rows", dependencies=[Depends(allow("read_rows"))])

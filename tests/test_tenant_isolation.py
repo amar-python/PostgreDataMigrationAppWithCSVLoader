@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg2 import sql
 
-from api.config import settings
+from api.config import TE_TABLES, settings
 from api.db import Conn
 from api.main import app
 from api.services import accounts
@@ -172,7 +172,8 @@ class CrossTenantIsolation(unittest.TestCase):
         schema = schema_for(self.slugs["b"])
         with Conn() as conn, conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM information_schema.table_constraints "
-                        "WHERE table_schema = %s AND constraint_type = 'FOREIGN KEY'", (schema,))
+                        "WHERE table_schema = %s AND constraint_type = 'FOREIGN KEY' AND table_name = ANY(%s)",
+                        (schema, TE_TABLES))   # the T&E tables only; 0007's upload tables have their own
             tenant_fks = cur.fetchone()[0]
             cur.execute("SELECT count(*) FROM information_schema.table_constraints "
                         "WHERE table_schema = %s AND constraint_type = 'FOREIGN KEY'", (settings.TE_SCHEMA,))
@@ -198,7 +199,7 @@ class CrossTenantIsolation(unittest.TestCase):
         with Conn() as conn, conn.cursor() as cur:
             cur.execute(sql.SQL("SELECT version_num FROM {}.alembic_version").format(
                 sql.Identifier(schema_for(self.slugs["b"]))))
-            self.assertEqual(cur.fetchone()[0], "0006")
+            self.assertEqual(cur.fetchone()[0], "0007")
             cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = %s",
                         (schema_for(self.slugs["b"]),))
             self.assertTrue({"csv_files", "audit_log"} <= {r[0] for r in cur.fetchall()})

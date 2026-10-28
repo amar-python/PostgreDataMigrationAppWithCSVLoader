@@ -45,6 +45,10 @@ VALID_ACTIONS = frozenset({"upload", "delete", "password_reset"})
 _actor: ContextVar[str | None] = ContextVar("audit_actor", default=None)
 
 
+def current_actor() -> str | None:
+    return _actor.get()
+
+
 @contextmanager
 def acting_as(actor: str):
     token = _actor.set(actor)

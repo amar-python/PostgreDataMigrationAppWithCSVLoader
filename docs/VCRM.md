@@ -142,8 +142,8 @@ Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" 
 
 | ID | Status | Reason | Planned verification | Milestone |
 |----|--------|--------|----------------------|-----------|
-| BR-23 | ⚠️ Partial | Registry has UNIQUE file hash and name and a migration history (M1: #87); still no uploader, tenant or status | Integration + DB constraint tests | M1, M3 |
-| BR-24 | ❌ Not started | Original never stored; overwrite drops data | DB negative tests | M3 |
+| BR-23 | ✅ | Every upload attempt gets an `uploads` row (M3b, #107): id, original filename, SHA-256, uploader, timestamp and outcome (imported, partly_imported, failed, duplicate, rejected). The tenant is the schema the row lives in (decision 6), not a column. Registry UNIQUE hash and name from M1 (#87). `test_preserved_uploads.py` | Integration + DB constraint tests | M1, M3 |
+| BR-24 | ⚠️ Partial | Original bytes (`upload_blobs`) and parsed rows (`source_rows`) kept for every upload, including failed ones and files later overwritten or deleted (M3b, #107). Triggers reject UPDATE, DELETE and TRUNCATE (`test_preserved_uploads.py`, 6 tests). Still to do: the least-privilege runtime role (M3d); edits kept separate arrive with M4 | DB negative tests | M3 |
 | BR-25 | ⚠️ Partial | 10-row preview sample; 200-row cap on table view | API paging + e2e | M4 |
 | BR-26 | ❌ Not started | No code | API + e2e | M4 |
 | BR-27 | ❌ Not started | No code | API + DB tests | M4 |
@@ -178,12 +178,12 @@ Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" 
 
 | Status | Count | Requirements |
 |--------|-------|-------------|
-| ✅ Verified | 19 | BR-01, BR-03, BR-04, BR-05, BR-06, BR-07, BR-08, BR-09, BR-10, BR-11, BR-12, BR-13, BR-14, BR-15, BR-16, BR-17, BR-18, BR-19, BR-20 |
-| ⚠️ Partial | 11 | BR-23, BR-25, BR-28, BR-29, BR-30, BR-31, BR-33, BR-34, BR-35, BR-36, BR-37 (ART, added 2026-10-26) |
-| ❌ Not started | 5 | BR-24, BR-26, BR-27, BR-32 (ART, added 2026-10-26); BR-38 (added 2026-10-27) |
+| ✅ Verified | 20 | BR-01, BR-03, BR-04, BR-05, BR-06, BR-07, BR-08, BR-09, BR-10, BR-11, BR-12, BR-13, BR-14, BR-15, BR-16, BR-17, BR-18, BR-19, BR-20, BR-23 (M3b) |
+| ⚠️ Partial | 11 | BR-24, BR-25, BR-28, BR-29, BR-30, BR-31, BR-33, BR-34, BR-35, BR-36, BR-37 (ART, added 2026-10-26) |
+| ❌ Not started | 4 | BR-26, BR-27, BR-32 (ART, added 2026-10-26); BR-38 (added 2026-10-27) |
 | ⏸ Deferred by decision | 3 | BR-02, BR-21, BR-22 |
 
-**Headline (2026-10-27):** with BR-38 added (cross-platform offline install, #128), **19 of 38 (50 %)** are verified, 3 are deferred by decision, and the other 16 are partial or not started.
+**Headline (2026-10-28):** with BR-23 verified by M3b (#107), **20 of 38 (53 %)** are verified, 3 are deferred by decision, and the other 15 are partial or not started.
 
 **Headline (2026-10-26):** with the 15 ART requirements added, **19 of 37 (51 %)** are verified, 3 are deferred by decision, and the other 15 are partial or not started.
 
