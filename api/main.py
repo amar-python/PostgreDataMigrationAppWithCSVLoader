@@ -86,7 +86,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],  # PUT: review changes (M4, #108)
     allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 
