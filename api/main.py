@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from api import db, oidc
 from api.config import settings
 from api.ratelimit import rate_limit_middleware
-from api.routers import audit_routes, auth_routes, csv_routes, te_routes
+from api.routers import audit_routes, auth_routes, csv_routes, review_routes, te_routes
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +97,7 @@ app.middleware("http")(rate_limit_middleware)
 
 app.include_router(auth_routes.router)
 app.include_router(csv_routes.router)
+app.include_router(review_routes.router)
 app.include_router(te_routes.router)
 app.include_router(audit_routes.router)
 

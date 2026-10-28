@@ -191,7 +191,7 @@ class AuditWriterContract(unittest.TestCase):
     """O-04: the shared audit writer's guardrails, without touching a database."""
 
     def test_only_known_actions_are_accepted(self):
-        self.assertEqual(VALID_ACTIONS, {"upload", "delete", "password_reset"})
+        self.assertEqual(VALID_ACTIONS, {"upload", "delete", "password_reset", "row_decision", "cell_edit"})
 
     def test_unknown_action_raises_before_any_sql_runs(self):
         class ExplodingCursor:

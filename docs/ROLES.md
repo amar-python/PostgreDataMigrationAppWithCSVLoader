@@ -7,11 +7,12 @@ Every member of a tenant has one role (ADR-0003). This table is enforced by `PER
 | preview | `POST /api/csv/preview` | ✓ | | ✓ | |
 | upload | `POST /api/csv/upload` | ✓ | | ✓ | |
 | list_files | `GET /api/csv/files`, `GET /api/csv/uploads` | ✓ | ✓ | ✓ | ✓ |
-| read_rows | `GET /api/csv/tables/{table}/rows`, `GET /api/csv/uploads/{id}/original` | ✓ | ✓ | ✓ | ✓ |
+| read_rows | `GET /api/csv/tables/{table}/rows`, `GET /api/csv/uploads/{id}/original`, `GET /api/csv/uploads/{id}/rows`, `GET /api/csv/uploads/{id}/rows/{n}/history` | ✓ | ✓ | ✓ | ✓ |
 | list_te | `GET /api/te/tables` | ✓ | ✓ | ✓ | ✓ |
 | delete_file | `DELETE /api/csv/files/{id}` | | | ✓ | |
 | read_audit | `GET /api/audit/log`, `GET /api/audit/verify` | | | ✓ | ✓ |
 | reset_password | `POST /api/auth/users/{username}/password` | | | ✓ | |
+| review_rows | `PUT /api/csv/uploads/{id}/rows/{n}/decision`, `PUT /api/csv/uploads/{id}/rows/{n}/cells/{column}` | | ✓ | ✓ | |
 
 A role that isn't allowed gets **403**. Two kinds of request are outside this table:
 

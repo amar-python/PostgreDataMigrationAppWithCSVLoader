@@ -46,13 +46,13 @@ def record_upload(file_name: str, content: str, mode: str, result: dict) -> int 
                 s = sql.Identifier(uploads_schema())
                 cur.execute(sql.SQL(
                     "INSERT INTO {}.uploads (file_name, sha256, byte_size, uploader, mode, status, "
-                    "total_rows, imported_rows, failed_rows, csv_file_id, row_errors, logs) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id").format(s),
+                    "total_rows, imported_rows, failed_rows, csv_file_id, row_errors, logs, columns, column_types) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id").format(s),
                     (file_name, hashlib.sha256(data).hexdigest(), len(data), current_actor(), mode,
                      outcome(result), result.get("totalRows"), result.get("insertedRows"),
                      result.get("failedRows"), coerce_file_id(result.get("fileId")) if ok else None,
                      Json((result.get("rowErrors") or [])[:settings.MAX_ROW_ERRORS_REPORTED]),
-                     Json(result.get("logs") or [])))
+                     Json(result.get("logs") or []), result.get("columns"), result.get("types")))
                 upload_id = cur.fetchone()[0]
                 cur.execute(sql.SQL("INSERT INTO {}.upload_blobs (upload_id, content) VALUES (%s, %s)").format(s),
                             (upload_id, data))

@@ -330,7 +330,8 @@ def _do_upload(
                     msg += f' First problem: row {e["rowNumber"]}, column "{e["column"]}": {e["reason"]}'
                 _log(logs, "error", msg, "error")
                 return {"status": "error", "message": msg, "rowErrors": row_errors,
-                        "totalRows": len(data_rows), "failedRows": failed_row_count, "logs": logs}
+                        "totalRows": len(data_rows), "failedRows": failed_row_count,
+                        "columns": columns, "types": col_types, "logs": logs}
 
             # Insert
             inserted = 0
