@@ -98,9 +98,11 @@ export function authHeaders(): Record<string, string> {
   return s ? { Authorization: `Bearer ${s.token}` } : {};
 }
 
-/** Route guard (#96): send anyone without a live session to the sign-in page. */
+/** Route guard (#96): send anyone without a live session to the sign-in page.
+ *  A full page load, not a client-side redirect: redirecting while the first
+ *  page hydrates broke the router's match tree (React #520/#422, #133). */
 export function requireSession(): void {
-  if (!getSession()) throw redirect({ to: "/auth" });
+  if (!getSession()) throw redirect({ to: "/auth", reloadDocument: true });
 }
 
 /** Change your own password (#117). This session stays; the server ends all others. */
