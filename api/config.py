@@ -9,6 +9,11 @@ class Settings:
     PG_USER: str = os.environ.get("PGUSER", "postgres")
     PG_PASSWORD: str = os.environ.get("PGPASSWORD", "")
     PG_DATABASE: str = os.environ.get("PGDATABASE", "te_mgmt_dev")
+    # M3d (#107): the runtime role the API's request pool connects as. It may only
+    # read and insert in the append-only tables. PG_USER stays the owner, used at
+    # startup for migrations and grants. Unset: the pool connects as PG_USER.
+    APP_DB_USER: str = os.environ.get("APP_DB_USER", "")
+    APP_DB_PASSWORD: str = os.environ.get("APP_DB_PASSWORD", "")
 
     # Schema where dynamically created per-CSV tables + the registry live.
     UPLOADS_SCHEMA: str = os.environ.get("CSV_UPLOADS_SCHEMA", "csv_uploads")

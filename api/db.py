@@ -2,6 +2,7 @@
 
 import logging
 import time
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from pathlib import Path
 
@@ -39,8 +40,8 @@ def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
                 maxconn=_MAXCONN,
                 host=settings.PG_HOST,
                 port=settings.PG_PORT,
-                user=settings.PG_USER,
-                password=settings.PG_PASSWORD,
+                user=settings.APP_DB_USER or settings.PG_USER,
+                password=settings.APP_DB_PASSWORD if settings.APP_DB_USER else settings.PG_PASSWORD,
                 dbname=settings.PG_DATABASE,
             )
             if attempt > 1:
@@ -176,8 +177,67 @@ def bootstrap() -> None:
                 settings.PG_USER, settings.PG_HOST, settings.PG_PORT,
                 settings.PG_DATABASE)
     command.upgrade(cfg, "head")
+    with owner_connect() as conn, conn.cursor() as cur:
+        for schema, create in ((settings.UPLOADS_SCHEMA, True), (settings.CONTROL_SCHEMA, False),
+                               (settings.TE_SCHEMA, False)):
+            grant_runtime(cur, schema, create=create)
     _migrate_existing_tenants()
     logger.info("Alembic migrations complete")
+    if not settings.APP_DB_USER:
+        logger.warning("APP_DB_USER is not set: the API connects as the owner %r, so the database "
+                       "doesn't stop it changing the audit log (M3d). See docs/QUICKSTART.md.",
+                       settings.PG_USER)
+
+
+@contextmanager
+def owner_connect():
+    """A connection as the owner (PG_USER): for migrations, provisioning and grants, never requests.
+    Closed on exit; the caller commits."""
+    conn = psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
+                            password=settings.PG_PASSWORD, dbname=settings.PG_DATABASE)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+# Tables the runtime role may only read and insert (M3, #107). Triggers also stop the owner.
+APPEND_ONLY = ("audit_log", "uploads", "upload_blobs", "source_rows", "alembic_version")
+
+
+def grant_runtime(cur, schema: str, create: bool) -> None:
+    """Give the runtime role (APP_DB_USER) what requests need in one schema (M3d, #107).
+
+    Read and write on ordinary tables; read and insert only on APPEND_ONLY.
+    ``create`` lets it create, and so own and drop, the per-upload csv_* tables;
+    ones the owner created before M3d are handed over. Commits. No-op without
+    APP_DB_USER or if the schema doesn't exist.
+    """
+    role = settings.APP_DB_USER
+    if not role:
+        return
+    cur.execute("SELECT 1 FROM pg_namespace WHERE nspname = %s", (schema,))
+    if cur.fetchone() is None:
+        return
+    s, r = sql.Identifier(schema), sql.Identifier(role)
+    cur.execute(sql.SQL("GRANT USAGE{} ON SCHEMA {} TO {}").format(
+        sql.SQL(", CREATE") if create else sql.SQL(""), s, r))
+    cur.execute(sql.SQL("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {} TO {}").format(s, r))
+    cur.execute(sql.SQL("GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {} TO {}").format(s, r))
+    cur.execute("SELECT relname FROM pg_class WHERE relnamespace = %s::regnamespace AND relname = ANY(%s)",
+                (schema, list(APPEND_ONLY)))
+    for (table,) in cur.fetchall():
+        cur.execute(sql.SQL("REVOKE UPDATE, DELETE, TRUNCATE ON {}.{} FROM {}").format(
+            s, sql.Identifier(table), r))
+    cur.execute("SELECT to_regclass(%s)", (f'"{schema}".csv_files',))
+    if create and cur.fetchone()[0] is not None:
+        cur.execute(sql.SQL(
+            "SELECT c.relname FROM {}.csv_files f JOIN pg_class c ON c.relname = f.table_name "
+            "AND c.relnamespace = %s::regnamespace WHERE f.mode = 'dynamic' "
+            "AND pg_get_userbyid(c.relowner) <> %s").format(s), (schema, role))
+        for (table,) in cur.fetchall():
+            cur.execute(sql.SQL("ALTER TABLE {}.{} OWNER TO {}").format(s, sql.Identifier(table), r))
+    cur.connection.commit()
 
 
 def alembic_ini_path() -> Path:
@@ -188,7 +248,7 @@ def _migrate_existing_tenants() -> None:
     """Bring every tenant schema to head too (decision 6: migrations run across N schemas)."""
     from api.tenancy import migrate_tenant
 
-    with Conn() as conn, conn.cursor() as cur:
+    with owner_connect() as conn, conn.cursor() as cur:
         cur.execute(sql.SQL("SELECT slug FROM {}.tenants ORDER BY id").format(
             sql.Identifier(settings.CONTROL_SCHEMA)))
         slugs = [r[0] for r in cur.fetchall()]
