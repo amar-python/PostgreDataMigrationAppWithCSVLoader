@@ -151,6 +151,21 @@ def list_uploads(limit: int = 100, offset: int = 0) -> list[dict]:
     return out
 
 
+@router.get("/uploads/{upload_id}", dependencies=[Depends(allow("list_files"))])
+def upload_detail(upload_id: int) -> dict:
+    """One upload's outcome, why its rows failed, and its step log (M3c, #107).
+    Stored on the server, so any session in the tenant can read them."""
+    with Conn() as conn, conn.cursor() as cur:
+        cur.execute(sql.SQL(
+            "SELECT status, total_rows, imported_rows, failed_rows, row_errors, logs, uploader, file_name "
+            "FROM {}.uploads WHERE id = %s").format(sql.Identifier(uploads_schema())), (upload_id,))
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(404, "No such upload")
+    keys = ("status", "totalRows", "importedRows", "failedRows", "rowErrors", "logs", "uploader", "fileName")
+    return {"id": str(upload_id), **dict(zip(keys, row))}
+
+
 @router.get("/uploads/{upload_id}/original", dependencies=[Depends(allow("read_rows"))])
 def upload_original(upload_id: int) -> Response:
     """The file exactly as it was uploaded (M3b; BR-24)."""

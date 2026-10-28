@@ -82,6 +82,16 @@ class PreservedUploads(unittest.TestCase):
         self.assertEqual((row["status"], row["csv_file_id"], row["failed_rows"]), ("failed", None, 1))
         self.assertEqual(self.client.get(f"/api/csv/uploads/{res['uploadId']}/original").content, content.encode())
 
+    def test_failure_reasons_and_log_are_readable_from_another_session(self):
+        """M3c (#107): the reasons rows failed live on the server, not only in the uploading browser."""
+        res = self._upload(f"n,t\n1,{self.tag}\nx,{self.tag}\n", ["int8", "text"])
+        other = TestClient(app)   # a separate client with no state shared with the uploader; no
+        detail = other.get(f"/api/csv/uploads/{res['uploadId']}").json()   # lifespan, so the pool stays up
+        self.assertEqual((detail["status"], detail["failedRows"]), ("partly_imported", 1))
+        self.assertEqual(detail["rowErrors"], res["rowErrors"])
+        self.assertEqual(detail["rowErrors"][0]["rowNumber"], 2)
+        self.assertEqual([entry["step"] for entry in detail["logs"]], [entry["step"] for entry in res["logs"]])
+
     def test_partly_failed_and_duplicate_outcomes(self):
         res = self._upload(f"n,t\n1,{self.tag}\nx,{self.tag}\n", ["int8", "text"])
         self.assertEqual(self._upload_row(res["uploadId"])["status"], "partly_imported")
@@ -110,3 +120,4 @@ class PreservedUploads(unittest.TestCase):
 
     def test_unknown_upload_is_404(self):
         self.assertEqual(self.client.get("/api/csv/uploads/999999999/original").status_code, 404)
+        self.assertEqual(self.client.get("/api/csv/uploads/999999999").status_code, 404)

@@ -2,7 +2,8 @@
 
 - ``uploads``: one row per upload attempt. Who uploaded it, when, the file's
   SHA-256 and size, the mode, the outcome (imported, partly_imported, failed,
-  duplicate or rejected), the row counts, and the registry row it produced.
+  duplicate or rejected), the row counts, the registry row it produced, and
+  why rows failed plus the step log (M3c; row errors capped at API_MAX_ROW_ERRORS).
 - ``upload_blobs``: the file's bytes exactly as received.
 - ``source_rows``: the parsed rows as text; row 0 is the header.
 
@@ -48,6 +49,8 @@ def upgrade() -> None:
         imported_rows INTEGER,
         failed_rows INTEGER,
         csv_file_id BIGINT,
+        row_errors JSONB,
+        logs JSONB,
         uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now())""")
     op.execute(f"CREATE INDEX uploads_csv_file_id ON {s}.uploads (csv_file_id)")
     op.execute(f"""CREATE TABLE {s}.upload_blobs (
