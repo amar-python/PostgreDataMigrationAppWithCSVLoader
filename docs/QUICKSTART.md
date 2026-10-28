@@ -118,6 +118,25 @@ It prompts for a password of at least 12 characters, or reads it from
 `TE_ADMIN_PASSWORD`. Sign in with tenant `dev`, username `admin` and that
 password.
 
+### Set up the runtime database role (once, M3d)
+
+The API answers requests as a separate database role, `te_app`. It can only read
+and add to the audit log and the stored uploads, never change or delete them
+(#107). The owner (`PGUSER`, usually `postgres`) is used only at startup. Stop the
+API first, then run this once from the same folder:
+
+```powershell
+cd "C:\Users\User\OneDrive\Desktop\Migration using ai\PostgreDataMigrationAppWithCSVLoader"
+python scripts\create_app_role.py
+```
+
+It connects as the owner with the `PG*` values from step 3, so run it in a
+window where they're set (`PGPORT` 5433 and `PGPASSWORD` for PostgreSQL 18).
+It creates the role with a random password and writes the role's settings to
+`%USERPROFILE%\.te-migration\app-db.env`. It never prints the password.
+`start-api.ps1` loads that file. Until you run it, the API prints
+`APP_DB_USER not set` and runs as the owner. Running it again sets a new password.
+
 ### Change or reset a password (#117)
 
 - **Your own password:** sign in, then click the key icon in the header.

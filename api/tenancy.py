@@ -66,12 +66,13 @@ def migrate_tenant(slug: str) -> None:
             command.upgrade(cfg, "head")
         finally:
             settings.UPLOADS_SCHEMA = original
-    from api.db import Conn
+    from api.db import grant_runtime, owner_connect
 
-    with Conn() as conn:
+    with owner_connect() as conn:
         with conn.cursor() as cur:
             provision_te_tables(cur, schema_for(slug), settings.TE_SCHEMA)
-        conn.commit()
+            conn.commit()
+            grant_runtime(cur, schema_for(slug), create=True)
 
 
 def provision_te_tables(cur, schema: str, template: str) -> int:

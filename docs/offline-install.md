@@ -66,8 +66,8 @@ The script runs six steps:
 1. Checks every file against `SHA256SUMS`.
 2. Installs the Ubuntu packages, using the bundle as the only apt source. The VM's own apt sources are ignored.
 3. Copies the app to `/opt/te-migration`, creates the `te-app` system user, and builds a Python virtual environment from `wheels/` without network access.
-4. Deploys database `te_mgmt_prod` with schema `te_prod` and its login role `te_prod_user`, using a generated password.
-5. Writes `/opt/te-migration/env` (mode 600) with that password and a generated API key, and starts the `te-api` (port 8000) and `te-frontend` (port 3000) services under systemd. The API key is for scripts only. The frontend holds no key; people sign in.
+4. Deploys database `te_mgmt_prod` with schema `te_prod` and its owner role `te_prod_user`. It also creates the runtime role `te_prod_runtime`, which serves requests and can only read and insert the audit and upload tables (M3d, #107). Both get generated passwords.
+5. Writes `/opt/te-migration/env` (mode 600) with both passwords and a generated API key, and starts the `te-api` (port 8000) and `te-frontend` (port 3000) services under systemd. The API key is for scripts only. The frontend holds no key; people sign in.
 6. Creates the first tenant and its tenant admin, then runs the smoke test.
 
 During step 2, apt may print `W: Download is performed unsandboxed as root`. This only means apt's sandbox user can't read the bundle folder, and it's harmless.

@@ -20,6 +20,19 @@ if (-not $env:PGPASSWORD) {
         [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
 }
 
+# M3d (#107): requests use the runtime role made by scripts\create_app_role.py,
+# which can't change the audit log. The owner above is only used at startup.
+$appDbEnv = Join-Path $env:USERPROFILE ".te-migration\app-db.env"
+if ((-not $env:APP_DB_USER) -and (Test-Path $appDbEnv)) {
+    foreach ($line in Get-Content $appDbEnv) {
+        $k, $v = $line -split "=", 2
+        if ($k) { Set-Item -Path "env:$k" -Value $v }
+    }
+}
+if (-not $env:APP_DB_USER) {
+    Write-Host "APP_DB_USER not set - requests run as the owner. Run once: python scripts\create_app_role.py" -ForegroundColor Yellow
+}
+
 if (-not $env:API_KEY) {
     Write-Host "API_KEY not set - every endpoint is unauthenticated (fine for local dev)." -ForegroundColor Yellow
 }

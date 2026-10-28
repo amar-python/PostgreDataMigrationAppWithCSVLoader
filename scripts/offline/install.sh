@@ -43,6 +43,14 @@ sed "s/__INJECT_AT_DEPLOY__/$DB_PASS/" "$DEST/app/build/environments/env_prod.ex
   > "$DEST/app/build/environments/env_prod.sql"
 ( cd "$DEST/app" && sudo -u postgres env PGHOST=/var/run/postgresql bash build/deploy_all.sh prod >/dev/null )
 rm "$DEST/app/build/environments/env_prod.sql"   # it holds the password
+# M3d (#107): a separate runtime role for requests; it can only read and insert the
+# audit and upload tables. te_prod_user stays the owner and runs migrations at startup.
+APP_DB_PASS="$(openssl rand -hex 24)"
+sudo -u postgres psql -q -v ON_ERROR_STOP=1 -d te_mgmt_prod -c "SET client_min_messages = warning" \
+  -c "DO \$\$BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'te_prod_runtime') THEN CREATE ROLE te_prod_runtime LOGIN; END IF; END\$\$" \
+  -c "ALTER ROLE te_prod_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD '$APP_DB_PASS'" \
+  -c "GRANT te_prod_runtime TO te_prod_user" \
+  -c "GRANT CONNECT ON DATABASE te_mgmt_prod TO te_prod_runtime" >/dev/null
 
 echo "== 5/6 configuration and services"
 cat > "$DEST/env" <<ENV
@@ -53,6 +61,8 @@ PGPORT=5432
 PGUSER=te_prod_user
 PGPASSWORD=$DB_PASS
 PGDATABASE=te_mgmt_prod
+APP_DB_USER=te_prod_runtime
+APP_DB_PASSWORD=$APP_DB_PASS
 TE_SCHEMA=te_prod
 CORS_ORIGINS=http://$API_HOST:3000
 PORT=3000
