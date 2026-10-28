@@ -78,6 +78,13 @@ class RuntimeRole(unittest.TestCase):
         over = self.client.post("/api/csv/upload", json={
             "fileName": name, "content": f"v\nnew_{name}\n", "overwrite": True}).json()
         self.assertEqual(over["status"], "ok", over)
+        # P15 (docs/test-cases/M4-review.md): review changes work through the runtime role.
+        decided = self.client.put(f"/api/csv/uploads/{up['uploadId']}/rows/1/decision",
+                                  json={"decision": "exclude", "reason": "runtime role case"})
+        self.assertEqual(decided.status_code, 200, decided.text)
+        edited = self.client.put(f"/api/csv/uploads/{up['uploadId']}/rows/1/cells/v",
+                                 json={"value": "changed", "reason": "runtime role case"})
+        self.assertEqual(edited.status_code, 200, edited.text)
         self.assertEqual(self.client.delete(f"/api/csv/files/{over['fileId']}").status_code, 200)
         self.assertTrue(self.client.get("/api/audit/verify").json()["intact"])
         with Conn() as conn, conn.cursor() as cur:   # the API's own request pool
@@ -86,9 +93,10 @@ class RuntimeRole(unittest.TestCase):
 
     def test_runtime_role_cannot_change_or_unprotect_append_only_tables(self):
         schema = settings.UPLOADS_SCHEMA
-        statements = [f"{verb} {{}}.{table}" for table in ("audit_log", "uploads", "upload_blobs", "source_rows")
-                      for verb in ("DELETE FROM", "TRUNCATE")]
+        tables = ("audit_log", "uploads", "upload_blobs", "source_rows", "row_decisions", "cell_edits")
+        statements = [f"{verb} {{}}.{table}" for table in tables for verb in ("DELETE FROM", "TRUNCATE")]
         statements += ["UPDATE {}.audit_log SET actor = 'x'", "UPDATE {}.uploads SET status = 'failed'",
+                       "UPDATE {}.row_decisions SET reason = 'x'", "UPDATE {}.cell_edits SET new_value = 'x'",  # N15
                        "ALTER TABLE {}.audit_log DISABLE TRIGGER audit_no_change"]
         conn = self._as_runtime()
         try:
