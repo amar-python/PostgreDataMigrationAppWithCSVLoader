@@ -249,3 +249,81 @@ export type UploadDetail = z.infer<typeof uploadDetailSchema>;
 export async function getUploadDetail(uploadId: string): Promise<UploadDetail> {
   return apiFetch(`/api/csv/uploads/${encodeURIComponent(uploadId)}`, uploadDetailSchema);
 }
+
+// M4 (#108): review of a stored upload. Changes are recorded for review; they
+// don't change the imported table (applied by the approval step, M6).
+const reviewRowSchema = z.object({
+  rowNumber: z.number(),
+  original: z.array(z.string()),
+  current: z.array(z.string()),
+  editedColumns: z.array(z.number()),
+  decision: z.enum(["include", "exclude"]),
+  decisionReason: z.string().nullable(),
+  errors: z.array(z.object({ column: z.string(), value: z.string(), reason: z.string() })),
+});
+export type ReviewRow = z.infer<typeof reviewRowSchema>;
+
+const reviewPageSchema = z.object({
+  fileName: z.string(),
+  columns: z.array(z.string()),
+  types: z.array(z.string()),
+  total: z.number(),
+  offset: z.number(),
+  limit: z.number(),
+  excludedRows: z.number(),
+  editedRows: z.number(),
+  rows: z.array(reviewRowSchema),
+});
+export type ReviewPage = z.infer<typeof reviewPageSchema>;
+
+const historyEntrySchema = z.object({
+  kind: z.enum(["decision", "edit"]),
+  at: z.string(),
+  actor: z.string().nullable(),
+  reason: z.string(),
+  decision: z.enum(["include", "exclude"]).optional(),
+  column: z.string().optional(),
+  oldValue: z.string().optional(),
+  newValue: z.string().optional(),
+});
+export type HistoryEntry = z.infer<typeof historyEntrySchema>;
+
+const uploadPath = (uploadId: string) => `/api/csv/uploads/${encodeURIComponent(uploadId)}`;
+
+export async function getReviewPage(
+  uploadId: string,
+  offset: number,
+  limit: number,
+): Promise<ReviewPage> {
+  return apiFetch(`${uploadPath(uploadId)}/rows?offset=${offset}&limit=${limit}`, reviewPageSchema);
+}
+
+export async function decideRow(
+  uploadId: string,
+  rowNumber: number,
+  decision: "include" | "exclude",
+  reason: string,
+): Promise<ReviewRow> {
+  return apiFetch(`${uploadPath(uploadId)}/rows/${rowNumber}/decision`, reviewRowSchema, {
+    method: "PUT",
+    body: JSON.stringify({ decision, reason }),
+  });
+}
+
+export async function editCell(
+  uploadId: string,
+  rowNumber: number,
+  column: string,
+  value: string,
+  reason: string,
+): Promise<ReviewRow> {
+  return apiFetch(
+    `${uploadPath(uploadId)}/rows/${rowNumber}/cells/${encodeURIComponent(column)}`,
+    reviewRowSchema,
+    { method: "PUT", body: JSON.stringify({ value, reason }) },
+  );
+}
+
+export async function rowHistory(uploadId: string, rowNumber: number): Promise<HistoryEntry[]> {
+  return apiFetch(`${uploadPath(uploadId)}/rows/${rowNumber}/history`, z.array(historyEntrySchema));
+}
