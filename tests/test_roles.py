@@ -35,6 +35,7 @@ _ROUTES = {
     "delete_file": ("DELETE", "/api/csv/files/{id}"),
     "read_audit": ("GET", "/api/audit/log"),
     "reset_password": ("POST", "/api/auth/users/{user}/password"),
+    "review_rows": ("PUT", "/api/csv/uploads/{upload}/rows/1/decision"),
 }
 
 
@@ -96,16 +97,16 @@ class RoleMatrixOverTheApi(unittest.TestCase):
             conn.commit()
         cls.ctx.__exit__(None, None, None)
 
-    def _file(self) -> tuple[str, str]:
+    def _file(self) -> tuple[str, str, str]:
         tag = uuid.uuid4().hex[:10]
         res = self.client.post("/api/csv/upload", headers=self.headers["tenant_admin"],
                                json={"fileName": f"r_{tag}.csv", "content": f"k\n{tag}\n"}).json()
         assert res["status"] == "ok", res
-        return res["tableName"], res["fileId"]
+        return res["tableName"], res["fileId"], res["uploadId"]
 
     def _call(self, role: str, action: str) -> int:
         method, path = _ROUTES[action]
-        table, file_id = self._file()
+        table, file_id, upload_id = self._file()
         body, user = None, None
         if action in ("preview", "upload"):
             tag = uuid.uuid4().hex[:10]
@@ -121,7 +122,9 @@ class RoleMatrixOverTheApi(unittest.TestCase):
                     accounts.add_membership(cur, accounts.create_user(cur, user, _PW), tid, "uploader")
                 conn.commit()
             body = {"newPassword": "a brand new passphrase"}
-        res = self.client.request(method, path.format(table=table, id=file_id, user=user),
+        if action == "review_rows":
+            body = {"decision": "exclude", "reason": "role matrix test"}
+        res = self.client.request(method, path.format(table=table, id=file_id, user=user, upload=upload_id),
                                   headers=self.headers[role], json=body)
         return res.status_code
 

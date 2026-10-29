@@ -144,9 +144,9 @@ Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" 
 |----|--------|--------|----------------------|-----------|
 | BR-23 | ✅ | Every upload attempt gets an `uploads` row (M3b, #107): id, original filename, SHA-256, uploader, timestamp and outcome (imported, partly_imported, failed, duplicate, rejected). The tenant is the schema the row lives in (decision 6), not a column. Registry UNIQUE hash and name from M1 (#87). `test_preserved_uploads.py` | Integration + DB constraint tests | M1, M3 |
 | BR-24 | ⚠️ Partial | Original bytes (`upload_blobs`) and parsed rows (`source_rows`) kept for every upload, including failed ones and files later overwritten or deleted (M3b, #107). Triggers reject UPDATE, DELETE and TRUNCATE (`test_preserved_uploads.py`, 7 tests), and the API's runtime role has no UPDATE, DELETE or TRUNCATE grant on them (M3d, `test_runtime_role.py`). Still to do: show edits kept separate once they exist (M4) | DB negative tests | M3 |
-| BR-25 | ⚠️ Partial | 10-row preview sample; 200-row cap on table view | API paging + e2e | M4 |
-| BR-26 | ❌ Not started | No code | API + e2e | M4 |
-| BR-27 | ❌ Not started | No code | API + DB tests | M4 |
+| BR-25 | ⚠️ Partial | API: `GET /api/csv/uploads/{id}/rows` pages through every stored row (up to 500 a page), with column types and each row's validation errors, including rows beyond the 200 errors reported at upload (M4a, #108, `test_review.py`). Still to do: the review screen and its e2e test (M4b) | API paging + e2e | M4 |
+| BR-26 | ⚠️ Partial | API: include or exclude a row with a required reason; actor and time recorded; insert-only history, latest wins; audited with before and after (M4a, #108, `test_review.py`). Applied to imports in M6 (decision 1 on #108). Still to do: the review screen and its e2e test (M4b) | API + e2e | M4 |
+| BR-27 | ✅ | Cell edits are insert-only versions in `cell_edits` with old and new value, actor, time and a required reason; the original in `source_rows` is unchanged; edited values are revalidated; each edit is audited (M4a, #108, `test_review.py`: API and DB tests). The screen to make edits arrives in M4b | API + DB tests | M4 |
 | BR-28 | ⚠️ Partial | Race guard enforced by UNIQUE constraints (M1: #87, `tests/test_migrations.py`). For signed-in tenants the registry is per tenant, so the same file in two tenants is not a duplicate (M2: #100, `test_duplicate_detection_is_per_tenant`). Requests without a session still share the default registry; M5 finishes the per-tenant model | Concurrency + cross-tenant tests | M1, M5 |
 | BR-29 | ⚠️ Partial | In-file exact match only | Unit + integration | M5 |
 | BR-30 | ⚠️ Partial | Content-derived names; repeats refused or destructive | Unit + integration | M5 |
@@ -178,12 +178,12 @@ Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" 
 
 | Status | Count | Requirements |
 |--------|-------|-------------|
-| ✅ Verified | 20 | BR-01, BR-03, BR-04, BR-05, BR-06, BR-07, BR-08, BR-09, BR-10, BR-11, BR-12, BR-13, BR-14, BR-15, BR-16, BR-17, BR-18, BR-19, BR-20, BR-23 (M3b) |
-| ⚠️ Partial | 11 | BR-24, BR-25, BR-28, BR-29, BR-30, BR-31, BR-33, BR-34, BR-35, BR-36, BR-37 (ART, added 2026-10-26) |
-| ❌ Not started | 4 | BR-26, BR-27, BR-32 (ART, added 2026-10-26); BR-38 (added 2026-10-27) |
+| ✅ Verified | 21 | BR-01, BR-03, BR-04, BR-05, BR-06, BR-07, BR-08, BR-09, BR-10, BR-11, BR-12, BR-13, BR-14, BR-15, BR-16, BR-17, BR-18, BR-19, BR-20, BR-23 (M3b), BR-27 (M4a) |
+| ⚠️ Partial | 12 | BR-24, BR-25, BR-26, BR-28, BR-29, BR-30, BR-31, BR-33, BR-34, BR-35, BR-36, BR-37 (ART, added 2026-10-26) |
+| ❌ Not started | 2 | BR-32 (ART, added 2026-10-26); BR-38 (added 2026-10-27) |
 | ⏸ Deferred by decision | 3 | BR-02, BR-21, BR-22 |
 
-**Headline (2026-10-28):** with BR-23 verified by M3b (#107), **20 of 38 (53 %)** are verified, 3 are deferred by decision, and the other 15 are partial or not started.
+**Headline (2026-10-28):** with BR-23 verified by M3b (#107) and BR-27 by M4a (#108), **21 of 38 (55 %)** are verified, 3 are deferred by decision, and the other 14 are partial or not started.
 
 **Headline (2026-10-26):** with the 15 ART requirements added, **19 of 37 (51 %)** are verified, 3 are deferred by decision, and the other 15 are partial or not started.
 

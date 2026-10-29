@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 # Actions the log is allowed to record. A typo becomes a loud failure here rather
 # than an unqueryable string in the table.
-VALID_ACTIONS = frozenset({"upload", "delete", "password_reset"})
+VALID_ACTIONS = frozenset({"upload", "delete", "password_reset", "row_decision", "cell_edit"})
 
 # Who is acting (M3a, #107). tenant_scope sets it per request: the signed-in
 # username, or "api_key" for a request made with the shared key.

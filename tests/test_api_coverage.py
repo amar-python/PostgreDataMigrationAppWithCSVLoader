@@ -117,6 +117,16 @@ class CorsHeaders(unittest.TestCase):
         })
         self.assertIn("access-control-allow-origin", r.headers)
 
+    def test_preflight_allows_put_for_review_changes(self):
+        """#108: the browser's review screen sends PUT; without it the preflight fails."""
+        r = client.options("/api/csv/uploads/1/rows/1/decision", headers={
+            "Origin": "http://localhost:8080",
+            "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        })
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertIn("PUT", r.headers.get("access-control-allow-methods", ""))
+
     def test_cors_allows_configured_origin(self):
         r = client.get("/api/health", headers={"Origin": "http://localhost:5173"})
         self.assertEqual(
