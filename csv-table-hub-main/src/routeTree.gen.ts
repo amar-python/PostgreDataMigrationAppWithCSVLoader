@@ -13,6 +13,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuditRouteImport } from './routes/audit'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedReviewUploadIdRouteImport } from './routes/_authenticated/review.$uploadId'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -33,16 +34,24 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedReviewUploadIdRoute =
+  AuthenticatedReviewUploadIdRouteImport.update({
+    id: '/review/$uploadId',
+    path: '/review/$uploadId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/audit': typeof AuditRoute
   '/auth': typeof AuthRoute
+  '/review/$uploadId': typeof AuthenticatedReviewUploadIdRoute
 }
 export interface FileRoutesByTo {
   '/audit': typeof AuditRoute
   '/auth': typeof AuthRoute
   '/': typeof AuthenticatedIndexRoute
+  '/review/$uploadId': typeof AuthenticatedReviewUploadIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -50,13 +59,20 @@ export interface FileRoutesById {
   '/audit': typeof AuditRoute
   '/auth': typeof AuthRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/review/$uploadId': typeof AuthenticatedReviewUploadIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/audit' | '/auth'
+  fullPaths: '/' | '/audit' | '/auth' | '/review/$uploadId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/audit' | '/auth' | '/'
-  id: '__root__' | '/_authenticated' | '/audit' | '/auth' | '/_authenticated/'
+  to: '/audit' | '/auth' | '/' | '/review/$uploadId'
+  id:
+    | '__root__'
+    | '/_authenticated'
+    | '/audit'
+    | '/auth'
+    | '/_authenticated/'
+    | '/_authenticated/review/$uploadId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -95,15 +111,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/review/$uploadId': {
+      id: '/_authenticated/review/$uploadId'
+      path: '/review/$uploadId'
+      fullPath: '/review/$uploadId'
+      preLoaderRoute: typeof AuthenticatedReviewUploadIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedReviewUploadIdRoute: typeof AuthenticatedReviewUploadIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedReviewUploadIdRoute: AuthenticatedReviewUploadIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
