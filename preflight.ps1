@@ -144,14 +144,19 @@ if (-not $SkipPg) {
         if ($env:PGHOST) { $env:PGHOST } else { $false }
     } -Optional -FixHint 'Run `$env:PGHOST = "localhost"` (and PGPORT, PGUSER, PGPASSWORD, PGDATABASE) before connecting'
 
-    Test-Check 'port 5432 reachable' {
-        $r = Test-NetConnection -ComputerName ($env:PGHOST ?? 'localhost') -Port ($env:PGPORT ?? 5432) -WarningAction SilentlyContinue
+    $pgHost = if ($env:PGHOST) { $env:PGHOST } else { 'localhost' }
+    $pgPort = if ($env:PGPORT) { [int]$env:PGPORT } else { 5432 }
+    $pgUser = if ($env:PGUSER) { $env:PGUSER } else { 'postgres' }
+    $pgDb   = if ($env:PGDATABASE) { $env:PGDATABASE } else { 'postgres' }
+
+    Test-Check "port $pgPort reachable" {
+        $r = Test-NetConnection -ComputerName $pgHost -Port $pgPort -WarningAction SilentlyContinue
         $r.TcpTestSucceeded
     } -Optional -FixHint 'PG not listening on the expected host:port. Check service is running and listen_addresses includes your client.'
 
     if ((Get-Command psql -ErrorAction SilentlyContinue) -and $env:PGPASSWORD) {
         Test-Check 'PG accepts the configured credentials' {
-            $output = & psql -h ($env:PGHOST ?? 'localhost') -p ($env:PGPORT ?? 5432) -U ($env:PGUSER ?? 'postgres') -d ($env:PGDATABASE ?? 'postgres') -c "SELECT 1" 2>&1
+            $output = & psql -h $pgHost -p $pgPort -U $pgUser -d $pgDb -c "SELECT 1" 2>&1
             $LASTEXITCODE -eq 0
         } -Optional -FixHint 'psql `SELECT 1` failed. Recheck PGUSER/PGPASSWORD/PGDATABASE.'
     }
