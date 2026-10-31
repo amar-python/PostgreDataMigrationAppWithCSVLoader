@@ -1,12 +1,37 @@
 .git
 .gitignore
+.github
+*.md
+
+# Terraform state and lockfiles
 **/.terraform
 **/.terraform.lock.hcl
 **/*.tfstate
 **/*.tfstate.*
 .terraform.tfstate.lock.info
+
+# Secrets and environment configuration
+.env
+.env.*
+!.env.example
+env.dev.example
+
+# Python virtualenvs, bytecode and test caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node and frontend build artifacts
+node_modules/
+csv-table-hub-main/node_modules/
+csv-table-hub-main/dist/
+
+# Local workspace and agent metadata
 .remember
 .abacusai
 _norton_
-.github
-*.md
+.claude/
