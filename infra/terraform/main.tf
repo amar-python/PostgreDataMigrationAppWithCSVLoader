@@ -73,6 +73,11 @@ resource "azurerm_container_registry" "acr" {
 }
 
 # --- Storage for PG persistent volume ------------------------------------
+#
+# The pg_storage account holds the Postgres data volume (pgdata) and two
+# blob containers that are provisioned but currently unused (see below).
+# The account itself must stay — pgdata depends on it. See docs/infra/README.md
+# for the full inventory.
 
 resource "azurerm_storage_account" "pg_storage" {
   name                     = "stpgte${var.environment}${local.suffix}"
@@ -83,6 +88,8 @@ resource "azurerm_storage_account" "pg_storage" {
   tags                     = local.tags
 }
 
+# The persistent volume for the PostgreSQL Container App. Database files
+# live here. Required by the pg Container App's volume mount.
 resource "azurerm_storage_share" "pg_data" {
   name                 = "pgdata"
   storage_account_id   = azurerm_storage_account.pg_storage.id
@@ -90,7 +97,17 @@ resource "azurerm_storage_share" "pg_data" {
 }
 
 # --- Storage for CSV input + run reports ---------------------------------
-
+#
+# Provisioned ahead of time but currently unused — file bodies and migration
+# run reports both live in Postgres per D4
+# (DECISIONS/2026-11-02-file-storage-backend.md).
+#
+# Review trigger — revisit D4 if either:
+#   (a) pg_dump cycles become painful because BYTEA values bloat the dump; or
+#   (b) run reports grow past "a page of text" into large exports people
+#       download.
+# Either case = reopen D4 and wire these containers into the code.
+#
 resource "azurerm_storage_container" "csv_input" {
   name                  = "csv-input"
   storage_account_id    = azurerm_storage_account.pg_storage.id
