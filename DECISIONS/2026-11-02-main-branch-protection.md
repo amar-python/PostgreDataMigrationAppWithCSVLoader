@@ -21,11 +21,11 @@ Branch protection on main:
 
 - The last 8 merges on main all show all three checks SUCCESS. Formalising reflects practice, not disrupting it.
 - Two months of unprotected red integration is the precedent for why unprotected main is unsafe.
-- Solo project discipline requires enforce_admins: true — admin bypass defeats the purpose of the gate for a one-person team.
+- Solo project discipline requires enforce_admins: true â€” admin bypass defeats the purpose of the gate for a one-person team.
 
 ## Trade-offs accepted
 
-- No admin bypass means emergency merges require temporarily removing protection (deliberate — see escape hatch below).
+- No admin bypass means emergency merges require temporarily removing protection (deliberate â€” see escape hatch below).
 - strict: true forces a pull-and-re-check on stale branches. Small friction, catches merge-main-into-feature drift.
 - Required 0-approval PR means you merge your own PRs; the gate is CI, not review.
 
@@ -54,4 +54,4 @@ Reconsider if any of:
 
 - #51 (closed with this decision)
 - #45 (closed 7 days earlier): made option (a) viable
-- 26 Oct 2026 closure rule — this decision applies the equivalent discipline to merges
+- 26 Oct 2026 closure rule â€” this decision applies the equivalent discipline to merges
