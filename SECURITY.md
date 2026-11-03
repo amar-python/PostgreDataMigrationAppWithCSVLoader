@@ -18,7 +18,8 @@ upgrade to the latest release before reporting.
 If you believe you've found a security vulnerability in this
 project, please report it privately. Do not open a public issue.
 
-**Email:** REPLACE_ME
+<!-- TODO 2026-11-03: this is a Gmail placeholder; replace with security@<org> once the dedicated address exists. Tracked in #57. -->
+**Email:** singhofoz@gmail.com
 
 Please include, where possible:
 
