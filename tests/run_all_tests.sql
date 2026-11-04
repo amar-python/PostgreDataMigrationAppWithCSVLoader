@@ -124,3 +124,13 @@ FROM te_test_harness.report_totals();
 \echo ' Test run complete.'
 \echo '============================================================'
 \echo ''
+
+-- #181: fail the run when any test failed. psql exits 0 on a failed SELECT, so the
+-- suite raises here; callers that set ON_ERROR_STOP (run_tests.sh, evals runner) then get exit 3.
+DO $$
+BEGIN
+   IF (SELECT COUNT(*) FROM test_run_results WHERE status = 'FAIL') > 0 THEN
+      RAISE EXCEPTION 'TEST(S) FAILED';
+   END IF;
+END
+$$;

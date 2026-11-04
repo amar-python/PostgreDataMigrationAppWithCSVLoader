@@ -475,7 +475,7 @@ def _run_fresh_deploy_then_tests(
         "--set", "tbl_evidence_artifacts=evidence_artifacts",
     ]
     tests = subprocess.run(
-        ["psql", "-d", "te_mgmt_dev"] + table_overrides + ["-f", str(run_tests)],
+        ["psql", "-v", "ON_ERROR_STOP=1", "-d", "te_mgmt_dev"] + table_overrides + ["-f", str(run_tests)],
         env=env, capture_output=True, text=True, timeout=180,
     )
 
