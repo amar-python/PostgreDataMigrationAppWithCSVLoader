@@ -40,7 +40,13 @@ PKGS="postgresql-16 postgresql-client-16 python3.12-venv nodejs"
 # Ubuntu 24.04 already has; apt skips those on install. Prune if size matters.
 DEPS=$(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts \
   --no-breaks --no-replaces --no-enhances $PKGS | grep '^[a-z0-9]' | sort -u)
-( cd "$OUT/debs" && apt-get download $DEPS >/dev/null 2>&1 || true )
+# Virtual packages have no candidate and nothing to download, so skip them. Any real
+# package that fails to download stops the build; the old `|| true` let a partial bundle pass (#182).
+REAL=()
+for p in $DEPS; do
+  apt-cache policy "$p" | grep -q 'Candidate: (none)' || REAL+=("$p")
+done
+( cd "$OUT/debs" && apt-get download "${REAL[@]}" >/dev/null )
 for p in $PKGS; do ls "$OUT/debs/${p}_"*.deb >/dev/null || { echo "missing deb: $p" >&2; exit 1; }; done
 ( cd "$OUT/debs" && apt-ftparchive packages . > Packages )   # local apt repository index
 
