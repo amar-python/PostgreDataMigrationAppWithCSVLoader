@@ -676,6 +676,8 @@ def run_tier_e_scenario(scenario_dir: Path) -> ScenarioResult:
 
     if name == "01_envs_have_identical_structure":
         return _run_envs_have_identical_structure(result, expected)
+    if name == "02_empty_schema_is_detected":
+        return _run_empty_schema_is_detected(result, expected)
 
     result.errors.append("Unknown tier-E scenario: " + name)
     return result
@@ -745,6 +747,46 @@ def _run_envs_have_identical_structure(
 
     result.errors = errors
     result.passed = not errors
+    return result
+
+
+def _run_empty_schema_is_detected(
+    result: ScenarioResult, expected: Dict[str, Any]
+) -> ScenarioResult:
+    """Negative control: _column_signature on a schema with no tables returns
+    an empty dict, and the eval correctly flags it as having 0 tables.
+
+    Creates a disposable schema in the dev database, queries it, asserts the
+    expected zero-table result, and drops the schema unconditionally.
+    """
+    db = "te_mgmt_dev"
+    tmp_schema = "_eval_empty_probe"
+    env = _pg_env()
+    try:
+        subprocess.run(
+            ["psql", "-v", "ON_ERROR_STOP=1", "-d", db, "-c",
+             "CREATE SCHEMA IF NOT EXISTS " + tmp_schema],
+            env=env, capture_output=True, text=True, timeout=10,
+        )
+        sig = _column_signature(db, tmp_schema)
+        table_count = len(sig)
+        result.actual = {"table_count": table_count, "signature": sig}
+        exp = expected.get("expected", {})
+        if table_count != exp.get("table_count", 0):
+            result.errors.append(
+                "expected " + str(exp.get("table_count", 0))
+                + " tables but _column_signature returned "
+                + str(table_count)
+            )
+    except Exception as exc:
+        result.errors.append("empty-schema probe failed: " + str(exc))
+    finally:
+        subprocess.run(
+            ["psql", "-d", db, "-c",
+             "DROP SCHEMA IF EXISTS " + tmp_schema + " CASCADE"],
+            env=env, capture_output=True, text=True, timeout=10,
+        )
+    result.passed = not result.errors
     return result
 
 

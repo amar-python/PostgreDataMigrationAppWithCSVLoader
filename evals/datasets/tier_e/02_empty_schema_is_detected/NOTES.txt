@@ -1,0 +1,7 @@
+Negative control — no input data required.
+
+This scenario creates a temporary empty schema (_eval_empty_probe) in the
+dev database, verifies that _column_signature returns zero tables, and drops
+the schema.  It exists to prevent structural comparison from silently passing
+when a schema is missing or empty — the kind of false green that masked the
+original CI failure (issue #45 follow-up).

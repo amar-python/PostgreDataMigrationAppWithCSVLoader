@@ -1,0 +1,7 @@
+{
+  "scenario": "02_empty_schema_is_detected",
+  "description": "Negative control: an empty schema must return 0 tables from _column_signature, proving that structural comparison is not silently succeeding on missing data.",
+  "expected": {
+    "table_count": 0
+  }
+}

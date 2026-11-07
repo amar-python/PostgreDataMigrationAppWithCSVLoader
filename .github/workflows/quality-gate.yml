@@ -81,7 +81,8 @@ jobs:
       PGPORT: "5432"
       PGUSER: postgres
       PGPASSWORD: postgres
-      PGDATABASE: postgres
+      PGDATABASE: te_mgmt_dev
+      API_ALLOW_DESTRUCTIVE: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -142,27 +143,21 @@ jobs:
             fi
           done
 
-      # Tier E deploys all four environments and compares their schemas, so it
-      # runs here where the postgres service exists. Order matters: E deploys
-      # every environment, which the cross-env parity pytest markers then rely on.
-      # Tier X is excluded per ADR-0001 — see the free-tier job's note.
-      - name: Evals — Tiers P, I, S, E
-        run: python3 evals/runner.py --tiers p,i,s,e --verbose
-
-      - name: Deploy all environments (for cross-env parity)
+      - name: Deploy all environments
         run: |
           for env in dev test staging prod; do
             bash build/deploy_all.sh "$env"
           done
 
+      # Tier E compares the four deployed schemas column by column.
+      # Tier X is excluded per ADR-0001 — see the free-tier job's note.
+      - name: Evals — Tiers P, I, S, E
+        run: python3 evals/runner.py --tiers p,i,s,e --verbose
+
       # Prints a final block accounting for every test: PASSED / FAILED /
       # ERROR / SKIPPED (with reasons) / NOT RUN (deselected). --strict fails
       # the build on any skip.
-      # The API reads PGDATABASE (api/config.py). The schema lives in
-      # te_mgmt_dev, not the job-level default "postgres" (issue #45).
       - name: Full test suite — final result with skip accounting
-        env:
-          PGDATABASE: te_mgmt_dev
         run: python3 scripts/test_report.py --strict
 
       - name: Upload eval reports
