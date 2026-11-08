@@ -3,8 +3,9 @@
 A 10-minute walkthrough to get the full stack running locally: PostgreSQL
 database, FastAPI backend, and React frontend.
 
-For architecture and rationale see `docs/ARCHITECTURE.md`, `docs/VCRM.md`, and
-`docs/API_INTEGRATION.md`.
+For architecture and rationale see `docs/ARCHITECTURE.md` and `docs/VCRM.md`.
+For the current API reference, use the interactive OpenAPI docs at
+`http://localhost:8000/api/docs` when the backend is running.
 
 ---
 
@@ -296,7 +297,7 @@ PostgreDataMigrationAppWithCSVLoader/
 │
 ├── env.dev.example               ← dev environment template
 ├── docs/ENV_VARIABLES.md              ← all env vars documented
-├── docs/API_INTEGRATION.md            ← frontend ↔ API endpoint mapping
+├── docs/API_INTEGRATION.md            ← frontend ↔ API endpoint mapping (historical — see OpenAPI docs)
 └── docs/VCRM.md                       ← business requirement traceability
 ```
 
@@ -307,7 +308,7 @@ PostgreDataMigrationAppWithCSVLoader/
 - `docs/STARTER_GUIDE.md` — orientation, key concepts, and a guided first
   walkthrough (dynamic mode vs T&E mode, running the test suite end to end)
 - `docs/ENV_VARIABLES.md` — full list of every environment variable
-- `docs/API_INTEGRATION.md` — frontend ↔ backend endpoint mapping and gaps
+- OpenAPI docs at `http://localhost:8000/api/docs` — live API reference (replaces the historical `docs/API_INTEGRATION.md`)
 - `docs/VCRM.md` — business requirement traceability (142 SQL assertions)
 - `docs/ARCHITECTURE.md` — three-layer architecture rationale
 - `evals/USAGE.md` — eval runner flags and CI integration

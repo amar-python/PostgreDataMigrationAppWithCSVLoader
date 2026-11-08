@@ -49,8 +49,9 @@ which mode was used:
   real schema" path. Implemented in `api/services/te_loader.py`.
 
 Both modes go through the same `POST /api/csv/upload` endpoint, with a
-`mode: "dynamic" | "te"` field distinguishing them — see
-`docs/API_INTEGRATION.md` for the full request/response shapes.
+`mode: "dynamic" | "te"` field distinguishing them — see the interactive
+OpenAPI docs at `http://localhost:8000/api/docs` for the full
+request/response shapes.
 
 ## Multi-environment by design
 
@@ -83,15 +84,21 @@ Once the app is running locally, this sequence exercises both modes and the
 test suite in about ten minutes — a good way to confirm your setup actually
 works, not just that servers started.
 
-1. **Upload a CSV in dynamic mode.** Any small CSV works — three columns,
+1. **Create a tenant admin and sign in.** The app requires authentication
+   since ART Milestone 2. From the project root, run:
+   ```powershell
+   python scripts\create_tenant_admin.py --tenant dev --name "Dev tenant" --username admin
+   ```
+   (prompts for a password). Then at `http://localhost:8080`, sign in as
+   `admin` with that password. The upload area appears once you're signed in.
+   If you've already done this via `docs/QUICKSTART.md`, skip to step 2.
+2. **Upload a CSV in dynamic mode.** Any small CSV works — three columns,
    a few rows. Drop it on the upload area, preview it, confirm the import.
    Check the Migrated Files table for the new `csv_<hash>` table and row
    count.
-2. **Upload a CSV in T&E mode.** Pick one of the 12 T&E tables (e.g.
+3. **Upload a CSV in T&E mode.** Pick one of the 12 T&E tables (e.g.
    `organisations`), match your CSV's headers to its columns, and import.
    This exercises the validation path dynamic mode skips.
-3. **Re-upload the same file.** Confirm duplicate detection kicks in
-   (content-hash based, not filename based).
 4. **Run the fast test suite** to confirm the backend is sane:
    ```powershell
    python -m pytest tests\ -m "unit or regression or security or snapshot" -q
@@ -112,7 +119,7 @@ If all five pass/succeed, your environment is a faithful match for CI.
 |---|---|
 | Set up my dev environment from scratch | `docs/QUICKSTART.md` |
 | Understand the repo's folder structure and why it's split that way | `docs/ARCHITECTURE.md` |
-| See every frontend↔backend API call and its shape | `docs/API_INTEGRATION.md` |
+| See every frontend↔backend API call and its shape | OpenAPI docs at `http://localhost:8000/api/docs` (live) or `api/routers/*.py` (source) |
 | Look up an environment variable | `docs/ENV_VARIABLES.md` |
 | Understand Dev/Test/Staging/Prod differences | `docs/DATABASE_ENVIRONMENTS.md` |
 | Deploy to Azure | `docs/AZURE_DEPLOY.md` (non-prod) / `docs/PROD_DEPLOY.md` (prod) |

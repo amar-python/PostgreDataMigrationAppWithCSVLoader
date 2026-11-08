@@ -1,5 +1,13 @@
 # Frontend Integration — CSV Table Hub
 
+> **SUPERSEDED — DO NOT USE AS CURRENT REFERENCE.**
+> This document describes a July 2026 design where the API shelled out to
+> `csv_loader.sh`. That design was replaced by the FastAPI routers and
+> services in `api/`. For the current API, use the interactive OpenAPI docs
+> at `http://localhost:8000/api/docs` (available when the backend is running)
+> or read `api/routers/*.py` directly. This file is retained for historical
+> context only.
+
 Notes on the FastAPI backend in `api/`, which connects the React frontend in
 `csv-table-hub-main/` (originally a standalone project, now merged into this
 monorepo) to PostgreSQL.
