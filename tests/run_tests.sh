@@ -112,7 +112,7 @@ run_suite() {
          2>&1 | tee "${outfile}"; then
       log "Test run for ${env^^} completed."
    else
-      error "Test run FAILED for ${env^^} — check output above."
+      error "Test run FAILED for ${env^^} — psql exited non-zero."
       FAILED_ENVS+=("${env}")
    fi
 
@@ -121,6 +121,17 @@ run_suite() {
    overall=$(grep -E '(ALL TESTS PASSED|TEST\(S\) FAILED)' "${outfile}" \
              | tail -1 | xargs || echo "unknown")
    RESULTS["${env}"]="${overall}"
+
+   # #181: psql exits 0 even when SQL assertions record FAIL rows. Parse the
+   # output for failures and mark the environment as failed if any are found.
+   if grep -qiE 'FAIL|TEST\(S\) FAILED' "${outfile}" && \
+      ! grep -q 'ALL TESTS PASSED' "${outfile}"; then
+      error "Assertion failures detected in ${env^^} output."
+      # Only add if not already in the list
+      local already=false
+      for e in "${FAILED_ENVS[@]:-}"; do [[ "$e" == "$env" ]] && already=true; done
+      $already || FAILED_ENVS+=("${env}")
+   fi
 
    rm -f "${outfile}"
 }

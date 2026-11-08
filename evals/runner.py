@@ -358,7 +358,7 @@ def _run_deploy_dev_twice(
         return result
 
     env = _pg_env()
-    psql_args = ["psql", "-f", str(env_dev_sql)]
+    psql_args = ["psql", "-v", "ON_ERROR_STOP=1", "-f", str(env_dev_sql)]
 
     r1 = subprocess.run(psql_args, env=env, capture_output=True, text=True, timeout=120)
     counts_1 = _count_dev_rows()

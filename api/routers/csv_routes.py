@@ -70,15 +70,15 @@ def preview(req: PreviewRequest) -> dict:
 
 
 @router.post("/upload", dependencies=[Depends(allow("upload"))])
-def upload(req: UploadRequest) -> dict:
+def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> dict:
     if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
     if req.mode == "te":
         if not req.targetTable:
             raise HTTPException(422, "targetTable is required when mode is 'te'")
-        result = upload_te(req.fileName, req.content, req.targetTable)
+        result = upload_te(req.fileName, req.content, req.targetTable, session=session)
     elif req.mode == "dynamic":
-        result = upload_dynamic(req.fileName, req.content, req.types, req.overwrite)
+        result = upload_dynamic(req.fileName, req.content, req.types, req.overwrite, session=session)
     else:
         raise HTTPException(422, f"Unknown mode '{req.mode}' — use 'dynamic' or 'te'")
 

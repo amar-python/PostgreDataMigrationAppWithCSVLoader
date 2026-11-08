@@ -29,6 +29,7 @@ from psycopg2.extras import execute_values
 from api.config import TE_TABLES, settings
 from api.tenancy import te_schema, uploads_schema
 from api.db import Conn
+from api.services.destructive_ops import _require_delete
 from api.services.csv_parse import (
     cast_value,
     extra_cells,
@@ -112,7 +113,7 @@ def _cleanup_prior_registry_entries(cur, file_name, file_hash):
     )
 
 
-def upload_te(file_name: str, content: str, target_table: str) -> dict:
+def upload_te(file_name: str, content: str, target_table: str, *, session: dict | None = None) -> dict:
     logs: list[dict] = []
     _log(logs, "receive", f'Received "{file_name}" for T&E table "{target_table}"')
 
@@ -216,7 +217,7 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
 
             # Pre-validate every row client-side; drop failures into row_errors.
             failed_row_count = 0
-            to_insert: list[list] = []
+            to_insert: list[tuple[int, list]] = []  # (original_csv_row, values)
             for r, raw in enumerate(data_rows):
                 row_number = r + 1
                 values: list = []
@@ -232,8 +233,6 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
                         values.append(None)
                         continue
                     if col_type is None:
-                        # Let PG handle it; pass the raw string through and
-                        # rely on the SAVEPOINT fallback below to catch errors.
                         values.append(cell)
                         continue
                     ok, val, reason = cast_value(cell, col_type)
@@ -244,7 +243,7 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
                         break
                     values.append(val)
                 if not failed:
-                    to_insert.append(values)
+                    to_insert.append((row_number, values))
 
             _log(
                 logs,
@@ -257,25 +256,20 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
 
             # Batch insert survivors. If a constraint (FK, UNIQUE, CHECK on an
             # unmapped column, etc.) trips, roll back the chunk and fall back
-            # to per-row to identify the bad row(s) — same shape as before but
-            # only runs on the ~few rows that had DB-only failure modes.
+            # to per-row to identify the bad row(s).
             chunk_size = 500
             for start in range(0, len(to_insert), chunk_size):
                 chunk = to_insert[start : start + chunk_size]
+                chunk_values = [v for _, v in chunk]
                 cur.execute("SAVEPOINT chunk_sp")
                 try:
-                    execute_values(cur, batch_insert_stmt.as_string(cur), chunk)
+                    execute_values(cur, batch_insert_stmt.as_string(cur), chunk_values)
                     cur.execute("RELEASE SAVEPOINT chunk_sp")
                     inserted += len(chunk)
                 except Exception:  # noqa: BLE001 — DB-level constraint: retry per-row
                     cur.execute("ROLLBACK TO SAVEPOINT chunk_sp")
                     cur.execute("RELEASE SAVEPOINT chunk_sp")
-                    for i, values in enumerate(chunk):
-                        # We don't know which original CSV row this maps to
-                        # because to_insert dropped failures — reconstruct via
-                        # position in the surviving list. Row numbers reported
-                        # here are the position within the successful subset;
-                        # good enough to point the user at the record.
+                    for orig_row_num, values in chunk:
                         cur.execute("SAVEPOINT row_sp")
                         try:
                             cur.execute(insert_stmt, values)
@@ -285,11 +279,24 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
                             failed_row_count += 1
                             if len(row_errors) < settings.MAX_ROW_ERRORS_REPORTED:
                                 row_errors.append({
-                                    "rowNumber": start + i + 1,
+                                    "rowNumber": orig_row_num,
                                     "reason": str(exc).split("\n")[0],
                                 })
                         finally:
                             cur.execute("RELEASE SAVEPOINT row_sp")
+
+            # #170: if every row failed, nothing was migrated. Roll back and
+            # preserve any prior dataset rather than cleaning it up.
+            if data_rows and inserted == 0:
+                conn.rollback()
+                msg = f"None of the {len(data_rows)} rows could be imported into {target_table}, so nothing was saved."
+                if row_errors:
+                    e = row_errors[0]
+                    msg += f' First problem: row {e["rowNumber"]}, {e.get("column", "")}: {e.get("reason", "")}'
+                _log(logs, "error", msg, "error")
+                return {"status": "error", "message": msg, "rowErrors": row_errors,
+                        "totalRows": len(data_rows), "failedRows": failed_row_count,
+                        "insertedRows": 0, "columns": columns, "logs": logs}
 
             # Register the load in the shared registry (mode='te')
             file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -298,6 +305,15 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
             # _cleanup_prior_registry_entries (not a plain DELETE) so a prior
             # *dynamic*-mode upload of the same file also has its csv_<hash>
             # table dropped instead of orphaned.
+            # #175: require delete permission when a prior entry would be destroyed.
+            cur.execute(
+                sql.SQL(
+                    "SELECT 1 FROM {s}.csv_files WHERE file_name = %s OR file_hash = %s"
+                ).format(s=sql.Identifier(uploads_schema())),
+                (file_name, file_hash),
+            )
+            if cur.fetchone() is not None:
+                _require_delete(session)
             _cleanup_prior_registry_entries(cur, file_name, file_hash)
             try:
                 cur.execute(
