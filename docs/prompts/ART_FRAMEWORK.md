@@ -237,7 +237,7 @@ Follow the repository's no-skip policy: a missing prerequisite fails with remedi
 ### Evidence rules
 
 - A requirement is "Verified" only when a test run proves it. Quote the actual command and the actual pass, fail and skip counts.
-- Documents such as `VCRM.md`, `FIXES_APPLIED.md` and `API_INTEGRATION.md` are claims, not evidence. `API_INTEGRATION.md` describes a superseded API.
+- Documents such as `VCRM.md`, `FIXES_APPLIED.md` and `API_INTEGRATION.md` are claims, not evidence. `API_INTEGRATION.md` covers only the main CSV and auth endpoints, not every live route — the OpenAPI schema at `/api/docs` is the complete list.
 - If something could not be run (for example, no database available), say so plainly.
 - When searching the repository, exclude the stale worktree `.claude/worktrees/velvety-chasing-badger/`. It holds an old copy of `api/`.
 
