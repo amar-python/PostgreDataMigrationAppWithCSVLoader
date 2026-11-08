@@ -1,4 +1,6 @@
 .PHONY: test-free test-gate test-evals test-e2e test-all \
+        test-unit test-system test-sit test-performance test-accessibility test-uat \
+        test-catalogue \
         lint lint-diff health \
         eval-list eval-compare eval-summary select-tests \
         csv-load csv-list csv-demo
@@ -31,6 +33,34 @@ test-e2e:
 test-all:
 	pytest tests/ --cov=build/csv --cov=evals --cov-report=term-missing
 	python3 evals/runner.py --tiers p,i,s,e --verbose
+
+# ── Test categories (#167) ────────────────────────────────────────────────────
+# One target per folder under tests/. tests/conftest.py gives every test the
+# marker of its folder, so `make test-sit` and `pytest -m sit` select the same
+# set. unit needs nothing; the rest need PostgreSQL, and accessibility also
+# needs Playwright browsers plus a running frontend (see tests/README.md).
+
+test-unit:
+	pytest tests/unit -v
+
+test-system:
+	pytest tests/system -v
+
+test-sit:
+	pytest tests/system_integration -v
+
+test-performance:
+	pytest tests/performance -v
+
+test-accessibility:
+	pytest tests/accessibility -v
+
+test-uat:
+	pytest tests/uat -v
+
+# Regenerate docs/TEST_CASES.md from the test tree (#169).
+test-catalogue:
+	python3 scripts/test_catalogue.py
 
 # ── Code quality ──────────────────────────────────────────────────────────────
 

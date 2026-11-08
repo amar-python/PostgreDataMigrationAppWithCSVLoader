@@ -32,7 +32,7 @@ _RULES: list[tuple[str, str, str]] = [
     ("build/environments/",      "integration or e2e or parity",    "env SQL changed → integration + parity"),
     ("build/schema/",            "integration or e2e or parity",    "schema changed → integration + parity"),
     ("tests/suites/",            "integration",                      "SQL test suite changed → integration"),
-    ("tests/test_",              "unit",                             "test file changed → unit"),
+    ("tests/",                   "unit",                             "test file changed → unit"),
     ("scripts/",                 "security",                         "scripts changed → security scan"),
     ("build/adapters/",          "security",                         "adapter changed → security scan"),
     ("build/csv/loader_",        "e2e",                              "loader changed → e2e"),

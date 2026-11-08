@@ -78,7 +78,7 @@ async def tenant_scope(authorization: str = Header(default=""),
 
 
 # M2c (#94): which roles may perform each action. docs/ROLES.md shows the same
-# table, and tests/test_roles.py checks that the two agree.
+# table, and tests/system_integration/test_roles.py checks that the two agree.
 PERMISSIONS: dict[str, frozenset[str]] = {
     "preview":     frozenset({"uploader", "tenant_admin"}),
     "upload":      frozenset({"uploader", "tenant_admin"}),

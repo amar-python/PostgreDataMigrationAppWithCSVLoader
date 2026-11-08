@@ -338,7 +338,7 @@ organisations ──< personnel
 | Connection Limit | 10 | 15 | 25 | 50 |
 | Seed Data | ✅ | ✅ | ❌ | ❌ |
 
-Staging and Prod are **never seeded**. The `tests/environments/` contract tests
+Staging and Prod are **never seeded**. The `tests/system_integration/environments/` contract tests
 verify this automatically.
 
 ---

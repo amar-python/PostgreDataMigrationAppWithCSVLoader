@@ -173,7 +173,7 @@ def check_test_infra() -> None:
     for label, path in files.items():
         _check_file(label, path)
 
-    test_files = list((ROOT / "tests").glob("test_*.py"))
+    test_files = list((ROOT / "tests").rglob("test_*.py"))
     if test_files:
         _pass(f"python test files ({len(test_files)} found)")
     else:
