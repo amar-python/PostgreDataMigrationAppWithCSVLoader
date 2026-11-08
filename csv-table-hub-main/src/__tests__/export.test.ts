@@ -234,6 +234,43 @@ describe("downloadErrorReport XLSX", () => {
   });
 });
 
+// ─── downloadErrorReport — XLSX formula guard (#193) ─────────────────────────
+
+describe("downloadErrorReport XLSX formula guard", () => {
+  let cap: ReturnType<typeof captureBlob>;
+
+  beforeEach(() => { cap = captureBlob(); });
+  afterEach(() => { cap.reset(); });
+
+  it.each([
+    ['=HYPERLINK("http://x","y")'],
+    ["+cmd|' /C calc'!A0"],
+    ["-2+3"],
+    ["@SUM(A1:A2)"],
+    ["\tcmd"],
+  ])("neutralises formula payload %s in XLSX", async (value) => {
+    const rows = buildErrorRows("data.csv", [{ rowNumber: 1, column: "c", value, reason: "test" }]);
+    downloadErrorReport("data.csv", rows, "xlsx");
+    const buf = await cap.blob!.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const ws = wb.Sheets["Errors"];
+    const parsed = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+    expect((parsed[0] as any).value).toBe(`'${value}`);
+  });
+
+  it("leaves plain negative numbers unchanged in XLSX", async () => {
+    const rows = buildErrorRows("data.csv", [
+      { rowNumber: 1, column: "n", value: "-5", reason: "+3.2" },
+    ]);
+    downloadErrorReport("data.csv", rows, "xlsx");
+    const buf = await cap.blob!.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const parsed = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets["Errors"]);
+    expect((parsed[0] as any).value).toBe("-5");
+    expect((parsed[0] as any).reason).toBe("+3.2");
+  });
+});
+
 // ─── downloadAuditReport ──────────────────────────────────────────────────────
 
 describe("downloadAuditReport", () => {
