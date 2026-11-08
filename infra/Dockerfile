@@ -47,7 +47,22 @@ WORKDIR /opt/migration
 # Copy only what the runner needs (NOT the .git folder, IDE configs, etc.).
 # Build context is the PostgreDataMigrationApp repo root, so paths are
 # relative to that — NO `PostgreDataMigrationApp/` prefix.
-COPY --chown=app:app build/        ./build/
+#
+# RV-S4 (#174): build/ is copied as an explicit source list, NOT as
+# `COPY build/ ./build/`. A broad copy pulls in whatever a developer's checkout
+# happens to hold — build/config.local.env (written by setup.sh) and the
+# concrete build/environments/env_<env>.sql files both carry real credentials,
+# are gitignored, and gitignore does not filter the Docker build context. They
+# are also listed in .dockerignore; this list is the second layer, and the one
+# that keeps holding when someone adds a new config file under build/.
+# Adding a file to the image means adding it here on purpose.
+COPY --chown=app:app build/*.sh                        ./build/
+COPY --chown=app:app build/*.sql                       ./build/
+COPY --chown=app:app build/config.env.example          ./build/
+COPY --chown=app:app build/environments/*.example.sql  ./build/environments/
+COPY --chown=app:app build/schema/                     ./build/schema/
+COPY --chown=app:app build/csv/                        ./build/csv/
+COPY --chown=app:app build/adapters/                   ./build/adapters/
 COPY --chown=app:app tests/        ./tests/
 COPY --chown=app:app evals/        ./evals/
 COPY --chown=app:app infra/entrypoint.sh ./entrypoint.sh
