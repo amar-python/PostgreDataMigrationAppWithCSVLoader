@@ -402,7 +402,7 @@ class TeUploadPipeline(_IntegrationBase):
         csv = self._org_csv(f"{self.tag}_bad", org_type="X" * 100)
         r = self._upload_te(csv)
         body = r.json()
-        self.assertEqual(body["status"], "ok", body)
+        self.assertEqual(body["status"], "error", body)
         self.assertGreaterEqual(body["failedRows"], 1)
         self.assertTrue(body["rowErrors"])
         self.assertIn("rowNumber", body["rowErrors"][0])
@@ -424,7 +424,7 @@ class TeUploadPipeline(_IntegrationBase):
         csv = self._org_csv(f"{self.tag}_enum", org_type="INVALID_ENUM")
         r = self._upload_te(csv)
         body = r.json()
-        self.assertEqual(body["status"], "ok", body)
+        self.assertEqual(body["status"], "error", body)
         self.assertGreaterEqual(body["failedRows"], 1,
             "Invalid enum value should fail at row level, not crash the endpoint")
         self.assertIn("rowNumber", body["rowErrors"][0])
@@ -434,7 +434,7 @@ class TeUploadPipeline(_IntegrationBase):
         csv = "name,org_type,country\n,government,AU\n"
         r = self._upload_te(csv)
         body = r.json()
-        self.assertEqual(body["status"], "ok", body)
+        self.assertEqual(body["status"], "error", body)
         self.assertGreaterEqual(body["failedRows"], 1,
             "NULL in a NOT NULL column should fail at row level")
         self.assertIn("rowNumber", body["rowErrors"][0])
