@@ -10,7 +10,6 @@ manual or needs another system.
 
 from __future__ import annotations
 
-import re
 import subprocess
 import unittest
 from pathlib import Path

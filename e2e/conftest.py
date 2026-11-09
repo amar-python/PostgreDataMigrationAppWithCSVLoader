@@ -7,7 +7,6 @@ browser and three local servers. See e2e/README.md.
 from __future__ import annotations
 
 import os
-import shutil
 import signal
 import socket
 import subprocess
@@ -154,7 +153,7 @@ def stack():
 @pytest.fixture(scope="session")
 def browser():
     with sync_playwright() as p:
-        exe = os.environ.get("E2E_CHROMIUM") or (shutil.which("chromium") if os.environ.get("E2E_SYSTEM_CHROMIUM") else None)
+        exe = os.environ.get("E2E_CHROMIUM") or None  # else the browser `playwright install` fetched
         b = p.chromium.launch(executable_path=exe) if exe else p.chromium.launch()
         yield b
         b.close()
