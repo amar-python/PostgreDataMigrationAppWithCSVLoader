@@ -173,8 +173,13 @@ class TeUploadOrganisations(unittest.TestCase):
         self.__class__._inserted.extend(names)
         fname = f"te_reupload_{os.getpid()}.csv"
 
+        # The second load must insert something: an identical file collides on the
+        # unique name, fails every row and (#215) changes nothing.
+        content_v2 = content.replace(names[0], names[0] + "_v2")
+        self.__class__._inserted.append(names[0] + "_v2")
+
         first  = self._upload_te(content, file_name=fname)
-        second = self._upload_te(content, file_name=fname)
+        second = self._upload_te(content_v2, file_name=fname)
 
         self.assertEqual(first["status"],  "ok", first)
         self.assertEqual(second["status"], "ok", second)
