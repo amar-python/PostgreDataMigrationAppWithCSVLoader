@@ -143,7 +143,7 @@ PostgreDataMigrationAppWithCSVLoader/
 │
 ├── env.dev.example                   ← dev environment template
 ├── docs/ENV_VARIABLES.md                  ← all environment variables documented
-├── docs/API_INTEGRATION.md                ← frontend ↔ API endpoint mapping
+├── docs/API_INTEGRATION.md                ← API design notes: auth, known gaps, migrations
 ├── docs/QUICKSTART.md                     ← 10-minute setup guide
 └── docs/VCRM.md                           ← business requirement traceability
 ```

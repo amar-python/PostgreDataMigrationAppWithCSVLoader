@@ -49,8 +49,8 @@ which mode was used:
   real schema" path. Implemented in `api/services/te_loader.py`.
 
 Both modes go through the same `POST /api/csv/upload` endpoint, with a
-`mode: "dynamic" | "te"` field distinguishing them — see
-`docs/API_INTEGRATION.md` for the full request/response shapes.
+`mode: "dynamic" | "te"` field distinguishing them — see the Swagger UI at
+`http://localhost:8000/docs` (API running) for the full request/response shapes.
 
 ## Multi-environment by design
 
@@ -83,26 +83,33 @@ Once the app is running locally, this sequence exercises both modes and the
 test suite in about ten minutes — a good way to confirm your setup actually
 works, not just that servers started.
 
-1. **Upload a CSV in dynamic mode.** Any small CSV works — three columns,
+1. **Sign in.** The app has required authentication since ART Milestone 2, so
+   `http://localhost:8080` opens on the sign-in page, not the upload area.
+   Follow QUICKSTART's **"Create your sign-in (first run only)"** section to
+   create a tenant admin, then sign in with it.
+2. **Upload a CSV in dynamic mode.** Any small CSV works — three columns,
    a few rows. Drop it on the upload area, preview it, confirm the import.
    Check the Migrated Files table for the new `csv_<hash>` table and row
    count.
-2. **Upload a CSV in T&E mode.** Pick one of the 12 T&E tables (e.g.
+3. **Upload a CSV in T&E mode.** Pick one of the 12 T&E tables (e.g.
    `organisations`), match your CSV's headers to its columns, and import.
    This exercises the validation path dynamic mode skips.
-3. **Re-upload the same file.** Confirm duplicate detection kicks in
-   (content-hash based, not filename based).
-4. **Run the fast test suite** to confirm the backend is sane:
+4. **Re-upload the dynamic-mode file from step 2.** Confirm duplicate
+   detection kicks in — the upload is rejected with "Duplicate file" on either
+   a matching filename or a matching content hash. Dynamic mode only: a T&E
+   re-upload replaces the previous registry entry instead of refusing, since
+   per-tenant and per-record dedup is still M5 scope (#109).
+5. **Run the fast test suite** to confirm the backend is sane:
    ```powershell
    python -m pytest tests\ -m "unit or regression or security or snapshot" -q
    ```
-5. **Run the frontend tests:**
+6. **Run the frontend tests:**
    ```powershell
    cd csv-table-hub-main
    npm test
    ```
 
-If all five pass/succeed, your environment is a faithful match for CI.
+If all six pass/succeed, your environment is a faithful match for CI.
 
 ---
 
@@ -112,7 +119,8 @@ If all five pass/succeed, your environment is a faithful match for CI.
 |---|---|
 | Set up my dev environment from scratch | `docs/QUICKSTART.md` |
 | Understand the repo's folder structure and why it's split that way | `docs/ARCHITECTURE.md` |
-| See every frontend↔backend API call and its shape | `docs/API_INTEGRATION.md` |
+| See every API route and its request/response shape | `http://localhost:8000/docs` while the API is running (Swagger UI) |
+| Understand how the API is put together, its auth model, known gaps and migrations | `docs/API_INTEGRATION.md` |
 | Look up an environment variable | `docs/ENV_VARIABLES.md` |
 | Understand Dev/Test/Staging/Prod differences | `docs/DATABASE_ENVIRONMENTS.md` |
 | Deploy to Azure | `docs/AZURE_DEPLOY.md` (non-prod) / `docs/PROD_DEPLOY.md` (prod) |
