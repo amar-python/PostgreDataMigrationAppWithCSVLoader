@@ -164,17 +164,20 @@ jobs:
       # the build on any skip.
       # The API reads PGDATABASE (api/config.py). The schema lives in
       # te_mgmt_dev, not the job-level default "postgres" (issue #45).
+      # Accessibility scans need a browser and the frontend, not this database;
+      # they run in the `accessibility` job below (#168) and are reported here as
+      # NOT RUN, not as skipped.
       - name: Full test suite — final result with skip accounting
         env:
           PGDATABASE: te_mgmt_dev
-        run: python3 scripts/test_report.py --strict
+        run: python3 scripts/test_report.py --markers "not accessibility" --strict
 
       # #194: measure api/services coverage with per-loader floors.
       - name: api/services coverage gate
         env:
           PGDATABASE: te_mgmt_dev
         run: |
-          python -m pytest tests/ \
+          python -m pytest tests/ -m "not accessibility" \
             --cov=api/services \
             --cov-report=json:coverage-services.json \
             --cov-report=term-missing \
@@ -187,5 +190,64 @@ jobs:
         with:
           name: eval-reports-integration
           path: evals/reports/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # #168: WCAG 2.1 A and AA scans of the frontend (csv-table-hub-main) with
+  # Playwright + axe-core in Chromium, against the Vite dev server. The API is
+  # stubbed, so this job needs no database and a backend-only change cannot
+  # alter what it scans. Known violations are recorded in
+  # tests/accessibility/known_violations.json: the job fails on a NEW violation
+  # and when a recorded one is fixed (so the list only shrinks). Not yet a
+  # required check; make it one after a few green runs (see the issue).
+  accessibility:
+    name: accessibility (Playwright + axe-core, WCAG 2.1 AA)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements-dev.txt
+            requirements-a11y.txt
+            api/requirements.txt
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: csv-table-hub-main/package-lock.json
+
+      - name: Install dev dependencies
+        # api/requirements.txt is needed too: tests/conftest.py imports the API
+        # app, so pytest collection fails without FastAPI.
+        run: pip install -r requirements-dev.txt -r api/requirements.txt -r requirements-a11y.txt
+
+      - name: Install frontend dependencies
+        working-directory: csv-table-hub-main
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        run: python -m playwright install --with-deps chromium
+
+      # Prints the same final block as the other jobs. --strict fails on any skip.
+      # The scans start `npm run dev` themselves (tests/accessibility/conftest.py).
+      - name: Accessibility scans — final result with skip accounting
+        env:
+          A11Y_REPORT_DIR: accessibility-report
+        run: python3 scripts/test_report.py --markers accessibility --strict
+
+      - name: Upload accessibility report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: accessibility-report
+          path: accessibility-report/
           if-no-files-found: ignore
           retention-days: 30
