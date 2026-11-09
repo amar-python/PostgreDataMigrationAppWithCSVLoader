@@ -13,13 +13,14 @@ const rowErrorSchema = z.object({
 });
 export type RowError = z.infer<typeof rowErrorSchema>;
 
-const processingLogSchema = z.object({
+export const processingLogSchema = z.object({
   ts: z.number(),
   step: z.enum([
     "receive",
     "hash",
     "duplicate_check",
     "parse",
+    "header_mapping",
     "validate_columns",
     "create_table",
     "cast_rows",
