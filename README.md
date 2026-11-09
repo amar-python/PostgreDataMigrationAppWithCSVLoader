@@ -267,7 +267,7 @@ bash tests/run_tests.sh dev
 ### Eval suite
 
 ```powershell
-python evals\runner.py --tiers p,i,s,e   # 26 scenarios: Tier P 23, I 1, S 1, E 1
+python evals\runner.py --tiers p,i,s,e   # 27 scenarios: Tier P 23, I 1, S 1, E 2
 ```
 
 ### CI
