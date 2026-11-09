@@ -40,8 +40,11 @@ class RuntimeRole(unittest.TestCase):
         cls.role = f"te_app_test_{uuid.uuid4().hex[:8]}"
         cls.tmp = tempfile.TemporaryDirectory()
         env_file = Path(cls.tmp.name) / "app-db.env"
-        run = subprocess.run([sys.executable, "scripts/create_app_role.py", "--role", cls.role,
-                              "--env-file", str(env_file)], cwd=_ROOT, capture_output=True, text=True)
+        # RV-S3 (#173): --env is mandatory. The role and credential file are
+        # still overridden here so each run gets a unique, disposable role.
+        run = subprocess.run([sys.executable, "scripts/create_app_role.py", "--env", "test",
+                              "--role", cls.role, "--env-file", str(env_file)],
+                             cwd=_ROOT, capture_output=True, text=True)
         assert run.returncode == 0, run.stderr
         cls.script_stdout = run.stdout
         values = dict(line.split("=", 1) for line in env_file.read_text().splitlines())
