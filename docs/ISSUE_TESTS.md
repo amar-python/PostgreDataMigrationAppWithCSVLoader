@@ -75,8 +75,8 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 113 | Check OIDC sign-in against the real IdP | ✅ / 👤 | `tests/unit/test_oidc_https_jwks.py` covers the https key fetch, rotation and certificate checks. A sign-in against Keycloak or Entra ID is manual |
 | 128 | Offline bundle for Windows, macOS and Linux | — | only the Ubuntu bundle exists |
 | 159 | Verify `docs/VCRM.md` against the DID | 👤 | compare with an external document |
-| 167 | Reorganise `tests/` into category folders | 📎 | PR #214 |
-| 168 | Accessibility CI job | 📎 | PR #214 (`tests/accessibility/`) |
+| 167 | Reorganise `tests/` into category folders | ✅ | Done on `main` (#221); `tests/README.md` says where a new test goes. The issue is still open, and could be closed |
+| 168 | Accessibility CI job | ✅ | Done on `main` (#222): `tests/accessibility/` and its CI job. The issue is still open, and could be closed |
 | 172 | Production database name disagreement | 📎 | PR #213 (`tests/test_prod_db_naming.py`) |
 | 173 | Cluster-wide `te_app` role | 📎 | PR #208 (`tests/test_runtime_role_per_env.py`) |
 | 174 | Docker image can bake local credentials | 📎 | PR #204 (`tests/test_docker_image_secrets.py`) |
