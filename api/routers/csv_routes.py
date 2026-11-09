@@ -113,7 +113,8 @@ def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> 
         raise HTTPException(422, f"Unknown mode '{req.mode}' — use 'dynamic' or 'te'")
 
     # M3b (#107): keep the original and its outcome, whatever the outcome was.
-    upload_id = record_upload(req.fileName, req.content, req.mode, result, original=original)
+    flags = result.pop("_duplicateFlags", None)
+    upload_id = record_upload(req.fileName, req.content, req.mode, result, original=original, flags=flags)
     result["uploadId"] = None if upload_id is None else str(upload_id)
 
     # O-04: record the load so audit_log covers creations, not just deletions.

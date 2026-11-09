@@ -147,10 +147,10 @@ Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" 
 | BR-25 | ✅ | `GET /api/csv/uploads/{id}/rows` pages through every stored row and column (up to 500 a page), with column types and each row's validation errors, including rows beyond the 200 errors reported at upload (M4a, `test_review.py`). The review screen pages through them with types and invalid cells marked (M4b, `review-table.test.tsx`, e2e `scripts/e2e/m4-review.js`). #108 | API paging + e2e | M4 |
 | BR-26 | ✅ | Include or exclude a row with a required reason; actor and time recorded; insert-only history, latest wins; audited with before and after (M4a, `test_review.py`). The review screen does it, shows it after reload and lists the history (M4b, e2e `scripts/e2e/m4-review.js`). Applied to imports in M6 (decision 1 on #108) | API + e2e | M4 |
 | BR-27 | ✅ | Cell edits are insert-only versions in `cell_edits` with old and new value, actor, time and a required reason; the original in `source_rows` is unchanged; edited values are revalidated; each edit is audited (M4a, #108, `test_review.py`: API and DB tests). The screen to make edits arrives in M4b | API + DB tests | M4 |
-| BR-28 | ⚠️ Partial | Race guard enforced by UNIQUE constraints (M1: #87, `tests/test_migrations.py`). For signed-in tenants the registry is per tenant, so the same file in two tenants is not a duplicate (M2: #100, `test_duplicate_detection_is_per_tenant`). Requests without a session still share the default registry; M5 finishes the per-tenant model | Concurrency + cross-tenant tests | M1, M5 |
-| BR-29 | ⚠️ Partial | In-file exact match only | Unit + integration | M5 |
-| BR-30 | ⚠️ Partial | Content-derived names; repeats refused or destructive | Unit + integration | M5 |
-| BR-31 | ⚠️ Partial | T&E mode only; overwrite drops tables | Integration | M5 |
+| BR-28 | ✅ | Race guard enforced by UNIQUE constraints (M1: #87, `tests/test_migrations.py`). Every request dedups within its own registry: a tenant's, or the deployment's default registry for a request with no session. The same file in two tenants is not a duplicate (M2: #100, `test_duplicate_detection_is_per_tenant`), and a repeat with no session is refused without matching any tenant's files (M5, #109: `test_versions_and_dedup_are_independent_per_tenant_and_without_a_session`). `overwrite` no longer bypasses it (`test_overwrite_flag_does_not_bypass_exact_file_dedup`) | Concurrency + cross-tenant tests | M1, M5 |
+| BR-29 | ⚠️ Partial | Exact whole-row match within a file, and across the earlier versions of the same dataset (M5, #109): a repeated row is loaded but flagged (`row_flags`, insert-only), shown on the review page, and the user excludes or keeps it per row with the M4 decision (`test_versioned_datasets.py`, 6 tests). Still to do: the configurable rule (key columns per dataset), and matching across different datasets | Unit + integration | M5 |
+| BR-30 | ✅ | A repeated filename becomes the next version, `csv_<slug>_v<n>`; no version is overwritten, and the `overwrite` flag is ignored (M5, #109, decision 2). The slug is lower-case ASCII, 40 characters at most, behind a fixed `csv_` prefix and `_v<n>` suffix, so a filename can't name a registry table (`test_versioned_datasets.py`; migration 0009 backfills existing uploads, `test_migrations.py`). Concurrent same-name uploads get distinct versions (`test_registry_race.py`) | Unit + integration | M5 |
+| BR-31 | ⚠️ Partial | A new version's columns are compared with the previous version's and the difference is reported (added, removed, retyped); the previous table is never altered, and the overwrite path that dropped tables is gone (M5, #109, `test_versioned_datasets.py`). T&E mode still checks against its fixed schema. Open: a T&E upload with identical content to a dynamic dataset still replaces that entry and drops its table (permission-gated, #175); the comparison reports only, it doesn't block | Integration | M5 |
 | BR-32 | ❌ Not started | No code | API + e2e | M6 |
 | BR-33 | ⚠️ Partial | Single-transaction load; no staging or lineage | Integration incl. failure injection | M6 |
 | BR-34 | ⚠️ Partial | Total, inserted, duplicate and failed counts persisted per import (M1: #90, `tests/test_import_counts.py`); an upload where every row fails is reported as failed and saves nothing, and partial failures are shown on the files list (#123, `tests/test_failed_uploads.py`); over-wide rows reported, not dropped (M1: #88, `tests/test_ragged_rows.py`); excluded and edited rows not yet tracked (M6) | Integration | M1, M6 |
@@ -178,10 +178,12 @@ Status as assessed on 2026-10-26 at `main` 032b522. None of these is "Verified" 
 
 | Status | Count | Requirements |
 |--------|-------|-------------|
-| ✅ Verified | 23 | BR-01, BR-03, BR-04, BR-05, BR-06, BR-07, BR-08, BR-09, BR-10, BR-11, BR-12, BR-13, BR-14, BR-15, BR-16, BR-17, BR-18, BR-19, BR-20, BR-23 (M3b), BR-25, BR-26, BR-27 (M4) |
-| ⚠️ Partial | 10 | BR-24, BR-28, BR-29, BR-30, BR-31, BR-33, BR-34, BR-35, BR-36, BR-37 (ART, added 2026-10-26) |
+| ✅ Verified | 25 | BR-01, BR-03, BR-04, BR-05, BR-06, BR-07, BR-08, BR-09, BR-10, BR-11, BR-12, BR-13, BR-14, BR-15, BR-16, BR-17, BR-18, BR-19, BR-20, BR-23 (M3b), BR-25, BR-26, BR-27 (M4), BR-28, BR-30 (M5) |
+| ⚠️ Partial | 8 | BR-24, BR-29, BR-31, BR-33, BR-34, BR-35, BR-36, BR-37 (ART, added 2026-10-26) |
 | ❌ Not started | 2 | BR-32 (ART, added 2026-10-26); BR-38 (added 2026-10-27) |
 | ⏸ Deferred by decision | 3 | BR-02, BR-21, BR-22 |
+
+**Headline (2026-11-09):** with BR-28 and BR-30 verified by M5 (#109; full suite 418 passed, 0 failed, 0 skipped), **25 of 38 (66 %)** are verified, 3 are deferred by decision, and the other 10 are partial or not started.
 
 **Headline (2026-10-28):** with BR-23 verified by M3b (#107) and BR-25, BR-26 and BR-27 by M4 (#108), **23 of 38 (61 %)** are verified, 3 are deferred by decision, and the other 12 are partial or not started.
 

@@ -37,12 +37,13 @@ def outcome(result: dict) -> str:
 
 
 def record_upload(file_name: str, content: str, mode: str, result: dict, *,
-                  original: bytes | None = None) -> int | None:
+                  original: bytes | None = None, flags: list[dict] | None = None) -> int | None:
     """Store the original and its outcome. Returns the upload id, or None if it couldn't be stored.
 
     ``original`` is the file's bytes exactly as uploaded (#185); it is what gets hashed and
     kept. Without it the decoded ``content`` re-encoded as UTF-8 stands in, which loses a
     BOM or any invalid bytes. ``content`` still feeds the parsed ``source_rows`` view.
+    ``flags`` are rows that duplicate an earlier version of the dataset (M5, BR-29), stored as ``row_flags``.
     """
     data = original if original is not None else content.encode("utf-8")
     ok = result.get("status") == "ok"
@@ -67,6 +68,12 @@ def record_upload(file_name: str, content: str, mode: str, result: dict, *,
                     execute_values(cur, sql.SQL("INSERT INTO {}.source_rows (upload_id, row_number, cells) VALUES %s")
                                    .format(s).as_string(cur), [(upload_id, n, r) for n, r in enumerate(rows)],
                                    page_size=1000)
+                if flags:
+                    execute_values(cur, sql.SQL("INSERT INTO {}.row_flags (upload_id, row_number, kind, "
+                                                "matched_file_id, matched_file_name, matched_version) VALUES %s")
+                                   .format(s).as_string(cur),
+                                   [(upload_id, f["rowNumber"], "duplicate_of_earlier_version", int(f["matchedFileId"]),
+                                     f["matchedFileName"], f["matchedVersion"]) for f in flags], page_size=1000)
             conn.commit()
         return upload_id
     except Exception as exc:  # noqa: BLE001 — the load has already committed; see the module docstring

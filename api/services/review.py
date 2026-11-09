@@ -51,6 +51,14 @@ def _upload(cur, upload_id: int) -> dict:
     return {"fileName": name, "columns": columns, "types": types, "total": total, "_dbErrors": db_errors}
 
 
+def _flags(cur, upload_id: int, numbers: list[int]) -> dict:
+    """Rows that duplicate an earlier version of the dataset (M5, BR-29); the user decides per row."""
+    cur.execute(sql.SQL(
+        "SELECT row_number, matched_file_name, matched_version FROM {}.row_flags "
+        "WHERE upload_id = %s AND row_number = ANY(%s)").format(_s()), (upload_id, numbers))
+    return {n: {"fileName": f, "version": v} for n, f, v in cur.fetchall()}
+
+
 def _validate(cells: list[str], raw: list[str], columns: list[str], types: list[str]) -> list[dict]:
     errors = []
     if extra_cells(raw, len(columns)):
@@ -92,6 +100,7 @@ def _rows(cur, upload_id: int, meta: dict, numbers: list[int] | None = None,
             "ORDER BY row_number").format(_s()), (upload_id, numbers))
     source = cur.fetchall()
     decisions, edits = _latest(cur, upload_id, [n for n, _ in source])
+    duplicates = _flags(cur, upload_id, [n for n, _ in source])
     width = len(meta["columns"])
     out = []
     for n, raw in source:
@@ -106,6 +115,7 @@ def _rows(cur, upload_id: int, meta: dict, numbers: list[int] | None = None,
             "editedColumns": sorted(edits.get(n, {})),
             "decision": decision["decision"] if decision else "include",
             "decisionReason": decision["reason"] if decision else None,
+            "duplicateOfEarlierVersion": duplicates.get(n),
             "errors": errors,
         })
     return out

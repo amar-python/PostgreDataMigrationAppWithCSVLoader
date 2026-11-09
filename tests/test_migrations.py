@@ -81,7 +81,7 @@ class MigrationsOnScratchSchema(unittest.TestCase):
     def test_upgrade_head_creates_tables_and_unique_constraints(self):
         command.upgrade(self.cfg, "head")
         self.assertTrue({"csv_files", "audit_log", "alembic_version"} <= self._tables())
-        self.assertEqual(self._constraints(), {"csv_files_file_hash_key", "csv_files_file_name_key"})
+        self.assertEqual(self._constraints(), {"csv_files_file_hash_key", "csv_files_dataset_version_key"})
 
     def test_control_schema_is_created_and_removed(self):
         command.upgrade(self.cfg, "head")
@@ -113,6 +113,64 @@ class MigrationsOnScratchSchema(unittest.TestCase):
                         "column_names TEXT[] NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT now())")
         command.upgrade(self.cfg, "head")
         self.assertIn("csv_files_file_hash_key", self._constraints())
+
+    def _seed_registry(self, rows):
+        with self.conn.cursor() as cur:
+            for i, (name, mode) in enumerate(rows):
+                cur.execute(f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files '
+                            "(file_name, file_hash, table_name, mode) VALUES (%s, %s, %s, %s)",
+                            (name, f"hash{i}", f"csv_legacy{i}", mode))
+
+    def test_0009_backfills_dataset_and_version_oldest_first_and_leaves_te_rows_alone(self):
+        command.upgrade(self.cfg, "0008")
+        self._seed_registry([("Sales Report.csv", "dynamic"), ("other.csv", "dynamic"),
+                             ("sales_report.csv", "dynamic"), ("loaded.csv", "te")])
+        command.upgrade(self.cfg, "0009")
+        with self.conn.cursor() as cur:
+            cur.execute(f'SELECT file_name, dataset, version, table_name FROM "{settings.UPLOADS_SCHEMA}".csv_files ORDER BY id')
+            self.assertEqual(cur.fetchall(), [
+                ("Sales Report.csv", "sales_report", 1, "csv_legacy0"),   # tables are kept as they were
+                ("other.csv", "other", 1, "csv_legacy1"),
+                ("sales_report.csv", "sales_report", 2, "csv_legacy2"),
+                ("loaded.csv", None, None, "csv_legacy3")])
+
+    def test_0009_sql_slug_agrees_with_the_loaders_slug(self):
+        from api.services.dynamic_loader import dataset_slug
+
+        names = ["Sales Report 2026.CSV", "a-b__c.csv", "!!!.csv", "../etc/passwd.csv", "x" * 60 + ".csv", "plain"]
+        command.upgrade(self.cfg, "0008")
+        self._seed_registry([(n, "dynamic") for n in names])
+        command.upgrade(self.cfg, "0009")
+        with self.conn.cursor() as cur:
+            cur.execute(f'SELECT file_name, dataset FROM "{settings.UPLOADS_SCHEMA}".csv_files ORDER BY id')
+            self.assertEqual(cur.fetchall(), [(n, dataset_slug(n)) for n in names])
+
+    def test_0009_keeps_one_te_row_per_file_name_but_allows_dataset_versions(self):
+        command.upgrade(self.cfg, "head")
+        insert = (f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode, dataset, version) '
+                  "VALUES (%s, %s, 't', %s, %s, %s)")
+        with self.conn.cursor() as cur:
+            cur.execute(insert, ("same.csv", "h1", "dynamic", "same", 1))
+            cur.execute(insert, ("same.csv", "h2", "dynamic", "same", 2))        # versions share a name
+            cur.execute(insert, ("same.csv", "h3", "te", None, None))
+            with self.assertRaises(psycopg2.errors.UniqueViolation):             # T&E race guard is intact
+                cur.execute(insert, ("same.csv", "h4", "te", None, None))
+        with self.conn.cursor() as cur:
+            with self.assertRaises(psycopg2.errors.UniqueViolation):             # a version number is used once
+                cur.execute(insert, ("same.csv", "h5", "dynamic", "same", 2))
+
+    def test_0009_downgrade_refuses_while_versions_share_a_name_then_restores_the_constraint(self):
+        command.upgrade(self.cfg, "head")
+        self._seed_registry([("same.csv", "te")])
+        with self.conn.cursor() as cur:
+            cur.execute(f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode, dataset, version) '
+                        "VALUES ('same.csv', 'hx', 't', 'dynamic', 'same', 1)")
+        with self.assertRaisesRegex(RuntimeError, "versioned datasets share a file name.*same.csv"):
+            command.downgrade(self.cfg, "0008")
+        with self.conn.cursor() as cur:
+            cur.execute(f'DELETE FROM "{settings.UPLOADS_SCHEMA}".csv_files WHERE mode = \'dynamic\'')
+        command.downgrade(self.cfg, "0008")
+        self.assertIn("csv_files_file_name_key", self._constraints())
 
     def test_existing_duplicates_stop_the_upgrade_with_remediation(self):
         command.upgrade(self.cfg, "0001")
@@ -148,7 +206,7 @@ class RegistryUniqueness(unittest.TestCase):
     def test_bootstrap_brings_the_schema_to_head(self):
         with Conn() as conn, conn.cursor() as cur:
             cur.execute(f'SELECT version_num FROM "{settings.UPLOADS_SCHEMA}".alembic_version')
-            self.assertEqual(cur.fetchone()[0], "0008")
+            self.assertEqual(cur.fetchone()[0], "0009")
 
     def test_duplicate_hash_is_rejected_by_the_database(self):
         insert = (f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode) '
