@@ -1,0 +1,71 @@
+{
+  "about": "Accessibility violations the frontend has today, recorded so the scans pass on it and fail on a CHANGE (see README.md in this folder). Fixing one means deleting its entry here in the same pull request; adding one is not allowed except by a deliberate decision. 'nodes' is how many elements axe-core reported. Frontend fixes are tracked separately from #168 (frontend direction: #154).",
+  "violations": [
+    {
+      "scenario": "upload_page_with_history",
+      "rule": "aria-progressbar-name",
+      "nodes": 3,
+      "note": "each import job's progress bar has no accessible name (index.tsx:392)"
+    },
+    {
+      "scenario": "upload_page_with_history",
+      "rule": "button-name",
+      "nodes": 1,
+      "note": "a select (role=combobox) under the file list has no accessible name"
+    },
+    {
+      "scenario": "upload_page_with_history",
+      "rule": "color-contrast",
+      "nodes": 4,
+      "note": "job cards: table-name chip 4.34:1, file size 4.35:1, failed and duplicate status pills 3.67:1 and 4.48:1; 4.5:1 is required (index.tsx:344,382,393)"
+    },
+    {
+      "scenario": "upload_page_failed_attempts",
+      "rule": "button-name",
+      "nodes": 1,
+      "note": "a select (role=combobox) under the file list has no accessible name"
+    },
+    {
+      "scenario": "upload_mapping_dialog",
+      "rule": "button-name",
+      "nodes": 2,
+      "note": "the column-type select in each row of the mapping dialog has no accessible name"
+    },
+    {
+      "scenario": "upload_page_toast",
+      "rule": "button-name",
+      "nodes": 1,
+      "note": "a select (role=combobox) under the file list has no accessible name"
+    },
+    {
+      "scenario": "upload_page_toast",
+      "rule": "color-contrast",
+      "nodes": 1,
+      "note": "the error toast's text (#e60000 on #fff0f0) is 4.34:1; 4.5:1 is required"
+    },
+    {
+      "scenario": "audit_log_with_history",
+      "rule": "button-name",
+      "nodes": 2,
+      "note": "a select (role=combobox) and the icon-only per-row download button (audit.tsx:183) have no accessible name"
+    },
+    {
+      "scenario": "audit_log_with_history",
+      "rule": "color-contrast",
+      "nodes": 2,
+      "note": "the '120 ok' count (#009966 on white) is 3.65:1 and the failed-status pill (#e7000b on pale red) is 4.0:1; 4.5:1 is required (audit.tsx:169,173)"
+    },
+    {
+      "scenario": "audit_log_report_menu",
+      "rule": "aria-hidden-focus",
+      "nodes": 1,
+      "note": "opening the report menu marks the page aria-hidden while it still contains focusable controls (audit.tsx:92)"
+    },
+    {
+      "scenario": "audit_log_report_menu",
+      "rule": "color-contrast",
+      "nodes": 2,
+      "note": "the same two contrast failures as audit_log_with_history, still on the page behind the open menu"
+    }
+  ]
+}

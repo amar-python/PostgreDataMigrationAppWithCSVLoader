@@ -11,18 +11,18 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 
 | # | What | Status | Verified by |
 |---|---|---|---|
-| 99 | Per-tenant T&E tables | ✅ | `tests/test_tenant_isolation.py` (own tables, per-tenant counts, keys and triggers kept) |
-| 102 | Lock accounts after failed sign-ins | ✅ | `tests/test_accounts.py` (`Lockout`) |
-| 107 | Immutable source, append-only audit | ✅ | `tests/test_preserved_uploads.py`, `test_audit_append_only.py`, `test_original_bytes.py` |
-| 108 | Review: paging, include/exclude, versioned edits | ✅ | `tests/test_review.py`, `test_review_cases.py`, `fe: review-table.test.tsx`, `e2e/test_streamlit_spike.py` |
+| 99 | Per-tenant T&E tables | ✅ | `tests/system/test_tenant_isolation.py` (own tables, per-tenant counts, keys and triggers kept) |
+| 102 | Lock accounts after failed sign-ins | ✅ | `tests/system/test_accounts.py` (`Lockout`) |
+| 107 | Immutable source, append-only audit | ✅ | `tests/system/test_preserved_uploads.py`, `test_audit_append_only.py`, `test_original_bytes.py` |
+| 108 | Review: paging, include/exclude, versioned edits | ✅ | `tests/system/test_review.py`, `test_review_cases.py`, `fe: review-table.test.tsx`, `e2e/test_streamlit_spike.py` |
 | 114 | Delete merged branches | — | housekeeping |
 | 116 | Local PostgreSQL not reachable on 5433 | 👤 | one dev machine's setup; closed on evidence attached to the issue |
-| 117 | Password change and admin reset | ✅ | `tests/test_password_reset.py`, `fe: change-password.test.tsx` |
+| 117 | Password change and admin reset | ✅ | `tests/system/test_password_reset.py`, `fe: change-password.test.tsx` |
 | 118 | "Failed to fetch" when the API is down | ✅ | `fe: session.test.ts` ("API unreachable"). The PowerShell start-up guard in `scripts/start-api.ps1` has no test |
 | 119 | Upload times shown in UTC | ✅ | `fe: local-time.test.ts` |
 | 120 | House writing style doc | — | docs |
-| 123 | Every-row-rejected upload shown as migrated | ✅ | `tests/test_failed_uploads.py`, `fe: job-outcome.test.ts` |
-| 130 | Frontend lock file out of sync | ✅ | `tests/test_tooling_issues.py` (lock file agrees with `package.json`) |
+| 123 | Every-row-rejected upload shown as migrated | ✅ | `tests/system/test_failed_uploads.py`, `fe: job-outcome.test.ts` |
+| 130 | Frontend lock file out of sync | ✅ | `tests/unit/test_tooling_issues.py` (lock file agrees with `package.json`) |
 | 132 | `npm audit` critical and high | ✅ / 👤 | `fe: table-rows-contract.test.ts` guards the zod 4 change. `npm audit` itself needs the registry and was not run |
 | 133 | React hydration errors on `/auth` | ✅ | `fe: session.test.ts` |
 | 151 | Terraform storage accounts audit | — | investigation |
@@ -33,30 +33,30 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 164 | Live pointers to superseded API doc | — | docs, closed not planned |
 | 165 | STARTER_GUIDE dedup claim | — | docs, closed not planned |
 | 166 | STARTER_GUIDE skips sign-in | — | docs |
-| 169 | Test catalogue generator | ✅ | `tests/test_tooling_issues.py` and the CI freshness step |
-| 170 | All-failed T&E import removed the prior dataset | ✅ | `tests/test_te_reupload_registry.py` (`…keeps_a_prior_dynamic_table…`), `tests/test_failed_uploads.py` |
-| 171 | `setup.sh` truncated the config on failure | ✅ | `tests/test_tooling_issues.py` (runs the real config-write block) |
-| 175 | Overwrite and mode switch bypassed the delete gate | ✅ | `tests/test_issue_regressions.py` (`UploadCannotBypassTheDeleteGate`) |
+| 169 | Test catalogue generator | ✅ | `tests/unit/test_tooling_issues.py` and the CI freshness step |
+| 170 | All-failed T&E import removed the prior dataset | ✅ | `tests/system/test_te_reupload_registry.py` (`…keeps_a_prior_dynamic_table…`), `tests/system/test_failed_uploads.py` |
+| 171 | `setup.sh` truncated the config on failure | ✅ | `tests/unit/test_tooling_issues.py` (runs the real config-write block) |
+| 175 | Overwrite and mode switch bypassed the delete gate | ✅ | `tests/system/test_issue_regressions.py` (`UploadCannotBypassTheDeleteGate`) |
 | 176 | Browser history leaks across tenants | ⚠️ | `fe: tenant-isolation.test.tsx`, `e2e/test_react_ui.py`. Closed as moot (the React screen is being replaced, #212), but the leak is live in the shipped app. Both tests turn red when it is fixed |
 | 177 | Composite FKs for program consistency | ✅ | `tests/suites/test_06_program_consistency.sql` (Tier S) |
-| 178 | Distinct rows dropped as duplicates | ✅ | `tests/test_issue_regressions.py` (`RowDedupKeepsDistinctRows`) |
+| 178 | Distinct rows dropped as duplicates | ✅ | `tests/system/test_issue_regressions.py` (`RowDedupKeepsDistinctRows`) |
 | 179 | Frontend lint baseline | — | not a test: `npm run lint` is the check, and is not in CI. Closed as moot |
-| 180 | Tier I eval ignored SQL errors | ✅ | `tests/test_tooling_issues.py` |
-| 181 | SQL test wrapper exited 0 on failures | ✅ / 👤 | `tests/test_tooling_issues.py` covers the wrapper. The second half (`ON_ERROR_STOP` on the Tier S psql calls in `evals/runner.py`, fix on the unmerged `fix/181-sql-suite-exit-code` branch) has no test: CI fails any skipped or expected-fail pytest test, so it can't be recorded as one |
-| 182 | Offline bundle swallowed download failures | ✅ | `tests/test_tooling_issues.py` (runs the real download block with a failing `apt-get`) |
-| 183 | Rate limiter used the API key prefix | ✅ | `tests/test_issue_regressions.py` (`RateLimiterIdentity`) |
-| 185 | Preserved original differed from uploaded bytes | ✅ | `tests/test_original_bytes.py`, `fe: file-bytes.test.ts` |
-| 186 | Header mappings ignored | ✅ | `tests/test_header_mapping.py`, `fe: log-step-contract.test.ts` (the schema accepts the step it added) |
+| 180 | Tier I eval ignored SQL errors | ✅ | `tests/unit/test_tooling_issues.py` |
+| 181 | SQL test wrapper exited 0 on failures | ✅ / 👤 | `tests/unit/test_tooling_issues.py` covers the wrapper. The second half (`ON_ERROR_STOP` on the Tier S psql calls in `evals/runner.py`, fix on the unmerged `fix/181-sql-suite-exit-code` branch) has no test: CI fails any skipped or expected-fail pytest test, so it can't be recorded as one |
+| 182 | Offline bundle swallowed download failures | ✅ | `tests/unit/test_tooling_issues.py` (runs the real download block with a failing `apt-get`) |
+| 183 | Rate limiter used the API key prefix | ✅ | `tests/system/test_issue_regressions.py` (`RateLimiterIdentity`) |
+| 185 | Preserved original differed from uploaded bytes | ✅ | `tests/system/test_original_bytes.py`, `fe: file-bytes.test.ts` |
+| 186 | Header mappings ignored | ✅ | `tests/system/test_header_mapping.py`, `fe: log-step-contract.test.ts` (the schema accepts the step it added) |
 | 187 | Failed uploads unreachable from the browser | ✅ | `fe: upload-attempts.test.tsx`, `fe: files-refresh.test.ts`, `e2e/test_react_ui.py` |
 | 188 | Cancel did not interrupt an import | ✅ | `fe: uploader-state-machine.test.ts`, `fe: job-outcome.test.ts`, `e2e/test_react_ui.py`. Server-side cancel is not built (#110) |
-| 189 | T&E errors named the wrong source row | ✅ | `tests/test_issue_regressions.py` (`TeDatabaseErrorsNameTheSourceRow`) |
-| 190 | T&E review showed no validation errors | ✅ | `tests/test_review.py`, `tests/test_api_coverage.py`, `fe: review-table.test.tsx` |
-| 191 | Registry race | ✅ | `tests/test_registry_race.py` |
-| 192 | Ragged rows accounting | ✅ | `tests/test_ragged_rows.py` |
+| 189 | T&E errors named the wrong source row | ✅ | `tests/system/test_issue_regressions.py` (`TeDatabaseErrorsNameTheSourceRow`) |
+| 190 | T&E review showed no validation errors | ✅ | `tests/system/test_review.py`, `tests/system/test_api_coverage.py`, `fe: review-table.test.tsx` |
+| 191 | Registry race | ✅ | `tests/system/test_registry_race.py` |
+| 192 | Ragged rows accounting | ✅ | `tests/system/test_ragged_rows.py` |
 | 193 | Formula injection in exports | ✅ | `fe: export.test.ts` |
-| 194 | Coverage floors for the loaders | ✅ | `tests/test_tooling_issues.py` (the gate fails below a floor) |
-| 207 | API doc covered 8 of 22 routes | ✅ | `tests/test_tooling_issues.py` (the doc defers to the generated schema, which is served) |
-| 215 | All-failed T&E re-upload overwrote the registry record | ✅ | `tests/test_te_reupload_registry.py`, `tests/test_te_loader_integration.py` |
+| 194 | Coverage floors for the loaders | ✅ | `tests/unit/test_tooling_issues.py` (the gate fails below a floor) |
+| 207 | API doc covered 8 of 22 routes | ✅ | `tests/unit/test_tooling_issues.py` (the doc defers to the generated schema, which is served) |
+| 215 | All-failed T&E re-upload overwrote the registry record | ✅ | `tests/system/test_te_reupload_registry.py`, `tests/system/test_te_loader_integration.py` |
 
 ## Open issues
 
@@ -65,14 +65,14 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 31 | One-time cloud setup for terraform-test/staging | 👤 | cloud account work |
 | 32 | `az` CLI SSL error on the dev machine | 👤 | one machine's setup |
 | 34 | `terraform plan` provider handshake fails locally | 👤 | one machine's setup |
-| 57 | Add SECURITY.md | ✅ | `tests/test_open_issues.py`. The issue's done-when ("on `main`") is met, so it could be closed. The file still carries a placeholder address, noted in a comment inside it |
+| 57 | Add SECURITY.md | ✅ | `tests/unit/test_open_issues.py`. The issue's done-when ("on `main`") is met, so it could be closed. The file still carries a placeholder address, noted in a comment inside it |
 | 59 | Sample Migration Verification Report | 📎 | PR #216 (docs) |
-| 60 | Air-gapped install procedure | ✅ / 👤 | `tests/test_open_issues.py` (scripts parse, stop on error, guide names them). The offline dry run, due 15 Nov, is manual |
+| 60 | Air-gapped install procedure | ✅ / 👤 | `tests/unit/test_open_issues.py` (scripts parse, stop on error, guide names them). The offline dry run, due 15 Nov, is manual |
 | 109 | ART M5: dedup and naming | — | milestone, not built |
 | 110 | ART M6: approval and staged import | — | milestone, not built. Server-side cancel (#188 option b) belongs here |
 | 111 | ART M7: sovereignty and reports | — | milestone, not built |
 | 112 | Security review before the first external tenant | 👤 | review by a person. The #176 tests are evidence for it |
-| 113 | Check OIDC sign-in against the real IdP | ✅ / 👤 | `tests/test_oidc_https_jwks.py` covers the https key fetch, rotation and certificate checks. A sign-in against Keycloak or Entra ID is manual |
+| 113 | Check OIDC sign-in against the real IdP | ✅ / 👤 | `tests/unit/test_oidc_https_jwks.py` covers the https key fetch, rotation and certificate checks. A sign-in against Keycloak or Entra ID is manual |
 | 128 | Offline bundle for Windows, macOS and Linux | — | only the Ubuntu bundle exists |
 | 159 | Verify `docs/VCRM.md` against the DID | 👤 | compare with an external document |
 | 167 | Reorganise `tests/` into category folders | 📎 | PR #214 |
