@@ -1,4 +1,12 @@
-"""Rows wider than the header are reported, never silently truncated (#82)."""
+"""Rows wider than the header are reported, never silently truncated (#82, #192).
+
+#192 asked whether this file checks reject-and-count or only that the import
+succeeds. The #82 tests below assert the reason and the counts for ONE ragged
+row. The accounting tests at the end add what was missing: several ragged rows
+mixed with good rows and an in-file duplicate, the identity
+``total = inserted + duplicates + failed``, and that each ragged row's reason is
+*stored* with the upload (GET /api/csv/uploads/{id}), not just returned.
+"""
 
 from __future__ import annotations
 
@@ -68,3 +76,46 @@ class RaggedRowsOverTheApi(unittest.TestCase):
         self.assertEqual(res["status"], "ok")
         self.assertEqual((res["insertedRows"], res["failedRows"]), (1, 1))
         self.assertEqual(res["rowErrors"][0]["value"], "LOST")
+
+    # ── #192: accounting identity and stored reasons ─────────────────────────
+    def _assert_accounted(self, res: dict, ragged_rows: dict[int, str]):
+        """total = inserted + duplicates + failed, and every ragged row has a
+        reason both in the response and stored with the upload."""
+        self.assertEqual(res["status"], "ok")
+        self.assertEqual(
+            res["totalRows"],
+            res["insertedRows"] + res["duplicateRowsSkipped"] + res["failedRows"],
+            f"rows went missing: {res}")
+        self.assertEqual(res["failedRows"], len(ragged_rows))
+
+        def by_row(errors):
+            return {e["rowNumber"]: e for e in errors}
+
+        returned = by_row(res["rowErrors"])
+        self.assertEqual(set(returned), set(ragged_rows))
+        stored_detail = self.client.get(f"/api/csv/uploads/{res['uploadId']}").json()
+        stored = by_row(stored_detail["rowErrors"])
+        for row_number, lost in ragged_rows.items():
+            for where, err in (("response", returned[row_number]), ("stored", stored[row_number])):
+                self.assertEqual(err["value"], lost, f"row {row_number} {where}")
+                self.assertIn("would be lost", err["reason"], f"row {row_number} {where}")
+        self.assertEqual(stored_detail["failedRows"], len(ragged_rows))
+
+    def test_dynamic_mode_accounts_for_every_row_with_a_stored_reason(self):
+        t = self.tag
+        res = self._upload(
+            f"a,b\n1,{t}\n1,{t}\n2,{t},LOST1\n3,{t}\n4,{t},LOST2,MORE\n")
+        self.assertEqual((res["insertedRows"], res["duplicateRowsSkipped"], res["failedRows"]), (2, 1, 2))
+        self._assert_accounted(res, {3: "LOST1", 5: "LOST2"})
+
+    def test_te_mode_accounts_for_every_row_with_a_stored_reason(self):
+        t = self.tag
+        head = "name,org_type,country\n"
+        res = self._upload(
+            head + f"RAG_{t}_1,government,AU\n"
+                   f"RAG_{t}_2,government,AU,LOST1\n"
+                   f"RAG_{t}_3,government,AU\n"
+                   f"RAG_{t}_4,government,AU,LOST2,MORE\n",
+            mode="te", targetTable="organisations")
+        self.assertEqual((res["insertedRows"], res["failedRows"]), (2, 2))
+        self._assert_accounted(res, {2: "LOST1", 4: "LOST2"})
