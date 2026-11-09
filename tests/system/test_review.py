@@ -109,29 +109,25 @@ class Review(unittest.TestCase):
                 self.assertEqual(res.status_code, code)
         self.assertEqual(self.client.get(f"/api/csv/uploads/{uid}/rows/2/history").json(), [])
 
+    @pytest.mark.usefixtures("te_org_cleanup")
     def test_te_review_shows_the_database_reason_a_row_was_rejected(self):
         # #190: T&E uploads stored no types, so review said errors: [] for a row the CHECK rejected.
         good, bad = f"TE_REV_{self.tag}_ok", f"TE_REV_{self.tag}_bad"
+        self.te_org_cleanup.extend([good, bad])
         res = self.client.post("/api/csv/upload", json={
             "fileName": f"te_rev_{self.tag}.csv", "mode": "te", "targetTable": "organisations",
             "content": f"name,org_type,country\n{good},government,AU\n{bad},not_a_type,AU\n"}).json()
-        try:
-            self.assertEqual(res["failedRows"], 1, res)
-            page = self._rows(res["uploadId"])
-            self.assertEqual(len(page["types"]), 3)
-            ok_row, bad_row = page["rows"]
-            self.assertEqual(ok_row["errors"], [])
-            [err] = bad_row["errors"]
-            self.assertEqual(err["column"], "(database)")
-            self.assertIn("org_type", err["reason"])
-            # Once a reviewer edits the row, the upload-time reason no longer describes it.
-            self.assertEqual(self._edit(res["uploadId"], 2, "org_type", "prime").status_code, 200)
-            self.assertEqual(self._rows(res["uploadId"])["rows"][1]["errors"], [])
-        finally:
-            with Conn() as conn, conn.cursor() as cur:
-                cur.execute(sql.SQL("DELETE FROM {}.organisations WHERE name = ANY(%s)").format(
-                    sql.Identifier(settings.TE_SCHEMA)), ([good, bad],))
-                conn.commit()
+        self.assertEqual(res["failedRows"], 1, res)
+        page = self._rows(res["uploadId"])
+        self.assertEqual(len(page["types"]), 3)
+        ok_row, bad_row = page["rows"]
+        self.assertEqual(ok_row["errors"], [])
+        [err] = bad_row["errors"]
+        self.assertEqual(err["column"], "(database)")
+        self.assertIn("org_type", err["reason"])
+        # Once a reviewer edits the row, the upload-time reason no longer describes it.
+        self.assertEqual(self._edit(res["uploadId"], 2, "org_type", "prime").status_code, 200)
+        self.assertEqual(self._rows(res["uploadId"])["rows"][1]["errors"], [])
 
     def test_changes_are_audited_and_insert_only(self):
         uid = self._three_rows()

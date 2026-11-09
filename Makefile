@@ -1,4 +1,5 @@
 .PHONY: test-free test-gate test-evals test-e2e test-all \
+        test-unit test-system test-sit test-performance test-accessibility test-uat \
         lint lint-diff health \
         eval-list eval-compare eval-summary select-tests \
         csv-load csv-list csv-demo
@@ -31,6 +32,35 @@ test-e2e:
 test-all:
 	pytest tests/ --cov=build/csv --cov=evals --cov-report=term-missing
 	python3 evals/runner.py --tiers p,i,s,e --verbose
+
+# ── One category at a time (#167) ─────────────────────────────────────────────
+# tests/ is split by what a test needs: unit (nothing), system (the API and
+# PostgreSQL), system_integration (whole pipeline, all environments), then
+# performance, accessibility and uat. See tests/README.md.
+
+# pytest exits 5 when a folder holds no tests yet; that is not a failure for a
+# category that has none so far.
+define run_category
+	python3 -m pytest $(1) -v; rc=$$?; if [ $$rc -eq 5 ]; then echo "No tests in $(1) yet."; exit 0; fi; exit $$rc
+endef
+
+test-unit:
+	$(call run_category,tests/unit)
+
+test-system:
+	$(call run_category,tests/system)
+
+test-sit:
+	$(call run_category,tests/system_integration)
+
+test-performance:
+	$(call run_category,tests/performance)
+
+test-accessibility:
+	$(call run_category,tests/accessibility)
+
+test-uat:
+	$(call run_category,tests/uat)
 
 # ── Code quality ──────────────────────────────────────────────────────────────
 
