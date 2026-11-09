@@ -18,6 +18,7 @@ import psycopg2.errors
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 
 from api.config import settings
@@ -114,6 +115,39 @@ class MigrationsOnScratchSchema(unittest.TestCase):
         command.upgrade(self.cfg, "head")
         self.assertIn("csv_files_file_hash_key", self._constraints())
 
+    def _provenance_by_file(self) -> list[tuple]:
+        with self.conn.cursor() as cur:
+            cur.execute(f'SELECT file_name, types_provenance FROM "{settings.UPLOADS_SCHEMA}".csv_files '
+                        "ORDER BY file_name")
+            return cur.fetchall()
+
+    def test_type_provenance_marks_old_dynamic_rows_unconfirmed_and_leaves_te_null(self):
+        command.upgrade(self.cfg, "0008")
+        insert = (f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode) '
+                  "VALUES (%s, %s, 't', %s)")
+        with self.conn.cursor() as cur:
+            cur.execute(insert, ("d.csv", "h_dyn", "dynamic"))
+            cur.execute(insert, ("t.csv", "h_te", "te"))
+        command.upgrade(self.cfg, "head")
+        self.assertEqual(self._provenance_by_file(), [("d.csv", "inferred_unconfirmed"), ("t.csv", None)])
+
+    def test_type_provenance_only_accepts_the_two_known_values(self):
+        command.upgrade(self.cfg, "head")
+        with self.conn.cursor() as cur:
+            with self.assertRaises(psycopg2.errors.CheckViolation):
+                cur.execute(f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files '
+                            "(file_name, file_hash, table_name, mode, types_provenance) "
+                            "VALUES ('x.csv', 'hx', 't', 'dynamic', 'bogus')")
+
+    def test_type_provenance_downgrade_drops_the_column(self):
+        command.upgrade(self.cfg, "head")
+        command.downgrade(self.cfg, "0008")
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM information_schema.columns WHERE table_schema = %s "
+                        "AND table_name = 'csv_files' AND column_name = 'types_provenance'",
+                        (settings.UPLOADS_SCHEMA,))
+            self.assertIsNone(cur.fetchone())
+
     def test_existing_duplicates_stop_the_upgrade_with_remediation(self):
         command.upgrade(self.cfg, "0001")
         with self.conn.cursor() as cur:
@@ -148,7 +182,7 @@ class RegistryUniqueness(unittest.TestCase):
     def test_bootstrap_brings_the_schema_to_head(self):
         with Conn() as conn, conn.cursor() as cur:
             cur.execute(f'SELECT version_num FROM "{settings.UPLOADS_SCHEMA}".alembic_version')
-            self.assertEqual(cur.fetchone()[0], "0008")
+            self.assertEqual(cur.fetchone()[0], ScriptDirectory.from_config(Config(_ALEMBIC_INI)).get_current_head())
 
     def test_duplicate_hash_is_rejected_by_the_database(self):
         insert = (f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode) '
