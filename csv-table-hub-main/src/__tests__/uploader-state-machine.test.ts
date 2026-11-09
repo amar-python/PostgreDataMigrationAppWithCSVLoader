@@ -124,7 +124,7 @@ describe("Uploader state machine", () => {
     await waitFor(() => expect(screen.getByText(/^failed$/i)).toBeInTheDocument());
   });
 
-  it("clicking Stop while uploading marks the job cancelled and ignores the late result", async () => {
+  it("offers no Stop once the request is on the server, and shows the import that finishes (#188)", async () => {
     let resolveUpload: (v: unknown) => void;
     uploadCsv.mockReturnValue(
       new Promise((resolve) => {
@@ -132,21 +132,17 @@ describe("Uploader state machine", () => {
       }),
     );
 
-    const user = await dropAndConfirm(csvFile());
+    await dropAndConfirm(csvFile());
 
-    const stopBtn = await screen.findByRole("button", { name: /stop/i });
-    await user.click(stopBtn);
+    // The request is sent: the server will finish it whatever the UI does, so Stop would lie.
+    expect(await screen.findByText(/sent to the server/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /stop/i })).not.toBeInTheDocument();
 
-    await waitFor(() => expect(screen.getByText(/^cancelled$/i)).toBeInTheDocument());
-
-    // The in-flight promise resolving afterwards must not flip the job back
-    // to "done" — runJob checks ctrl.signal.aborted before applying the result.
     resolveUpload!({ status: "ok", fileId: "1", tableName: "t", totalRows: 1,
       insertedRows: 1, duplicateRowsSkipped: 0, failedRows: 0, columns: [],
       types: [], rowErrors: [], logs: [] });
-    await new Promise((r) => setTimeout(r, 50));
-    expect(screen.getByText(/^cancelled$/i)).toBeInTheDocument();
-    expect(screen.queryByText(/^imported$/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/^imported$/i)).toBeInTheDocument());
+    expect(screen.queryByText(/^cancelled$/i)).not.toBeInTheDocument();
   });
 
   it("overwrite flow: confirming the diff dialog re-uploads with overwrite=true", async () => {

@@ -37,7 +37,7 @@ import type { Job, JobStatus } from "@/lib/job-types";
 import { readFileBase64 } from "@/lib/file-bytes";
 import { formatLocalTime, formatUtc } from "@/lib/utils";
 import {
-  classifyUploadResult, classifyThrownError, buildCancelPatch, buildCancelToastMessage,
+  classifyUploadResult, classifyThrownError, buildCancelPatch, buildCancelToastMessage, canStop,
   decideOverwriteAction, failedRowsNote,
 } from "@/lib/job-outcome";
 import { Button } from "@/components/ui/button";
@@ -188,7 +188,8 @@ export function Uploader() {
         headerMapping: headerMapping?.map(c=>({original:c.original,renamed:c.renamed})),
         mode: job.mode, targetTable: job.targetTable,
       });
-      if (ctrl.signal.aborted) return;
+      // #188: the request is already on the server, which finishes it whatever the UI does.
+      // Never discard the result (Stop isn't offered from here on), so the user sees what happened.
       abortMap.current.delete(job.id);
 
       const outcome = classifyUploadResult(job.name,res,mapping);
@@ -198,7 +199,7 @@ export function Uploader() {
       if (outcome.invalidateRoute) await router.invalidate();
     } catch(err) {
       abortMap.current.delete(job.id);
-      if (ctrl.signal.aborted) return; // already cancelled
+      if (ctrl.signal.aborted) return; // stopped before the request was sent
       const outcome = classifyThrownError(job.name,err);
       updateJob(job.id,outcome.patch);
       toast[outcome.toast.type](outcome.toast.message);
@@ -384,7 +385,9 @@ function JobRow({job,onRetry,onOverwrite,onCancel}:{job:Job;onRetry:(id:string)=
               <StatusPill status={job.status}/>
               {(hasRowErrors||isError||isDuplicate)&&<ExportErrorsMenu job={job}/>}
               {/* F8: cancel button for active jobs */}
-              {isRunning&&<Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground" onClick={()=>onCancel(job.id)}><XIcon className="mr-1 h-3 w-3"/>Stop</Button>}
+              {/* #188: Stop is only true before the request is sent; after that the server finishes the import. */}
+              {canStop(job)&&<Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground" onClick={()=>onCancel(job.id)}><XIcon className="mr-1 h-3 w-3"/>Stop</Button>}
+              {job.status==="processing"&&<span className="text-xs text-muted-foreground">Sent to the server; it can't be stopped now</span>}
               {isDuplicate&&<Button size="sm" variant="outline" className="h-7 px-2" onClick={()=>onOverwrite(job.id)}><RotateCw className="mr-1 h-3 w-3"/>Overwrite</Button>}
               {(isError||isDuplicate||isInterrupted)&&<Button size="sm" variant="ghost" className="h-7 px-2" onClick={()=>onRetry(job.id)}><RotateCw className="mr-1 h-3 w-3"/>Retry</Button>}
             </div>

@@ -121,6 +121,11 @@ export function classifyThrownError(jobName: string, err: unknown): JobOutcome {
   };
 }
 
+/** Stop is honest only before the request is sent; once the server has it, it finishes the import (#188). */
+export function canStop(job: Pick<Job, "status">): boolean {
+  return job.status === "reading" || job.status === "uploading";
+}
+
 export function buildCancelPatch(reason?: string): Partial<Job> {
   return { status: "cancelled", progress: 100, cancellationReason: reason ?? "Cancelled by user" };
 }
