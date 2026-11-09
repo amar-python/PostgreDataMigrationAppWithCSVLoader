@@ -46,9 +46,15 @@ export type AuditReportRow = {
 const FORMULA_START = /^[=+\-@\t\r]/;
 const PLAIN_NUMBER = /^[+-]?\d+(\.\d+)?$/;
 
+/** Prefix a quote to a string a spreadsheet would run as a formula. Shared by
+ *  CSV and XLSX so the two formats cannot drift (#193, product-owner decision).
+ *  Non-strings pass through: a number cell is a number, never a formula. */
+function guardFormula<T>(v: T): T | string {
+  return typeof v === "string" && FORMULA_START.test(v) && !PLAIN_NUMBER.test(v) ? `'${v}` : v;
+}
+
 function escapeCsv(v: unknown): string {
-  let s = v === undefined || v === null ? "" : String(v);
-  if (FORMULA_START.test(s) && !PLAIN_NUMBER.test(s)) s = `'${s}`;
+  const s = guardFormula(v === undefined || v === null ? "" : String(v)) as string;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -67,7 +73,12 @@ function toXlsxBlob(
   headers: string[],
   rows: Record<string, unknown>[],
 ): Blob {
-  const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+  // SheetJS stores strings as text cells, which Excel does not evaluate, but the
+  // guard is applied anyway so the XLSX and CSV exports behave the same (#193).
+  const safe = rows.map((r) =>
+    Object.fromEntries(Object.entries(r).map(([k, v]) => [k, guardFormula(v)])),
+  );
+  const ws = XLSX.utils.json_to_sheet(safe, { header: headers });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
   const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });

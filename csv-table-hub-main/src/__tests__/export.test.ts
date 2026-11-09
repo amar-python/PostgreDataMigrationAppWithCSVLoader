@@ -268,3 +268,82 @@ describe("downloadAuditReport", () => {
     expect(text).toContain("Imported");
   });
 });
+
+// ─── formula injection — CSV and XLSX behave the same (#193, F3) ──────────────
+// A rejected row holding `=cmd` must not run as a formula when the downloaded
+// report is opened. Product-owner decision (4 Nov 2026): the XLSX export gets the
+// same guard as the CSV export.
+
+describe("formula injection guard", () => {
+  let cap: ReturnType<typeof captureBlob>;
+
+  beforeEach(() => {
+    cap = captureBlob();
+  });
+  afterEach(() => {
+    cap.reset();
+  });
+
+  const payloads = [
+    ["=cmd", "'=cmd"],
+    ["+cmd", "'+cmd"],
+    ["-cmd", "'-cmd"],
+    ["@cmd", "'@cmd"],
+    ["\t=cmd", "'\t=cmd"],
+  ] as const;
+
+  const errorRowWith = (value: string) =>
+    buildErrorRows("data.csv", [{ rowNumber: 1, column: "c", value, reason: "bad" }]);
+
+  it.each(payloads)("CSV: %j is stored as %j", async (value, guarded) => {
+    downloadErrorReport("data.csv", errorRowWith(value), "csv");
+    const text = await cap.blob!.text();
+    expect(text).toContain(`,${guarded},`);
+    expect(text).not.toContain(`,${value},`);
+  });
+
+  // ERROR_HEADERS = file,row_number,column,value,… so `value` is column D; row 1 is the header.
+  async function xlsxValueCell(value: string): Promise<XLSX.CellObject> {
+    downloadErrorReport("data.csv", errorRowWith(value), "xlsx");
+    const wb = XLSX.read(await cap.blob!.arrayBuffer(), { type: "array" });
+    return wb.Sheets["Errors"]["D2"];
+  }
+
+  it.each(payloads)(
+    "XLSX: %j is a text cell holding %j, with no formula",
+    async (value, guarded) => {
+      const cell = await xlsxValueCell(value);
+      expect(cell.t).toBe("s"); // stored as text, so a spreadsheet will not evaluate it
+      expect(cell.f).toBeUndefined(); // and carries no formula
+      expect(cell.v).toBe(guarded); // and the guard prefix is applied, as in CSV
+    },
+  );
+
+  it("XLSX: guards the audit report too, not just the error report", async () => {
+    downloadAuditReport(
+      [
+        {
+          file: "=cmd",
+          status: "Imported",
+          imported_at: "x",
+          total_rows: 1,
+          inserted_rows: 1,
+          duplicate_rows_skipped: 0,
+          failed_rows: 0,
+          table_name: "t",
+        },
+      ],
+      "xlsx",
+    );
+    const wb = XLSX.read(await cap.blob!.arrayBuffer(), { type: "array" });
+    expect(wb.Sheets["Audit"]["A2"].v).toBe("'=cmd");
+  });
+
+  it("XLSX: leaves plain signed numbers and real numeric cells alone", async () => {
+    const cell = await xlsxValueCell("-5");
+    expect(cell.v).toBe("-5"); // a plain number is not a formula, so no prefix
+    downloadErrorReport("data.csv", errorRowWith("x"), "xlsx");
+    const wb = XLSX.read(await cap.blob!.arrayBuffer(), { type: "array" });
+    expect(wb.Sheets["Errors"]["B2"].t).toBe("n"); // row_number stays a number cell
+  });
+});
