@@ -618,6 +618,12 @@ BEGIN
 END;
 $$;
 
+-- The newest tenant T&E migration (alembic_te/) this schema already contains. api/tenancy.py
+-- clones this schema into each new tenant and stamps the tenant at this version, then runs
+-- any later migrations. Adding a migration means bumping this to its revision id, in both
+-- copies of this file; tests/test_tenant_te_migrations.py fails if it is left behind.
+COMMENT ON SCHEMA :"schema_name" IS 'te_schema_version=te0002';
+
 
 -- =============================================================================
 -- PHASE 5: TRIGGERS — auto-update updated_at
