@@ -215,8 +215,9 @@ def upload_te(file_name: str, content: str, target_table: str, *, session: dict 
                     "info",
                 )
 
-            # Detect reupload before inserting so the all-failed rollback
-            # does not undo the registry cleanup (#170 + reupload compat).
+            # A re-upload overwrites the earlier load, so it needs delete permission
+            # up front. The cleanup itself waits until a row has actually landed
+            # (#170, #215): a re-upload that fails every row must change nothing.
             file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
             cur.execute(
                 sql.SQL(
@@ -224,10 +225,8 @@ def upload_te(file_name: str, content: str, target_table: str, *, session: dict 
                 ).format(s=sql.Identifier(uploads_schema())),
                 (file_name, file_hash),
             )
-            is_reupload = cur.fetchone() is not None
-            if is_reupload:
+            if cur.fetchone() is not None:
                 _require_delete(session)
-                _cleanup_prior_registry_entries(cur, file_name, file_hash)
 
             # Pre-validate every row client-side; drop failures into row_errors.
             failed_row_count = 0
@@ -301,7 +300,7 @@ def upload_te(file_name: str, content: str, target_table: str, *, session: dict 
 
             # #170: if every row failed, nothing was migrated. Roll back and
             # preserve any prior dataset rather than cleaning it up.
-            if data_rows and inserted == 0 and not is_reupload:
+            if data_rows and inserted == 0:
                 conn.rollback()
                 msg = f"None of the {len(data_rows)} rows could be imported into {target_table}, so nothing was saved."
                 if row_errors:
@@ -312,11 +311,9 @@ def upload_te(file_name: str, content: str, target_table: str, *, session: dict 
                         "totalRows": len(data_rows), "failedRows": failed_row_count,
                         "insertedRows": 0, "columns": columns, "logs": logs}
 
-            # Register the load in the shared registry (mode='te').
-            # Reupload cleanup was done before inserts; for first uploads
-            # clean any stale entries now (usually a no-op).
-            if not is_reupload:
-                _cleanup_prior_registry_entries(cur, file_name, file_hash)
+            # Register the load in the shared registry (mode='te'), replacing any
+            # earlier entry for this file. Only reached once a row has landed.
+            _cleanup_prior_registry_entries(cur, file_name, file_hash)
             try:
                 cur.execute(
                     sql.SQL(
