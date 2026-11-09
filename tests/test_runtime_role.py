@@ -93,7 +93,7 @@ class RuntimeRole(unittest.TestCase):
 
     def test_runtime_role_cannot_change_or_unprotect_append_only_tables(self):
         schema = settings.UPLOADS_SCHEMA
-        tables = ("audit_log", "uploads", "upload_blobs", "source_rows", "row_decisions", "cell_edits")
+        tables = ("audit_log", "uploads", "upload_blobs", "source_rows", "row_decisions", "cell_edits", "row_flags")
         statements = [f"{verb} {{}}.{table}" for table in tables for verb in ("DELETE FROM", "TRUNCATE")]
         statements += ["UPDATE {}.audit_log SET actor = 'x'", "UPDATE {}.uploads SET status = 'failed'",
                        "UPDATE {}.row_decisions SET reason = 'x'", "UPDATE {}.cell_edits SET new_value = 'x'",  # N15
