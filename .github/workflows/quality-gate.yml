@@ -41,6 +41,11 @@ jobs:
       - name: Component health check
         run: make health
 
+      # #169: docs/TEST_CASES.md is generated from the test tree. A test added
+      # without regenerating it fails here with the command to run.
+      - name: Test catalogue is current
+        run: python3 scripts/test_catalogue.py --check
+
       # Tier X (cross-engine) is deliberately absent: multi-engine support is
       # deferred by ADR-0001 (PostgreSQL first), so this pipeline is PostgreSQL
       # only. The scenario still exists and passes — run it with `make
