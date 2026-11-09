@@ -453,9 +453,11 @@ class TeUploadPipeline(_IntegrationBase):
         self.assertIn("non_existent_table", body.get("message", ""))
 
     def test_te_reupload_same_file_replaces_registry(self):
-        """A re-upload that loads rows replaces the registry entry. (An identical
-        file would collide on the unique name and change nothing: #215, see
-        tests/test_te_reupload_registry.py.)"""
+        """A T&E re-upload that loads rows replaces the registry entry.
+
+        An identical file would collide on the unique name and change nothing
+        (#215, see tests/test_te_reupload_registry.py).
+        """
         r1 = self._upload_te(self._org_csv(f"{self.tag}_reup_1"))
         self.assertEqual(r1.json()["status"], "ok", r1.json())
         r2 = self._upload_te(self._org_csv(f"{self.tag}_reup_2"))

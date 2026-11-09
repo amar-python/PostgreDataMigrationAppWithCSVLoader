@@ -72,6 +72,7 @@ class TeReuploadRegistry(unittest.TestCase):
     # -- the bug -------------------------------------------------------------
 
     def test_all_failed_reupload_keeps_the_earlier_registry_record(self):
+        """A T&E re-upload that fails every row leaves the earlier load's registry record alone."""
         # Two valid rows and one that the check constraint rejects.
         csv = f"{HEADER}\n{self.tag}_a,government,AU\n{self.tag}_b,prime,AU\n{self.tag}_bad,not_a_type,AU\n"
         first = self._upload_te(csv)
@@ -93,6 +94,7 @@ class TeReuploadRegistry(unittest.TestCase):
     # -- guard against over-correcting ---------------------------------------
 
     def test_reupload_that_inserts_rows_still_replaces_the_registry_record(self):
+        """A T&E re-upload that loads at least one row still replaces the registry record."""
         first = self._upload_te(f"{HEADER}\n{self.tag}_a,government,AU\n")
         self.assertEqual(first["status"], "ok", first)
         old_id = self._registry()[0]["id"]
@@ -108,6 +110,7 @@ class TeReuploadRegistry(unittest.TestCase):
     # -- #170's original scenario, in the same place -------------------------
 
     def test_all_failed_te_upload_keeps_a_prior_dynamic_table_of_the_same_name(self):
+        """An all-failed T&E upload does not drop a dynamic table registered under the same filename (#170)."""
         dyn = self.client.post("/api/csv/upload", json={
             "fileName": self.file_name, "content": "col_a,col_b\n1,2\n", "mode": "dynamic",
         }).json()
