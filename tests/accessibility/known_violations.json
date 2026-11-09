@@ -20,6 +20,12 @@
       "note": "job cards: table-name chip 4.34:1, file size 4.35:1, failed and duplicate status pills 3.67:1 and 4.48:1; 4.5:1 is required (index.tsx:344,382,393)"
     },
     {
+      "scenario": "upload_page_failed_attempts",
+      "rule": "button-name",
+      "nodes": 1,
+      "note": "a select (role=combobox) under the file list has no accessible name"
+    },
+    {
       "scenario": "upload_mapping_dialog",
       "rule": "button-name",
       "nodes": 2,

@@ -43,6 +43,17 @@ JOBS = [
      "tableName": "csv_customers"},
 ]
 
+# Every upload attempt, failed ones included (the "Upload attempts" card on the upload page).
+UPLOADS = [
+    {"id": "101", "file_name": "orders.csv", "mode": "dynamic", "status": "failed", "total_rows": 2,
+     "imported_rows": 0, "failed_rows": 2, "uploader": "ada", "uploaded_at": "2026-11-02T03:04:05Z"},
+    {"id": "102", "file_name": "customers.csv", "mode": "dynamic", "status": "partly_imported",
+     "total_rows": 125, "imported_rows": 120, "failed_rows": 5, "uploader": "ada",
+     "uploaded_at": "2026-11-01T01:02:03Z"},
+    {"id": "103", "file_name": "empty.csv", "mode": "dynamic", "status": "rejected", "total_rows": None,
+     "imported_rows": None, "failed_rows": None, "uploader": "ada", "uploaded_at": "2026-11-01T00:00:00Z"},
+]
+
 REVIEW_PAGE = {
     "fileName": "customers.csv", "columns": ["id", "name"], "types": ["int8", "text"], "total": 2,
     "offset": 0, "limit": 50, "excludedRows": 0, "editedRows": 0,
@@ -66,6 +77,7 @@ Responses = dict[str, Any]
 def default_responses() -> Responses:
     return {
         "/api/csv/files": FILES,
+        "/api/csv/uploads": [],
         "/api/te/tables": TE_TABLES,
         "/api/csv/preview": PREVIEW,
         "/api/auth/login": {"detail": "Invalid credentials"},

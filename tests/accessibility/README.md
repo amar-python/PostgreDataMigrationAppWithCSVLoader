@@ -29,7 +29,8 @@ skip.
 ## What is scanned
 
 The API is stubbed in `stub_api.py`: no database, no API process. Every `/api/**` request gets a
-fixed answer and a signed-in session is planted in the browser. A backend-only change therefore
+fixed answer and a signed-in session is planted in the browser. A request the stub has no answer for fails the
+test, so a new endpoint in the frontend is noticed here instead of silently scanning a half-rendered page. A backend-only change therefore
 cannot alter what is scanned, and the job needs no PostgreSQL service.
 
 | Scenario | State |
@@ -37,6 +38,7 @@ cannot alter what is scanned, and the job needs no PostgreSQL service.
 | `sign_in`, `sign_in_failed` | the sign-in page, and after the server refuses a login |
 | `upload_page_empty` | a new tenant: no files, no import history |
 | `upload_page_with_history` | a migrated file and one import of each kind (done, failed, duplicate) |
+| `upload_page_failed_attempts` | the list of every upload attempt, with a failed, a partly imported and a rejected one |
 | `upload_mapping_dialog` | the dialog that opens when a CSV is chosen |
 | `upload_page_toast` | the toast shown when a non-CSV file is chosen |
 | `audit_log_with_history`, `audit_log_report_menu` | the audit log, and with its report menu open |

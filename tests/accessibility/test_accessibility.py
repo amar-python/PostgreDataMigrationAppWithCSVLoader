@@ -59,6 +59,14 @@ def test_upload_page_with_files_and_import_history(open_page, scan):
     scan(page, "upload_page_with_history")
 
 
+def test_upload_page_failed_upload_attempts(open_page, scan):
+    """The upload page's list of every attempt, with a failed, a partly imported and a rejected one."""
+    page = open_page("/", responses={"/api/csv/uploads": stub_api.UPLOADS})
+    _shows(page, "Upload attempts")
+    _shows(page, "orders.csv")
+    scan(page, "upload_page_failed_attempts")
+
+
 def test_upload_page_column_mapping_dialog(open_page, scan):
     """The dialog that opens when a CSV is chosen: column names and the type of each."""
     page = open_page("/")
