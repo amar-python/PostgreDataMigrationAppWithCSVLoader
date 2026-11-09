@@ -295,7 +295,7 @@ resource "azurerm_postgresql_flexible_server" "pg" {
 # The production database. Its name and the server admin ("pgadmin", the job's
 # PGUSER and the database owner) must equal db_name and db_owner in
 # build/environments/env_prod.example.sql: that file is what build/deploy_all.sh
-# reads. tests/test_prod_db_naming.py fails if they drift (RV-S1, #172;
+# reads. tests/test_azure_db_naming.py fails if they drift (RV-S1, #172;
 # DECISIONS/2026-11-09-prod-db-naming.md).
 resource "azurerm_postgresql_flexible_server_database" "te_prod" {
   name      = "te_prod"

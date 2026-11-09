@@ -1,8 +1,10 @@
 ﻿-- env_test.example.sql  (TEMPLATE - safe to commit; no real secrets)
 -- Copy to env_test.sql (gitignored) and fill in, or inject app_password at deploy.
+-- db_name and db_owner are read by build/deploy_all.sh and must match infra/terraform-test
+-- (database te_test, server admin pgadmin). #172; DECISIONS/2026-11-09-prod-db-naming.md.
 \set env_label          TEST
-\set db_name            te_mgmt_test
-\set db_owner           postgres
+\set db_name            te_test
+\set db_owner           pgadmin
 \set schema_name        te_test
 \set app_user           te_test_user
 \set app_password       '__INJECT_AT_DEPLOY__'

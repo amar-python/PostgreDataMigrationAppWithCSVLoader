@@ -43,8 +43,8 @@ _REQUIRED_TABLES = [
 
 _ENV_CONFIG = {
     "dev":     ("te_mgmt_dev",     "te_dev"),
-    "test":    ("te_mgmt_test",    "te_test"),
-    "staging": ("te_mgmt_staging", "te_staging"),
+    "test":    ("te_test",    "te_test"),
+    "staging": ("te_staging", "te_staging"),
     "prod":    ("te_prod",    "te_prod"),
 }
 

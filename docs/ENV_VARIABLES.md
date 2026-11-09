@@ -60,7 +60,7 @@ the environment SQL templates. Copy `build/config.env.example` to
 
 | Variable | Dev | Test | Staging | Prod |
 |---|---|---|---|---|
-| `PG_DB_*` | `te_mgmt_dev` | `te_mgmt_test` | `te_mgmt_staging` | `te_prod` |
+| `PG_DB_*` | `te_mgmt_dev` | `te_test` | `te_staging` | `te_prod` |
 | `PG_SCHEMA_*` | `te_dev` | `te_test` | `te_staging` | `te_prod` |
 | `PG_APP_USER_*` | `te_dev_user` | `te_test_user` | `te_stg_user` | `te_prod_user` |
 | `PG_APP_PASSWORD_*` | _(empty)_ | _(empty)_ | _(empty)_ | _(empty)_ |

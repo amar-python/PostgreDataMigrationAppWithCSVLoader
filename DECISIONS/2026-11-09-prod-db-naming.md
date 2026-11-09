@@ -1,4 +1,4 @@
-# Decision: Production database is `te_prod`, owned by `pgadmin`
+# Decision: Azure databases are `te_<env>`, owned by `pgadmin`
 
 Status:  Decided and applied
 Date:    2026-11-09
@@ -9,6 +9,10 @@ Review:  On trigger (see below)
 The production database is **`te_prod`** and its owner is **`pgadmin`**, in all three
 artefacts that describe it: `infra/terraform-prod/main.tf`, `build/deploy_all.sh` and
 `infra/entrypoint.sh`. Option (a) of #172. The schema inside it stays `te_prod`.
+
+**Extended to test and staging (9 Nov 2026, same day):** `te_test` and `te_staging`, also
+owned by `pgadmin`, matching `infra/terraform-test` and `infra/terraform-staging`. Dev
+stays `te_mgmt_dev` owned by `postgres`: it is local-only and has no stack.
 
 `build/environments/env_prod.example.sql` is the single place that states the name and
 owner (`db_name`, `db_owner`). The deployer reads them from the launcher it is about to
@@ -36,8 +40,9 @@ canonical name on 9 Nov 2026.
 
 ## Trade-offs accepted
 
-- Prod now differs from dev, test and staging (`te_mgmt_<env>`, owner `postgres`). The
-  reading code does not care; the asymmetry is in the data.
+- The Azure environments (`te_<env>`, owner `pgadmin`) now differ from dev
+  (`te_mgmt_dev`, owner `postgres`). The reading code does not care; the asymmetry is in
+  the data, and it is the difference between a local database and a managed one.
 - Where `pgadmin` does not exist (CI, a dev server, the offline install), `deploy_all.sh`
   creates it as `NOLOGIN`. It owns the database and nothing else, so it adds no credential,
   but a stray role appears on those servers.
@@ -47,14 +52,16 @@ canonical name on 9 Nov 2026.
 - `deploy` now requires `APP_USER_PASSWORD`. Without it the application role would be
   created with the template's placeholder password.
 
-## Not decided here
+## Test and staging
 
-`infra/terraform-test` and `infra/terraform-staging` create `te_test` and `te_staging`,
-while the deployer builds `te_mgmt_test` and `te_mgmt_staging`: the same disagreement.
-Those stacks are code only (#31). Settle their names before #31 resumes.
+`infra/terraform-test` and `infra/terraform-staging` already created `te_test` and
+`te_staging`, while the deployer built `te_mgmt_test` and `te_mgmt_staging`: the same
+disagreement as prod. Those stacks are code only (#31), so nothing was deployed. They are
+aligned now, before #31 resumes, with the same launcher-driven deployer and the same
+`APP_USER_PASSWORD` wiring as prod.
 
 ## Reopen trigger
 
-Reconsider if test and staging are given the Azure-style names (then prod no longer
-stands apart and the `te_mgmt_` prefix may be dropped everywhere), or if the application
-is ever to run as a role other than the database owner in Azure.
+Reconsider if dev is given an Azure stack (then it should follow `te_dev`/`pgadmin` and the
+`te_mgmt_` prefix can go), or if the application is ever to run as a role other than the
+database owner in Azure.

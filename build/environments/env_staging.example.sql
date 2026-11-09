@@ -1,8 +1,10 @@
 ﻿-- env_staging.example.sql  (TEMPLATE - safe to commit; no real secrets)
 -- Copy to env_staging.sql (gitignored) and fill in, or inject app_password at deploy.
+-- db_name and db_owner are read by build/deploy_all.sh and must match infra/terraform-staging
+-- (database te_staging, server admin pgadmin). #172; DECISIONS/2026-11-09-prod-db-naming.md.
 \set env_label          STAGING
-\set db_name            te_mgmt_staging
-\set db_owner           postgres
+\set db_name            te_staging
+\set db_owner           pgadmin
 \set schema_name        te_staging
 \set app_user           te_stg_user
 \set app_password       '__INJECT_AT_DEPLOY__'

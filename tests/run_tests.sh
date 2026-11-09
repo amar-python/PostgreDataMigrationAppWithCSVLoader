@@ -35,8 +35,8 @@ separator() { echo "────────────────────
 # ── Environment → DB/schema/table mapping ─────────────────────────────────────
 declare -A ENV_DB=(
    [dev]="te_mgmt_dev"
-   [test]="te_mgmt_test"
-   [staging]="te_mgmt_staging"
+   [test]="te_test"
+   [staging]="te_staging"
    [prod]="te_prod"
 )
 declare -A ENV_SCHEMA=(

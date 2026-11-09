@@ -113,9 +113,9 @@ jobs:
           PG_SUPERUSER_PASSWORD="postgres"
           PG_DB_DEV="te_mgmt_dev"
           PG_SCHEMA_DEV="te_dev"
-          PG_DB_TEST="te_mgmt_test"
+          PG_DB_TEST="te_test"
           PG_SCHEMA_TEST="te_test"
-          PG_DB_STAGING="te_mgmt_staging"
+          PG_DB_STAGING="te_staging"
           PG_SCHEMA_STAGING="te_staging"
           PG_DB_PROD="te_prod"
           PG_SCHEMA_PROD="te_prod"
@@ -133,14 +133,15 @@ jobs:
           done
           ls -1 build/environments/
 
-      # Prod's database is te_prod owned by pgadmin, as in Azure (#172); the
-      # others are te_mgmt_<env> owned by postgres. The owners must match each
-      # build/environments/env_<env>.example.sql, or deploy_all.sh warns.
+      # Test, staging and prod databases are named and owned as in Azure
+      # (te_<env>, owner pgadmin; #172); dev stays te_mgmt_dev owned by postgres.
+      # The owners must match each build/environments/env_<env>.example.sql, or
+      # deploy_all.sh warns.
       - name: Create environment databases
         run: |
           psql -v ON_ERROR_STOP=1 -d postgres -c "CREATE ROLE pgadmin NOLOGIN"
-          for db in te_mgmt_dev te_mgmt_test te_mgmt_staging te_prod; do
-            owner=postgres; [ "$db" = te_prod ] && owner=pgadmin
+          for db in te_mgmt_dev te_test te_staging te_prod; do
+            owner=pgadmin; [ "$db" = te_mgmt_dev ] && owner=postgres
             if [ -z "$(psql -d postgres -tA -c "SELECT 1 FROM pg_database WHERE datname = '$db'")" ]; then
               psql -v ON_ERROR_STOP=1 -d postgres -c \
                 "CREATE DATABASE \"$db\" WITH OWNER = $owner ENCODING = 'UTF8' TEMPLATE = template0 CONNECTION LIMIT = -1"

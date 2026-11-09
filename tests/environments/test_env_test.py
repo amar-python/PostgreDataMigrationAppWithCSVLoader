@@ -7,5 +7,5 @@ pytestmark = [pytest.mark.integration, pytest.mark.parity]
 
 
 class TestEnvironment(EnvironmentContract, unittest.TestCase):
-    ENV = "test"; DB = "te_mgmt_test"; SCHEMA = "te_test"
+    ENV = "test"; DB = "te_test"; SCHEMA = "te_test"
     APP_USER = "te_test_user"; CONN_LIMIT = 15; SEEDED = True

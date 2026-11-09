@@ -1,4 +1,4 @@
-"""RV-S1 (#172): Terraform, the deployer and the entrypoint agree on the production database.
+"""#172: Terraform, the deployer and the entrypoint agree on each Azure environment's database.
 
 Before this, three artefacts described production three ways:
 
@@ -7,14 +7,16 @@ Before this, three artefacts described production three ways:
   infra/entrypoint.sh            required a concrete env_prod.sql that nothing in a
                                  freshly built image generates
 
-Decision (3 Nov 2026, canonical name chosen 9 Nov 2026): the database is ``te_prod`` and
-its owner is ``pgadmin``. ``build/environments/env_<env>.example.sql`` is the single
-place that says so; the deployer reads it rather than keeping its own copy.
+Decision (3 Nov 2026; names chosen by the product owner 9 Nov 2026): prod, test and
+staging use ``te_<env>`` owned by ``pgadmin``, matching their Terraform stacks. Dev stays
+``te_mgmt_dev`` owned by ``postgres``: it is local-only and has no stack.
+``build/environments/env_<env>.example.sql`` is the single place that says so; the
+deployer reads it rather than keeping its own copy.
 
-``ProductionArtefactsAgree`` is the regression guard: static, no database, runs in CI's
-free-tier job. ``EntrypointOnAFreshServer`` is the behavioural check: it runs the real
-entrypoint from a tree holding only committed files (what a clean image contains) against
-a live server with no pre-existing owner role.
+``AzureArtefactsAgree`` is the regression guard: static, no database, runs in CI's
+free-tier job, once per Azure environment. ``EntrypointOnAFreshServer`` is the behavioural
+check: it runs the real entrypoint from a tree holding only committed files (what a clean
+image contains) against a live server with no pre-existing owner role.
 """
 
 from __future__ import annotations
@@ -36,8 +38,9 @@ from api.config import settings
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_DIR = ROOT / "build" / "environments"
-CANONICAL_DB = "te_prod"
 CANONICAL_OWNER = "pgadmin"
+# environment -> its database. Each has an infra/terraform-<env> stack.
+AZURE_DATABASES = {"prod": "te_prod", "test": "te_test", "staging": "te_staging"}
 
 
 def launcher_var(path: Path, name: str) -> str:
@@ -49,39 +52,66 @@ def launcher_var(path: Path, name: str) -> str:
     raise AssertionError(f"\\set {name} not found in {path}")
 
 
+def launcher(env: str) -> Path:
+    return ENV_DIR / f"env_{env}.example.sql"
+
+
+def terraform(env: str) -> str:
+    return (ROOT / "infra" / f"terraform-{env}" / "main.tf").read_text(encoding="utf-8")
+
+
 @pytest.mark.unit
-class ProductionArtefactsAgree(unittest.TestCase):
-    prod_template = ENV_DIR / "env_prod.example.sql"
-    tf = (ROOT / "infra" / "terraform-prod" / "main.tf").read_text(encoding="utf-8")
+class AzureArtefactsAgree(unittest.TestCase):
     deployer = (ROOT / "build" / "deploy_all.sh").read_text(encoding="utf-8")
     entrypoint = (ROOT / "infra" / "entrypoint.sh").read_text(encoding="utf-8")
 
-    def test_the_launcher_names_the_canonical_database_and_owner(self):
-        self.assertEqual(launcher_var(self.prod_template, "db_name"), CANONICAL_DB)
-        self.assertEqual(launcher_var(self.prod_template, "db_owner"), CANONICAL_OWNER)
+    def each_env(self):
+        for env, db in AZURE_DATABASES.items():
+            with self.subTest(env=env):
+                yield env, db
+
+    def test_each_launcher_names_the_canonical_database_and_owner(self):
+        for env, db in self.each_env():
+            self.assertEqual(launcher_var(launcher(env), "db_name"), db)
+            self.assertEqual(launcher_var(launcher(env), "db_owner"), CANONICAL_OWNER)
+
+    def test_dev_is_unchanged_and_local_only(self):
+        self.assertEqual(launcher_var(launcher("dev"), "db_name"), "te_mgmt_dev")
+        self.assertEqual(launcher_var(launcher("dev"), "db_owner"), "postgres")
 
     def test_terraform_creates_the_same_database(self):
-        names = re.findall(
-            r'resource\s+"azurerm_postgresql_flexible_server_database"\s+"\w+"\s*\{[^}]*?name\s*=\s*"([^"]+)"',
-            self.tf)
-        self.assertEqual(names, [launcher_var(self.prod_template, "db_name")],
-                         "Terraform's database differs from the one the deployer will deploy to")
+        for env, _ in self.each_env():
+            names = re.findall(
+                r'resource\s+"azurerm_postgresql_flexible_server_database"\s+"\w+"\s*\{[^}]*?name\s*=\s*"([^"]+)"',
+                terraform(env))
+            self.assertEqual(names, [launcher_var(launcher(env), "db_name")],
+                             "Terraform's database differs from the one the deployer will deploy to")
 
     def test_terraform_admin_is_the_launchers_owner(self):
-        admin = re.search(r'administrator_login\s*=\s*"([^"]+)"', self.tf).group(1)
-        self.assertEqual(admin, launcher_var(self.prod_template, "db_owner"))
+        for env, _ in self.each_env():
+            admin = re.search(r'administrator_login\s*=\s*"([^"]+)"', terraform(env)).group(1)
+            self.assertEqual(admin, launcher_var(launcher(env), "db_owner"))
 
     def test_the_migration_job_runs_as_that_owner_against_that_database(self):
-        job_user = re.search(r'name\s*=\s*"PGUSER"\s*value\s*=\s*"([^"]+)"', self.tf).group(1)
-        self.assertEqual(job_user, launcher_var(self.prod_template, "db_owner"))
-        self.assertRegex(self.tf, r'name\s*=\s*"PGDATABASE"\s*value\s*=\s*azurerm_postgresql_flexible_server_database\.\w+\.name',
-                         "PGDATABASE must come from the database resource, not a second literal")
+        for env, _ in self.each_env():
+            tf = terraform(env)
+            job_user = re.search(r'name\s*=\s*"PGUSER"\s*value\s*=\s*"([^"]+)"', tf).group(1)
+            self.assertEqual(job_user, launcher_var(launcher(env), "db_owner"))
+            self.assertRegex(tf, r'name\s*=\s*"PGDATABASE"\s*value\s*=\s*azurerm_postgresql_flexible_server_database\.\w+\.name',
+                             "PGDATABASE must come from the database resource, not a second literal")
+
+    def test_the_migration_job_is_given_the_app_role_password(self):
+        """Without it entrypoint.sh refuses to deploy, so a first run would fail."""
+        for env, _ in self.each_env():
+            tf = terraform(env)
+            self.assertRegex(tf, r'name\s*=\s*"APP_USER_PASSWORD"\s*secret_name\s*=\s*"app-user-password"')
+            self.assertRegex(tf, r'name\s*=\s*"app-user-password"[^}]*azurerm_key_vault_secret\.app_user_password\.id')
 
     def test_every_launcher_declares_both_so_the_deployer_can_read_them(self):
         for env in ("dev", "test", "staging", "prod"):
-            path = ENV_DIR / f"env_{env}.example.sql"
-            self.assertTrue(launcher_var(path, "db_name"), path)
-            self.assertTrue(launcher_var(path, "db_owner"), path)
+            with self.subTest(env=env):
+                self.assertTrue(launcher_var(launcher(env), "db_name"), launcher(env))
+                self.assertTrue(launcher_var(launcher(env), "db_owner"), launcher(env))
 
     def test_the_deployer_keeps_no_name_or_owner_of_its_own(self):
         """The hardcoded copies are what drifted."""
@@ -93,9 +123,11 @@ class ProductionArtefactsAgree(unittest.TestCase):
         self.assertIn("example.sql", self.entrypoint,
                       "entrypoint.sh must build env_<env>.sql from the template; a clean image has only the template")
 
-    def test_the_template_is_not_a_populated_launcher(self):
+    def test_no_template_is_a_populated_launcher(self):
         """RV-S4 (#174): the fix must not bake a real password into the image."""
-        self.assertEqual(launcher_var(self.prod_template, "app_password"), "__INJECT_AT_DEPLOY__")
+        for env in ("dev", "test", "staging", "prod"):
+            with self.subTest(env=env):
+                self.assertEqual(launcher_var(launcher(env), "app_password"), "__INJECT_AT_DEPLOY__")
 
 
 @pytest.mark.integration
@@ -106,7 +138,7 @@ class EntrypointOnAFreshServer(unittest.TestCase):
     names so the run cannot touch a real environment; the machinery under test (name
     and owner read from the launcher, launcher generated at runtime, owner role
     created when absent) is identical. The names themselves are pinned by
-    ``ProductionArtefactsAgree``.
+    ``AzureArtefactsAgree``.
     """
 
     PASSWORD = "a'b\\c&d/e\"f g"  # every character the generation step must survive
