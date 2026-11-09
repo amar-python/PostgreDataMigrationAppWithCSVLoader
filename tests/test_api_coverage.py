@@ -389,7 +389,8 @@ class TeUploadPipeline(_IntegrationBase):
                     "columns", "rowErrors"):
             self.assertIn(key, body, f"missing key '{key}'")
         self.assertEqual(body["duplicateRowsSkipped"], 0)
-        self.assertEqual(body["types"], [])
+        # #190: one reviewable type per column (organisations' columns are all text).
+        self.assertEqual(body["types"], ["text"] * len(body["columns"]))
 
     def test_column_mismatch_returns_error(self):
         csv = "bogus_col,fake_col\nval1,val2\n"

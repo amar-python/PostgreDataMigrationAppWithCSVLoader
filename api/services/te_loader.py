@@ -332,7 +332,9 @@ def upload_te(file_name: str, content: str, target_table: str) -> dict:
         "duplicateRowsSkipped": 0,
         "failedRows": failed_row_count,
         "columns": columns,
-        "types": [],
+        # #190: stored with the upload so review revalidates against the target's types.
+        # Columns Postgres casts itself (uuid, enums, ...) review as text.
+        "types": [t or "text" for t in col_types],
         "rowErrors": row_errors,
         "logs": logs,
     }
