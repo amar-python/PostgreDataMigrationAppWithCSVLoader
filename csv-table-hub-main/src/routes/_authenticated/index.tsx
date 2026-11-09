@@ -38,8 +38,9 @@ import { readFileBase64 } from "@/lib/file-bytes";
 import { formatLocalTime, formatUtc } from "@/lib/utils";
 import {
   classifyUploadResult, classifyThrownError, buildCancelPatch, buildCancelToastMessage,
-  decideOverwriteAction, failedRowsNote, needsAttention,
+  decideOverwriteAction, failedRowsNote,
 } from "@/lib/job-outcome";
+import { needsAttention } from "@/lib/job-outcome";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
