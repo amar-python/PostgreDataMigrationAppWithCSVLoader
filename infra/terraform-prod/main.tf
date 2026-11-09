@@ -227,6 +227,27 @@ resource "azurerm_key_vault_secret" "pg_password" {
   depends_on = [azurerm_role_assignment.kv_admin_terraform]
 }
 
+# Password for te_prod_user, the application role te_core_schema.sql creates.
+# The migration job passes it to infra/entrypoint.sh as APP_USER_PASSWORD, which
+# writes it into the launcher at run time. Without it the role would be created
+# with the template's placeholder password (RV-S1, #172).
+resource "random_password" "app_user_password" {
+  length           = 32
+  special          = true
+  min_lower        = 4
+  min_upper        = 4
+  min_numeric      = 4
+  override_special = "!@#$%^&*()-_=+"
+}
+
+resource "azurerm_key_vault_secret" "app_user_password" {
+  name         = "pg-app-user-password"
+  value        = random_password.app_user_password.result
+  key_vault_id = azurerm_key_vault.kv.id
+
+  depends_on = [azurerm_role_assignment.kv_admin_terraform]
+}
+
 # --- PostgreSQL Flexible Server (managed, HA-capable) -------------------
 
 resource "azurerm_postgresql_flexible_server" "pg" {
@@ -271,6 +292,11 @@ resource "azurerm_postgresql_flexible_server" "pg" {
   }
 }
 
+# The production database. Its name and the server admin ("pgadmin", the job's
+# PGUSER and the database owner) must equal db_name and db_owner in
+# build/environments/env_prod.example.sql: that file is what build/deploy_all.sh
+# reads. tests/test_prod_db_naming.py fails if they drift (RV-S1, #172;
+# DECISIONS/2026-11-09-prod-db-naming.md).
 resource "azurerm_postgresql_flexible_server_database" "te_prod" {
   name      = "te_prod"
   server_id = azurerm_postgresql_flexible_server.pg.id
@@ -477,6 +503,10 @@ resource "azurerm_container_app_job" "migration" {
         name        = "PGPASSWORD"
         secret_name = "pg-password"
       }
+      env {
+        name        = "APP_USER_PASSWORD"
+        secret_name = "app-user-password"
+      }
     }
   }
 
@@ -484,6 +514,12 @@ resource "azurerm_container_app_job" "migration" {
     name                = "pg-password"
     identity            = azurerm_user_assigned_identity.runner.id
     key_vault_secret_id = azurerm_key_vault_secret.pg_password.id
+  }
+
+  secret {
+    name                = "app-user-password"
+    identity            = azurerm_user_assigned_identity.runner.id
+    key_vault_secret_id = azurerm_key_vault_secret.app_user_password.id
   }
 
   tags = local.tags

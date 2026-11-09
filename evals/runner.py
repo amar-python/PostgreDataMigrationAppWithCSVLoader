@@ -559,7 +559,7 @@ ENV_TARGETS = [
     ("dev",     "te_mgmt_dev",     "te_dev"),
     ("test",    "te_mgmt_test",    "te_test"),
     ("staging", "te_mgmt_staging", "te_staging"),
-    ("prod",    "te_mgmt_prod",    "te_prod"),
+    ("prod",    "te_prod",    "te_prod"),
 ]
 
 

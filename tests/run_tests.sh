@@ -37,7 +37,7 @@ declare -A ENV_DB=(
    [dev]="te_mgmt_dev"
    [test]="te_mgmt_test"
    [staging]="te_mgmt_staging"
-   [prod]="te_mgmt_prod"
+   [prod]="te_prod"
 )
 declare -A ENV_SCHEMA=(
    [dev]="te_dev"

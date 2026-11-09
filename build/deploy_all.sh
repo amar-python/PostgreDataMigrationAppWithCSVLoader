@@ -44,6 +44,14 @@ warn()    { echo -e "${YELLOW}[⚠]${NC} $*"; }
 error()   { echo -e "${RED}[✗]${NC} $*" >&2; }
 separator(){ echo "────────────────────────────────────────────────────────────"; }
 
+# Read one \set variable from an environment launcher (RV-S1, #172).
+# env_<env>.sql is the single place that says which database an environment
+# deploys to and who owns it. This script used to keep its own copy
+# (te_mgmt_<env>, owner postgres) which drifted from Terraform's.
+launcher_var() {
+   tr -d '\r' < "$1" | sed -n "s/^\\\\set[[:space:]][[:space:]]*$2[[:space:]][[:space:]]*'\{0,1\}\([^' ]*\)'\{0,1\}.*/\1/p" | head -n1
+}
+
 # ── Parse arguments ───────────────────────────────────────────────────────────
 ENVS_TO_DEPLOY=("${@:-${ALL_ENVS[@]}}")
 
@@ -75,7 +83,14 @@ for env in "${ENVS_TO_DEPLOY[@]}"; do
       continue
    fi
 
-   DB_NAME="te_mgmt_${env}"
+   DB_NAME="$(launcher_var "${env_file}" db_name)"
+   DB_OWNER="$(launcher_var "${env_file}" db_owner)"
+   # Both land inside quoted SQL identifiers/literals below, so insist on plain names.
+   if [[ ! "${DB_NAME}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ || ! "${DB_OWNER}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      error "${env_file}: db_name ('${DB_NAME}') and db_owner ('${DB_OWNER}') must both be set to plain identifiers."
+      FAILED+=("${env}")
+      continue
+   fi
 
    echo ""
    warn "Deploying environment: ${env^^}  (database: ${DB_NAME})"
@@ -86,10 +101,24 @@ for env in "${ENVS_TO_DEPLOY[@]}"; do
    DB_EXISTS=$(${PSQL} -d postgres -tA -c \
       "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'" 2>/dev/null || true)
    if [[ -z "${DB_EXISTS}" ]]; then
-      log "Creating database: ${DB_NAME}"
+      # The owner has to exist before it can own anything. On Azure it is the
+      # server admin and already does. Anywhere else (CI, the offline install, a
+      # fresh dev server) it is created NOLOGIN: it owns the database and nothing
+      # else, so it adds no credential and no way in.
+      OWNER_EXISTS=$(${PSQL} -d postgres -tA -c \
+         "SELECT 1 FROM pg_roles WHERE rolname = '${DB_OWNER}'" 2>/dev/null || true)
+      if [[ -z "${OWNER_EXISTS}" ]]; then
+         log "Creating database owner role: ${DB_OWNER} (NOLOGIN)"
+         ${PSQL} -d postgres -c "CREATE ROLE \"${DB_OWNER}\" NOLOGIN" || {
+            error "Failed to create owner role ${DB_OWNER}"
+            FAILED+=("${env}")
+            continue
+         }
+      fi
+      log "Creating database: ${DB_NAME} (owner: ${DB_OWNER})"
       ${PSQL} -d postgres -c \
          "CREATE DATABASE \"${DB_NAME}\"
-            WITH OWNER = postgres
+            WITH OWNER = \"${DB_OWNER}\"
             ENCODING = 'UTF8'
             TEMPLATE = template0
             CONNECTION LIMIT = -1" || {
@@ -100,6 +129,13 @@ for env in "${ENVS_TO_DEPLOY[@]}"; do
       log "Database ${DB_NAME} created."
    else
       log "Database ${DB_NAME} already exists — skipping CREATE."
+      # Report drift, never fix it: changing the owner of a database that already
+      # holds data is not a decision a deploy script should take silently.
+      ACTUAL_OWNER=$(${PSQL} -d postgres -tA -c \
+         "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = '${DB_NAME}'" 2>/dev/null || true)
+      if [[ -n "${ACTUAL_OWNER}" && "${ACTUAL_OWNER}" != "${DB_OWNER}" ]]; then
+         warn "${DB_NAME} is owned by '${ACTUAL_OWNER}', but ${env_file##*/} says '${DB_OWNER}'. Left unchanged."
+      fi
    fi
 
    if ${PSQL} \

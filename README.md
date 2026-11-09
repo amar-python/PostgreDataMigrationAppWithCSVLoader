@@ -332,7 +332,7 @@ organisations ──< personnel
 
 | Setting | Dev | Test | Staging | Prod |
 |---|---|---|---|---|
-| Database | `te_mgmt_dev` | `te_mgmt_test` | `te_mgmt_staging` | `te_mgmt_prod` |
+| Database | `te_mgmt_dev` | `te_mgmt_test` | `te_mgmt_staging` | `te_prod` |
 | Schema | `te_dev` | `te_test` | `te_staging` | `te_prod` |
 | App User | `te_dev_user` | `te_test_user` | `te_stg_user` | `te_prod_user` |
 | Connection Limit | 10 | 15 | 25 | 50 |

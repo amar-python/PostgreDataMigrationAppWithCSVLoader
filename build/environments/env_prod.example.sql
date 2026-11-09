@@ -1,8 +1,10 @@
 ﻿-- env_prod.example.sql  (TEMPLATE - safe to commit; no real secrets)
 -- Copy to env_prod.sql (gitignored) and fill in, or inject app_password at deploy.
+-- db_name and db_owner are read by build/deploy_all.sh and must match infra/terraform-prod
+-- (database te_prod, server admin pgadmin). RV-S1, #172; DECISIONS/2026-11-09-prod-db-naming.md.
 \set env_label          PROD
-\set db_name            te_mgmt_prod
-\set db_owner           postgres
+\set db_name            te_prod
+\set db_owner           pgadmin
 \set schema_name        te_prod
 \set app_user           te_prod_user
 \set app_password       '__INJECT_AT_DEPLOY__'

@@ -16,9 +16,16 @@
 # Run locally (against a PG container on the same network):
 #   docker run --rm \
 #     -e PGHOST=postgres -e PGPORT=5432 -e PGUSER=postgres \
-#     -e PGPASSWORD=devpass -e PGDATABASE=te_dev \
+#     -e PGPASSWORD=devpass -e PGDATABASE=te_mgmt_dev \
+#     -e APP_USER_PASSWORD=change-me \
 #     -e TARGET_ENV=dev \
 #     te-migration:dev deploy
+#
+# The image holds only the env_<env>.example.sql templates. `deploy` generates
+# env_<env>.sql from the template and APP_USER_PASSWORD at run time and deletes it
+# on exit, so no launcher with a password is ever in an image (RV-S4, #174).
+# PGDATABASE must equal the db_name in that launcher (prod: te_prod, matching
+# infra/terraform-prod); `deploy` refuses to run if it does not (RV-S1, #172).
 
 FROM python:3.11-slim AS base
 
@@ -65,7 +72,7 @@ USER app
 ENV PGHOST=localhost \
     PGPORT=5432 \
     PGUSER=postgres \
-    PGDATABASE=te_dev \
+    PGDATABASE=te_mgmt_dev \
     TARGET_ENV=dev \
     WAIT_FOR_DB_SECONDS=60
 

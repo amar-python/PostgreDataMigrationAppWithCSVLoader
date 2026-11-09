@@ -154,6 +154,12 @@ branch) — this binds the SP to GitHub Environment approval.
    - Triggers a single execution of the Job
    - Streams logs from Log Analytics
    - Exits 0 only if the Job status is `Succeeded`
+5. What the Job does on a fresh server: `infra/entrypoint.sh` generates
+   `env_prod.sql` from the image's `env_prod.example.sql` and the
+   `pg-app-user-password` secret, `deploy_all.sh` deploys into the `te_prod`
+   database Terraform created, and the generated file is deleted on exit. It fails
+   fast, naming the cause, if `APP_USER_PASSWORD` is missing or `PGDATABASE` is not
+   the launcher's database (#172).
 
 ### Step 3 — Verify
 

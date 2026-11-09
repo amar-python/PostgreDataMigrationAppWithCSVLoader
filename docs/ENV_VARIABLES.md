@@ -60,7 +60,7 @@ the environment SQL templates. Copy `build/config.env.example` to
 
 | Variable | Dev | Test | Staging | Prod |
 |---|---|---|---|---|
-| `PG_DB_*` | `te_mgmt_dev` | `te_mgmt_test` | `te_mgmt_staging` | `te_mgmt_prod` |
+| `PG_DB_*` | `te_mgmt_dev` | `te_mgmt_test` | `te_mgmt_staging` | `te_prod` |
 | `PG_SCHEMA_*` | `te_dev` | `te_test` | `te_staging` | `te_prod` |
 | `PG_APP_USER_*` | `te_dev_user` | `te_test_user` | `te_stg_user` | `te_prod_user` |
 | `PG_APP_PASSWORD_*` | _(empty)_ | _(empty)_ | _(empty)_ | _(empty)_ |
@@ -162,14 +162,32 @@ $env:PGPASSWORD = "changeme_local_only"
 python -m pytest tests\ -m "unit or regression or security or snapshot"
 ```
 
-### Deploying to Azure
+### Running the migration job (`infra/entrypoint.sh`)
+Terraform sets these on the Container Apps Job (`infra/terraform-prod/main.tf`):
+```
+TARGET_ENV         = prod
+PGHOST             = your-pg-host.postgres.database.azure.com
+PGPORT             = 5432
+PGUSER             = pgadmin            # the server admin, and the owner of te_prod
+PGPASSWORD         = <from Key Vault: pg-postgres-password>
+PGDATABASE         = te_prod            # must equal db_name in env_prod.example.sql
+APP_USER_PASSWORD  = <from Key Vault: pg-app-user-password>
+```
+`APP_USER_PASSWORD` is the password for the `te_prod_user` application role. The
+image carries only `env_prod.example.sql`; `deploy` fills the password into a
+launcher at run time and deletes it on exit, and refuses to run without it.
+`deploy` also refuses to run if `PGDATABASE` differs from the launcher's
+`db_name`. `MIGRATION_ROOT` (default `/opt/migration`) moves where the script
+looks for the runner; it exists so the script can be tested outside a container.
+
+### Deploying the API to Azure
 Set these in the Container App environment (not in code):
 ```
 PGHOST         = your-pg-host.postgres.database.azure.com
 PGPORT         = 5432
-PGUSER         = postgres
+PGUSER         = pgadmin
 PGPASSWORD     = <from Key Vault>
-PGDATABASE     = te_mgmt_prod
+PGDATABASE     = te_prod
 API_KEY        = <strong random value>
 CORS_ORIGINS   = https://your-frontend.azurestaticapps.net
 TE_SCHEMA      = te_prod

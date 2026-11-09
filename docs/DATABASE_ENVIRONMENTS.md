@@ -14,7 +14,14 @@ for names: `build/config.env.example` (template) / `build/config.local.env`
 | **dev** | `te_mgmt_dev` | `te_dev` | `te_dev_user` | 10 | yes (`SEED_DEV=true`) |
 | **test** | `te_mgmt_test` | `te_test` | `te_test_user` | 15 | yes (`SEED_TEST=true`) |
 | **staging** | `te_mgmt_staging` | `te_staging` | `te_stg_user` | 25 | no (`SEED_STAGING=false`) |
-| **prod** | `te_mgmt_prod` | `te_prod` | `te_prod_user` | 50 | no (`SEED_PROD=false`) |
+| **prod** | `te_prod` | `te_prod` | `te_prod_user` | 50 | no (`SEED_PROD=false`) |
+
+The database name and owner come from `build/environments/env_<env>.sql` (`db_name`,
+`db_owner`), which `deploy_all.sh` reads; nothing else keeps its own copy. Prod's
+database is `te_prod`, owned by `pgadmin`, to match `infra/terraform-prod` (#172;
+`DECISIONS/2026-11-09-prod-db-naming.md`). Where `pgadmin` does not exist yet (a dev
+server, CI, the offline install) `deploy_all.sh` creates it `NOLOGIN`: it owns the
+database and nothing else. Dev, test and staging keep `te_mgmt_<env>` owned by `postgres`.
 
 Every environment also gets a `csv_uploads` schema in its own database
 (same name across environments — no collision, since each environment is a
