@@ -31,12 +31,15 @@
 
 -- Store psql variables as session parameters so DO blocks can access them.
 -- (psql does not substitute :varname inside $$ dollar-quoted strings.)
+-- \gset, not ';': it keeps the result out of psql's output. The row contains the
+-- application password, and deployment output ends up in container logs (#172).
 SELECT
-   set_config('te.env_label',    :'env_label',    false),
-   set_config('te.db_name',      :'db_name',      false),
-   set_config('te.app_user',     :'app_user',     false),
-   set_config('te.app_password', :'app_password', false),
-   set_config('te.conn_limit',   :'conn_limit',   false);
+   set_config('te.env_label',    :'env_label',    false) AS env_label,
+   set_config('te.db_name',      :'db_name',      false) AS db_name,
+   set_config('te.app_user',     :'app_user',     false) AS app_user,
+   set_config('te.app_password', :'app_password', false) AS app_password,
+   set_config('te.conn_limit',   :'conn_limit',   false) AS conn_limit
+\gset te_set_
 
 \echo '>> [1/6] Creating database:' :db_name
 -- Database creation is handled by deploy_all.sh before this script runs.
