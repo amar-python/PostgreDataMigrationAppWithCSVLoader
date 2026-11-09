@@ -18,8 +18,8 @@ import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.snapshot]
 
-VALIDATOR     = Path(__file__).resolve().parents[1] / "build" / "csv" / "validator.py"
-SNAPSHOTS_DIR = Path(__file__).resolve().parent / "snapshots"
+VALIDATOR     = Path(__file__).resolve().parents[2] / "build" / "csv" / "validator.py"
+SNAPSHOTS_DIR = Path(__file__).resolve().parents[1] / "snapshots"
 UPDATE        = os.environ.get("UPDATE_SNAPSHOTS", "").lower() in ("1", "true", "yes")
 
 
@@ -95,7 +95,7 @@ class SnapshotAllValidInput(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         _assert_snapshot(valid_text, "all_valid_expected_valid.csv")
         # skip file should have only a header (or be empty)
-        skip_lines = [l for l in skip_text.splitlines() if l.strip()]
+        skip_lines = [ln for ln in skip_text.splitlines() if ln.strip()]
         self.assertLessEqual(len(skip_lines), 1,
                              "Expected at most a header row in skip.csv when all rows are valid")
 

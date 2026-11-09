@@ -15,7 +15,7 @@ import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
-VALIDATOR = Path(__file__).resolve().parents[1] / "build" / "csv" / "validator.py"
+VALIDATOR = Path(__file__).resolve().parents[2] / "build" / "csv" / "validator.py"
 
 
 def _run(env: dict) -> subprocess.CompletedProcess:

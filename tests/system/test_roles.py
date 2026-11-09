@@ -24,7 +24,7 @@ from api.services.accounts import ROLES
 from api.tenancy import migrate_tenant, schema_for
 
 _PW = "correct horse battery staple"
-_DOC = Path(__file__).resolve().parent.parent / "docs" / "ROLES.md"
+_DOC = Path(__file__).resolve().parents[2] / "docs" / "ROLES.md"
 # action -> (method, path); {table} and {id} are filled per run.
 _ROUTES = {
     "preview": ("POST", "/api/csv/preview"),

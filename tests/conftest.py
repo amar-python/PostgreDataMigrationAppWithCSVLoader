@@ -42,6 +42,28 @@ def _reset_rate_limiter():
     _limiter.reset()
 
 
+# Folder -> marker (#167). The folder a test lives in is its category, so `-m system`,
+# `-m "not accessibility"` and the Makefile targets agree with the layout without each
+# test having to remember a decorator. `unit` stays explicit: it is what the free tier
+# (and the Windows job) select on, and some folders mix it with finer markers.
+_FOLDER_MARKERS = {
+    "system": "system",
+    "system_integration": "sit",
+    "performance": "performance",
+    "accessibility": "accessibility",
+    "uat": "uat",
+}
+
+
+def pytest_collection_modifyitems(items):
+    for item in items:
+        for part in Path(str(item.fspath)).parts:
+            marker = _FOLDER_MARKERS.get(part)
+            if marker:
+                item.add_marker(getattr(pytest.mark, marker))
+                break
+
+
 # Env vars tests are allowed to mutate; restored after every test.
 _RESTORE_KEYS = (
     "CSV_FILE",

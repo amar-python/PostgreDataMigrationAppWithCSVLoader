@@ -280,7 +280,6 @@ class DeleteEndpoint(_IntegrationBase):
         self.assertNotIn(str(file_id), ids)
 
 
-
 # ---------------------------------------------------------------------------
 # BUG-041: GET /api/audit/log (integration)
 # ---------------------------------------------------------------------------
@@ -419,7 +418,6 @@ class TeUploadPipeline(_IntegrationBase):
         self.assertTrue(match, "T&E upload should appear in csv_files list")
         self.assertEqual(match[0]["mode"], "te")
 
-
     def test_enum_constraint_violation_reported_per_row(self):
         """An invalid enum value must produce a per-row error, not a 500."""
         csv = self._org_csv(f"{self.tag}_enum", org_type="INVALID_ENUM")
@@ -427,7 +425,7 @@ class TeUploadPipeline(_IntegrationBase):
         body = r.json()
         self.assertEqual(body["status"], "error", body)
         self.assertGreaterEqual(body["failedRows"], 1,
-            "Invalid enum value should fail at row level, not crash the endpoint")
+                                "Invalid enum value should fail at row level, not crash the endpoint")
         self.assertIn("rowNumber", body["rowErrors"][0])
 
     def test_null_in_not_null_column_reported_per_row(self):
@@ -437,7 +435,7 @@ class TeUploadPipeline(_IntegrationBase):
         body = r.json()
         self.assertEqual(body["status"], "error", body)
         self.assertGreaterEqual(body["failedRows"], 1,
-            "NULL in a NOT NULL column should fail at row level")
+                                "NULL in a NOT NULL column should fail at row level")
         self.assertIn("rowNumber", body["rowErrors"][0])
 
     def test_unknown_target_table_returns_error(self):
@@ -462,7 +460,7 @@ class TeUploadPipeline(_IntegrationBase):
         files = self.client.get("/api/csv/files").json()
         matches = [f for f in files if f["file_name"] == f"{self.tag}.csv"]
         self.assertEqual(len(matches), 1,
-            "Re-upload should replace the registry entry, not create a duplicate")
+                         "Re-upload should replace the registry entry, not create a duplicate")
 
     def test_te_client_side_type_validation_reports_column_and_value(self):
         """BUG-028: a bad value on a client-validatable column (BOOLEAN here)
@@ -482,14 +480,14 @@ class TeUploadPipeline(_IntegrationBase):
         self.assertEqual(body["status"], "ok", body)
         self.assertEqual(body["failedRows"], 1)
         self.assertEqual(body["insertedRows"], 1,
-            "The valid row should still land while the bad row is skipped.")
+                         "The valid row should still land while the bad row is skipped.")
         self.assertTrue(body["rowErrors"], "rowErrors must be populated")
         err = body["rowErrors"][0]
         # These two fields are the fingerprint of the client-side path.
         self.assertEqual(err.get("column"), "is_active",
-            f"Client-side validator must set column; got {err!r}")
+                         f"Client-side validator must set column; got {err!r}")
         self.assertEqual(err.get("value"), "NOT_A_BOOL",
-            f"Client-side validator must set value; got {err!r}")
+                         f"Client-side validator must set value; got {err!r}")
         self.assertIn("true/false", err["reason"].lower())
 
     def test_te_upload_rejects_over_row_cap(self):
@@ -513,7 +511,7 @@ class TeUploadPipeline(_IntegrationBase):
             files = self.client.get("/api/csv/files").json()
             matches = [f for f in files if f["file_name"] == f"{self.tag}.csv"]
             self.assertFalse(matches,
-                "An over-cap upload must not create a registry entry.")
+                             "An over-cap upload must not create a registry entry.")
         finally:
             cfg.settings.MAX_ROWS = original
 
@@ -529,6 +527,6 @@ class DeleteGateUnit(unittest.TestCase):
         try:
             r = client.delete("/api/csv/files/1")
             self.assertEqual(r.status_code, 403,
-                "DELETE must return 403 when API_ALLOW_DESTRUCTIVE=false")
+                             "DELETE must return 403 when API_ALLOW_DESTRUCTIVE=false")
         finally:
             cfg.settings.allow_destructive = original

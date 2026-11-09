@@ -1,6 +1,7 @@
 """Shared contract every deployed environment must satisfy."""
 from __future__ import annotations
-import shutil, subprocess  # nosec B404
+import shutil
+import subprocess  # nosec B404
 
 CORE_TABLES = {
     "organisations", "personnel", "test_programs", "temp_documents",
@@ -25,7 +26,12 @@ def _psql(db, sql):
 
 
 class EnvironmentContract:
-    ENV = ""; DB = ""; SCHEMA = ""; APP_USER = ""; CONN_LIMIT = 0; SEEDED = False
+    ENV = ""
+    DB = ""
+    SCHEMA = ""
+    APP_USER = ""
+    CONN_LIMIT = 0
+    SEEDED = False
 
     @classmethod
     def setUpClass(cls):
@@ -35,7 +41,8 @@ class EnvironmentContract:
 
     def test_database_exists(self):
         ok, out = _psql("postgres", f"SELECT 1 FROM pg_database WHERE datname = '{self.DB}'")
-        self.assertTrue(ok, out); self.assertEqual(out, "1")
+        self.assertTrue(ok, out)
+        self.assertEqual(out, "1")
 
     def test_schema_has_all_core_tables(self):
         ok, out = _psql(self.DB, f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{self.SCHEMA}'")
@@ -45,7 +52,8 @@ class EnvironmentContract:
 
     def test_application_role_exists(self):
         ok, out = _psql(self.DB, f"SELECT 1 FROM pg_roles WHERE rolname = '{self.APP_USER}'")
-        self.assertTrue(ok, out); self.assertEqual(out, "1")
+        self.assertTrue(ok, out)
+        self.assertEqual(out, "1")
 
     def test_application_role_connection_limit(self):
         ok, out = _psql(self.DB, f"SELECT COALESCE(rolconnlimit,-999) FROM pg_roles WHERE rolname = '{self.APP_USER}'")

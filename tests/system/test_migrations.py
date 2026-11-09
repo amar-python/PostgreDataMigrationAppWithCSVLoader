@@ -28,7 +28,7 @@ from api.services.te_loader import upload_te
 
 _HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
          "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1.")
-_ALEMBIC_INI = str(Path(__file__).resolve().parent.parent / "alembic.ini")
+_ALEMBIC_INI = str(Path(__file__).resolve().parents[2] / "alembic.ini")
 
 
 def _connect():

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "preflight.ps1"
 
 WINDOWS_PS = shutil.which("powershell") if sys.platform == "win32" else None

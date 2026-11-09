@@ -19,7 +19,7 @@ from alembic.config import Config
 from api.config import settings
 from api.services.audit import acting_as, verify_chain, write_audit
 
-_ALEMBIC_INI = str(Path(__file__).resolve().parent.parent / "alembic.ini")
+_ALEMBIC_INI = str(Path(__file__).resolve().parents[2] / "alembic.ini")
 
 
 def _connect():

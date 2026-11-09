@@ -25,7 +25,7 @@ from api.config import settings
 from api.db import Conn
 from api.main import app
 
-_ROOT = Path(__file__).resolve().parent.parent
+_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _owner():

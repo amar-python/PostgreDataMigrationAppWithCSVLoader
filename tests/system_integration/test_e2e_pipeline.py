@@ -19,7 +19,7 @@ import pytest
 
 pytestmark = pytest.mark.e2e
 
-ROOT      = Path(__file__).resolve().parents[1]
+ROOT      = Path(__file__).resolve().parents[2]
 VALIDATOR = ROOT / "build" / "csv" / "validator.py"
 RUNNER    = ROOT / "evals" / "runner.py"
 
@@ -83,7 +83,7 @@ class E2EPipelineValidateOnly(unittest.TestCase):
             self.assertIn("2,Bob",   valid_lines)
             # skip.csv should contain only the header (no skips)
             if skip_csv.exists():
-                skip_lines = [l for l in skip_csv.read_text(encoding="utf-8").splitlines() if l.strip()]
+                skip_lines = [ln for ln in skip_csv.read_text(encoding="utf-8").splitlines() if ln.strip()]
                 self.assertLessEqual(len(skip_lines), 1)
 
     def test_mixed_rows_splits_correctly(self):

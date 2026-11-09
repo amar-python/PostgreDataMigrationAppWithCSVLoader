@@ -12,7 +12,7 @@ import yaml
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "quality-gate.yml"
 GAP_ANALYSIS = ROOT / "docs/GAP_ANALYSIS.md"
 
@@ -46,7 +46,6 @@ class TestQualityGateStructure(unittest.TestCase):
         triggers = self.wf.get(True, self.wf.get("on", {}))
         push_branches = triggers.get("push", {}).get("branches", [])
         self.assertIn("main", push_branches)
-
 
 
 class TestAllJobsHaveConsistentStructure(unittest.TestCase):
@@ -92,7 +91,6 @@ class TestAllJobsHaveConsistentStructure(unittest.TestCase):
                 any("Install" in n and "dep" in n.lower() for n in names),
                 f"Job {job_id!r} missing install dev dependencies step",
             )
-
 
 
 class TestGapAnalysisG2Accepted(unittest.TestCase):

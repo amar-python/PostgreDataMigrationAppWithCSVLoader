@@ -5,7 +5,7 @@ API-key-guarded feed so the trail is actually consultable.
 O-04 update: the table is no longer delete-only. Successful uploads also write a
 row, through the shared writer in api/services/audit.py, so this feed now covers
 creations as well as destructions. Integration coverage lives in
-tests/test_api_integration.py::AuditLogTrail."""
+tests/system/test_api_integration.py::AuditLogTrail."""
 
 from __future__ import annotations
 

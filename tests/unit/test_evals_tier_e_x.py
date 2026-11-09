@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "evals"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "evals"))
 
 import runner  # noqa: E402
 
@@ -168,7 +168,7 @@ class TierXSqliteStructure(unittest.TestCase):
 
     def test_the_real_sqlite_ddl_executes_and_matches_the_expectation_file(self):
         import json
-        root = Path(__file__).resolve().parent.parent
+        root = Path(__file__).resolve().parents[2]
         ddl = (root / "build" / "schema" / "sqlite"
                / "te_core_schema.sql").read_text(encoding="utf-8")
         exp = json.loads(
@@ -185,7 +185,7 @@ class TierXSqliteStructure(unittest.TestCase):
         # these tables to the DDL but forgets to move it out of
         # known_missing_tables, the file would misreport the shortfall.
         import json
-        root = Path(__file__).resolve().parent.parent
+        root = Path(__file__).resolve().parents[2]
         ddl = (root / "build" / "schema" / "sqlite"
                / "te_core_schema.sql").read_text(encoding="utf-8")
         exp = json.loads(
@@ -202,7 +202,7 @@ class TierXSqliteStructure(unittest.TestCase):
 
     def test_missing_plus_present_accounts_for_all_twelve_tables(self):
         import json
-        root = Path(__file__).resolve().parent.parent
+        root = Path(__file__).resolve().parents[2]
         exp = json.loads(
             (root / "evals" / "expected" / "tier_x"
              / "01_sqlite_schema_structure.json").read_text(encoding="utf-8")
