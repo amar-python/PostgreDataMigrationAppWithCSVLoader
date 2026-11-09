@@ -24,6 +24,7 @@ Usage
     python3 scripts/test_report.py                 # whole suite
     python3 scripts/test_report.py --markers "unit or security"
     python3 scripts/test_report.py --strict        # exit 1 if anything skipped
+    python3 scripts/test_report.py --pytest-arg=--cov=api/services   # extra pytest flags
 
 Exit codes: 0 all executed tests passed; 1 otherwise (or any skip under
 --strict).
@@ -64,7 +65,7 @@ def _collect_all_ids() -> set[str]:
     return ids
 
 
-def _run(markers: str | None, xml_path: Path) -> int:
+def _run(markers: str | None, xml_path: Path, extra: list[str]) -> int:
     """Run pytest and return its exit code.
 
     Exit code 2 means the run was INTERRUPTED (typically a collection error),
@@ -75,7 +76,9 @@ def _run(markers: str | None, xml_path: Path) -> int:
     cmd = [sys.executable, "-m", "pytest", f"--junitxml={xml_path}", "-q", "--no-header"]
     if markers:
         cmd += ["-m", markers]
-    return subprocess.run(cmd, cwd=ROOT).returncode
+    # Applied to the real run only, not to the collect-only pass above (#194:
+    # coverage flags there would measure nothing and just add noise).
+    return subprocess.run(cmd + extra, cwd=ROOT).returncode
 
 
 def _parse(xml_path: Path):
@@ -111,12 +114,15 @@ def main() -> int:
                     help='pytest -m expression, e.g. "unit or security"')
     ap.add_argument("--strict", action="store_true",
                     help="exit non-zero if any test was skipped")
+    ap.add_argument("--pytest-arg", action="append", default=[], metavar="ARG",
+                    help="extra pytest argument for the test run (repeatable), "
+                         "e.g. --pytest-arg=--cov=api/services")
     args = ap.parse_args()
 
     with tempfile.TemporaryDirectory() as td:
         xml_path = Path(td) / "results.xml"
         all_ids = _collect_all_ids()
-        exit_code = _run(args.markers, xml_path)
+        exit_code = _run(args.markers, xml_path, args.pytest_arg)
         passed, failed, errored, skipped = _parse(xml_path)
 
     # pytest's own exit code 2 == interrupted, e.g. a collection error.

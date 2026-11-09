@@ -169,10 +169,22 @@ jobs:
       # neither of which exists in this job — they run in the `accessibility`
       # job below. Deselected, not skipped: test_report.py accounts for them
       # under NOT RUN.
+      # #194: api/services is measured here, not in the database-free job — the
+      # loaders' branches only run against PostgreSQL. The coverage table
+      # (term-missing) lands in this step's log; the floors are enforced next.
       - name: Full test suite — final result with skip accounting
         env:
           PGDATABASE: te_mgmt_dev
-        run: python3 scripts/test_report.py --markers "not accessibility" --strict
+        run: |
+          python3 scripts/test_report.py --markers "not accessibility" --strict \
+            --pytest-arg=--cov=api/services \
+            --pytest-arg=--cov-report=term-missing \
+            --pytest-arg=--cov-report=json:coverage.json
+
+      # One floor per loader (scripts/coverage_floors.py): a single project-wide
+      # number would let te_loader's 96% hide a collapse in csv_parse.
+      - name: api/services coverage floors
+        run: python3 scripts/coverage_floors.py
 
       - name: Upload eval reports
         if: always()
