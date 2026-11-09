@@ -121,6 +121,11 @@ export function classifyThrownError(jobName: string, err: unknown): JobOutcome {
   };
 }
 
+/** Stop is honest only before the request is sent; once the server has it, it finishes the import (#188). */
+export function canStop(job: Pick<Job, "status">): boolean {
+  return job.status === "reading" || job.status === "uploading";
+}
+
 export function buildCancelPatch(reason?: string): Partial<Job> {
   return { status: "cancelled", progress: 100, cancellationReason: reason ?? "Cancelled by user" };
 }
@@ -134,6 +139,11 @@ export type OverwriteAction = { action: "show-diff"; job: Job } | { action: "ret
 export function decideOverwriteAction(job: Job | undefined): OverwriteAction {
   if (job?.tableName) return { action: "show-diff", job };
   return { action: "retry-overwrite" };
+}
+
+/** An upload attempt a reviewer should look at: it failed outright or lost some rows (#187). */
+export function needsAttention(status: string): boolean {
+  return status === "failed" || status === "partly_imported" || status === "rejected";
 }
 
 /** "51 of 171 rows failed", for a registered upload with failures (#123); else null. */

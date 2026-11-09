@@ -8,7 +8,7 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyUploadResult, classifyThrownError, buildCancelPatch,
-  buildCancelToastMessage, decideOverwriteAction, failedRowsNote, typesProvenanceNote,
+  buildCancelToastMessage, canStop, decideOverwriteAction, failedRowsNote, typesProvenanceNote,
 } from "@/lib/job-outcome";
 import type { UploadResult } from "@/lib/csv.functions";
 import type { Job } from "@/lib/job-types";
@@ -100,6 +100,15 @@ describe("classifyThrownError", () => {
     const outcome = classifyThrownError("widgets.csv", {});
     expect(outcome.patch.errorMessage).toBe("Unknown error");
     expect(outcome.toast.message).toBe("widgets.csv: Unknown error");
+  });
+});
+
+describe("canStop (#188)", () => {
+  it("is true only before the request is sent", () => {
+    expect(canStop({ status: "reading" })).toBe(true);
+    expect(canStop({ status: "uploading" })).toBe(true);
+    const rest = ["processing", "done", "error", "duplicate", "cancelled", "interrupted"] as const;
+    for (const status of rest) expect(canStop({ status })).toBe(false);
   });
 });
 

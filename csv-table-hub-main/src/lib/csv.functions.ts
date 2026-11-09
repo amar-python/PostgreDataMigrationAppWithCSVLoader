@@ -38,9 +38,13 @@ export type ProcessingLog = z.infer<typeof processingLogSchema>;
 
 const typesProvenanceSchema = z.enum(["inferred_unconfirmed", "user_confirmed"]);
 
+// #187: the API sends the stored attempt's id on every outcome, failures included.
+const uploadIdField = { uploadId: z.string().nullable().optional() };
+
 const uploadResultSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("ok"),
+    ...uploadIdField,
     fileId: z.string(),
     tableName: z.string(),
     totalRows: z.number(),
@@ -64,6 +68,7 @@ const uploadResultSchema = z.discriminatedUnion("status", [
   }),
   z.object({
     status: z.literal("duplicate_file"),
+    ...uploadIdField,
     reason: z.enum(["content", "name"]),
     existingFileName: z.string(),
     tableName: z.string(),
@@ -72,12 +77,14 @@ const uploadResultSchema = z.discriminatedUnion("status", [
   }),
   z.object({
     status: z.literal("invalid_structure"),
+    ...uploadIdField,
     reason: z.enum(["empty", "header_only", "no_columns"]),
     message: z.string(),
     logs: z.array(processingLogSchema),
   }),
   z.object({
     status: z.literal("error"),
+    ...uploadIdField,
     message: z.string(),
     rowErrors: z.array(rowErrorSchema).optional(),
     logs: z.array(processingLogSchema),
@@ -179,6 +186,26 @@ export async function uploadCsv(input: {
   });
 }
 
+const uploadAttemptSchema = z.object({
+  id: z.string(),
+  file_name: z.string(),
+  mode: z.string(),
+  status: z.string(), // imported | partly_imported | failed | rejected | duplicate
+  total_rows: z.number().nullable(),
+  imported_rows: z.number().nullable(),
+  failed_rows: z.number().nullable(),
+  uploader: z.string().nullable().optional(),
+  uploaded_at: z.string(),
+});
+export type UploadAttempt = z.infer<typeof uploadAttemptSchema>;
+
+/** Every upload attempt, failed ones included (BR-25), newest first. */
+export async function listUploads(): Promise<UploadAttempt[]> {
+  return apiFetch("/api/csv/uploads", z.array(uploadAttemptSchema));
+}
+
+export const uploadsQuery = { queryKey: ["csv-uploads"], queryFn: listUploads };
+
 export async function listCsvFiles(): Promise<CsvFileSummary[]> {
   return apiFetch("/api/csv/files", csvFileSummaryListSchema);
 }
@@ -188,7 +215,10 @@ export const filesQuery = { queryKey: ["csv-files"], queryFn: listCsvFiles };
 // Route loader for the files list. revalidateIfStale makes router.invalidate()
 // (called after each upload) refetch instead of returning the cached list (#64).
 export const loadFiles = (queryClient: QueryClient) =>
-  queryClient.ensureQueryData({ ...filesQuery, revalidateIfStale: true });
+  Promise.all([
+    queryClient.ensureQueryData({ ...uploadsQuery, revalidateIfStale: true }),
+    queryClient.ensureQueryData({ ...filesQuery, revalidateIfStale: true }),
+  ]).then(([, files]) => files);
 
 const csvPreviewResultSchema = z.discriminatedUnion("status", [
   z.object({
