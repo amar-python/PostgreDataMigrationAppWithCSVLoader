@@ -56,6 +56,12 @@ class RaggedRowsOverTheApi(unittest.TestCase):
         err = res["rowErrors"][0]
         self.assertEqual((err["rowNumber"], err["value"]), (2, "LOST"))
         self.assertIn("header has 2", err["reason"])
+        # #192: accounting identity — every row is accounted for
+        self.assertEqual(
+            res["totalRows"],
+            res["insertedRows"] + res.get("duplicateRowsSkipped", 0) + res["failedRows"],
+            f"Accounting identity violated: {res}",
+        )
 
     def test_dynamic_mode_accepts_a_trailing_empty_cell(self):
         res = self._upload(f"a,b\n1,{self.tag},\n")
@@ -68,3 +74,24 @@ class RaggedRowsOverTheApi(unittest.TestCase):
         self.assertEqual(res["status"], "ok")
         self.assertEqual((res["insertedRows"], res["failedRows"]), (1, 1))
         self.assertEqual(res["rowErrors"][0]["value"], "LOST")
+        # #192: accounting identity
+        self.assertEqual(
+            res["totalRows"],
+            res["insertedRows"] + res.get("duplicateRowsSkipped", 0) + res["failedRows"],
+            f"Accounting identity violated: {res}",
+        )
+
+    def test_multiple_ragged_rows_each_get_a_reason(self):
+        """Every ragged row gets its own entry in rowErrors with a reason."""
+        content = (f"a,b\n"
+                   f"1,{self.tag}\n"
+                   f"2,{self.tag},X1,X2\n"
+                   f"3,{self.tag},X3\n")
+        res = self._upload(content)
+        self.assertEqual(res["status"], "ok")
+        self.assertEqual(res["failedRows"], 2)
+        self.assertEqual(res["insertedRows"], 1)
+        for err in res["rowErrors"]:
+            self.assertIn("rowNumber", err, f"Missing rowNumber: {err}")
+            self.assertIn("reason", err, f"Missing reason: {err}")
+            self.assertTrue(err["reason"], f"Empty reason: {err}")

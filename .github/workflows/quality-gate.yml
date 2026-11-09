@@ -41,6 +41,10 @@ jobs:
       - name: Component health check
         run: make health
 
+      # #169: test catalogue freshness — fails if docs/TEST_CASES.md is stale.
+      - name: Test catalogue check
+        run: python3 scripts/test_catalogue.py --check
+
       # Tier X (cross-engine) is deliberately absent: multi-engine support is
       # deferred by ADR-0001 (PostgreSQL first), so this pipeline is PostgreSQL
       # only. The scenario still exists and passes — run it with `make
@@ -164,6 +168,18 @@ jobs:
         env:
           PGDATABASE: te_mgmt_dev
         run: python3 scripts/test_report.py --strict
+
+      # #194: measure api/services coverage with per-loader floors.
+      - name: api/services coverage gate
+        env:
+          PGDATABASE: te_mgmt_dev
+        run: |
+          python -m pytest tests/ \
+            --cov=api/services \
+            --cov-report=json:coverage-services.json \
+            --cov-report=term-missing \
+            -q --no-header 2>&1 | tail -20
+          python3 scripts/check_coverage_floors.py coverage-services.json
 
       - name: Upload eval reports
         if: always()

@@ -88,17 +88,16 @@ _EXEMPT_PATHS = frozenset({"/api/health", "/openapi.json", "/docs", "/redoc"})
 
 
 def _client_id(request: Request) -> str:
-    """Identify the caller.
+    """Identify the caller by a trusted attribute.
 
-    Prefers the API key (a deployed caller's stable identity) over the socket
-    address, because several callers can share one NAT address. Falls back to
-    the peer IP. ``X-Forwarded-For`` is deliberately ignored: it is
-    client-controlled, so trusting it would let anyone bypass the limit by
-    varying the header.
+    Uses the peer IP as the rate-limit identity. The API key is NOT used here
+    because it is checked before authentication: an attacker could rotate
+    arbitrary X-API-Key values to get a fresh rate-limit bucket each time,
+    bypassing brute-force protection (#183).
+
+    ``X-Forwarded-For`` is deliberately ignored: it is client-controlled, so
+    trusting it would let anyone bypass the limit by varying the header.
     """
-    api_key = request.headers.get("x-api-key")
-    if api_key:
-        return f"key:{api_key[:8]}"
     client = request.client
     return f"ip:{client.host}" if client and client.host else "ip:unknown"
 

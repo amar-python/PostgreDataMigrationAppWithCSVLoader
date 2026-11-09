@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import logging
 from urllib.parse import quote
 
@@ -35,6 +37,11 @@ class PreviewRequest(BaseModel):
     content: str = Field(min_length=1)
 
 
+class HeaderRename(BaseModel):
+    original: str = Field(max_length=255)
+    renamed: str = Field(default="", max_length=128)  # blank keeps the original
+
+
 class UploadRequest(BaseModel):
     fileName: str = Field(min_length=1, max_length=255)
     content: str = Field(min_length=1)
@@ -42,6 +49,10 @@ class UploadRequest(BaseModel):
     overwrite: bool = False
     mode: str = "dynamic"  # "dynamic" | "te"
     targetTable: str | None = None  # required when mode == "te"
+    headerMapping: list[HeaderRename] | None = Field(default=None, max_length=1000)  # dynamic mode only (#186)
+    # The file's bytes as the browser read them, base64. Kept as the preserved
+    # original so its hash matches the uploader's copy; `content` is still what loads (#185).
+    contentBase64: str | None = None
 
 
 @router.post("/preview", dependencies=[Depends(allow("preview"))])
@@ -69,21 +80,40 @@ def preview(req: PreviewRequest) -> dict:
     return result
 
 
+def _decode_original(b64: str | None) -> bytes | None:
+    if b64 is None:
+        return None
+    # base64 inflates by 4/3; refuse before decoding rather than after.
+    if len(b64) > settings.MAX_UPLOAD_BYTES * 4 // 3 + 4:
+        raise HTTPException(413, "File too large")
+    try:
+        return base64.b64decode(b64, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(422, "contentBase64 is not valid base64") from None
+
+
 @router.post("/upload", dependencies=[Depends(allow("upload"))])
-def upload(req: UploadRequest) -> dict:
+def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> dict:
     if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
+    original = _decode_original(req.contentBase64)
     if req.mode == "te":
         if not req.targetTable:
             raise HTTPException(422, "targetTable is required when mode is 'te'")
-        result = upload_te(req.fileName, req.content, req.targetTable)
+        if req.headerMapping:
+            # T&E columns must match the fixed schema exactly; a rename could
+            # only be ignored, which is the silent failure #186 describes.
+            raise HTTPException(422, "headerMapping is only supported in 'dynamic' mode")
+        result = upload_te(req.fileName, req.content, req.targetTable, session=session)
     elif req.mode == "dynamic":
-        result = upload_dynamic(req.fileName, req.content, req.types, req.overwrite)
+        mapping = [m.model_dump() for m in req.headerMapping] if req.headerMapping else None
+        result = upload_dynamic(req.fileName, req.content, req.types, req.overwrite,
+                                session=session, header_mapping=mapping)
     else:
         raise HTTPException(422, f"Unknown mode '{req.mode}' — use 'dynamic' or 'te'")
 
     # M3b (#107): keep the original and its outcome, whatever the outcome was.
-    upload_id = record_upload(req.fileName, req.content, req.mode, result)
+    upload_id = record_upload(req.fileName, req.content, req.mode, result, original=original)
     result["uploadId"] = None if upload_id is None else str(upload_id)
 
     # O-04: record the load so audit_log covers creations, not just deletions.
