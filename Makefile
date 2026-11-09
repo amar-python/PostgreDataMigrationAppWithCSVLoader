@@ -27,10 +27,11 @@ test-evals:
 test-e2e:
 	pytest -m "e2e or integration or parity" tests/ -v
 
-# All: every test tier including evals.
+# All: every test tier including evals. Accessibility scans need a browser and the
+# frontend, so they run on their own: `make test-accessibility` (tests/accessibility/README.md).
 # Mirrors: bun run test:evals:all
 test-all:
-	pytest tests/ --cov=build/csv --cov=evals --cov-report=term-missing
+	pytest tests/ -m "not accessibility" --cov=build/csv --cov=evals --cov-report=term-missing
 	python3 evals/runner.py --tiers p,i,s,e --verbose
 
 # ── One category at a time (#167) ─────────────────────────────────────────────

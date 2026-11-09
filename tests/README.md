@@ -10,7 +10,7 @@ automatically.
 | `system/` | The API and a live PostgreSQL | `system` (automatic) | `make test-system` |
 | `system_integration/` | The whole pipeline: shell loaders, every deployed environment, cross-environment parity | `sit` (automatic) | `make test-sit` |
 | `performance/` | Load and timing tests (none yet) | `performance` (automatic) | `make test-performance` |
-| `accessibility/` | A real browser against the running app, WCAG scans (#168) | `accessibility` (automatic) | `make test-accessibility` |
+| `accessibility/` | Chromium, the frontend's dev server and Node; the API is stubbed. WCAG 2.1 AA scans, own CI job ([README](accessibility/README.md), #168) | `accessibility` (automatic) | `make test-accessibility` |
 | `uat/` | User-acceptance scenarios (none yet) | `uat` (automatic) | `make test-uat` |
 
 Which folder does a new test go in? Ask what is the least it needs: nothing →

@@ -36,6 +36,7 @@ _RULES: list[tuple[str, str, str]] = [
     ("tests/system/",            "integration",                      "system test changed → integration"),
     ("tests/system_integration/", "e2e or integration or parity",    "system-integration test changed → e2e + integration + parity"),
     ("tests/accessibility/",     "accessibility",                    "accessibility test changed → accessibility"),
+    ("csv-table-hub-main/src/", "accessibility",                    "frontend changed → accessibility scans (CI job only)"),
     ("scripts/",                 "security",                         "scripts changed → security scan"),
     ("build/adapters/",          "security",                         "adapter changed → security scan"),
     ("build/csv/loader_",        "e2e",                              "loader changed → e2e"),

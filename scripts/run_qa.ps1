@@ -34,7 +34,7 @@ switch ($Target) {
         pytest -m "e2e or integration or parity" tests/ -v
     }
     "test-all" {
-        pytest tests/ --cov=build/csv --cov=evals --cov-report=term-missing
+        pytest tests/ -m "not accessibility" --cov=build/csv --cov=evals --cov-report=term-missing
         python evals/runner.py --tiers p,i,s --verbose
     }
     "lint" {
