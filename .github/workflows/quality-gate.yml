@@ -174,11 +174,12 @@ jobs:
         run: python3 scripts/test_report.py --markers "not accessibility" --strict
 
       # #194: measure api/services coverage with per-loader floors.
+      # Accessibility tests need a browser and a running frontend (own job below).
       - name: api/services coverage gate
         env:
           PGDATABASE: te_mgmt_dev
         run: |
-          python -m pytest tests/ \
+          python -m pytest tests/ -m "not accessibility" \
             --cov=api/services \
             --cov-report=json:coverage-services.json \
             --cov-report=term-missing \
