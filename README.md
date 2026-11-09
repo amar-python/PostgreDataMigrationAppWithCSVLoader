@@ -244,8 +244,8 @@ Interactive docs: `http://localhost:8000/docs`
 python -m pytest tests\ -m "unit or regression or security or snapshot" -q
 
 # Integration tests — requires running API + provisioned database
-python -m pytest tests\test_api_integration.py -v
-python -m pytest tests\test_te_loader_integration.py -v
+python -m pytest tests\system\test_api_integration.py -v
+python -m pytest tests\system\test_te_loader_integration.py -v
 
 # Per-environment contract tests
 python -m pytest tests\environments\ -v
@@ -267,7 +267,7 @@ bash tests/run_tests.sh dev
 ### Eval suite
 
 ```powershell
-python evals\runner.py --tiers p,i,s,e   # 26 scenarios: Tier P 23, I 1, S 1, E 1
+python evals\runner.py --tiers p,i,s,e   # 27 scenarios: Tier P 23, I 1, S 1, E 2
 ```
 
 ### CI
@@ -338,7 +338,7 @@ organisations ──< personnel
 | Connection Limit | 10 | 15 | 25 | 50 |
 | Seed Data | ✅ | ✅ | ❌ | ❌ |
 
-Staging and Prod are **never seeded**. The `tests/environments/` contract tests
+Staging and Prod are **never seeded**. The `tests/system_integration/environments/` contract tests
 verify this automatically.
 
 ---

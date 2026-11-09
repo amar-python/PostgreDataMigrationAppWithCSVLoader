@@ -203,7 +203,7 @@ def owner_connect():
 
 # Tables the runtime role may only read and insert (M3, #107). Triggers also stop the owner.
 APPEND_ONLY = ("audit_log", "uploads", "upload_blobs", "source_rows", "row_decisions", "cell_edits",
-               "row_flags", "alembic_version")
+               "row_flags", "alembic_version", "alembic_version_te")
 
 
 def grant_runtime(cur, schema: str, create: bool) -> None:

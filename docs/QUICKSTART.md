@@ -198,10 +198,10 @@ Or use the convenience script from the repo root:
 python -m pytest tests\ -m "unit or regression or security or snapshot" -q
 
 # Integration tests — requires running API + provisioned database
-python -m pytest tests\test_api_integration.py -v
+python -m pytest tests\system\test_api_integration.py -v
 
 # T&E mode integration tests
-python -m pytest tests\test_te_loader_integration.py -v
+python -m pytest tests\system\test_te_loader_integration.py -v
 
 # Per-environment contract tests
 python -m pytest tests\environments\ -v

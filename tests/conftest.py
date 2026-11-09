@@ -42,6 +42,97 @@ def _reset_rate_limiter():
     _limiter.reset()
 
 
+# ── Shared fixtures for tests that need the live API (#167) ───────────────────────────
+# unittest.TestCase classes cannot take fixture arguments, so each fixture also attaches
+# its value (`self.client`, `self.registry_cleanup`, ...) to the class or instance. Use
+# them with @pytest.mark.usefixtures("live_api", "destructive_enabled") on the class.
+# These fail, never skip, when PostgreSQL is not reachable, like the tests themselves.
+from fastapi.testclient import TestClient  # noqa: E402
+from psycopg2 import sql  # noqa: E402
+
+from api.db import Conn  # noqa: E402
+
+_START_HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/PGPASSWORD/"
+               "PGDATABASE). See scripts/start-api.ps1.")
+
+
+@pytest.fixture(scope="class")
+def destructive_enabled():
+    """DELETE and overwrite are off unless API_ALLOW_DESTRUCTIVE is set; turn them on for one class."""
+    original = _settings.allow_destructive
+    _settings.allow_destructive = True
+    yield
+    _settings.allow_destructive = original
+
+
+@pytest.fixture(scope="class")
+def live_api(request):
+    """The API started with its lifespan, so the database pool is up. ``self.client`` on a class."""
+    ctx = TestClient(app)
+    try:
+        client = ctx.__enter__()
+    except Exception as exc:  # noqa: BLE001
+        raise AssertionError(f"Could not start the API: {type(exc).__name__}: {exc}\n{_START_HELP}") from None
+    if request.cls is not None:
+        request.cls.client = client
+    yield client
+    ctx.__exit__(None, None, None)
+
+
+@pytest.fixture
+def registry_cleanup(request, live_api, destructive_enabled):
+    """File names the test registered; their csv_files rows (and tables) are deleted afterwards.
+
+    Append names to the list: ``self.registry_cleanup.append(name)``.
+    """
+    names: list[str] = []
+    if request.instance is not None:
+        request.instance.registry_cleanup = names
+    yield names
+    for entry in live_api.get("/api/csv/files").json():
+        if entry["file_name"] in names:
+            live_api.delete(f"/api/csv/files/{entry['id']}")
+
+
+@pytest.fixture
+def te_org_cleanup(request):
+    """Names of organisations the test inserted into the T&E schema; deleted afterwards.
+
+    Append names to the list: ``self.te_org_cleanup.append(name)``.
+    """
+    names: list[str] = []
+    if request.instance is not None:
+        request.instance.te_org_cleanup = names
+    yield names
+    if names:
+        with Conn() as conn, conn.cursor() as cur:
+            cur.execute(sql.SQL("DELETE FROM {}.organisations WHERE name = ANY(%s)").format(
+                sql.Identifier(_settings.TE_SCHEMA)), (names,))
+            conn.commit()
+
+
+# Folder -> marker (#167). The folder a test lives in is its category, so `-m system`,
+# `-m "not accessibility"` and the Makefile targets agree with the layout without each
+# test having to remember a decorator. `unit` stays explicit: it is what the free tier
+# (and the Windows job) select on, and some folders mix it with finer markers.
+_FOLDER_MARKERS = {
+    "system": "system",
+    "system_integration": "sit",
+    "performance": "performance",
+    "accessibility": "accessibility",
+    "uat": "uat",
+}
+
+
+def pytest_collection_modifyitems(items):
+    for item in items:
+        for part in Path(str(item.fspath)).parts:
+            marker = _FOLDER_MARKERS.get(part)
+            if marker:
+                item.add_marker(getattr(pytest.mark, marker))
+                break
+
+
 # Env vars tests are allowed to mutate; restored after every test.
 _RESTORE_KEYS = (
     "CSV_FILE",
