@@ -80,7 +80,7 @@ def provision_te_tables(cur, schema: str, template: str) -> int:
 
     ``template`` is the schema build/deploy_all.sh created. Copies columns,
     defaults, checks, indexes and comments, then the foreign keys, the
-    updated_at function and its triggers, re-pointed at ``schema``. Keys are
+    updated_at and program_id-fill functions and their triggers, re-pointed at ``schema``. Keys are
     UUIDs, so no sequence is shared between tenants. Idempotent: only missing
     tables are created. Returns how many were. The caller commits.
     """
@@ -114,7 +114,7 @@ def provision_te_tables(cur, schema: str, template: str) -> int:
             sql.Identifier(schema), sql.Identifier(table), sql.Identifier(name))
             + sql.SQL(ddl.replace(f"REFERENCES {qt}.", f"REFERENCES {qs}.")))
     cur.execute("SELECT pg_get_functiondef(p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
-                "WHERE n.nspname = %s AND p.proname = 'set_updated_at'", (template,))
+                "WHERE n.nspname = %s AND p.proname IN ('set_updated_at', 'te_fill_program_id')", (template,))
     for (ddl,) in cur.fetchall():
         cur.execute(sql.SQL(ddl.replace(f"FUNCTION {qt}.", f"FUNCTION {qs}.", 1)))
     for (ddl,) in defs(

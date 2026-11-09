@@ -60,6 +60,7 @@ SELECT
 \i tests/suites/test_03_requirements_vcrm.sql
 \i tests/suites/test_04_execution_defects.sql
 \i tests/suites/test_05_schema_and_business_rules.sql
+\i tests/suites/test_06_program_consistency.sql
 
 -- ── Step 3: Reports ───────────────────────────────────────────────────────────
 

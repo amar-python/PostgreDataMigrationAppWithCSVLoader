@@ -445,6 +445,178 @@ CREATE INDEX IF NOT EXISTS idx_defects_status
 
 
 -- =============================================================================
+-- PHASE 4B: PROGRAM CONSISTENCY  (BR-05, BR-07, BR-08; issue #177)
+-- =============================================================================
+-- program_id is the join key that ties VCRM entries, results and defects to ONE
+-- program. test_cases, vcrm_entries, test_events and test_results carry it, and
+-- every cross-table FK is composite (<id>, program_id), so PostgreSQL rejects a
+-- row that joins two programs. program_id is filled from the parent on INSERT
+-- when omitted (CSV loads, seed data); a value that disagrees with the parent
+-- fails the composite FK.
+--
+-- Idempotent: runs on a fresh database and on one deployed before #177. On an
+-- existing database it backfills program_id from the parent rows, then ABORTS
+-- (rolling everything back) listing any pre-existing cross-program rows.
+
+\echo '>> [4b/6] Program-consistency constraints'
+
+CREATE OR REPLACE FUNCTION :"schema_name".te_fill_program_id()
+RETURNS TRIGGER LANGUAGE plpgsql AS
+$$
+-- args: parent table, parent key column, this row's FK column. The parent lives
+-- in the row's own schema (TG_TABLE_SCHEMA), never a name baked in at deploy
+-- time: api/tenancy.py clones these triggers into per-tenant schemas.
+DECLARE
+   v_prog UUID;
+BEGIN
+   IF NEW.program_id IS NULL THEN
+      EXECUTE format('SELECT program_id FROM %I.%I WHERE %I = $1',
+                     TG_TABLE_SCHEMA, TG_ARGV[0], TG_ARGV[1])
+         INTO v_prog USING (to_jsonb(NEW) ->> TG_ARGV[2])::UUID;
+      IF v_prog IS NULL THEN
+         RAISE EXCEPTION '%.% % not found', TG_ARGV[0], TG_ARGV[1], to_jsonb(NEW) ->> TG_ARGV[2]
+            USING ERRCODE = 'foreign_key_violation';
+      END IF;
+      NEW.program_id := v_prog;
+   END IF;
+   RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION pg_temp.te_add_con(p_tbl TEXT, p_name TEXT, p_def TEXT)
+RETURNS VOID LANGUAGE plpgsql AS
+$$
+BEGIN
+   IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conrelid = p_tbl::regclass AND conname = p_name) THEN
+      EXECUTE format('ALTER TABLE %s ADD CONSTRAINT %I %s', p_tbl, p_name, p_def);
+   END IF;
+END;
+$$;
+
+DO
+$$
+DECLARE
+   v_sch TEXT := current_setting('te.schema_name');
+   ph    TEXT := format('%I.%I', v_sch, current_setting('te.tbl_test_phases'));
+   rq    TEXT := format('%I.%I', v_sch, current_setting('te.tbl_requirements'));
+   tc    TEXT := format('%I.%I', v_sch, current_setting('te.tbl_test_cases'));
+   vc    TEXT := format('%I.%I', v_sch, current_setting('te.tbl_vcrm_entries'));
+   ev    TEXT := format('%I.%I', v_sch, current_setting('te.tbl_test_events'));
+   rs    TEXT := format('%I.%I', v_sch, current_setting('te.tbl_test_results'));
+   df    TEXT := format('%I.%I', v_sch, current_setting('te.tbl_defect_reports'));
+   v_bad TEXT;
+   r     RECORD;
+BEGIN
+   -- 1. program_id columns (nullable until backfilled)
+   EXECUTE format('ALTER TABLE %s ADD COLUMN IF NOT EXISTS program_id UUID', tc);
+   EXECUTE format('ALTER TABLE %s ADD COLUMN IF NOT EXISTS program_id UUID', ev);
+   EXECUTE format('ALTER TABLE %s ADD COLUMN IF NOT EXISTS program_id UUID', vc);
+   EXECUTE format('ALTER TABLE %s ADD COLUMN IF NOT EXISTS program_id UUID', rs);
+
+   -- 2. backfill from the parent each row already depends on. updated_at
+   --    triggers are paused so the backfill does not look like an edit.
+   FOR r IN SELECT t FROM unnest(ARRAY[tc, ev]) t
+            WHERE EXISTS (SELECT 1 FROM pg_trigger
+                          WHERE tgrelid = t::regclass AND tgname = 'trg_updated_at')
+   LOOP
+      EXECUTE format('ALTER TABLE %s DISABLE TRIGGER trg_updated_at', r.t);
+   END LOOP;
+   EXECUTE format('UPDATE %s c SET program_id = p.program_id FROM %s p
+                   WHERE c.phase_id = p.phase_id AND c.program_id IS NULL', tc, ph);
+   EXECUTE format('UPDATE %s c SET program_id = p.program_id FROM %s p
+                   WHERE c.phase_id = p.phase_id AND c.program_id IS NULL', ev, ph);
+   EXECUTE format('UPDATE %s c SET program_id = p.program_id FROM %s p
+                   WHERE c.req_id = p.req_id AND c.program_id IS NULL', vc, rq);
+   EXECUTE format('UPDATE %s c SET program_id = p.program_id FROM %s p
+                   WHERE c.event_id = p.event_id AND c.program_id IS NULL', rs, ev);
+   FOR r IN SELECT t FROM unnest(ARRAY[tc, ev]) t
+            WHERE EXISTS (SELECT 1 FROM pg_trigger
+                          WHERE tgrelid = t::regclass AND tgname = 'trg_updated_at')
+   LOOP
+      EXECUTE format('ALTER TABLE %s ENABLE TRIGGER trg_updated_at', r.t);
+   END LOOP;
+
+   -- 3. pre-migration data check: refuse to constrain data that already violates
+   --    BR-07, and say exactly which rows to triage.
+   EXECUTE format($q$
+      SELECT string_agg(msg, E'\n') FROM (
+         SELECT 'vcrm_entries ' || v.vcrm_id || ': requirement in program ' || v.program_id
+                || ', test case in program ' || c.program_id AS msg
+         FROM %s v JOIN %s c ON c.tc_id = v.tc_id WHERE c.program_id <> v.program_id
+         UNION ALL
+         SELECT 'test_results ' || x.result_id || ': event in program ' || x.program_id
+                || ', test case in program ' || c.program_id
+         FROM %s x JOIN %s c ON c.tc_id = x.tc_id WHERE c.program_id <> x.program_id
+         UNION ALL
+         SELECT 'defect_reports ' || d.defect_id || ': defect in program ' || d.program_id
+                || ', result in program ' || x.program_id
+         FROM %s d JOIN %s x ON x.result_id = d.result_id WHERE x.program_id <> d.program_id
+         LIMIT 50
+      ) m $q$, vc, tc, rs, tc, df, rs) INTO v_bad;
+   IF v_bad IS NOT NULL THEN
+      RAISE EXCEPTION E'Cross-program references found (BR-07). Fix or remove these rows, then re-run:\n%', v_bad;
+   END IF;
+
+   -- 4. NOT NULL, composite-key targets, composite FKs
+   EXECUTE format('ALTER TABLE %s ALTER COLUMN program_id SET NOT NULL', tc);
+   EXECUTE format('ALTER TABLE %s ALTER COLUMN program_id SET NOT NULL', ev);
+   EXECUTE format('ALTER TABLE %s ALTER COLUMN program_id SET NOT NULL', vc);
+   EXECUTE format('ALTER TABLE %s ALTER COLUMN program_id SET NOT NULL', rs);
+
+   -- drop the single-column FKs the composites replace (any name, any age)
+   FOR r IN
+      SELECT c.conrelid::regclass AS t, c.conname
+      FROM pg_constraint c
+      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+      WHERE c.contype = 'f' AND cardinality(c.conkey) = 1
+        AND (c.conrelid, a.attname) IN (
+              (tc::regclass::oid, 'phase_id'),  (ev::regclass::oid, 'phase_id'),
+              (vc::regclass::oid, 'req_id'),    (vc::regclass::oid, 'tc_id'),
+              (rs::regclass::oid, 'event_id'),  (rs::regclass::oid, 'tc_id'),
+              (df::regclass::oid, 'result_id'))
+   LOOP
+      EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.t, r.conname);
+   END LOOP;
+
+   PERFORM pg_temp.te_add_con(ph, 'uq_phases_id_program',       'UNIQUE (phase_id, program_id)');
+   PERFORM pg_temp.te_add_con(rq, 'uq_requirements_id_program', 'UNIQUE (req_id, program_id)');
+   PERFORM pg_temp.te_add_con(tc, 'uq_testcases_id_program',    'UNIQUE (tc_id, program_id)');
+   PERFORM pg_temp.te_add_con(ev, 'uq_events_id_program',       'UNIQUE (event_id, program_id)');
+   PERFORM pg_temp.te_add_con(rs, 'uq_results_id_program',      'UNIQUE (result_id, program_id)');
+
+   PERFORM pg_temp.te_add_con(tc, 'fk_testcases_phase_program',
+      format('FOREIGN KEY (phase_id, program_id) REFERENCES %s(phase_id, program_id) ON DELETE CASCADE', ph));
+   PERFORM pg_temp.te_add_con(ev, 'fk_events_phase_program',
+      format('FOREIGN KEY (phase_id, program_id) REFERENCES %s(phase_id, program_id) ON DELETE CASCADE', ph));
+   PERFORM pg_temp.te_add_con(vc, 'fk_vcrm_req_program',
+      format('FOREIGN KEY (req_id, program_id) REFERENCES %s(req_id, program_id) ON DELETE CASCADE', rq));
+   PERFORM pg_temp.te_add_con(vc, 'fk_vcrm_tc_program',
+      format('FOREIGN KEY (tc_id, program_id) REFERENCES %s(tc_id, program_id) ON DELETE CASCADE', tc));
+   PERFORM pg_temp.te_add_con(rs, 'fk_results_event_program',
+      format('FOREIGN KEY (event_id, program_id) REFERENCES %s(event_id, program_id) ON DELETE CASCADE', ev));
+   PERFORM pg_temp.te_add_con(rs, 'fk_results_tc_program',
+      format('FOREIGN KEY (tc_id, program_id) REFERENCES %s(tc_id, program_id)', tc));
+   -- defect result_id is nullable; MATCH SIMPLE skips the check when it is NULL
+   PERFORM pg_temp.te_add_con(df, 'fk_defects_result_program',
+      format('FOREIGN KEY (result_id, program_id) REFERENCES %s(result_id, program_id)', rs));
+
+   -- 5. fill program_id from the parent on INSERT when the caller omitted it
+   FOR r IN SELECT * FROM (VALUES
+         (tc, ph, 'phase_id', 'phase_id'), (ev, ph, 'phase_id', 'phase_id'),
+         (vc, rq, 'req_id',   'req_id'),   (rs, ev, 'event_id', 'event_id')) AS m(t, parent, pk, fk)
+   LOOP
+      EXECUTE format('DROP TRIGGER IF EXISTS trg_fill_program_id ON %s', r.t);
+      EXECUTE format(
+         'CREATE TRIGGER trg_fill_program_id BEFORE INSERT ON %s FOR EACH ROW
+             EXECUTE FUNCTION %I.te_fill_program_id(%L, %L, %L)',
+         r.t, v_sch, (parse_ident(r.parent))[2], r.pk, r.fk);
+   END LOOP;
+END;
+$$;
+
+
+-- =============================================================================
 -- PHASE 5: TRIGGERS — auto-update updated_at
 -- =============================================================================
 
@@ -991,16 +1163,19 @@ FROM (
 ORDER BY table_name;
 
 -- VCRM coverage summary: requirements with and without test case coverage
+-- Grouped per requirement per program: the same req_identifier in two programs
+-- must stay two rows (RV-F8, #177).
 SELECT
+   r.program_id,
    r.req_identifier,
    r.title,
    r.req_type,
    COUNT(v.tc_id)  AS test_cases_mapped,
    CASE WHEN COUNT(v.tc_id) = 0 THEN '✗ NO COVERAGE' ELSE '✓ COVERED' END AS coverage_status
 FROM       :"schema_name".:"tbl_requirements"  r
-LEFT JOIN  :"schema_name".:"tbl_vcrm_entries"  v ON v.req_id = r.req_id
-GROUP BY r.req_identifier, r.title, r.req_type
-ORDER BY r.req_identifier;
+LEFT JOIN  :"schema_name".:"tbl_vcrm_entries"  v ON v.req_id = r.req_id AND v.program_id = r.program_id
+GROUP BY r.program_id, r.req_id, r.req_identifier, r.title, r.req_type
+ORDER BY r.program_id, r.req_identifier;
 
 -- Defect summary by severity and status
 SELECT
