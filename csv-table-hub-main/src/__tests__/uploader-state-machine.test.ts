@@ -189,4 +189,27 @@ describe("Uploader state machine", () => {
     const call = uploadCsv.mock.calls[0][0];
     expect(call.overwrite).toBe(true);
   });
+
+  it("sends the file's raw bytes alongside the decoded text (#185)", async () => {
+    uploadCsv.mockResolvedValue({
+      status: "ok",
+      fileId: "1",
+      tableName: "csv_abc123",
+      totalRows: 1,
+      insertedRows: 1,
+      duplicateRowsSkipped: 0,
+      failedRows: 0,
+      columns: ["id", "name"],
+      types: ["int8", "text"],
+      rowErrors: [],
+      logs: [],
+    });
+    const raw = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode("id,name\n1,foo\n")]);
+    await dropAndConfirm(new File([raw], "bom.csv", { type: "text/csv" }));
+
+    await waitFor(() => expect(uploadCsv).toHaveBeenCalled());
+    const call = uploadCsv.mock.calls[0][0];
+    expect(Array.from(Uint8Array.from(atob(call.contentBase64), (c) => c.charCodeAt(0)))).toEqual(Array.from(raw));
+    expect(call.content.startsWith("id,name")).toBe(true); // the BOM is not in the decoded text
+  });
 });

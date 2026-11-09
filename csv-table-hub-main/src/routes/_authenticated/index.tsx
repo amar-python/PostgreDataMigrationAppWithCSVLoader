@@ -34,6 +34,7 @@ import {
 } from "@/lib/mapping-templates";
 import { downloadErrorReport, buildErrorRows, type ExportFormat } from "@/lib/export";
 import type { Job, JobStatus } from "@/lib/job-types";
+import { readFileBase64 } from "@/lib/file-bytes";
 import { formatLocalTime, formatUtc } from "@/lib/utils";
 import {
   classifyUploadResult, classifyThrownError, buildCancelPatch, buildCancelToastMessage,
@@ -169,6 +170,8 @@ export function Uploader() {
         reader.readAsText(file);
       });
       if (ctrl.signal.aborted) return;
+      const contentBase64 = await readFileBase64(file); // #185: keep the original bytes, not the decoded text
+      if (ctrl.signal.aborted) return;
       updateJob(job.id,{status:"uploading",progress:75});
       await new Promise(r=>setTimeout(r,30));
       if (ctrl.signal.aborted) return;
@@ -181,7 +184,7 @@ export function Uploader() {
       const headerMapping = isTe ? undefined : mapping;
 
       const res = await uploadCsv({
-        fileName:job.name, content, types, overwrite,
+        fileName:job.name, content, contentBase64, types, overwrite,
         headerMapping: headerMapping?.map(c=>({original:c.original,renamed:c.renamed})),
         mode: job.mode, targetTable: job.targetTable,
       });

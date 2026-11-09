@@ -36,9 +36,15 @@ def outcome(result: dict) -> str:
     return _STATUS.get(status, "failed")
 
 
-def record_upload(file_name: str, content: str, mode: str, result: dict) -> int | None:
-    """Store the original and its outcome. Returns the upload id, or None if it couldn't be stored."""
-    data = content.encode("utf-8")
+def record_upload(file_name: str, content: str, mode: str, result: dict, *,
+                  original: bytes | None = None) -> int | None:
+    """Store the original and its outcome. Returns the upload id, or None if it couldn't be stored.
+
+    ``original`` is the file's bytes exactly as uploaded (#185); it is what gets hashed and
+    kept. Without it the decoded ``content`` re-encoded as UTF-8 stands in, which loses a
+    BOM or any invalid bytes. ``content`` still feeds the parsed ``source_rows`` view.
+    """
+    data = original if original is not None else content.encode("utf-8")
     ok = result.get("status") == "ok"
     try:
         with Conn() as conn:

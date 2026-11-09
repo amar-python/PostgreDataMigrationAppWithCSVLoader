@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import logging
 from urllib.parse import quote
 
@@ -48,6 +50,9 @@ class UploadRequest(BaseModel):
     mode: str = "dynamic"  # "dynamic" | "te"
     targetTable: str | None = None  # required when mode == "te"
     headerMapping: list[HeaderRename] | None = Field(default=None, max_length=1000)  # dynamic mode only (#186)
+    # The file's bytes as the browser read them, base64. Kept as the preserved
+    # original so its hash matches the uploader's copy; `content` is still what loads (#185).
+    contentBase64: str | None = None
 
 
 @router.post("/preview", dependencies=[Depends(allow("preview"))])
@@ -75,10 +80,23 @@ def preview(req: PreviewRequest) -> dict:
     return result
 
 
+def _decode_original(b64: str | None) -> bytes | None:
+    if b64 is None:
+        return None
+    # base64 inflates by 4/3; refuse before decoding rather than after.
+    if len(b64) > settings.MAX_UPLOAD_BYTES * 4 // 3 + 4:
+        raise HTTPException(413, "File too large")
+    try:
+        return base64.b64decode(b64, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(422, "contentBase64 is not valid base64") from None
+
+
 @router.post("/upload", dependencies=[Depends(allow("upload"))])
 def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> dict:
     if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
+    original = _decode_original(req.contentBase64)
     if req.mode == "te":
         if not req.targetTable:
             raise HTTPException(422, "targetTable is required when mode is 'te'")
@@ -95,7 +113,7 @@ def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> 
         raise HTTPException(422, f"Unknown mode '{req.mode}' — use 'dynamic' or 'te'")
 
     # M3b (#107): keep the original and its outcome, whatever the outcome was.
-    upload_id = record_upload(req.fileName, req.content, req.mode, result)
+    upload_id = record_upload(req.fileName, req.content, req.mode, result, original=original)
     result["uploadId"] = None if upload_id is None else str(upload_id)
 
     # O-04: record the load so audit_log covers creations, not just deletions.
