@@ -35,6 +35,11 @@ class PreviewRequest(BaseModel):
     content: str = Field(min_length=1)
 
 
+class HeaderRename(BaseModel):
+    original: str = Field(max_length=255)
+    renamed: str = Field(default="", max_length=128)  # blank keeps the original
+
+
 class UploadRequest(BaseModel):
     fileName: str = Field(min_length=1, max_length=255)
     content: str = Field(min_length=1)
@@ -42,6 +47,7 @@ class UploadRequest(BaseModel):
     overwrite: bool = False
     mode: str = "dynamic"  # "dynamic" | "te"
     targetTable: str | None = None  # required when mode == "te"
+    headerMapping: list[HeaderRename] | None = Field(default=None, max_length=1000)  # dynamic mode only (#186)
 
 
 @router.post("/preview", dependencies=[Depends(allow("preview"))])
@@ -76,9 +82,15 @@ def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> 
     if req.mode == "te":
         if not req.targetTable:
             raise HTTPException(422, "targetTable is required when mode is 'te'")
+        if req.headerMapping:
+            # T&E columns must match the fixed schema exactly; a rename could
+            # only be ignored, which is the silent failure #186 describes.
+            raise HTTPException(422, "headerMapping is only supported in 'dynamic' mode")
         result = upload_te(req.fileName, req.content, req.targetTable, session=session)
     elif req.mode == "dynamic":
-        result = upload_dynamic(req.fileName, req.content, req.types, req.overwrite, session=session)
+        mapping = [m.model_dump() for m in req.headerMapping] if req.headerMapping else None
+        result = upload_dynamic(req.fileName, req.content, req.types, req.overwrite,
+                                session=session, header_mapping=mapping)
     else:
         raise HTTPException(422, f"Unknown mode '{req.mode}' — use 'dynamic' or 'te'")
 

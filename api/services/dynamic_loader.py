@@ -24,6 +24,7 @@ from api.db import Conn
 from api.services.destructive_ops import safe_cleanup_prior
 from api.services.csv_parse import (
     ALLOWED_TYPES,
+    apply_header_mapping,
     cast_value,
     extra_cells,
     parse_csv,
@@ -58,6 +59,7 @@ def upload_dynamic(
     overwrite: bool,
     *,
     session: dict | None = None,
+    header_mapping: list[dict] | None = None,
 ) -> dict:
     logs: list[dict] = []
     _log(logs, "receive", f'Received "{file_name}" ({len(content)} chars)')
@@ -88,6 +90,17 @@ def upload_dynamic(
             "message": "This CSV's first row is blank, so we can't detect any column headers.",
             "logs": logs,
         }
+
+    # #186: honour confirmed header renames; the column name in the table is
+    # the renamed one, not the CSV's original.
+    mapped_headers, mapping_error = apply_header_mapping(rows[0], header_mapping)
+    if mapping_error:
+        _log(logs, "header_mapping", mapping_error, "error")
+        return {"status": "error", "reason": "invalid_header_mapping", "message": mapping_error, "logs": logs}
+    if header_mapping:
+        renamed_count = sum(1 for a, b in zip(rows[0], mapped_headers) if a != b)
+        _log(logs, "header_mapping", f"Renamed {renamed_count} column header(s)", count=renamed_count)
+        rows = [mapped_headers] + rows[1:]
 
     # BUG-027 guard: reject files above the configured row cap before doing any
     # per-row work. `rows` includes the header, so subtract one.
