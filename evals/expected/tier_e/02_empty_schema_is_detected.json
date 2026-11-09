@@ -1,0 +1,10 @@
+{
+  "scenario": "02_empty_schema_is_detected",
+  "description": "Negative control for scenario 01: a schema with no tables must read as empty, and comparing it with Dev's real schema must report the missing tables, so the parity eval cannot pass a deploy that wrote nothing.",
+  "reference_env": "dev",
+  "expected": {
+    "min_reference_tables": 12,
+    "empty_schema_tables": 0,
+    "diff_reports_missing_tables": true
+  }
+}
