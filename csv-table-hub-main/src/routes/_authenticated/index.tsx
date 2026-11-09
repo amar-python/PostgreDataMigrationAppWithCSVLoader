@@ -23,7 +23,7 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  filesQuery, loadFiles, previewCsvTable, getUploadDetail, previewCsv, listTeTables, uploadCsv,
+  filesQuery, uploadsQuery, loadFiles, type UploadAttempt, previewCsvTable, getUploadDetail, previewCsv, listTeTables, uploadCsv,
   type CsvFileSummary, type ColumnType, type TeTableInfo,
 } from "@/lib/csv.functions";
 import { parseCsvPreview, COLUMN_TYPE_LABEL, sanitizeColumns, type CsvPreview } from "@/lib/csv-preview";
@@ -40,8 +40,9 @@ import {
   classifyUploadResult, classifyThrownError, buildCancelPatch, buildCancelToastMessage,
   decideOverwriteAction, failedRowsNote,
 } from "@/lib/job-outcome";
+import { needsAttention } from "@/lib/job-outcome";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -70,6 +71,7 @@ export const Route = createFileRoute("/_authenticated/")({
 
 function Home() {
   const { data: files } = useSuspenseQuery(filesQuery);
+  const { data: uploads } = useSuspenseQuery(uploadsQuery);
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
       <Toaster richColors position="top-right"/>
@@ -92,6 +94,7 @@ function Home() {
       <main className="mx-auto max-w-5xl space-y-8 px-6 py-10">
         <Uploader/>
         <FilesList files={files}/>
+        <UploadAttempts uploads={uploads}/>
       </main>
     </div>
   );
@@ -672,6 +675,36 @@ function DiffDialog({job,onConfirm,onCancel}:{job:Job|null;onConfirm:()=>void;on
 // ─── FilesList (unchanged from original) ─────────────────────────────────────
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+
+// #187 (BR-25): every upload attempt, so a failed or partly failed one is reachable for review.
+const ATTEMPT_LABEL: Record<string,string> = { imported:"Imported", partly_imported:"Partly imported", failed:"Failed", rejected:"Rejected", duplicate:"Duplicate" };
+export function UploadAttempts({uploads}:{uploads:UploadAttempt[]}){
+  const [onlyProblems,setOnlyProblems]=useState(true);
+  const shown=onlyProblems?uploads.filter(u=>needsAttention(u.status)):uploads;
+  if(!uploads.length) return null;
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <div><CardTitle className="text-base">Upload attempts</CardTitle><CardDescription>Every upload, including ones that failed, with its stored rows.</CardDescription></div>
+        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={onlyProblems} onChange={e=>setOnlyProblems(e.target.checked)}/>Only failed or partial</label>
+      </CardHeader>
+      <CardContent>
+        {shown.length===0?<p className="text-sm text-muted-foreground">No failed or partly failed uploads.</p>:(
+          <ul className="divide-y">
+            {shown.map(u=>(
+              <li key={u.id} className="flex items-center gap-3 py-2 text-sm">
+                <span className="min-w-0 flex-1 truncate font-medium" title={u.file_name}>{u.file_name}</span>
+                <Badge variant={needsAttention(u.status)?"destructive":"secondary"}>{ATTEMPT_LABEL[u.status]??u.status}</Badge>
+                <span className="w-28 text-right text-xs tabular-nums text-muted-foreground">{u.failed_rows?`${u.failed_rows} of ${u.total_rows??"?"} rows failed`:`${u.total_rows??0} rows`}</span>
+                {u.status!=="rejected"&&<Button asChild size="sm" variant="ghost" className="h-7 px-2"><Link to="/review/$uploadId" params={{uploadId:u.id}}>Review</Link></Button>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function FilesList({files}:{files:CsvFileSummary[]}){
   const [preview,setPreview]=useState<CsvFileSummary|null>(null);

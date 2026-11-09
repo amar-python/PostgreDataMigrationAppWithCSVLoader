@@ -136,6 +136,11 @@ export function decideOverwriteAction(job: Job | undefined): OverwriteAction {
   return { action: "retry-overwrite" };
 }
 
+/** An upload attempt a reviewer should look at: it failed outright or lost some rows (#187). */
+export function needsAttention(status: string): boolean {
+  return status === "failed" || status === "partly_imported" || status === "rejected";
+}
+
 /** "51 of 171 rows failed", for a registered upload with failures (#123); else null. */
 export function failedRowsNote(f: {
   failed_rows?: number | null;
