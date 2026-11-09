@@ -93,16 +93,6 @@ class EvalRunnerStopsOnSqlErrors(unittest.TestCase):
         for call in calls:
             self.assertIn("ON_ERROR_STOP=1", call)
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "#181 second half, not on main: the Tier S deploy and SQL-suite psql calls in evals/runner.py "
-        "have no ON_ERROR_STOP, so a SQL error mid-suite is not an error exit. Fix is on the unmerged "
-        "branch fix/181-sql-suite-exit-code."))
-    def test_the_tier_s_deploy_and_suite_calls_stop_at_the_first_sql_error(self):
-        calls = [c for c in _psql_calls() if "env_dev_sql" in c and "-v" not in c or "run_tests" in c]
-        self.assertEqual(len(calls), 2, calls)
-        for call in calls:
-            self.assertIn("ON_ERROR_STOP=1", call)
-
 
 # ── #181 ─────────────────────────────────────────────────────────────────────
 

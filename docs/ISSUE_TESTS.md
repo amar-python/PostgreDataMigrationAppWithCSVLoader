@@ -42,7 +42,7 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 178 | Distinct rows dropped as duplicates | ✅ | `tests/test_issue_regressions.py` (`RowDedupKeepsDistinctRows`) |
 | 179 | Frontend lint baseline | — | not a test: `npm run lint` is the check, and is not in CI. Closed as moot |
 | 180 | Tier I eval ignored SQL errors | ✅ | `tests/test_tooling_issues.py` |
-| 181 | SQL test wrapper exited 0 on failures | ✅ / ⚠️ | `tests/test_tooling_issues.py`. The second half (`ON_ERROR_STOP` on the Tier S psql calls in `evals/runner.py`) is not on `main`: strict expected failure |
+| 181 | SQL test wrapper exited 0 on failures | ✅ / 👤 | `tests/test_tooling_issues.py` covers the wrapper. The second half (`ON_ERROR_STOP` on the Tier S psql calls in `evals/runner.py`, fix on the unmerged `fix/181-sql-suite-exit-code` branch) has no test: CI fails any skipped or expected-fail pytest test, so it can't be recorded as one |
 | 182 | Offline bundle swallowed download failures | ✅ | `tests/test_tooling_issues.py` (runs the real download block with a failing `apt-get`) |
 | 183 | Rate limiter used the API key prefix | ✅ | `tests/test_issue_regressions.py` (`RateLimiterIdentity`) |
 | 185 | Preserved original differed from uploaded bytes | ✅ | `tests/test_original_bytes.py`, `fe: file-bytes.test.ts` |
@@ -86,12 +86,11 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 210 | Background job queue for large imports | — | feature, not built |
 | 212 | Plan the Streamlit migration | — | a plan. `e2e/test_streamlit_spike.py` is the baseline it must keep passing |
 
-## Known failures on purpose
+## Known failure on purpose
 
-Strict expected failures: the suite is green now and turns red when the defect is fixed, so the marker gets removed then.
+A strict expected failure: the suite is green now and turns red when the defect is fixed, so the marker gets removed then.
 
-- **#176** (React localStorage history leak): `fe: tenant-isolation.test.tsx` (`it.fails`) and `e2e/test_react_ui.py`.
-- **#181, second half** (Tier S psql calls without `ON_ERROR_STOP`): `tests/test_tooling_issues.py`.
+- **#176** (React localStorage history leak): `fe: tenant-isolation.test.tsx` (`it.fails`) and `e2e/test_react_ui.py`. Neither runs in the pytest CI step, which fails any skipped or expected-fail test (`scripts/test_report.py --strict`).
 
 ## Found while writing these tests
 
