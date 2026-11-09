@@ -5,7 +5,7 @@ Notes on the FastAPI backend in `api/`, which connects the React frontend in
 monorepo) to PostgreSQL.
 
 > **See also** the **Web UI + REST API** section of `README.md` for the
-> user-facing quickstart (two-terminal launch, endpoint table, env vars). This
+> user-facing quickstart (two-terminal launch, env vars). This
 > file is the deeper design/integration doc — for how the backend is put
 > together and what's still open.
 
@@ -34,14 +34,11 @@ T&E table, which drives the mode picker in the UI.
 
 ## Endpoints
 
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/api/health` | Liveness; reports `ok` or `degraded`, never errors |
-| POST | `/api/csv/preview` | Parse and type-detect without writing |
-| POST | `/api/csv/upload` | Load (`mode: dynamic \| te`) |
-| GET | `/api/csv/files` | Registered uploads — drives "Migrated files" |
-| GET | `/api/csv/tables/{table}/rows` | Row preview, `limit` 1–200 |
-| DELETE | `/api/csv/files/{id}` | Remove registration; drops the table in dynamic mode |
+This file deliberately does not list routes: a hand-kept table fell behind the
+code (#207). The route list is generated from the code, so it cannot drift.
+With the API running, open `http://localhost:8000/docs` (Swagger UI) or fetch
+`/openapi.json`. Neither needs a key. Routers live in `api/routers/`
+(`auth`, `csv`, `review`, `te`, `audit`).
 
 CSV content is sent as a JSON string, not multipart.
 

@@ -49,8 +49,8 @@ which mode was used:
   real schema" path. Implemented in `api/services/te_loader.py`.
 
 Both modes go through the same `POST /api/csv/upload` endpoint, with a
-`mode: "dynamic" | "te"` field distinguishing them — see
-`docs/API_INTEGRATION.md` for the full request/response shapes.
+`mode: "dynamic" | "te"` field distinguishing them — see the Swagger UI at
+`http://localhost:8000/docs` (API running) for the full request/response shapes.
 
 ## Multi-environment by design
 
@@ -119,7 +119,8 @@ If all six pass/succeed, your environment is a faithful match for CI.
 |---|---|
 | Set up my dev environment from scratch | `docs/QUICKSTART.md` |
 | Understand the repo's folder structure and why it's split that way | `docs/ARCHITECTURE.md` |
-| See the main frontend↔backend API calls and their shapes | `docs/API_INTEGRATION.md` (partial — the full route list is the OpenAPI schema at `/api/docs`) |
+| See every API route and its request/response shape | `http://localhost:8000/docs` while the API is running (Swagger UI) |
+| Understand how the API is put together, its auth model, known gaps and migrations | `docs/API_INTEGRATION.md` |
 | Look up an environment variable | `docs/ENV_VARIABLES.md` |
 | Understand Dev/Test/Staging/Prod differences | `docs/DATABASE_ENVIRONMENTS.md` |
 | Deploy to Azure | `docs/AZURE_DEPLOY.md` (non-prod) / `docs/PROD_DEPLOY.md` (prod) |
