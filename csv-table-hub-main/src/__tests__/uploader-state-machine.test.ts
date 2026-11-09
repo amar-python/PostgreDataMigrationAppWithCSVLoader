@@ -212,4 +212,27 @@ describe("Uploader state machine", () => {
     expect(Array.from(Uint8Array.from(atob(call.contentBase64), (c) => c.charCodeAt(0)))).toEqual(Array.from(raw));
     expect(call.content.startsWith("id,name")).toBe(true); // the BOM is not in the decoded text
   });
+
+  it("marks the types as confirmed when they come from the user's confirmed mapping (#195)", async () => {
+    uploadCsv.mockResolvedValue({
+      status: "ok",
+      fileId: "1",
+      tableName: "csv_abc123",
+      totalRows: 2,
+      insertedRows: 2,
+      duplicateRowsSkipped: 0,
+      failedRows: 0,
+      columns: ["id", "name"],
+      types: ["int8", "text"],
+      typesProvenance: "user_confirmed",
+      rowErrors: [],
+      logs: [],
+    });
+    await dropAndConfirm(csvFile());
+
+    await waitFor(() => expect(uploadCsv).toHaveBeenCalled());
+    const call = uploadCsv.mock.calls[0][0];
+    expect(call.types).toEqual(["int8", "text"]);
+    expect(call.typesConfirmed).toBe(true);
+  });
 });

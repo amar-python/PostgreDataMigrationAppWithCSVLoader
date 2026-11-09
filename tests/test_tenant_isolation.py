@@ -10,9 +10,12 @@ from __future__ import annotations
 import os
 import unittest
 import uuid
+from pathlib import Path
 
 import psycopg2.errors
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from psycopg2 import sql
 
@@ -25,6 +28,7 @@ from api.tenancy import migrate_tenant, schema_for
 _HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
          "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1.")
 _PW = "correct horse battery staple"
+_ALEMBIC_INI = str(Path(__file__).resolve().parent.parent / "alembic.ini")
 
 
 @pytest.mark.integration
@@ -199,7 +203,7 @@ class CrossTenantIsolation(unittest.TestCase):
         with Conn() as conn, conn.cursor() as cur:
             cur.execute(sql.SQL("SELECT version_num FROM {}.alembic_version").format(
                 sql.Identifier(schema_for(self.slugs["b"]))))
-            self.assertEqual(cur.fetchone()[0], "0008")
+            self.assertEqual(cur.fetchone()[0], ScriptDirectory.from_config(Config(_ALEMBIC_INI)).get_current_head())
             cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = %s",
                         (schema_for(self.slugs["b"]),))
             self.assertTrue({"csv_files", "audit_log"} <= {r[0] for r in cur.fetchall()})

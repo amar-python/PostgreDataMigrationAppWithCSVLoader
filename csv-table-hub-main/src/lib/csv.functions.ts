@@ -36,6 +36,8 @@ const processingLogSchema = z.object({
 });
 export type ProcessingLog = z.infer<typeof processingLogSchema>;
 
+const typesProvenanceSchema = z.enum(["inferred_unconfirmed", "user_confirmed"]);
+
 const uploadResultSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("ok"),
@@ -47,6 +49,7 @@ const uploadResultSchema = z.discriminatedUnion("status", [
     failedRows: z.number(),
     columns: z.array(z.string()),
     types: z.array(columnTypeSchema),
+    typesProvenance: typesProvenanceSchema.optional(), // dynamic mode only (#195)
     rowErrors: z.array(rowErrorSchema),
     logs: z.array(processingLogSchema),
     overwritten: z.boolean().optional(),
@@ -91,6 +94,7 @@ const csvFileSummarySchema = z.object({
   failed_rows: z.number().nullable().optional(),
   uploader: z.string().nullable().optional(),
   upload_id: z.string().nullable().optional(),
+  types_provenance: typesProvenanceSchema.nullable().optional(), // null for T&E tables (#195)
   column_names: z.array(z.string()),
   created_at: z.string(),
 });
@@ -157,6 +161,7 @@ export async function uploadCsv(input: {
   targetTable?: string;
   headerMapping?: { original: string; renamed: string }[];
   contentBase64?: string;
+  typesConfirmed?: boolean;
 }): Promise<UploadResult> {
   return apiFetch("/api/csv/upload", uploadResultSchema, {
     method: "POST",
@@ -169,6 +174,7 @@ export async function uploadCsv(input: {
       targetTable: input.targetTable,
       headerMapping: input.headerMapping,
       contentBase64: input.contentBase64,
+      typesConfirmed: input.typesConfirmed,
     }),
   });
 }

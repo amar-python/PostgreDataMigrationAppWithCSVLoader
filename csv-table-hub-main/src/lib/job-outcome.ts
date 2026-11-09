@@ -146,3 +146,13 @@ export function failedRowsNote(f: {
     ? `${f.failed_rows} of ${f.total_rows} rows failed`
     : `${f.failed_rows} rows failed`;
 }
+
+/**
+ * Says so when a dynamic table's column types were never confirmed by a person (#195);
+ * null for confirmed tables and for T&E tables, which have no inferred types.
+ */
+export function typesProvenanceNote(f: { types_provenance?: string | null }): string | null {
+  return f.types_provenance === "inferred_unconfirmed"
+    ? "Column types were not confirmed by a person."
+    : null;
+}
