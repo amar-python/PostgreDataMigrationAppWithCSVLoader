@@ -226,7 +226,8 @@ def render(ev: dict, rows: list[tuple[str, str, bool]]) -> str:
         "",
         "## 3. Verification checks",
         "",
-        "Each check compares two independent sources (API response, database contents, or a hash computed outside the system).",
+        "Each check compares the system's output against the database itself, a hash computed outside the system, or an outcome declared in advance. "
+        "The exception is check 12, which is the system recomputing its own audit chain.",
         "",
         "| # | Check | Observed | Result |\n|---|---|---|---|",
         *[f"| {i} | {c} | {o} | {tick(p)} |" for i, (c, o, p) in enumerate(rows, 1)],
@@ -258,7 +259,7 @@ def render(ev: dict, rows: list[tuple[str, str, bool]]) -> str:
         f"Re-uploading the same file returned `{dy['duplicate_same_name'].get('status')}` "
         f"(reason: `{dy['duplicate_same_name'].get('reason')}`); uploading the same content as "
         f"`equipment_register_copy.csv` returned `{dy['duplicate_renamed'].get('status')}` "
-        f"(reason: `{dy['duplicate_renamed'].get('reason')}`). Neither created a table or an audit entry.",
+        f"(reason: `{dy['duplicate_renamed'].get('reason')}`). Neither added an audit entry (check 11).",
         "",
         "## 7. Audit trail",
         "",
@@ -272,7 +273,7 @@ def render(ev: dict, rows: list[tuple[str, str, bool]]) -> str:
         "## 8. What this report does and does not show",
         "",
         "**Shows:** for these two files, every source row is either in the database or rejected with the database's own reason; "
-        "loaded values equal source values; file hashes are recorded correctly; duplicates are refused; the audit trail is complete and tamper-evident.",
+        "loaded values equal source values; file hashes are recorded correctly; duplicates are refused; the audit trail has one entry per successful load and its hash chain verifies.",
         "",
         "**Does not show:**",
         "",
@@ -281,7 +282,7 @@ def render(ev: dict, rows: list[tuple[str, str, bool]]) -> str:
         f"returned HTTP **{po['unauthenticated_request_status']}** ({'the API key is not set, so unauthenticated access is open' if po['unauthenticated_request_status'] == 200 else 'access without credentials was refused'}); "
         f"the API's database connections used role(s) **{', '.join(po['database_roles_connected']) or 'unknown'}** "
         f"and the audit table is owned by **{po['audit_log_owner']}**"
-        f"{', so the database itself would not stop the API altering the audit log (the hash chain would still reveal it)' if po['audit_log_owner'] in po['database_roles_connected'] else ''}.",
+        f"{', so the database itself would not stop the API altering the audit log. The audit chain is designed to reveal such changes, but this run did not test that' if po['audit_log_owner'] in po['database_roles_connected'] else ''}.",
         "- Independent assurance. The checks were written and run by the system's developers. They are repeatable by a reviewer, not a third-party assessment.",
         "- Conformance to any Defence standard. No claim of alignment with ASDEFCON or any DID is made here.",
         "- That re-uploading a file is safe. The re-upload case for T&E mode has a known defect, tracked as #215.",
