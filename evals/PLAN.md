@@ -15,7 +15,7 @@
 > Current tier registrations live in `runner.TIER_RUNNERS`: `p, i, s, e, x`.
 
 
-This folder holds **data-driven evals** for the T&E Database Framework. Evals complement (but don't replace) the existing SQL test suites under `tests/suites/` and the Python unit tests under `tests/test_csv_validator.py`.
+This folder holds **data-driven evals** for the T&E Database Framework. Evals complement (but don't replace) the existing SQL test suites under `tests/suites/` and the Python unit tests under `tests/unit/test_csv_validator.py`.
 
 ## Why a separate `evals/` folder
 

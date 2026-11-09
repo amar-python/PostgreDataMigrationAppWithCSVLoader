@@ -21,6 +21,7 @@ class StageRequest(BaseModel):
     fileName: str = Field(min_length=1, max_length=255)
     content: str = Field(min_length=1)
     types: list[str] | None = None
+    typesConfirmed: bool = False  # a person confirmed `types` (#195); the import records it in the registry
     headerMapping: list[HeaderRename] | None = Field(default=None, max_length=1000)
     contentBase64: str | None = None  # the file's bytes as uploaded, kept as the preserved original (#185)
 
@@ -61,8 +62,10 @@ def stage(req: StageRequest) -> dict:
             original = base64.b64decode(req.contentBase64, validate=True)
         except (binascii.Error, ValueError):
             raise HTTPException(422, "contentBase64 is not valid base64") from None
+    if req.typesConfirmed and not req.types:
+        raise HTTPException(422, "typesConfirmed requires the confirmed types to be sent in 'types'")
     mapping = [m.model_dump() for m in req.headerMapping] if req.headerMapping else None
-    result = _run(staged_import.stage, req.fileName, req.content, req.types, mapping, original)
+    result = _run(staged_import.stage, req.fileName, req.content, req.types, mapping, original, req.typesConfirmed)
     if result["status"] == "duplicate_file":
         raise HTTPException(409, result)
     if result["status"] != "staged":

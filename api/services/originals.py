@@ -5,9 +5,10 @@ and parsed rows go to ``upload_blobs`` and ``source_rows``. All three tables are
 insert-only (migration 0007), so overwriting or deleting a migrated file never
 loses its original.
 
-Known limitation, the same as record_audit: the loaders commit their own
-transaction, so this runs after the load. A failure here is logged at ERROR
-and doesn't fail the upload. M6's single-transaction import (ADR-0002) closes it.
+Known limitation of ``record_upload``, the same as record_audit: the loaders commit their own
+transaction, so it runs after the load. A failure there is logged at ERROR and doesn't fail
+the upload. The approval flow (M6, ADR-0002) uses ``store_upload`` instead, inside its own
+transaction, and doesn't have this limitation; the direct upload path keeps it.
 """
 
 from __future__ import annotations
@@ -52,13 +53,13 @@ def store_upload(cur, file_name: str, content: str, mode: str, result: dict, *,
     s = sql.Identifier(uploads_schema())
     cur.execute(sql.SQL(
         "INSERT INTO {}.uploads (file_name, sha256, byte_size, uploader, mode, status, "
-        "total_rows, imported_rows, failed_rows, csv_file_id, row_errors, logs, columns, column_types) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id").format(s),
+        "total_rows, imported_rows, failed_rows, csv_file_id, row_errors, logs, columns, column_types, "
+        "types_provenance) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id").format(s),
         (file_name, hashlib.sha256(data).hexdigest(), len(data), current_actor(), mode,
          outcome(result), result.get("totalRows"), result.get("insertedRows"),
          result.get("failedRows"), coerce_file_id(result.get("fileId")) if ok else None,
          Json((result.get("rowErrors") or [])[:settings.MAX_ROW_ERRORS_REPORTED]),
-         Json(result.get("logs") or []), result.get("columns"), result.get("types")))
+         Json(result.get("logs") or []), result.get("columns"), result.get("types"), result.get("typesProvenance")))
     upload_id = cur.fetchone()[0]
     cur.execute(sql.SQL("INSERT INTO {}.upload_blobs (upload_id, content) VALUES (%s, %s)").format(s),
                 (upload_id, data))

@@ -118,7 +118,7 @@ def prepare(content: str, types: list[str] | None, header_mapping: list[dict] | 
 
 
 def stage(cur, file_name: str, content: str, types: list[str] | None, header_mapping: list[dict] | None,
-          original: bytes | None) -> dict:
+          original: bytes | None, types_confirmed: bool = False) -> dict:
     """Store an upload for review without importing it. Every attempt is recorded (BR-23).
 
     Returns a result dict whose ``status`` is ``staged``, ``duplicate_file`` or ``invalid_structure``,
@@ -157,7 +157,10 @@ def stage(cur, file_name: str, content: str, types: list[str] | None, header_map
                 numbers.append(n)
         flags = _earlier_version_matches(cur, uploads_schema(), priors, hashes, numbers)
 
-    result = {"status": "staged", "totalRows": len(rows) - 1, "columns": columns, "types": col_types}
+    # #195: the registry says whether a person confirmed the types; the import records it.
+    provenance = "user_confirmed" if (types and types_confirmed) else "inferred_unconfirmed"
+    result = {"status": "staged", "totalRows": len(rows) - 1, "columns": columns, "types": col_types,
+              "typesProvenance": provenance}
     upload_id = store_upload(cur, file_name, content, "dynamic", result, original=original, flags=flags)
     return {**result, "uploadId": str(upload_id), "state": "staged", "dataset": dataset,
             "duplicateRowsAcrossUploads": len(flags),
@@ -191,15 +194,16 @@ def derive_state(status: str, has_import: bool, sub_id: int | None, decision: st
 
 def state_of(cur, upload_id: int) -> dict | None:
     """The upload's workflow state with its latest submission, approval and import. None if there is no such upload."""
-    cur.execute(sql.SQL("SELECT u.status, u.uploader, u.file_name, u.sha256, {cols} FROM {s}.uploads u {join} "
-                        "WHERE u.id = %s").format(cols=state_columns(), s=_s(), join=state_join()), (upload_id,))
+    cur.execute(sql.SQL("SELECT u.status, u.uploader, u.file_name, u.sha256, u.types_provenance, {cols} "
+                        "FROM {s}.uploads u {join} WHERE u.id = %s")
+                .format(cols=state_columns(), s=_s(), join=state_join()), (upload_id,))
     row = cur.fetchone()
     if row is None:
         return None
-    status, uploader, file_name, sha, has_import, sub_id, decision = row
+    status, uploader, file_name, sha, provenance, has_import, sub_id, decision = row
     out = {"uploadId": str(upload_id), "state": derive_state(status, has_import, sub_id, decision),
-           "fileName": file_name, "uploader": uploader, "sha256": sha, "submission": None, "approval": None,
-           "import": None}
+           "fileName": file_name, "uploader": uploader, "sha256": sha, "typesProvenance": provenance,
+           "submission": None, "approval": None, "import": None}
     if sub_id is not None:
         cur.execute(sql.SQL("SELECT submitter, note, submitted_at FROM {}.submissions WHERE id = %s").format(_s()),
                     (sub_id,))
@@ -441,10 +445,10 @@ def import_upload(upload_id: int, key: str, session: dict | None) -> dict:
             try:
                 cur.execute(sql.SQL(
                     "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names, "
-                    "total_rows, duplicate_rows_skipped, failed_rows, dataset, version) "
-                    "VALUES (%s, %s, %s, 'dynamic', %s, %s, %s, %s, 0, %s, %s) RETURNING id").format(_s()),
+                    "total_rows, duplicate_rows_skipped, failed_rows, types_provenance, dataset, version) "
+                    "VALUES (%s, %s, %s, 'dynamic', %s, %s, %s, %s, 0, %s, %s, %s) RETURNING id").format(_s()),
                     (st["fileName"], st["sha256"], table_name, len(valid), columns, counts["rowsIn"],
-                     counts["duplicate"], dataset, version))
+                     counts["duplicate"], st["typesProvenance"] or "inferred_unconfirmed", dataset, version))
             except psycopg2.errors.UniqueViolation:
                 conn.rollback()  # the same bytes were imported meanwhile (exact-file dedup, BR-28)
                 raise WorkflowError(409, "These exact file contents were already imported", state="duplicate_file") from None

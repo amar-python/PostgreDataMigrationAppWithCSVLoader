@@ -7,6 +7,9 @@ never see who loaded it. Every mutating action now writes a row through here.
 
 Known limitation (deliberate, documented)
 -----------------------------------------
+This applies to ``POST /api/csv/upload`` only. The approval flow (M6, api/services/staged_import.py)
+writes its audit rows in the same transaction as the import, using ``write_audit``.
+
 The loaders in ``api/services/{dynamic,te}_loader.py`` own and commit their own
 transactions, so the audit row for an upload is written *after* the load has
 already committed rather than inside the same transaction. A crash in the narrow

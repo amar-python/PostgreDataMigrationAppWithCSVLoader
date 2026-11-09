@@ -54,6 +54,8 @@ class UploadRequest(BaseModel):
     # The file's bytes as the browser read them, base64. Kept as the preserved
     # original so its hash matches the uploader's copy; `content` is still what loads (#185).
     contentBase64: str | None = None
+    # True when a person reviewed `types` before this call (dynamic mode only, #195).
+    typesConfirmed: bool = False
 
 
 @router.post("/preview", dependencies=[Depends(allow("preview"))])
@@ -105,11 +107,15 @@ def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> 
             # T&E columns must match the fixed schema exactly; a rename could
             # only be ignored, which is the silent failure #186 describes.
             raise HTTPException(422, "headerMapping is only supported in 'dynamic' mode")
+        if req.typesConfirmed:
+            raise HTTPException(422, "typesConfirmed is only supported in 'dynamic' mode")
         result = upload_te(req.fileName, req.content, req.targetTable, session=session)
     elif req.mode == "dynamic":
+        if req.typesConfirmed and not req.types:
+            raise HTTPException(422, "typesConfirmed requires the confirmed types to be sent in 'types'")
         mapping = [m.model_dump() for m in req.headerMapping] if req.headerMapping else None
         result = upload_dynamic(req.fileName, req.content, req.types, req.overwrite,
-                                session=session, header_mapping=mapping)
+                                session=session, header_mapping=mapping, types_confirmed=req.typesConfirmed)
     else:
         raise HTTPException(422, f"Unknown mode '{req.mode}' — use 'dynamic' or 'te'")
 
@@ -140,7 +146,7 @@ def list_files() -> list[dict]:
             cur.execute(
                 sql.SQL(
                     "SELECT f.id, f.file_name, f.table_name, f.mode, f.row_count, f.column_names, f.created_at, "
-                    "f.total_rows, f.duplicate_rows_skipped, f.failed_rows, u.uploader, u.id "
+                    "f.total_rows, f.duplicate_rows_skipped, f.failed_rows, u.uploader, u.id, f.types_provenance "
                     "FROM {s}.csv_files f LEFT JOIN LATERAL (SELECT x.uploader, x.id FROM {s}.uploads x "
                     "  WHERE x.csv_file_id = f.id "
                     "     OR x.id = (SELECT i.upload_id FROM {s}.imports i WHERE i.csv_file_id = f.id) "
@@ -162,6 +168,7 @@ def list_files() -> list[dict]:
                     "failed_rows": r[9],
                     "uploader": r[10],
                     "upload_id": None if r[11] is None else str(r[11]),
+                    "types_provenance": r[12],
                 }
                 for r in cur.fetchall()
             ]

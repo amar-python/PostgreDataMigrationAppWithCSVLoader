@@ -124,6 +124,7 @@ def upload_dynamic(
     *,
     session: dict | None = None,
     header_mapping: list[dict] | None = None,
+    types_confirmed: bool = False,
 ) -> dict:
     logs: list[dict] = []
     _log(logs, "receive", f'Received "{file_name}" ({len(content)} chars)')
@@ -186,9 +187,13 @@ def upload_dynamic(
         }
 
     schema = uploads_schema()
+    # #195: only types a person explicitly confirmed count as confirmed; omitted types
+    # fall back to text and a bare `types` list is not proof anyone looked at it.
+    provenance = "user_confirmed" if (types and types_confirmed) else "inferred_unconfirmed"
 
     try:
-        return _do_upload(file_name, types, overwrite, logs, schema, rows, file_hash, session=session)
+        return _do_upload(file_name, types, overwrite, logs, schema, rows, file_hash,
+                          session=session, types_provenance=provenance)
     except psycopg2.errors.UniqueViolation:
         # #81: an identical concurrent upload won a race that _do_upload could
         # not settle itself (e.g. both creating csv_<hash> at once). Nothing
@@ -225,6 +230,7 @@ def _do_upload(
     file_hash: str,
     *,
     session: dict | None = None,
+    types_provenance: str = "inferred_unconfirmed",
 ) -> dict:
     with Conn() as conn:
         with conn.cursor() as cur:
@@ -434,11 +440,11 @@ def _do_upload(
                 cur.execute(
                     sql.SQL(
                         "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names, "
-                        "total_rows, duplicate_rows_skipped, failed_rows, dataset, version) "
-                        "VALUES (%s, %s, %s, 'dynamic', %s, %s, %s, %s, %s, %s, %s) RETURNING id"
+                        "total_rows, duplicate_rows_skipped, failed_rows, types_provenance, dataset, version) "
+                        "VALUES (%s, %s, %s, 'dynamic', %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id"
                     ).format(sql.Identifier(schema)),
                     (file_name, file_hash, table_name, inserted, columns,
-                     len(data_rows), duplicates, failed_row_count, dataset, version),
+                     len(data_rows), duplicates, failed_row_count, types_provenance, dataset, version),
                 )
                 file_id = cur.fetchone()[0]
             except psycopg2.errors.UniqueViolation:
@@ -474,6 +480,7 @@ def _do_upload(
         "failedRows": failed_row_count,
         "columns": columns,
         "types": col_types,
+        "typesProvenance": types_provenance,
         "rowErrors": row_errors,
         "logs": logs,
         "dataset": dataset,

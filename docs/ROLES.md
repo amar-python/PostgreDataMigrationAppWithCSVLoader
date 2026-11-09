@@ -1,6 +1,6 @@
 # Roles and permissions (BR-36, #94)
 
-Every member of a tenant has one role (ADR-0003). This table is enforced by `PERMISSIONS` in `api/auth.py`. `tests/test_roles.py` fails if the two disagree, and it tries every role against every route.
+Every member of a tenant has one role (ADR-0003). This table is enforced by `PERMISSIONS` in `api/auth.py`. `tests/system/test_roles.py` fails if the two disagree, and it tries every role against every route.
 
 | Action | Route | uploader | reviewer | tenant_admin | auditor |
 |---|---|---|---|---|---|

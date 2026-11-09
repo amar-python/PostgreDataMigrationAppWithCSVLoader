@@ -173,11 +173,12 @@ def check_test_infra() -> None:
     for label, path in files.items():
         _check_file(label, path)
 
-    test_files = list((ROOT / "tests").glob("test_*.py"))
+    # Recursive: tests live in category folders (unit/, system/, ...), see tests/README.md.
+    test_files = list((ROOT / "tests").rglob("test_*.py"))
     if test_files:
         _pass(f"python test files ({len(test_files)} found)")
     else:
-        _fail("python test files", "no test_*.py found in tests/")
+        _fail("python test files", "no test_*.py found under tests/")
 
 
 # ── Config template ───────────────────────────────────────────────────────────
