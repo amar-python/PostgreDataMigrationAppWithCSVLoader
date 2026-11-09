@@ -677,6 +677,9 @@ def run_tier_e_scenario(scenario_dir: Path) -> ScenarioResult:
     if name == "01_envs_have_identical_structure":
         return _run_envs_have_identical_structure(result, expected)
 
+    if name == "02_empty_schema_is_detected":
+        return _run_empty_schema_negative_control(result, expected)
+
     result.errors.append("Unknown tier-E scenario: " + name)
     return result
 
@@ -742,6 +745,112 @@ def _run_envs_have_identical_structure(
                                          signatures[env_name])
                 errors.extend(diffs)
             result.actual["signature_match"] = not errors
+
+    result.errors = errors
+    result.passed = not errors
+    return result
+
+
+# A schema that only the negative control below creates and drops. It is never
+# dropped with CASCADE: if something else is found in it, the control fails
+# rather than deleting what is not its own.
+_EMPTY_CONTROL_SCHEMA = "_te_empty_neg_ctrl"
+
+
+def _psql_run(db: str, sql: str) -> "subprocess.CompletedProcess[str]":
+    """Run one SQL statement on `db`; the caller reads returncode and stderr."""
+    return subprocess.run(
+        ["psql", "-d", db, "-v", "ON_ERROR_STOP=1", "-c", sql],
+        env=_pg_env(), capture_output=True, text=True, timeout=30,
+    )
+
+
+def _run_empty_schema_negative_control(
+    result: ScenarioResult, expected: Dict[str, Any]
+) -> ScenarioResult:
+    """Negative control for scenario 01: show that it can see "nothing deployed".
+
+    Scenario 01 passes when every environment has the same structure as dev. That
+    only means something if a schema a deploy left empty is read as empty and the
+    comparison then reports it. This creates a throwaway empty schema beside dev's
+    and checks both, against the real database:
+
+      1. the real schema query returns no tables for it (and a failed query is a
+         failure, not an empty schema: the confusion behind issue #45);
+      2. the real comparison between dev's schema and the empty one reports the
+         missing tables.
+
+    If either stops being true, scenario 01 could pass while a deploy wrote
+    nothing. The pure logic is unit-tested with a mocked psql; this is the same
+    claim made against a real server.
+    """
+    exp = expected.get("expected", {})
+    ref_env = expected.get("reference_env", "dev")
+    target = next((t for t in ENV_TARGETS if t[0] == ref_env), None)
+    if target is None:
+        result.errors.append("reference_env " + ref_env + " is not one of the "
+                             "environments in ENV_TARGETS")
+        return result
+    _, db, ref_schema = target
+
+    # Without a populated reference the comparison below is "nothing against
+    # nothing" and would prove nothing, so that is an error, not a pass.
+    try:
+        ref = _column_signature(db, ref_schema)
+    except RuntimeError as exc:
+        result.errors.append("reference env " + ref_env + ": " + str(exc))
+        return result
+    min_reference = int(exp.get("min_reference_tables", 12))
+    if len(ref) < min_reference:
+        result.errors.append(
+            "reference env " + ref_env + " has " + str(len(ref)) + " tables, "
+            "expected >= " + str(min_reference) + ". Deploy it first (scenario 01 "
+            "does); an empty reference would make this control compare nothing "
+            "with nothing."
+        )
+        return result
+
+    quoted = '"' + _EMPTY_CONTROL_SCHEMA + '"'
+    made = _psql_run(db, "DROP SCHEMA IF EXISTS " + quoted
+                     + "; CREATE SCHEMA " + quoted)
+    if made.returncode != 0:
+        result.errors.append("could not create the throwaway schema "
+                             + _EMPTY_CONTROL_SCHEMA + " in " + db + ": "
+                             + made.stderr.strip()[-300:])
+        return result
+
+    errors: List[str] = []
+    try:
+        try:
+            empty = _column_signature(db, _EMPTY_CONTROL_SCHEMA)
+        except RuntimeError as exc:
+            empty = None
+            errors.append("the schema query failed on an empty schema, which "
+                          "must not be reported as 'no tables': " + str(exc))
+        if empty is not None:
+            want = int(exp.get("empty_schema_tables", 0))
+            diffs = _diff_signatures(ref_env, ref, "empty", empty)
+            result.actual = {
+                "reference_tables": len(ref),
+                "empty_schema_tables": len(empty),
+                "differences_reported": len(diffs),
+            }
+            if len(empty) != want:
+                errors.append("an empty schema returned " + str(len(empty))
+                              + " tables, expected " + str(want))
+            if exp.get("diff_reports_missing_tables") is True and not any(
+                    " is missing tables present in " in d for d in diffs):
+                errors.append(
+                    "comparing " + ref_env + " (" + str(len(ref)) + " tables) with "
+                    "an empty schema reported no missing tables, so scenario 01 "
+                    "would pass a deploy that wrote nothing"
+                )
+    finally:
+        dropped = _psql_run(db, "DROP SCHEMA IF EXISTS " + quoted)
+        if dropped.returncode != 0:
+            errors.append("could not drop the throwaway schema "
+                          + _EMPTY_CONTROL_SCHEMA + " (it is left in " + db
+                          + "): " + dropped.stderr.strip()[-300:])
 
     result.errors = errors
     result.passed = not errors
