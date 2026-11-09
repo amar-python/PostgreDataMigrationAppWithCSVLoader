@@ -108,19 +108,16 @@ def upload_dynamic(
 
     try:
         return _do_upload(file_name, types, overwrite, logs, schema, rows, file_hash)
-    except psycopg2.errors.UniqueViolation:
+    except (psycopg2.errors.UniqueViolation, psycopg2.errors.DuplicateTable,
+            psycopg2.errors.DuplicateObject):
         # #81: an identical concurrent upload won a race that _do_upload could
         # not settle itself (e.g. both creating csv_<hash> at once). Nothing
-        # from this request was committed.
+        # from this request was committed. Which error the loser sees depends on
+        # where the race lands: a unique index (UniqueViolation), the table
+        # (DuplicateTable) or its row type (DuplicateObject) — #191 caught the
+        # last two surfacing as a generic "database error".
         _log(logs, "duplicate_check", "Lost race to a concurrent identical upload", "warn")
-        return {
-            "status": "duplicate_file",
-            "reason": "content",
-            "existingFileName": file_name,
-            "tableName": f"csv_{file_hash[:16]}",
-            "existingRowCount": 0,
-            "logs": logs,
-        }
+        return _lost_race(logs, schema, file_name, file_hash)
     except psycopg2.Error as exc:
         # Mirror te_loader's structured-error contract: an unexpected DB error
         # (e.g. a column type edge case not caught by cast_value) should not
@@ -132,6 +129,25 @@ def upload_dynamic(
             "message": "The CSV could not be loaded due to a database error. Check the file's data types and try again.",
             "logs": logs,
         }
+
+
+def _lost_race(logs: list[dict], schema: str, file_name: str, file_hash: str) -> dict:
+    """Name the upload that won. The winner commits its table and its registry
+    row together, so once the loser has seen the clash the row is visible."""
+    with Conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            sql.SQL("SELECT file_name, table_name, row_count, file_hash FROM {}.csv_files "
+                    "WHERE file_hash = %s OR file_name = %s ORDER BY (file_hash = %s) DESC LIMIT 1")
+            .format(sql.Identifier(schema)), (file_hash, file_name, file_hash))
+        existing = cur.fetchone()
+    return {
+        "status": "duplicate_file",
+        "reason": "content" if existing and existing[3] == file_hash else "name",
+        "existingFileName": existing[0] if existing else file_name,
+        "tableName": existing[1] if existing else f"csv_{file_hash[:16]}",
+        "existingRowCount": (existing[2] or 0) if existing else 0,
+        "logs": logs,
+    }
 
 
 def _do_upload(
