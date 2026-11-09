@@ -62,12 +62,29 @@ function toCsvBlob(headers: string[], rows: Record<string, unknown>[]): Blob {
 
 // ─── XLSX ─────────────────────────────────────────────────────────────────────
 
+function sanitizeForXlsx(
+  rows: Record<string, unknown>[],
+  headers: string[],
+): Record<string, unknown>[] {
+  return rows.map((r) => {
+    const out: Record<string, unknown> = {};
+    for (const h of headers) {
+      let v = r[h];
+      if (typeof v === "string" && FORMULA_START.test(v) && !PLAIN_NUMBER.test(v)) {
+        v = `'${v}`;
+      }
+      out[h] = v;
+    }
+    return out;
+  });
+}
+
 function toXlsxBlob(
   sheetName: string,
   headers: string[],
   rows: Record<string, unknown>[],
 ): Blob {
-  const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+  const ws = XLSX.utils.json_to_sheet(sanitizeForXlsx(rows, headers), { header: headers });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
   const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });

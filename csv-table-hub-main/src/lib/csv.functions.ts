@@ -156,6 +156,7 @@ export async function uploadCsv(input: {
   mode?: "dynamic" | "te";
   targetTable?: string;
   headerMapping?: { original: string; renamed: string }[];
+  contentBase64?: string;
 }): Promise<UploadResult> {
   return apiFetch("/api/csv/upload", uploadResultSchema, {
     method: "POST",
@@ -167,6 +168,7 @@ export async function uploadCsv(input: {
       mode: input.mode ?? "dynamic",
       targetTable: input.targetTable,
       headerMapping: input.headerMapping,
+      contentBase64: input.contentBase64,
     }),
   });
 }

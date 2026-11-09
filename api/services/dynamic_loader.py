@@ -10,6 +10,7 @@ All identifiers go through psycopg2.sql.Identifier — no string interpolation.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import time
 
@@ -20,8 +21,10 @@ from psycopg2.extras import execute_values
 from api.config import settings
 from api.tenancy import uploads_schema
 from api.db import Conn
+from api.services.destructive_ops import safe_cleanup_prior
 from api.services.csv_parse import (
     ALLOWED_TYPES,
+    apply_header_mapping,
     cast_value,
     extra_cells,
     parse_csv,
@@ -54,6 +57,9 @@ def upload_dynamic(
     content: str,
     types: list[str] | None,
     overwrite: bool,
+    *,
+    session: dict | None = None,
+    header_mapping: list[dict] | None = None,
 ) -> dict:
     logs: list[dict] = []
     _log(logs, "receive", f'Received "{file_name}" ({len(content)} chars)')
@@ -85,6 +91,17 @@ def upload_dynamic(
             "logs": logs,
         }
 
+    # #186: honour confirmed header renames; the column name in the table is
+    # the renamed one, not the CSV's original.
+    mapped_headers, mapping_error = apply_header_mapping(rows[0], header_mapping)
+    if mapping_error:
+        _log(logs, "header_mapping", mapping_error, "error")
+        return {"status": "error", "reason": "invalid_header_mapping", "message": mapping_error, "logs": logs}
+    if header_mapping:
+        renamed_count = sum(1 for a, b in zip(rows[0], mapped_headers) if a != b)
+        _log(logs, "header_mapping", f"Renamed {renamed_count} column header(s)", count=renamed_count)
+        rows = [mapped_headers] + rows[1:]
+
     # BUG-027 guard: reject files above the configured row cap before doing any
     # per-row work. `rows` includes the header, so subtract one.
     data_row_count = len(rows) - 1
@@ -107,7 +124,7 @@ def upload_dynamic(
     schema = uploads_schema()
 
     try:
-        return _do_upload(file_name, types, overwrite, logs, schema, rows, file_hash)
+        return _do_upload(file_name, types, overwrite, logs, schema, rows, file_hash, session=session)
     except psycopg2.errors.UniqueViolation:
         # #81: an identical concurrent upload won a race that _do_upload could
         # not settle itself (e.g. both creating csv_<hash> at once). Nothing
@@ -142,6 +159,8 @@ def _do_upload(
     schema: str,
     rows: list[list[str]],
     file_hash: str,
+    *,
+    session: dict | None = None,
 ) -> dict:
     replaced_file_name: str | None = None
     with Conn() as conn:
@@ -168,16 +187,7 @@ def _do_upload(
                         "logs": logs,
                     }
                 _log(logs, "overwrite", f'Overwriting previous upload "{name_match[1]}"', "warn")
-                # table_name is only a bare identifier owned by this schema for
-                # dynamic-mode rows (csv_<hash>); TE-mode rows store "schema.table"
-                # pointing at a shared T&E table that must never be dropped here.
-                # Same guard as te_loader._cleanup_prior_registry_entries.
-                if name_match[5] == "dynamic" and name_match[2].startswith("csv_"):
-                    cur.execute(
-                        sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
-                            sql.Identifier(schema), sql.Identifier(name_match[2])
-                        )
-                    )
+                safe_cleanup_prior(cur, session, schema, name_match[2], name_match[5])
                 cur.execute(
                     sql.SQL("DELETE FROM {}.csv_files WHERE id = %s").format(sql.Identifier(schema)),
                     (name_match[0],),
@@ -206,13 +216,7 @@ def _do_upload(
                         "logs": logs,
                     }
                 _log(logs, "overwrite", f'Overwriting previous content match "{content_match[1]}"', "warn")
-                # Same TE-vs-dynamic guard as above.
-                if content_match[4] == "dynamic" and content_match[2].startswith("csv_"):
-                    cur.execute(
-                        sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
-                            sql.Identifier(schema), sql.Identifier(content_match[2])
-                        )
-                    )
+                safe_cleanup_prior(cur, session, schema, content_match[2], content_match[4])
                 cur.execute(
                     sql.SQL("DELETE FROM {}.csv_files WHERE id = %s").format(sql.Identifier(schema)),
                     (content_match[0],),
@@ -301,10 +305,11 @@ def _do_upload(
                     values.append(val)
                 if failed:
                     continue
-                # BUG-022: ASCII unit separator (U+001F) between cells prevents
-                # ["ab","cd"] and ["a","bcd"] from hashing to the same value.
-                row_hash = hashlib.sha256(
-                    "\x1f".join(raw_joined).encode("utf-8")
+                # #178: JSON serialization prevents ambiguous concatenation.
+                # U+001F join was vulnerable: cells containing U+001F caused
+                # distinct rows to hash identically (silent data loss).
+                row_hash = "v2:" + hashlib.sha256(
+                    json.dumps(raw_joined, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
                 ).hexdigest()
                 if row_hash in seen:
                     duplicates += 1
