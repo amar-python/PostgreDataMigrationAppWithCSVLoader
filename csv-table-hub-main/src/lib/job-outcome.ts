@@ -86,6 +86,23 @@ export function classifyUploadResult(
     };
   }
 
+  if (res.status === "types_unconfirmed") {
+    // The upload page only uploads after "Confirm & import", so this means the
+    // server and the page disagree about confirmation — say so, don't swallow it.
+    return {
+      patch: {
+        status: "error",
+        progress: 100,
+        errorMessage: res.message,
+        errorDetails: res.message,
+        logs: res.logs,
+        headerMapping: mapping,
+      },
+      toast: { type: "error", message: `${jobName}: ${res.message}` },
+      notify: { title: "Import needs confirmation", body: `${jobName}: ${res.message}` },
+    };
+  }
+
   // res.status === "error" — the discriminated union narrows on its own from
   // the checks above, no cast needed.
   return {

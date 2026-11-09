@@ -50,7 +50,7 @@ class ImportCountsArePersisted(unittest.TestCase):
     def test_dynamic_import_persists_all_four_counts(self):
         # 5 data rows: 2 valid distinct, 1 in-file duplicate, 2 that fail the int8 cast.
         content = f"n,t\n1,{self.tag}\n2,{self.tag}\n1,{self.tag}\nx,{self.tag}\ny,{self.tag}\n"
-        res = self.client.post("/api/csv/upload", json={
+        res = self.client.post("/api/csv/upload", json={"typesConfirmed": True,
             "fileName": f"counts_{self.tag}.csv", "content": content, "types": ["int8", "text"],
         }).json()
         self.assertEqual(res["status"], "ok", res)

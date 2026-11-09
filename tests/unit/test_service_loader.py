@@ -32,7 +32,7 @@ class ServiceLoaderUnitTests(unittest.TestCase):
         fake_conn.cursor.return_value = fake_cursor
 
         with patch("api.services.dynamic_loader.Conn", return_value=fake_conn):
-            result = upload_dynamic("file.csv", content, ["int8"], overwrite=False)
+            result = upload_dynamic("file.csv", content, ["int8"], overwrite=False, types_confirmed=True)
 
         self.assertEqual(result["status"], "error")
         self.assertIn("column types", result["message"].lower())

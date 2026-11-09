@@ -78,7 +78,7 @@ class MultipleFileUpload(unittest.TestCase):
     def _upload(self, name: str, content: str) -> dict:
         self.uploaded.append(name)
         r = self.client.post("/api/csv/upload",
-                             json={"fileName": name, "content": content})
+                             json={"typesConfirmed": True, "fileName": name, "content": content})
         self.assertEqual(r.status_code, 200, r.text[:300])
         return r.json()
 

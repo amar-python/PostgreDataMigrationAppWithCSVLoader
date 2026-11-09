@@ -125,6 +125,29 @@ class MigrationsOnScratchSchema(unittest.TestCase):
             command.upgrade(self.cfg, "head")
         self.assertEqual(self._constraints(), set())
 
+    def test_0009_backfills_existing_dynamic_tables_as_unconfirmed(self):
+        """#195: no record that anyone confirmed a pre-existing table's types, so it
+        is labelled inferred_unconfirmed rather than left NULL; T&E rows keep NULL."""
+        command.upgrade(self.cfg, "0008")
+        with self.conn.cursor() as cur:
+            for name, mode in (("dyn.csv", "dynamic"), ("te.csv", "te")):
+                cur.execute(f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files '
+                            "(file_name, file_hash, table_name, mode) VALUES (%s, %s, 't', %s)",
+                            (name, f"h_{name}", mode))
+        command.upgrade(self.cfg, "head")
+        with self.conn.cursor() as cur:
+            cur.execute(f'SELECT file_name, types_provenance FROM "{settings.UPLOADS_SCHEMA}".csv_files '
+                        "ORDER BY file_name")
+            self.assertEqual(cur.fetchall(), [("dyn.csv", "inferred_unconfirmed"), ("te.csv", None)])
+            with self.assertRaises(psycopg2.errors.CheckViolation):
+                cur.execute(f'UPDATE "{settings.UPLOADS_SCHEMA}".csv_files SET types_provenance = \'guessed\'')
+        command.downgrade(self.cfg, "0008")   # reversible
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM information_schema.columns WHERE table_schema = %s "
+                        "AND table_name = 'csv_files' AND column_name = 'types_provenance'",
+                        (settings.UPLOADS_SCHEMA,))
+            self.assertIsNone(cur.fetchone())
+
 
 @pytest.mark.integration
 class RegistryUniqueness(unittest.TestCase):
@@ -148,7 +171,7 @@ class RegistryUniqueness(unittest.TestCase):
     def test_bootstrap_brings_the_schema_to_head(self):
         with Conn() as conn, conn.cursor() as cur:
             cur.execute(f'SELECT version_num FROM "{settings.UPLOADS_SCHEMA}".alembic_version')
-            self.assertEqual(cur.fetchone()[0], "0008")
+            self.assertEqual(cur.fetchone()[0], "0009")
 
     def test_duplicate_hash_is_rejected_by_the_database(self):
         insert = (f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode) '
@@ -201,7 +224,7 @@ class RegistryUniqueness(unittest.TestCase):
         content = f"a,b\n1,{self.tag}\n2,{self.tag}\n"
         table = f"csv_{hashlib.sha256(content.encode()).hexdigest()[:16]}"
         result = self._against_uncommitted_competitor(
-            lambda: upload_dynamic(name, content, None, False), name, content, table, "dynamic")
+            lambda: upload_dynamic(name, content, None, False, True), name, content, table, "dynamic")
         self.assertEqual(result["status"], "duplicate_file")
         with Conn() as conn, conn.cursor() as cur:
             cur.execute("SELECT to_regclass(%s)", (f'"{settings.UPLOADS_SCHEMA}".{table}',))

@@ -180,8 +180,11 @@ export function Uploader() {
       const types = isTe ? undefined : mapping?.map(c=>c.type);
       const headerMapping = isTe ? undefined : mapping;
 
+      // #195: runJob is only reached from the preview dialog's "Confirm & import"
+      // (or a retry that reuses what was confirmed there), so the types in
+      // `mapping` are the user's — confirmed or changed. T&E mode has no types.
       const res = await uploadCsv({
-        fileName:job.name, content, types, overwrite,
+        fileName:job.name, content, types, typesConfirmed:!isTe, overwrite,
         headerMapping: headerMapping?.map(c=>({original:c.original,renamed:c.renamed})),
         mode: job.mode, targetTable: job.targetTable,
       });
@@ -197,7 +200,8 @@ export function Uploader() {
       abortMap.current.delete(job.id);
       if (ctrl.signal.aborted) return; // already cancelled
       const outcome = classifyThrownError(job.name,err);
-      updateJob(job.id,outcome.patch);
+      // Keep what the user confirmed, so a retry after e.g. a network error reuses it.
+      updateJob(job.id,{...outcome.patch,headerMapping:mapping});
       toast[outcome.toast.type](outcome.toast.message);
     }
   },[router,updateJob]);
@@ -261,7 +265,14 @@ export function Uploader() {
     if (!file) { toast.error("Original file no longer available — please re-select it."); return; }
     updateJob(id,{status:"reading",progress:0,errorMessage:undefined,errorDetails:undefined,errorStack:undefined,rowErrors:undefined,invalidReason:undefined,cancellationReason:undefined});
     const preview = await parseCsvPreview(file);
-    const mapping: ColumnMapping[] = preview.headers.map((orig,i)=>({original:orig,renamed:job.headerMapping?.find(m=>m.original===orig)?.renamed??"",type:job.types?.[i]??preview.inferredTypes[i]}));
+    // #195: a retry must reuse the types the user confirmed. Re-inferring them here
+    // would upload as "confirmed" something nobody confirmed.
+    const confirmed = (orig:string,i:number) => job.types?.[i] ?? job.headerMapping?.find(m=>m.original===orig)?.type;
+    if (job.mode!=="te" && preview.headers.some((h,i)=>!confirmed(h,i))) {
+      updateJob(id,{status:"error",progress:100,errorMessage:"This file's column types were never confirmed. Drop the file again to review them."});
+      return;
+    }
+    const mapping: ColumnMapping[] = preview.headers.map((orig,i)=>({original:orig,renamed:job.headerMapping?.find(m=>m.original===orig)?.renamed??"",type:confirmed(orig,i)??preview.inferredTypes[i]}));
     await runJob(job,file,mapping,opts?.overwrite);
   },[jobs,runJob,updateJob]);
 
@@ -691,7 +702,7 @@ function FilesList({files}:{files:CsvFileSummary[]}){
           <>
             <div className="overflow-x-auto"><Table>
               <TableHeader><TableRow className="[&>th]:h-8 [&>th]:py-1"><TableHead className="w-12 text-right">#</TableHead><TableHead>File</TableHead><TableHead>Table</TableHead><TableHead className="w-16 text-right">Cols</TableHead><TableHead className="w-16 text-right">Rows</TableHead><TableHead className="w-40">Uploaded</TableHead><TableHead className="w-24"/></TableRow></TableHeader>
-              <TableBody>{visible.map((f,i)=><TableRow key={f.id} className="[&>td]:py-1.5"><TableCell className="text-right tabular-nums text-xs text-muted-foreground">{startIndex+i+1}</TableCell><TableCell className="max-w-[22rem] truncate font-medium" title={f.file_name}>{f.file_name}</TableCell><TableCell><code className="rounded bg-muted px-1.5 py-0.5 text-xs">{f.table_name}</code></TableCell><TableCell className="text-right tabular-nums">{f.column_names.length}</TableCell><TableCell className="text-right tabular-nums">{f.row_count}{failedRowsNote(f)&&<span className="block text-xs text-destructive">{failedRowsNote(f)}</span>}</TableCell><TableCell className="whitespace-nowrap text-xs text-muted-foreground" suppressHydrationWarning><time dateTime={f.created_at} title={formatUtc(f.created_at)}>{formatLocalTime(f.created_at)}</time></TableCell><TableCell className="text-right"><Button size="sm" variant="ghost" className="h-7 px-2" onClick={()=>setPreview(f)}><Eye className="mr-1 h-3.5 w-3.5"/>Preview</Button>{f.upload_id&&<Button asChild size="sm" variant="ghost" className="h-7 px-2"><Link to="/review/$uploadId" params={{uploadId:f.upload_id}}>Review</Link></Button>}</TableCell></TableRow>)}</TableBody>
+              <TableBody>{visible.map((f,i)=><TableRow key={f.id} className="[&>td]:py-1.5"><TableCell className="text-right tabular-nums text-xs text-muted-foreground">{startIndex+i+1}</TableCell><TableCell className="max-w-[22rem] truncate font-medium" title={f.file_name}>{f.file_name}</TableCell><TableCell><code className="rounded bg-muted px-1.5 py-0.5 text-xs">{f.table_name}</code>{f.types_provenance&&<span className={`block text-xs ${f.types_provenance==="user_confirmed"?"text-muted-foreground":"text-amber-700 dark:text-amber-400"}`}>{f.types_provenance==="user_confirmed"?"Types confirmed":"Types inferred, not confirmed"}</span>}</TableCell><TableCell className="text-right tabular-nums">{f.column_names.length}</TableCell><TableCell className="text-right tabular-nums">{f.row_count}{failedRowsNote(f)&&<span className="block text-xs text-destructive">{failedRowsNote(f)}</span>}</TableCell><TableCell className="whitespace-nowrap text-xs text-muted-foreground" suppressHydrationWarning><time dateTime={f.created_at} title={formatUtc(f.created_at)}>{formatLocalTime(f.created_at)}</time></TableCell><TableCell className="text-right"><Button size="sm" variant="ghost" className="h-7 px-2" onClick={()=>setPreview(f)}><Eye className="mr-1 h-3.5 w-3.5"/>Preview</Button>{f.upload_id&&<Button asChild size="sm" variant="ghost" className="h-7 px-2"><Link to="/review/$uploadId" params={{uploadId:f.upload_id}}>Review</Link></Button>}</TableCell></TableRow>)}</TableBody>
             </Table></div>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">

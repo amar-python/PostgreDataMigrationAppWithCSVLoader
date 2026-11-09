@@ -32,13 +32,41 @@ Two upload modes:
 `services/te_loader.match_te_table()` inspects the parsed columns and suggests a
 T&E table, which drives the mode picker in the UI.
 
+### Dynamic mode: confirm the column types first (#195)
+
+Dynamic mode infers each column's type from the data, and inference can be wrong
+(a `clearance` column, a date written two ways). So a dynamic table is created only
+after a person has confirmed — or changed — the types:
+
+1. `POST /api/csv/preview` returns `inferredTypes` for the file.
+2. `POST /api/csv/upload` **without** `typesConfirmed: true` creates nothing and is
+   not registered. It answers `{"status": "types_unconfirmed", "columns": [...],
+   "inferredTypes": [...]}`; the attempt is recorded as `rejected` in the upload history.
+3. The same request with `"typesConfirmed": true` and `"types": [...]` (one of
+   `int8 numeric date timestamptz boolean text` per column) creates the table.
+   `typesConfirmed: true` with `types` omitted means the caller explicitly chose
+   all-text.
+
+Every dynamic table records where its types came from, as `types_provenance` on its
+registry row (`GET /api/csv/files`) and `typesProvenance` in the upload response:
+
+| Value | Meaning |
+|---|---|
+| `user_confirmed` | The uploader confirmed or changed the types |
+| `inferred_unconfirmed` | Inferred and never confirmed. Tables registered before this rule (migration 0009) are backfilled with this |
+| `null` | T&E mode: types come from the T&E schema, not from inference |
+
+`typesConfirmed` is ignored in T&E mode. Dynamic tables are kept out of the T&E import
+path: `targetTable` must be one of the 12 `TE_TABLES`, so a `csv_<hash>` table is
+refused (`tests/system_integration/test_types_confirmation.py`).
+
 ## Endpoints
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health` | Liveness; reports `ok` or `degraded`, never errors |
 | POST | `/api/csv/preview` | Parse and type-detect without writing |
-| POST | `/api/csv/upload` | Load (`mode: dynamic \| te`) |
+| POST | `/api/csv/upload` | Load (`mode: dynamic \| te`); dynamic needs `typesConfirmed: true` |
 | GET | `/api/csv/files` | Registered uploads — drives "Migrated files" |
 | GET | `/api/csv/tables/{table}/rows` | Row preview, `limit` 1–200 |
 | DELETE | `/api/csv/files/{id}` | Remove registration; drops the table in dynamic mode |

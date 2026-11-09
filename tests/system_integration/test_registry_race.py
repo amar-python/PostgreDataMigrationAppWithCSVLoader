@@ -49,7 +49,7 @@ def _race(uploads: list[tuple[str, str]]) -> list[dict]:
 
     def go(item):
         gate.wait(timeout=30)
-        return upload_dynamic(item[0], item[1], None, False)
+        return upload_dynamic(item[0], item[1], None, False, True)
 
     with ThreadPoolExecutor(max_workers=len(uploads)) as pool:
         return list(pool.map(go, uploads))

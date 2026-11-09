@@ -132,7 +132,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
 
     def test_upload_then_list_then_read_rows(self):
         up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+                              json={"typesConfirmed": True, "fileName": self.name, "content": self.content})
         self.assertEqual(up.status_code, 200)
         body = up.json()
         self.assertEqual(body["status"], "ok", body)
@@ -149,18 +149,18 @@ class CsvPipelineWithDatabase(unittest.TestCase):
 
     def test_reupload_of_identical_content_is_refused(self):
         first = self.client.post("/api/csv/upload",
-                                 json={"fileName": self.name, "content": self.content})
+                                 json={"typesConfirmed": True, "fileName": self.name, "content": self.content})
         self.assertEqual(first.json()["status"], "ok")
 
         again = self.client.post("/api/csv/upload",
-                                 json={"fileName": self.name, "content": self.content})
+                                 json={"typesConfirmed": True, "fileName": self.name, "content": self.content})
         self.assertEqual(again.json()["status"], "duplicate_file",
                          "re-uploading identical content should be refused")
 
     def test_in_file_duplicate_rows_are_skipped(self):
         dupes = f"col_a,col_b\n{os.getpid()},x\n{os.getpid()},x\n"
         r = self.client.post("/api/csv/upload",
-                             json={"fileName": self.name, "content": dupes})
+                             json={"typesConfirmed": True, "fileName": self.name, "content": dupes})
         body = r.json()
         self.assertEqual(body["status"], "ok", body)
         self.assertEqual(body["insertedRows"], 1)
@@ -180,7 +180,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         )
         r = self.client.post(
             "/api/csv/upload",
-            json={"fileName": self.name, "content": content},
+            json={"typesConfirmed": True, "fileName": self.name, "content": content},
         )
         body = r.json()
         self.assertEqual(body["status"], "ok", body)
@@ -215,7 +215,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         )
         r = self.client.post(
             "/api/csv/upload",
-            json={"fileName": self.name, "content": content},
+            json={"typesConfirmed": True, "fileName": self.name, "content": content},
         )
         body = r.json()
         self.assertEqual(body["status"], "ok", body)
@@ -248,7 +248,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
     def test_audit_record_contains_required_fields(self):
         """BR-15: GET /api/csv/files must return all required audit fields."""
         up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+                              json={"typesConfirmed": True, "fileName": self.name, "content": self.content})
         self.assertEqual(up.json()["status"], "ok")
 
         files = self.client.get("/api/csv/files").json()
@@ -263,7 +263,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         content = f"col_a,col_b\n{os.getpid()}_audit,1\n{os.getpid()}_audit,2\n"
         name = f"br15_rowcount_{os.getpid()}.csv"
         up = self.client.post("/api/csv/upload",
-                              json={"fileName": name, "content": content})
+                              json={"typesConfirmed": True, "fileName": name, "content": content})
         body = up.json()
         self.assertEqual(body["status"], "ok")
 
@@ -276,7 +276,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
     def test_audit_record_table_name_matches_upload_response(self):
         """BR-15: persisted table_name must match what the upload response reported."""
         up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+                              json={"typesConfirmed": True, "fileName": self.name, "content": self.content})
         body = up.json()
         self.assertEqual(body["status"], "ok")
 
@@ -289,7 +289,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
     def test_audit_record_has_iso_timestamp(self):
         """BR-15: created_at must be a non-empty ISO timestamp."""
         up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+                              json={"typesConfirmed": True, "fileName": self.name, "content": self.content})
         self.assertEqual(up.json()["status"], "ok")
 
         files = self.client.get("/api/csv/files").json()
@@ -306,7 +306,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         """BR-15: a structurally invalid file must not create a registry entry."""
         bad_name = f"br15_fail_{os.getpid()}.csv"
         up = self.client.post("/api/csv/upload",
-                              json={"fileName": bad_name, "content": "col_a\n"})
+                              json={"typesConfirmed": True, "fileName": bad_name, "content": "col_a\n"})
         self.assertIn(up.json()["status"], ("invalid_structure", "error"))
 
         files = self.client.get("/api/csv/files").json()
@@ -389,7 +389,7 @@ class AuditLogTrail(unittest.TestCase):
     def test_successful_upload_writes_an_audit_row(self):
         """O-04: the gap this closes — a load used to leave no audit trace."""
         up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+                              json={"typesConfirmed": True, "fileName": self.name, "content": self.content})
         self.assertEqual(up.json()["status"], "ok", up.text)
 
         uploads = [e for e in self._entries_for(self.name) if e["action"] == "upload"]
@@ -403,7 +403,7 @@ class AuditLogTrail(unittest.TestCase):
         something happened — an audit trail that cannot be tied back to the
         artefact it describes is not evidence."""
         up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+                              json={"typesConfirmed": True, "fileName": self.name, "content": self.content})
         body = up.json()
         self.assertEqual(body["status"], "ok", up.text)
 
@@ -417,7 +417,7 @@ class AuditLogTrail(unittest.TestCase):
     def test_audit_row_names_the_actor_and_the_chain_verifies(self):
         """M3a (#107): who acted is recorded, and the hash chain checks out."""
         up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+                              json={"typesConfirmed": True, "fileName": self.name, "content": self.content})
         self.assertEqual(up.json()["status"], "ok", up.text)
         row = next(e for e in self._entries_for(self.name) if e["action"] == "upload")
         self.assertEqual(row["actor"], "api_key")
@@ -429,7 +429,7 @@ class AuditLogTrail(unittest.TestCase):
         """The full lifecycle. Before O-04 only the second half was recorded,
         so a table could be seen to vanish with no record of its arrival."""
         up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+                              json={"typesConfirmed": True, "fileName": self.name, "content": self.content})
         self.assertEqual(up.json()["status"], "ok", up.text)
 
         file_id = next(f["id"] for f in self.client.get("/api/csv/files").json()
@@ -450,11 +450,11 @@ class AuditLogTrail(unittest.TestCase):
         """Only a genuine load is audited. A refused duplicate changed nothing,
         so logging it would make the trail read as if data had landed twice."""
         first = self.client.post("/api/csv/upload",
-                                 json={"fileName": self.name, "content": self.content})
+                                 json={"typesConfirmed": True, "fileName": self.name, "content": self.content})
         self.assertEqual(first.json()["status"], "ok", first.text)
 
         second = self.client.post("/api/csv/upload",
-                                  json={"fileName": self.name, "content": self.content})
+                                  json={"typesConfirmed": True, "fileName": self.name, "content": self.content})
         self.assertEqual(second.json()["status"], "duplicate_file", second.text)
 
         uploads = [e for e in self._entries_for(self.name) if e["action"] == "upload"]
@@ -468,7 +468,7 @@ class AuditLogTrail(unittest.TestCase):
         nothing to audit."""
         bad = f"audit_fail_{os.getpid()}.csv"
         resp = self.client.post("/api/csv/upload",
-                                json={"fileName": bad, "content": "col_a\n"})
+                                json={"typesConfirmed": True, "fileName": bad, "content": "col_a\n"})
         self.assertIn(resp.json()["status"], ("invalid_structure", "error"))
         self.assertEqual(
             self._entries_for(bad), [],
@@ -478,7 +478,7 @@ class AuditLogTrail(unittest.TestCase):
     def test_audit_endpoint_reports_a_total_and_respects_limit(self):
         """Pagination contract, so a grower table stays consultable."""
         self.client.post("/api/csv/upload",
-                         json={"fileName": self.name, "content": self.content})
+                         json={"typesConfirmed": True, "fileName": self.name, "content": self.content})
         body = self.client.get("/api/audit/log", params={"limit": 1}).json()
         self.assertGreaterEqual(body["total"], 1)
         self.assertEqual(body["limit"], 1)

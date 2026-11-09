@@ -26,7 +26,8 @@ from api.tenancy import uploads_schema
 
 logger = logging.getLogger(__name__)
 
-_STATUS = {"duplicate_file": "duplicate", "invalid_structure": "rejected", "error": "failed"}
+_STATUS = {"duplicate_file": "duplicate", "invalid_structure": "rejected", "error": "failed",
+           "types_unconfirmed": "rejected"}  # #195: nothing was created, so it is a rejection
 
 
 def outcome(result: dict) -> str:

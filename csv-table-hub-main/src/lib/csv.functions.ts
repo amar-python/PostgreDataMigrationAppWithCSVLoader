@@ -36,6 +36,10 @@ const processingLogSchema = z.object({
 });
 export type ProcessingLog = z.infer<typeof processingLogSchema>;
 
+// #195: whether a dynamic table's column types were confirmed by a person.
+const typesProvenanceSchema = z.enum(["user_confirmed", "inferred_unconfirmed"]);
+export type TypesProvenance = z.infer<typeof typesProvenanceSchema>;
+
 const uploadResultSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("ok"),
@@ -47,6 +51,7 @@ const uploadResultSchema = z.discriminatedUnion("status", [
     failedRows: z.number(),
     columns: z.array(z.string()),
     types: z.array(columnTypeSchema),
+    typesProvenance: typesProvenanceSchema.optional(),
     rowErrors: z.array(rowErrorSchema),
     logs: z.array(processingLogSchema),
     overwritten: z.boolean().optional(),
@@ -73,6 +78,14 @@ const uploadResultSchema = z.discriminatedUnion("status", [
     message: z.string(),
     logs: z.array(processingLogSchema),
   }),
+  // #195: the server creates nothing until the column types are confirmed.
+  z.object({
+    status: z.literal("types_unconfirmed"),
+    message: z.string(),
+    columns: z.array(z.string()),
+    inferredTypes: z.array(columnTypeSchema),
+    logs: z.array(processingLogSchema),
+  }),
   z.object({
     status: z.literal("error"),
     message: z.string(),
@@ -93,6 +106,9 @@ const csvFileSummarySchema = z.object({
   upload_id: z.string().nullable().optional(),
   column_names: z.array(z.string()),
   created_at: z.string(),
+  mode: z.string().optional(),
+  // null for T&E-mode files: their types come from the T&E schema.
+  types_provenance: typesProvenanceSchema.nullable().optional(),
 });
 export type CsvFileSummary = z.infer<typeof csvFileSummarySchema>;
 
@@ -152,6 +168,9 @@ export async function uploadCsv(input: {
   fileName: string;
   content: string;
   types?: ColumnType[];
+  /** #195: true only once a person has confirmed (or changed) `types`. Without it
+   *  the server creates no dynamic table and answers "types_unconfirmed". */
+  typesConfirmed?: boolean;
   overwrite?: boolean;
   mode?: "dynamic" | "te";
   targetTable?: string;
@@ -163,6 +182,7 @@ export async function uploadCsv(input: {
       fileName: input.fileName,
       content: input.content,
       types: input.types,
+      typesConfirmed: input.typesConfirmed ?? false,
       overwrite: input.overwrite ?? false,
       mode: input.mode ?? "dynamic",
       targetTable: input.targetTable,

@@ -44,7 +44,7 @@ class PreservedUploads(unittest.TestCase):
                 self.client.delete(f"/api/csv/files/{f['id']}")
 
     def _upload(self, content: str, types: list[str] | None = None, overwrite: bool = False) -> dict:
-        body = {"fileName": self.name, "content": content, "overwrite": overwrite}
+        body = {"fileName": self.name, "content": content, "overwrite": overwrite, "typesConfirmed": True}
         if types:
             body["types"] = types
         return self.client.post("/api/csv/upload", json=body).json()

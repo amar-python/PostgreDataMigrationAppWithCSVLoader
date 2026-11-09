@@ -299,6 +299,7 @@ class DynamicOverwriteOfTeOriginFile(unittest.TestCase):
         dynamic_body = self.client.post(
             "/api/csv/upload",
             json={
+                "typesConfirmed": True,
                 "fileName": fname,
                 "content": "col_a\nsome_value\n",
                 "overwrite": True,

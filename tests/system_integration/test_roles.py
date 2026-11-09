@@ -100,7 +100,7 @@ class RoleMatrixOverTheApi(unittest.TestCase):
     def _file(self) -> tuple[str, str, str]:
         tag = uuid.uuid4().hex[:10]
         res = self.client.post("/api/csv/upload", headers=self.headers["tenant_admin"],
-                               json={"fileName": f"r_{tag}.csv", "content": f"k\n{tag}\n"}).json()
+                               json={"typesConfirmed": True, "fileName": f"r_{tag}.csv", "content": f"k\n{tag}\n"}).json()
         assert res["status"] == "ok", res
         return res["tableName"], res["fileId"], res["uploadId"]
 
@@ -110,7 +110,7 @@ class RoleMatrixOverTheApi(unittest.TestCase):
         body, user = None, None
         if action in ("preview", "upload"):
             tag = uuid.uuid4().hex[:10]
-            body = {"fileName": f"p_{tag}.csv", "content": f"k\n{tag}\n"}
+            body = {"fileName": f"p_{tag}.csv", "content": f"k\n{tag}\n", "typesConfirmed": True}
         if action == "reset_password":
             # A fresh member to reset, so no role's own session is revoked mid-test.
             user = f"{self.slug}_t{uuid.uuid4().hex[:6]}"

@@ -194,7 +194,7 @@ Start-Process "http://localhost:8080"
 |---|---|---|
 | `GET` | `/api/health` | DB reachability + PostgreSQL version |
 | `POST` | `/api/csv/preview` | Parse CSV, infer types, suggest T&E table match |
-| `POST` | `/api/csv/upload` | Load CSV — `mode: "dynamic"` or `mode: "te"` |
+| `POST` | `/api/csv/upload` | Load CSV — `mode: "dynamic"` (needs `typesConfirmed: true`, see `docs/API_INTEGRATION.md`) or `mode: "te"` |
 | `GET` | `/api/csv/files` | List all uploaded CSVs |
 | `GET` | `/api/csv/tables/{name}/rows` | Preview rows of a dynamic table |
 | `DELETE` | `/api/csv/files/{id}` | Drop a dynamic table (requires `API_ALLOW_DESTRUCTIVE=true`) |

@@ -22,6 +22,7 @@ from api.tenancy import uploads_schema
 from api.db import Conn
 from api.services.csv_parse import (
     ALLOWED_TYPES,
+    build_preview,
     cast_value,
     extra_cells,
     parse_csv,
@@ -49,12 +50,26 @@ def _log(logs: list, step: str, message: str, level: str = "info", count: int | 
     logs.append(entry)
 
 
+# Provenance of a dynamic table's column types (#195), stored on its registry row.
+USER_CONFIRMED = "user_confirmed"
+INFERRED_UNCONFIRMED = "inferred_unconfirmed"
+
+
 def upload_dynamic(
     file_name: str,
     content: str,
     types: list[str] | None,
     overwrite: bool,
+    types_confirmed: bool = False,
 ) -> dict:
+    """Load a CSV into its own typed table.
+
+    #195: a table is created only after a person has confirmed its column types.
+    Without ``types_confirmed`` nothing is created or registered; the caller gets
+    the inferred types back to show, and resubmits with ``types_confirmed=True``
+    and the types as confirmed or changed. ``types`` omitted while confirmed means
+    the caller explicitly chose all-text.
+    """
     logs: list[dict] = []
     _log(logs, "receive", f'Received "{file_name}" ({len(content)} chars)')
 
@@ -101,6 +116,21 @@ def upload_dynamic(
                 f"CSV has {data_row_count} data rows, but the API is configured to "
                 f"accept at most {settings.MAX_ROWS}. Split the file or raise API_MAX_ROWS."
             ),
+            "logs": logs,
+        }
+
+    if not types_confirmed:
+        # Same preview the UI shows, so the types offered for confirmation are
+        # exactly the ones it would have inferred.
+        preview = build_preview(content)
+        _log(logs, "validate_columns", "Column types not confirmed; no table created", "warn")
+        return {
+            "status": "types_unconfirmed",
+            "message": ("Column types must be confirmed before a table is created. "
+                        "Review inferredTypes, then upload again with typesConfirmed=true "
+                        "and the types you want."),
+            "columns": preview["columns"],
+            "inferredTypes": preview["inferredTypes"],
             "logs": logs,
         }
 
@@ -380,11 +410,11 @@ def _do_upload(
                 cur.execute(
                     sql.SQL(
                         "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names, "
-                        "total_rows, duplicate_rows_skipped, failed_rows) "
-                        "VALUES (%s, %s, %s, 'dynamic', %s, %s, %s, %s, %s) RETURNING id"
+                        "total_rows, duplicate_rows_skipped, failed_rows, types_provenance) "
+                        "VALUES (%s, %s, %s, 'dynamic', %s, %s, %s, %s, %s, %s) RETURNING id"
                     ).format(sql.Identifier(schema)),
                     (file_name, file_hash, table_name, inserted, columns,
-                     len(data_rows), duplicates, failed_row_count),
+                     len(data_rows), duplicates, failed_row_count, USER_CONFIRMED),
                 )
                 file_id = cur.fetchone()[0]
             except psycopg2.errors.UniqueViolation:
@@ -420,6 +450,7 @@ def _do_upload(
         "failedRows": failed_row_count,
         "columns": columns,
         "types": col_types,
+        "typesProvenance": USER_CONFIRMED,
         "rowErrors": row_errors,
         "logs": logs,
         "overwritten": replaced_file_name is not None,

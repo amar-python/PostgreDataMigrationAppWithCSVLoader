@@ -189,4 +189,26 @@ describe("Uploader state machine", () => {
     const call = uploadCsv.mock.calls[0][0];
     expect(call.overwrite).toBe(true);
   });
+
+  // #195: the server creates no dynamic table until types are confirmed. The page
+  // uploads only after "Confirm & import", so it must say so — and a retry must
+  // keep saying so with the types the user confirmed, not silently re-infer them.
+  it("sends typesConfirmed with the types shown in the dialog", async () => {
+    uploadCsv.mockResolvedValue({ status: "invalid_structure", reason: "empty", message: "x", logs: [] });
+    await dropAndConfirm(csvFile());
+    await waitFor(() => expect(uploadCsv).toHaveBeenCalledTimes(1));
+    expect(uploadCsv.mock.calls[0][0]).toMatchObject({ typesConfirmed: true, types: ["int8", "text"] });
+  });
+
+  it("a retry after a network failure still sends the confirmed types, confirmed", async () => {
+    uploadCsv.mockRejectedValueOnce(new Error("network down"));
+    const user = await dropAndConfirm(csvFile());
+    await waitFor(() => expect(screen.getByText(/^failed$/i)).toBeInTheDocument());
+
+    uploadCsv.mockResolvedValue({ status: "invalid_structure", reason: "empty", message: "x", logs: [] });
+    await user.click(screen.getByRole("button", { name: /retry/i }));
+
+    await waitFor(() => expect(uploadCsv).toHaveBeenCalledTimes(2));
+    expect(uploadCsv.mock.calls[1][0]).toMatchObject({ typesConfirmed: true, types: ["int8", "text"] });
+  });
 });

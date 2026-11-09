@@ -74,7 +74,7 @@ class ReviewCases(unittest.TestCase):
 
     def _upload(self, content: str, types: list[str], tenant: str = "a") -> dict:
         tag = uuid.uuid4().hex[:10]
-        return self.client.post("/api/csv/upload", headers=self._h(tenant=tenant), json={
+        return self.client.post("/api/csv/upload", headers=self._h(tenant=tenant), json={"typesConfirmed": True,
             "fileName": f"case_{tag}.csv", "content": content.replace("{tag}", tag), "types": types}).json()
 
     def _three(self, tenant: str = "a") -> str:

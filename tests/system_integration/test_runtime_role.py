@@ -72,10 +72,10 @@ class RuntimeRole(unittest.TestCase):
 
     def test_the_api_works_as_the_runtime_role(self):
         name = f"role_{uuid.uuid4().hex[:8]}.csv"
-        up = self.client.post("/api/csv/upload", json={"fileName": name, "content": f"v\n{name}\n"}).json()
+        up = self.client.post("/api/csv/upload", json={"typesConfirmed": True, "fileName": name, "content": f"v\n{name}\n"}).json()
         self.assertEqual(up["status"], "ok", up)
         self.assertIsNotNone(up["uploadId"], "the original must be stored by the runtime role")
-        over = self.client.post("/api/csv/upload", json={
+        over = self.client.post("/api/csv/upload", json={"typesConfirmed": True,
             "fileName": name, "content": f"v\nnew_{name}\n", "overwrite": True}).json()
         self.assertEqual(over["status"], "ok", over)
         # P15 (docs/test-cases/M4-review.md): review changes work through the runtime role.

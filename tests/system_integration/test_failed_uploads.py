@@ -37,7 +37,7 @@ class EveryRowFailed(unittest.TestCase):
         self.name = f"allfail_{self.tag}.csv"
 
     def _upload(self, content: str, types: list[str], overwrite: bool = False) -> dict:
-        return self.client.post("/api/csv/upload", json={
+        return self.client.post("/api/csv/upload", json={"typesConfirmed": True,
             "fileName": self.name, "content": content, "types": types, "overwrite": overwrite}).json()
 
     def _registered(self) -> list[dict]:

@@ -74,7 +74,7 @@ class CrossTenantIsolation(unittest.TestCase):
 
     def _upload(self, who: str, name: str, content: str) -> dict:
         res = self.client.post("/api/csv/upload", headers=self.headers[who],
-                               json={"fileName": name, "content": content})
+                               json={"typesConfirmed": True, "fileName": name, "content": content})
         self.assertEqual(res.status_code, 200, res.text)
         return res.json()
 
@@ -199,7 +199,7 @@ class CrossTenantIsolation(unittest.TestCase):
         with Conn() as conn, conn.cursor() as cur:
             cur.execute(sql.SQL("SELECT version_num FROM {}.alembic_version").format(
                 sql.Identifier(schema_for(self.slugs["b"]))))
-            self.assertEqual(cur.fetchone()[0], "0008")
+            self.assertEqual(cur.fetchone()[0], "0009")
             cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = %s",
                         (schema_for(self.slugs["b"]),))
             self.assertTrue({"csv_files", "audit_log"} <= {r[0] for r in cur.fetchall()})

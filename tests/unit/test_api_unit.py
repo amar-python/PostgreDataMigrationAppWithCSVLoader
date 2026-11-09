@@ -103,7 +103,7 @@ class RequestValidation(unittest.TestCase):
         self.assertEqual(r.status_code, 422)
 
     def test_upload_rejects_unknown_mode(self):
-        r = client.post("/api/csv/upload", json={
+        r = client.post("/api/csv/upload", json={"typesConfirmed": True,
             "fileName": "a.csv", "content": SMALL_CSV, "mode": "sideways"})
         self.assertEqual(r.status_code, 422)
 

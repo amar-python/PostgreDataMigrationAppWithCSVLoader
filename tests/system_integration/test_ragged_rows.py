@@ -54,7 +54,7 @@ class RaggedRowsOverTheApi(unittest.TestCase):
         self.tag = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
 
     def _upload(self, content: str, **extra) -> dict:
-        body = {"fileName": f"ragged_{self.tag}.csv", "content": content, **extra}
+        body = {"fileName": f"ragged_{self.tag}.csv", "content": content, "typesConfirmed": True, **extra}
         return self.client.post("/api/csv/upload", json=body).json()
 
     def test_dynamic_mode_reports_a_row_wider_than_the_header(self):

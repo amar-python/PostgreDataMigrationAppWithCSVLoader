@@ -40,6 +40,9 @@ class UploadRequest(BaseModel):
     content: str = Field(min_length=1)
     types: list[str] | None = None
     overwrite: bool = False
+    # #195: dynamic mode creates a table only once a person has confirmed (or
+    # changed) the inferred column types. Ignored in T&E mode.
+    typesConfirmed: bool = False
     mode: str = "dynamic"  # "dynamic" | "te"
     targetTable: str | None = None  # required when mode == "te"
 
@@ -78,7 +81,8 @@ def upload(req: UploadRequest) -> dict:
             raise HTTPException(422, "targetTable is required when mode is 'te'")
         result = upload_te(req.fileName, req.content, req.targetTable)
     elif req.mode == "dynamic":
-        result = upload_dynamic(req.fileName, req.content, req.types, req.overwrite)
+        result = upload_dynamic(req.fileName, req.content, req.types, req.overwrite,
+                                req.typesConfirmed)
     else:
         raise HTTPException(422, f"Unknown mode '{req.mode}' — use 'dynamic' or 'te'")
 
@@ -108,7 +112,8 @@ def list_files() -> list[dict]:
             cur.execute(
                 sql.SQL(
                     "SELECT f.id, f.file_name, f.table_name, f.mode, f.row_count, f.column_names, f.created_at, "
-                    "f.total_rows, f.duplicate_rows_skipped, f.failed_rows, u.uploader, u.id "
+                    "f.total_rows, f.duplicate_rows_skipped, f.failed_rows, u.uploader, u.id, "
+                    "f.types_provenance "
                     "FROM {s}.csv_files f LEFT JOIN LATERAL (SELECT uploader, id FROM {s}.uploads "
                     "  WHERE csv_file_id = f.id ORDER BY id DESC LIMIT 1) u ON true "
                     "ORDER BY f.created_at DESC, f.id DESC"
@@ -128,6 +133,8 @@ def list_files() -> list[dict]:
                     "failed_rows": r[9],
                     "uploader": r[10],
                     "upload_id": None if r[11] is None else str(r[11]),
+                    # #195: None for T&E rows (their types come from the T&E schema).
+                    "types_provenance": r[12],
                 }
                 for r in cur.fetchall()
             ]

@@ -17,7 +17,7 @@ code=$(curl -s -o /dev/null -w '%{http_code}' "$API/api/csv/files")
 [ "$code" = 401 ] && pass "API rejects a missing key" || nope "API rejects a missing key (got $code)"
 
 TAG="$(date +%s%N)"   # unique name and content, so the test can be re-run
-body=$(printf '{"fileName":"smoke_%s.csv","content":"a,b\\n1,%s\\n2,y\\n"}' "$TAG" "$TAG")
+body=$(printf '{"fileName":"smoke_%s.csv","content":"a,b\\n1,%s\\n2,y\\n","typesConfirmed":true}' "$TAG" "$TAG")
 res=$(curl -s -H "X-API-Key: $KEY" -H 'content-type: application/json' -d "$body" "$API/api/csv/upload")
 echo "$res" | grep -q '"insertedRows":2' && pass "upload a CSV (2 rows inserted)" || nope "upload a CSV: $res"
 

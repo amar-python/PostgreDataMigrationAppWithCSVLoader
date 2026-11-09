@@ -34,7 +34,7 @@ class Review(unittest.TestCase):
         self.tag = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
 
     def _upload(self, content: str, types: list[str]) -> dict:
-        return self.client.post("/api/csv/upload", json={
+        return self.client.post("/api/csv/upload", json={"typesConfirmed": True,
             "fileName": f"rev_{self.tag}.csv", "content": content, "types": types}).json()
 
     def _three_rows(self) -> str:

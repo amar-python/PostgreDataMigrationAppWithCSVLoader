@@ -88,7 +88,7 @@ class ImportSummaryCounts(unittest.TestCase):
     def _upload(self, content: str, suffix: str = "", **extra) -> dict:
         name = f"{self.tag}{suffix}.csv"
         self.uploaded.append(name)
-        payload = {"fileName": name, "content": content, **extra}
+        payload = {"fileName": name, "content": content, "typesConfirmed": True, **extra}
         r = self.client.post("/api/csv/upload", json=payload)
         self.assertEqual(r.status_code, 200, r.text[:300])
         return r.json()

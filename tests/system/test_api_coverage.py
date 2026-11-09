@@ -72,7 +72,7 @@ class _IntegrationBase(unittest.TestCase):
         if content is None:
             content = f"col_a,col_b\n{os.getpid()},{self._testMethodName}\n"
         return self.client.post("/api/csv/upload", json={
-            "fileName": name, "content": content, "overwrite": overwrite,
+            "typesConfirmed": True, "fileName": name, "content": content, "overwrite": overwrite,
         })
 
     def _upload_te(self, content, target_table="organisations"):
