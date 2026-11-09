@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -27,9 +28,42 @@ SCHEMA_SQL = BUILD / "te_core_schema.sql"
 SECRET = "S3cr3t'\"$(touch /tmp/should-not-exist)"
 
 
-def _bash(args: list[str], env: dict[str, str], cwd: Path | None = None) -> subprocess.CompletedProcess:
-    full_env = {"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/tmp"), **env}
-    return subprocess.run(["bash", *args], env=full_env, cwd=cwd, capture_output=True, text=True, timeout=60)
+def _find_bash():
+    """A real bash. On Windows the PATH `bash` is the WSL launcher, which fails when no distribution is
+    installed, so use Git Bash explicitly (as test_csv_utilise.py does). None if there isn't one."""
+    if sys.platform == "win32":
+        for candidate in (r"C:\Program Files\Git\bin\bash.exe", r"C:\Program Files (x86)\Git\bin\bash.exe"):
+            if Path(candidate).exists():
+                return candidate
+        found = shutil.which("bash")
+        return found if found and "system32" not in found.lower() else None
+    return shutil.which("bash") or "bash"
+
+
+_BASH = _find_bash()
+
+
+def _posix(path: Path) -> str:
+    """Forward slashes, which Git Bash and Linux bash both read; Windows backslashes are escapes to bash."""
+    return path.as_posix()
+
+
+def _bash(args: list[str], env: dict[str, str | None]) -> subprocess.CompletedProcess:
+    """Run bash with the caller's environment plus ``env``; a None value removes that variable."""
+    full_env = dict(os.environ)  # Git Bash on Windows needs SYSTEMROOT, TEMP and the like
+    for key, value in env.items():
+        if value is None:
+            full_env.pop(key, None)
+        else:
+            full_env[key] = value
+    # The scripts print UTF-8 symbols; the Windows locale codec cannot decode them.
+    return subprocess.run([_BASH, *args], env=full_env, capture_output=True, encoding="utf-8",
+                          errors="replace", timeout=60)
+
+
+def _require_bash() -> None:
+    if _BASH is None:
+        raise AssertionError("No working bash found: install Git Bash and ensure it is on PATH.")
 
 
 def _tf_env(name: str) -> str | None:
@@ -39,6 +73,10 @@ def _tf_env(name: str) -> str | None:
 
 @pytest.mark.unit
 class DeployerReadsNamesFromTheLauncher(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        _require_bash()
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="deploy_names_"))
         (self.tmp / "build").mkdir()
@@ -56,8 +94,11 @@ class DeployerReadsNamesFromTheLauncher(unittest.TestCase):
 
     def _dry_run(self, *envs: str) -> subprocess.CompletedProcess:
         # PGHOST is unreachable on purpose: a dry run must not touch PostgreSQL.
-        return _bash([str(self.tmp / "build" / "deploy_all.sh"), "--dry-run", *envs],
+        return _bash([_posix(self.tmp / "build" / "deploy_all.sh"), "--dry-run", *envs],
                      {"PGHOST": "/nonexistent-socket-dir"})
+
+    def _write_launcher(self, env: str, text: str) -> None:
+        self._launcher(env).write_text(text, encoding="utf-8", newline="\n")
 
     def test_committed_templates_keep_the_on_prem_names(self):
         out = self._dry_run().stdout
@@ -69,7 +110,7 @@ class DeployerReadsNamesFromTheLauncher(unittest.TestCase):
         text = self._launcher("prod").read_text(encoding="utf-8")
         text = re.sub(r"(\\set db_name\s+).*", r"\1te_prod", text)
         text = re.sub(r"(\\set db_owner\s+).*", r"\1pgadmin", text)
-        self._launcher("prod").write_text(text, encoding="utf-8")
+        self._write_launcher("prod", text)
         res = self._dry_run("prod")
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertRegex(res.stdout, r"PROD\s+\(database: te_prod, owner: pgadmin\)")
@@ -77,13 +118,13 @@ class DeployerReadsNamesFromTheLauncher(unittest.TestCase):
     def test_a_launcher_that_sets_neither_falls_back_to_the_on_prem_names(self):
         lines = [ln for ln in self._launcher("prod").read_text(encoding="utf-8").splitlines()
                  if not re.match(r"\\set (db_name|db_owner)\b", ln)]
-        self._launcher("prod").write_text("\n".join(lines), encoding="utf-8")
+        self._write_launcher("prod", "\n".join(lines))
         self.assertRegex(self._dry_run("prod").stdout, r"database: te_mgmt_prod, owner: postgres")
 
     def test_an_unsafe_identifier_is_refused(self):
         text = re.sub(r"(\\set db_name\s+).*", r'\1"x; DROP DATABASE y"',
                       self._launcher("prod").read_text(encoding="utf-8"))
-        self._launcher("prod").write_text(text, encoding="utf-8")
+        self._write_launcher("prod", text)
         res = self._dry_run("prod")
         self.assertNotEqual(res.returncode, 0)
         self.assertIn("Unsafe identifier", res.stderr)
@@ -91,13 +132,17 @@ class DeployerReadsNamesFromTheLauncher(unittest.TestCase):
 
 @pytest.mark.unit
 class EntrypointWritesTheLauncher(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        _require_bash()
+
     def setUp(self):
         self.home = Path(tempfile.mkdtemp(prefix="entrypoint_home_"))
         # The image carries the templates only; the concrete launchers are gitignored and absent.
         (self.home / "build" / "environments").mkdir(parents=True)
         for template in (BUILD / "environments").glob("env_*.example.sql"):
             shutil.copy(template, self.home / "build" / "environments" / template.name)
-        self.env = {"MIGRATION_HOME": str(self.home), "TARGET_ENV": "prod", "PGHOST": "unused",
+        self.env = {"MIGRATION_HOME": _posix(self.home), "TARGET_ENV": "prod", "PGHOST": "unused",
                     "PGPORT": "5432", "PGUSER": "pgadmin", "PGDATABASE": "te_prod",
                     "WAIT_FOR_DB_SECONDS": "1", "APP_DB_PASSWORD": SECRET}
 
@@ -106,9 +151,7 @@ class EntrypointWritesTheLauncher(unittest.TestCase):
         self.assertFalse(Path("/tmp/should-not-exist").exists(), "the password was executed as shell")
 
     def _render(self, **override) -> subprocess.CompletedProcess:
-        env = {**self.env, **override}
-        env = {k: v for k, v in env.items() if v is not None}
-        return _bash([str(ENTRYPOINT), "render"], env)
+        return _bash([_posix(ENTRYPOINT), "render"], {**self.env, **override})
 
     def test_the_image_has_no_concrete_launcher(self):
         self.assertEqual([p.name for p in (self.home / "build" / "environments").glob("env_*.sql")
