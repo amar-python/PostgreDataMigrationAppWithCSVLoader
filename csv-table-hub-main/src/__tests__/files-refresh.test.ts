@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
-import { filesQuery, loadFiles } from "@/lib/csv.functions";
+import { filesQuery, uploadsQuery, loadFiles } from "@/lib/csv.functions";
 
 const file = (name: string) => ({
   id: name,
@@ -18,17 +18,33 @@ const file = (name: string) => ({
 
 afterEach(() => vi.unstubAllGlobals());
 
+const attempt = (id: string, status: string) => ({
+  id,
+  file_name: `${id}.csv`,
+  mode: "dynamic",
+  status,
+  total_rows: 3,
+  imported_rows: 0,
+  failed_rows: 3,
+  uploaded_at: "2026-10-26T00:00:00Z",
+});
+
 describe("loadFiles", () => {
-  it("refetches the files list when the loader re-runs", async () => {
-    const responses = [[file("a")], [file("a"), file("b")]];
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify(responses.shift())));
+  it("refetches the files list and the upload attempts when the loader re-runs", async () => {
+    const files = [[file("a")], [file("a"), file("b")]];
+    const uploads = [[], [attempt("7", "failed")]];
+    const fetchMock = vi.fn(async (url: string) =>
+      new Response(JSON.stringify(String(url).includes("/uploads") ? uploads.shift() : files.shift())),
+    );
     vi.stubGlobal("fetch", fetchMock);
     const qc = new QueryClient();
 
     await loadFiles(qc); // first page load
     await loadFiles(qc); // router.invalidate() after an upload
 
+    // #187: an all-failed upload has no migrated file, so it must come from the attempts list.
     await vi.waitFor(() => expect(qc.getQueryData(filesQuery.queryKey)).toHaveLength(2));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(qc.getQueryData(uploadsQuery.queryKey)).toHaveLength(1));
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });
