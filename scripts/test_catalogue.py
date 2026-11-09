@@ -23,7 +23,8 @@ TESTS_DIR = ROOT / "tests"
 OUTPUT = ROOT / "docs" / "TEST_CASES.md"
 
 MARKER_NAMES = {"unit", "integration", "e2e", "regression", "security",
-                "snapshot", "parity"}
+                "snapshot", "parity", "system", "sit", "performance",
+                "accessibility", "uat"}
 
 
 def _extract_markers(decorators: list[ast.expr]) -> list[str]:

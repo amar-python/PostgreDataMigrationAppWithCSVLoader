@@ -41,7 +41,7 @@ Every change is made in three places, and a test fails if one is missed:
 3. **Stamp**: change the `COMMENT ON SCHEMA ... IS 'te_schema_version=...'` line in
    both schema files to the new revision id.
 
-`tests/test_tenant_te_migrations.py` then checks that a tenant reached by any route
+`tests/system/test_tenant_te_migrations.py` then checks that a tenant reached by any route
 (cloned, upgraded from the baseline, adopted from before versioning, cloned from an
 older template) has the same columns, constraints, indexes, triggers and functions as
 the template, and that both schema files carry the head's stamp. A change made in

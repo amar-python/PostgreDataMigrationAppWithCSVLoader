@@ -16,7 +16,7 @@ Idempotent: a tenant cloned after #177 already has all of it, and re-running cha
 nothing. The whole upgrade is one transaction. If cross-program rows already exist it
 ABORTS, leaving the tenant exactly as it was, and lists them so they can be triaged.
 
-The names below must match phase 4B; tests/test_tenant_te_migrations.py compares a
+The names below must match phase 4B; tests/system/test_tenant_te_migrations.py compares a
 migrated tenant with the template and fails if they drift.
 
 Revision ID: te0002

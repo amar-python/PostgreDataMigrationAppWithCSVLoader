@@ -117,9 +117,9 @@ scenario still fails on drift in either direction. It also executes the DDL
 rather than `adapter_sqlite.sh`, so the adapter scripts themselves remain
 unexercised — a smaller, separate gap.
 
-Also mitigated: `tests/test_parity.py::TestAllEnvironmentsHaveRequiredTables`
+Also mitigated: `tests/system_integration/test_parity.py::TestAllEnvironmentsHaveRequiredTables`
 runs against all four PostgreSQL environments, and
-`tests/test_evals_tier_e_x.py` unit-tests both tiers' comparison logic with
+`tests/unit/test_evals_tier_e_x.py` unit-tests both tiers' comparison logic with
 negative controls for added columns, changed types, changed nullability,
 reordered columns, and missing or extra tables.
 
