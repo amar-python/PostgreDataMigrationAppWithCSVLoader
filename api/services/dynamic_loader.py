@@ -63,7 +63,7 @@ def dataset_slug(file_name: str) -> str:
     return s[:40].strip("_") or "dataset"
 
 
-_SYSTEM_COLUMNS = ("_id", "_row_hash", "_created_at")
+_SYSTEM_COLUMNS = ("_id", "_row_hash", "_created_at", "_source_row_id", "_import_id")  # the last two: staged imports (M6)
 _UDT = {"boolean": "bool"}  # information_schema udt_name where it differs from our type name
 
 

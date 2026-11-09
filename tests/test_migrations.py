@@ -81,7 +81,9 @@ class MigrationsOnScratchSchema(unittest.TestCase):
     def test_upgrade_head_creates_tables_and_unique_constraints(self):
         command.upgrade(self.cfg, "head")
         self.assertTrue({"csv_files", "audit_log", "alembic_version"} <= self._tables())
-        self.assertEqual(self._constraints(), {"csv_files_file_hash_key", "csv_files_dataset_version_key"})
+        self.assertEqual(self._constraints(), {
+            "csv_files_file_hash_key", "csv_files_dataset_version_key",
+            "approvals_submission_id_key", "imports_upload_id_key", "imports_approval_id_key"})
 
     def test_control_schema_is_created_and_removed(self):
         command.upgrade(self.cfg, "head")
@@ -206,7 +208,7 @@ class RegistryUniqueness(unittest.TestCase):
     def test_bootstrap_brings_the_schema_to_head(self):
         with Conn() as conn, conn.cursor() as cur:
             cur.execute(f'SELECT version_num FROM "{settings.UPLOADS_SCHEMA}".alembic_version')
-            self.assertEqual(cur.fetchone()[0], "0009")
+            self.assertEqual(cur.fetchone()[0], "0010")
 
     def test_duplicate_hash_is_rejected_by_the_database(self):
         insert = (f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode) '

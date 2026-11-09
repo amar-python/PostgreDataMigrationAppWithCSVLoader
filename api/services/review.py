@@ -12,6 +12,7 @@ from psycopg2 import sql
 
 from api.services.audit import current_actor, write_audit
 from api.services.csv_parse import cast_value, extra_cells, ragged_row_reason, sanitize_columns
+from api.services.staged_import import state_of
 from api.tenancy import uploads_schema
 
 MAX_PAGE = 500
@@ -140,6 +141,13 @@ def _check_row(meta: dict, row_number: int) -> None:
         raise ReviewError(404, f"Row {row_number} doesn't exist; this upload has {meta['total']} rows")
 
 
+def _check_open(cur, upload_id: int) -> None:
+    """An approved or imported upload is frozen: what was approved is what gets imported (M6)."""
+    state = (state_of(cur, upload_id) or {}).get("state")
+    if state in ("approved", "imported"):
+        raise ReviewError(409, f"This upload is {state}, so its rows can no longer be changed")
+
+
 def _reason(reason: str) -> str:
     if not (reason or "").strip():
         raise ReviewError(422, "A reason is required")
@@ -150,6 +158,7 @@ def decide(cur, upload_id: int, row_number: int, decision: str, reason: str) -> 
     """Include or exclude one row. The caller commits."""
     meta = _upload(cur, upload_id)
     _check_row(meta, row_number)
+    _check_open(cur, upload_id)
     if decision not in ("include", "exclude"):
         raise ReviewError(422, "decision must be 'include' or 'exclude'")
     reason = _reason(reason)
@@ -168,6 +177,7 @@ def edit(cur, upload_id: int, row_number: int, column: str, value: str, reason: 
     """Set one cell's value as a new version. ``column`` is a name or a 0-based index. The caller commits."""
     meta = _upload(cur, upload_id)
     _check_row(meta, row_number)
+    _check_open(cur, upload_id)
     names = meta["columns"]
     index = int(column) if column.isdigit() else (names.index(column) if column in names else -1)
     if not 0 <= index < len(names):

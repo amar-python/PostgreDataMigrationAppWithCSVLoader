@@ -89,6 +89,9 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "read_audit":  frozenset({"tenant_admin", "auditor"}),
     "reset_password": frozenset({"tenant_admin"}),
     "review_rows": frozenset({"reviewer", "tenant_admin"}),
+    "submit_import": frozenset({"uploader", "tenant_admin"}),
+    "approve_import": frozenset({"reviewer", "tenant_admin"}),
+    "run_import": frozenset({"uploader", "reviewer", "tenant_admin"}),
 }
 
 

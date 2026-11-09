@@ -27,6 +27,8 @@ def main() -> int:
     ap.add_argument("--tenant", required=True, help="tenant slug: lowercase letters, digits, underscore")
     ap.add_argument("--name", required=True, help="tenant display name")
     ap.add_argument("--username", required=True)
+    ap.add_argument("--allow-self-approval", action="store_true",
+                    help="let members approve data they uploaded or submitted (for a tenant with a single user)")
     args = ap.parse_args()
     password = os.environ.get("TE_ADMIN_PASSWORD") or getpass.getpass("Password for the new admin: ")
     if len(password) < 12:
@@ -40,6 +42,8 @@ def main() -> int:
                 tenant_id = accounts.create_tenant(cur, args.tenant, args.name)
                 user_id = accounts.create_user(cur, args.username, password)
                 accounts.add_membership(cur, user_id, tenant_id, "tenant_admin")
+                if args.allow_self_approval:
+                    accounts.set_self_approval(cur, args.tenant, True)
             conn.commit()
         migrate_tenant(args.tenant)
     finally:
