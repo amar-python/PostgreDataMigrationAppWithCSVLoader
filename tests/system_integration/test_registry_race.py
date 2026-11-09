@@ -1,95 +1,163 @@
-"""Concurrent uploads of the same file must not create duplicate registry rows (#191).
+"""Concurrent uploads must leave one registry row and no partial state (#191, "F1").
 
-The UNIQUE constraints on csv_files(file_hash) and csv_files(file_name)
-settle the race at the database level. This test verifies that two
-simultaneous uploads of the same content yield one success and one
-graceful rejection — not a duplicate row or partial state.
+(Not #178, which is also labelled F1 and is a different defect.)
+
+The registry invariant is enforced by the database — migration 0002 adds
+UNIQUE (file_hash) and UNIQUE (file_name) on csv_files — but the check-then-insert
+in the upload path was not covered by any test. This drives the loader from
+several threads released together by a barrier, so the requests genuinely overlap,
+and repeats the race over several rounds because which interleaving wins is up to
+the scheduler. Whatever the interleaving, the invariants below must hold.
+
+Mutation check (from #191): drop the file_hash constraint and
+test_identical_content_under_different_names_registers_once fails (10 of 10 runs
+at ROUNDS = 40) —
+
+    ALTER TABLE csv_uploads.csv_files DROP CONSTRAINT csv_files_file_hash_key;
+
+Restore it afterwards with `ADD CONSTRAINT csv_files_file_hash_key UNIQUE (file_hash)`
+(delete any duplicate rows the mutated run left first).
+
+Only that test detects it, and that is by design: when racers share a file *name*
+as well as content, UNIQUE (file_name) and the csv_<hash> table name also stop the
+duplicate, so the hash constraint is not the only guard in that scenario. The
+different-names scenario isolates it.
 """
 
 from __future__ import annotations
 
-import os
-import unittest
-import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import hashlib
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from fastapi.testclient import TestClient
+from psycopg2 import sql
 
-from api.main import app
+from api.db import Conn
+from api.services.dynamic_loader import upload_dynamic
+from api.tenancy import uploads_schema
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
-         "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1.")
+pytestmark = pytest.mark.integration
+
+ROUNDS = 40
+RACERS = 4
 
 
-@pytest.mark.integration
-class RegistryRace(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.ctx = TestClient(app)
-        try:
-            cls.client = cls.ctx.__enter__()
-        except Exception as exc:  # noqa: BLE001
-            raise AssertionError(
-                f"Could not start the API: {type(exc).__name__}: {exc}\n{_HELP}"
-            ) from None
+def _race(uploads: list[tuple[str, str]]) -> list[dict]:
+    """Run each (file_name, content) upload at once; return the results in order."""
+    gate = threading.Barrier(len(uploads))
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.ctx.__exit__(None, None, None)
+    def go(item):
+        gate.wait(timeout=30)
+        return upload_dynamic(item[0], item[1], None, False)
 
-    def setUp(self):
-        self.tag = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
+    with ThreadPoolExecutor(max_workers=len(uploads)) as pool:
+        return list(pool.map(go, uploads))
 
-    def _upload(self, file_name: str, content: str) -> dict:
-        body = {"fileName": file_name, "content": content}
-        return self.client.post("/api/csv/upload", json=body).json()
 
-    def test_concurrent_identical_uploads_one_wins(self):
-        """Two threads upload the same content simultaneously.
+def _registry(names: list[str], hashes: list[str]) -> list[tuple]:
+    with Conn() as conn, conn.cursor() as cur:
+        cur.execute(sql.SQL(
+            "SELECT file_name, file_hash, table_name, row_count FROM {}.csv_files "
+            "WHERE file_name = ANY(%s) OR file_hash = ANY(%s)").format(sql.Identifier(uploads_schema())),
+            (names, hashes))
+        return cur.fetchall()
 
-        One should succeed; the other should fail gracefully (duplicate
-        hash detected). The registry must contain exactly one row.
-        """
-        fname = f"race_same_{self.tag}.csv"
-        content = f"a,b\n1,{self.tag}\n"
 
-        results: list[dict] = []
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            futures = [pool.submit(self._upload, fname, content) for _ in range(2)]
-            for f in as_completed(futures):
-                results.append(f.result())
+def _tables(prefixes: list[str]) -> list[str]:
+    with Conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = %s AND table_name = ANY(%s)",
+                    (uploads_schema(), prefixes))
+        return sorted(r[0] for r in cur.fetchall())
 
-        statuses = [r.get("status") for r in results]
-        ok_count = statuses.count("ok")
-        self.assertGreaterEqual(ok_count, 1, f"At least one upload must succeed: {results}")
-        self.assertLessEqual(ok_count + statuses.count("error"), 2)
 
-        files_resp = self.client.get("/api/csv/files").json()
-        matches = [f for f in files_resp if f.get("file_name") == fname]
-        self.assertEqual(len(matches), 1, f"Registry must have exactly one row: {matches}")
+def _table_rows(table: str) -> int:
+    with Conn() as conn, conn.cursor() as cur:
+        cur.execute(sql.SQL("SELECT count(*) FROM {}.{}").format(
+            sql.Identifier(uploads_schema()), sql.Identifier(table)))
+        return cur.fetchone()[0]
 
-    def test_concurrent_same_name_different_content(self):
-        """Two threads upload different content under the same filename.
 
-        The UNIQUE(file_name) constraint means only one can register. The
-        other must fail or be treated as a reupload (depending on the
-        code path), but not leave a second registry row.
-        """
-        fname = f"race_name_{self.tag}.csv"
-        content_a = f"a,b\nA,{self.tag}\n"
-        content_b = f"x,y\nB,{self.tag}\n"
+def _assert_rejection_is_attributable(res: dict, winner_name: str):
+    """The loser is told it lost, and to whom — not a bare error or a 500."""
+    assert res["status"] == "duplicate_file", res
+    assert res["existingFileName"] == winner_name, res
+    assert res["reason"] in ("content", "name"), res
 
-        results: list[dict] = []
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            fa = pool.submit(self._upload, fname, content_a)
-            fb = pool.submit(self._upload, fname, content_b)
-            for f in as_completed([fa, fb]):
-                results.append(f.result())
 
-        files_resp = self.client.get("/api/csv/files").json()
-        matches = [f for f in files_resp if f.get("file_name") == fname]
-        self.assertLessEqual(
-            len(matches), 1,
-            f"At most one registry row per filename: {matches}",
-        )
+def test_identical_file_uploaded_concurrently_registers_once(live_api, registry_cleanup, unique_tag):
+    for n in range(ROUNDS):
+        name = f"race_same_{unique_tag}_{n}.csv"
+        content = f"a,b\n1,{unique_tag}_{n}\n2,{unique_tag}_{n}\n"
+        digest = hashlib.sha256(content.encode()).hexdigest()
+        registry_cleanup.append(name)
+
+        results = _race([(name, content)] * RACERS)
+
+        ok = [r for r in results if r["status"] == "ok"]
+        rejected = [r for r in results if r["status"] != "ok"]
+        assert len(ok) == 1, f"round {n}: expected exactly one winner, got {[r['status'] for r in results]}"
+        assert len(rejected) == RACERS - 1
+        for r in rejected:
+            _assert_rejection_is_attributable(r, name)
+
+        # One registry row; one table; and the table holds the file once, not twice.
+        rows = _registry([name], [digest])
+        assert len(rows) == 1, f"round {n}: registry rows {rows}"
+        assert _tables([f"csv_{digest[:16]}"]) == [f"csv_{digest[:16]}"]
+        assert _table_rows(f"csv_{digest[:16]}") == 2, f"round {n}: rows duplicated or lost"
+
+
+def test_identical_content_under_different_names_registers_once(live_api, registry_cleanup, unique_tag):
+    """The case where file_hash, not file_name, is the guard: nothing about the
+    names clashes, so only the content identity can stop a second registration."""
+    for n in range(ROUNDS):
+        content = f"a,b\n1,{unique_tag}_{n}\n2,{unique_tag}_{n}\n"
+        digest = hashlib.sha256(content.encode()).hexdigest()
+        names = [f"race_hash_{unique_tag}_{n}_{i}.csv" for i in range(RACERS)]
+        registry_cleanup.extend(names)
+
+        results = _race([(nm, content) for nm in names])
+
+        ok = [(i, r) for i, r in enumerate(results) if r["status"] == "ok"]
+        assert len(ok) == 1, f"round {n}: expected exactly one winner, got {[r['status'] for r in results]}"
+        winner_name = names[ok[0][0]]
+        for i, r in enumerate(results):
+            if i != ok[0][0]:
+                _assert_rejection_is_attributable(r, winner_name)
+                assert r["reason"] == "content", r
+
+        rows = _registry(names, [digest])
+        assert len(rows) == 1, f"round {n}: registry rows {rows}"
+        assert rows[0][0] == winner_name
+        assert _table_rows(f"csv_{digest[:16]}") == 2, f"round {n}: rows duplicated or lost"
+
+
+def test_same_name_different_content_uploaded_concurrently_registers_once(live_api, registry_cleanup, unique_tag):
+    for n in range(ROUNDS):
+        name = f"race_name_{unique_tag}_{n}.csv"
+        uploads = [(name, f"a,b\n{i},{unique_tag}_{n}_{i}\n") for i in range(RACERS)]
+        digests = [hashlib.sha256(c.encode()).hexdigest() for _, c in uploads]
+        registry_cleanup.append(name)
+
+        results = _race(uploads)
+
+        ok = [(i, r) for i, r in enumerate(results) if r["status"] == "ok"]
+        assert len(ok) == 1, f"round {n}: expected exactly one winner, got {[r['status'] for r in results]}"
+        winner = ok[0][0]
+        for i, r in enumerate(results):
+            if i != winner:
+                _assert_rejection_is_attributable(r, name)
+                assert r["reason"] == "name", r
+
+        rows = _registry([name], digests)
+        assert len(rows) == 1, f"round {n}: registry rows {rows}"
+        assert rows[0][1] == digests[winner], "registry holds a different upload than the winner"
+
+        # No partial state: only the winner's table exists. A loser's table
+        # (created before its registry insert failed) must have rolled back.
+        expected = [f"csv_{digests[winner][:16]}"]
+        present = _tables([f"csv_{d[:16]}" for d in digests])
+        assert present == expected, f"round {n}: orphan tables {sorted(set(present) - set(expected))}"
+        assert _table_rows(expected[0]) == 1
