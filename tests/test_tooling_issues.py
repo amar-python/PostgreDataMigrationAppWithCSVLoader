@@ -9,7 +9,8 @@
   #194  the coverage-floor gate must fail below a floor
   #207  API_INTEGRATION.md must defer to the generated schema, and the schema must be served
 
-No database needed. Shell blocks are cut out of the real scripts and run, not re-implemented here.
+No database needed. Shell blocks are cut out of the real scripts and run, not re-implemented here;
+those classes are marked `tooling` (they need bash), so the Windows job leaves them out.
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ def _bash(script: str, **env: str) -> subprocess.CompletedProcess:
 
 # ── #171 ─────────────────────────────────────────────────────────────────────
 
-@pytest.mark.unit
+@pytest.mark.tooling
 class SetupKeepsPriorConfigOnFailure(unittest.TestCase):
     """#171: the config is written to a temp file and moved into place only once complete."""
 
@@ -96,7 +97,7 @@ class EvalRunnerStopsOnSqlErrors(unittest.TestCase):
 
 # ── #181 ─────────────────────────────────────────────────────────────────────
 
-@pytest.mark.unit
+@pytest.mark.tooling
 class SqlWrapperFailsOnAssertionFailures(unittest.TestCase):
     """#181: psql exits 0 even when assertions record FAIL rows; the wrapper must read the output."""
 
@@ -125,7 +126,7 @@ class SqlWrapperFailsOnAssertionFailures(unittest.TestCase):
 
 # ── #182 ─────────────────────────────────────────────────────────────────────
 
-@pytest.mark.unit
+@pytest.mark.tooling
 class OfflineBundleStopsOnDownloadFailure(unittest.TestCase):
     SCRIPT = (ROOT / "scripts/offline/build_bundle.sh").read_text(encoding="utf-8")
     BLOCK = _between(SCRIPT, "REAL=()", "( cd \"$OUT/debs\" && apt-ftparchive", include_end=False)
@@ -181,7 +182,7 @@ class FrontendLockFileMatchesPackageJson(unittest.TestCase):
 
 # ── #169 ─────────────────────────────────────────────────────────────────────
 
-@pytest.mark.unit
+@pytest.mark.tooling
 class TestCatalogueIsCurrent(unittest.TestCase):
     def test_docs_test_cases_matches_the_tests(self):
         res = subprocess.run([sys.executable, "scripts/test_catalogue.py", "--check"], cwd=ROOT,
@@ -200,8 +201,10 @@ class CoverageFloorGate(unittest.TestCase):
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             json.dump(report, f)
         try:
+            # The gate prints box-drawing characters; a Windows console's default encoding can't.
             return subprocess.run([sys.executable, "scripts/check_coverage_floors.py", f.name], cwd=ROOT,
-                                  capture_output=True, text=True, timeout=30).returncode
+                                  capture_output=True, text=True, timeout=30,
+                                  env={**os.environ, "PYTHONIOENCODING": "utf-8"}).returncode
         finally:
             os.unlink(f.name)
 

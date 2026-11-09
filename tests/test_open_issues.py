@@ -46,12 +46,6 @@ class OfflineInstallProcedureIsConsistent(unittest.TestCase):
     def test_the_build_and_install_scripts_exist(self):
         self.assertTrue({"build_bundle.sh", "install.sh"} <= {p.name for p in self.SCRIPTS})
 
-    def test_every_script_parses(self):
-        for script in self.SCRIPTS:
-            with self.subTest(script=script.name):
-                res = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
-                self.assertEqual(res.returncode, 0, res.stderr)
-
     def test_the_build_and_install_scripts_stop_on_the_first_error(self):
         # smoke_test.sh is excluded on purpose: it counts PASS/FAIL checks and exits non-zero at the end.
         for name in ("build_bundle.sh", "install.sh"):
@@ -66,3 +60,14 @@ class OfflineInstallProcedureIsConsistent(unittest.TestCase):
 
     def test_the_guide_gives_the_checksum_step(self):
         self.assertRegex(self.GUIDE, r"(?i)sha256")
+
+
+@pytest.mark.tooling
+class OfflineScriptsParse(unittest.TestCase):
+    """#60: `bash -n` on each offline script. Needs bash, so it is marked tooling (not run on Windows)."""
+
+    def test_every_script_parses(self):
+        for script in sorted((ROOT / "scripts/offline").glob("*.sh")):
+            with self.subTest(script=script.name):
+                res = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
+                self.assertEqual(res.returncode, 0, res.stderr)

@@ -1133,13 +1133,13 @@ To regenerate: `python3 scripts/test_catalogue.py`
 
 | `OfflineInstallProcedureIsConsistent.test_the_build_and_install_scripts_exist` | unit | — |
 
-| `OfflineInstallProcedureIsConsistent.test_every_script_parses` | unit | — |
-
 | `OfflineInstallProcedureIsConsistent.test_the_build_and_install_scripts_stop_on_the_first_error` | unit | — |
 
 | `OfflineInstallProcedureIsConsistent.test_the_guide_names_the_scripts_it_relies_on` | unit | — |
 
 | `OfflineInstallProcedureIsConsistent.test_the_guide_gives_the_checksum_step` | unit | — |
+
+| `OfflineScriptsParse.test_every_script_parses` | — | — |
 
 | `test_says_how_to_report_privately` | — | — |
 
@@ -1149,13 +1149,13 @@ To regenerate: `python3 scripts/test_catalogue.py`
 
 | `test_the_build_and_install_scripts_exist` | — | — |
 
-| `test_every_script_parses` | — | — |
-
 | `test_the_build_and_install_scripts_stop_on_the_first_error` | — | — |
 
 | `test_the_guide_names_the_scripts_it_relies_on` | — | — |
 
 | `test_the_guide_gives_the_checksum_step` | — | — |
+
+| `test_every_script_parses` | — | — |
 
 ## `tests/test_original_bytes.py`
 
@@ -1741,29 +1741,29 @@ To regenerate: `python3 scripts/test_catalogue.py`
 
 | Test | Markers | Objective |
 |---|---|---|
-| `SetupKeepsPriorConfigOnFailure.test_the_block_was_found_and_uses_many_variables` | unit | — |
+| `SetupKeepsPriorConfigOnFailure.test_the_block_was_found_and_uses_many_variables` | — | — |
 
-| `SetupKeepsPriorConfigOnFailure.test_success_replaces_the_config_and_leaves_no_temp_file` | unit | — |
+| `SetupKeepsPriorConfigOnFailure.test_success_replaces_the_config_and_leaves_no_temp_file` | — | — |
 
-| `SetupKeepsPriorConfigOnFailure.test_an_unset_variable_fails_the_run_but_keeps_the_prior_config` | unit | — |
+| `SetupKeepsPriorConfigOnFailure.test_an_unset_variable_fails_the_run_but_keeps_the_prior_config` | — | — |
 
 | `EvalRunnerStopsOnSqlErrors.test_the_idempotency_eval_stops_at_the_first_sql_error` | unit | — |
 
-| `SqlWrapperFailsOnAssertionFailures.test_failed_assertions_mark_the_environment_failed` | unit | — |
+| `SqlWrapperFailsOnAssertionFailures.test_failed_assertions_mark_the_environment_failed` | — | — |
 
-| `SqlWrapperFailsOnAssertionFailures.test_a_clean_run_is_not_marked_failed` | unit | — |
+| `SqlWrapperFailsOnAssertionFailures.test_a_clean_run_is_not_marked_failed` | — | — |
 
-| `OfflineBundleStopsOnDownloadFailure.test_the_old_swallow_is_gone` | unit | — |
+| `OfflineBundleStopsOnDownloadFailure.test_the_old_swallow_is_gone` | — | — |
 
-| `OfflineBundleStopsOnDownloadFailure.test_a_failed_download_stops_the_build` | unit | — |
+| `OfflineBundleStopsOnDownloadFailure.test_a_failed_download_stops_the_build` | — | — |
 
-| `OfflineBundleStopsOnDownloadFailure.test_a_download_that_yields_no_packages_stops_the_build` | unit | — |
+| `OfflineBundleStopsOnDownloadFailure.test_a_download_that_yields_no_packages_stops_the_build` | — | — |
 
-| `OfflineBundleStopsOnDownloadFailure.test_a_complete_download_continues` | unit | — |
+| `OfflineBundleStopsOnDownloadFailure.test_a_complete_download_continues` | — | — |
 
 | `FrontendLockFileMatchesPackageJson.test_root_entry_and_every_direct_dependency_agree` | unit | — |
 
-| `TestCatalogueIsCurrent.test_docs_test_cases_matches_the_tests` | unit | — |
+| `TestCatalogueIsCurrent.test_docs_test_cases_matches_the_tests` | — | — |
 
 | `CoverageFloorGate.test_floors_cover_the_three_loaders` | unit | — |
 
