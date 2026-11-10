@@ -27,23 +27,9 @@ PY_SRC=(
     scripts/create_tenant_admin.py
 )
 
-PY_TESTS=(
-    tests/test_csv_validator.py
-    tests/test_evals_runner.py
-    tests/test_api_unit.py
-    tests/test_api_integration.py
-    tests/test_issue_04_multi_file_upload.py
-    tests/test_issue_05_import_summary.py
-    tests/test_api_hardening.py
-    tests/test_evals_tier_e_x.py
-    tests/test_migrations.py
-    tests/test_import_counts.py
-    tests/test_accounts.py
-    tests/test_tenant_isolation.py
-    tests/test_roles.py
-    tests/test_oidc.py
-    tests/test_sql_no_bom.py
-)
+# Every Python file under tests/ (all categories, conftest, helpers). A hand-kept list had
+# fallen behind: it named 14 of the 38 test files (#167).
+mapfile -t PY_TESTS < <(find tests -name '*.py' -not -path '*/__pycache__/*' | sort)
 
 # Collect scripts/*.py dynamically
 mapfile -t PY_SCRIPTS < <(ls scripts/*.py 2>/dev/null || true)

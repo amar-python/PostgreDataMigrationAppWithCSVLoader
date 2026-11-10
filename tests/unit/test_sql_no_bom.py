@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 FILES = sorted((ROOT / "build" / "environments").glob("*.example.sql")) + [
     ROOT / "build" / "te_core_schema.sql",
     ROOT / "build" / "schema" / "postgresql" / "te_core_schema.sql",
