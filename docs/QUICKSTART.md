@@ -120,24 +120,45 @@ It prompts for a password of at least 12 characters, or reads it from
 `TE_ADMIN_PASSWORD`. Sign in with tenant `dev`, username `admin` and that
 password.
 
-### Set up the runtime database role (once, M3d)
+### Set up the runtime database role (once per environment, M3d)
 
-The API answers requests as a separate database role, `te_app`. It can only read
-and add to the audit log and the stored uploads, never change or delete them
-(#107). The owner (`PGUSER`, usually `postgres`) is used only at startup. Stop the
-API first, then run this once from the same folder:
+The API answers requests as a separate database role, `te_app_<env>` — so
+`te_app_dev` for your dev environment. It can only read and add to the audit log
+and the stored uploads, never change or delete them (#107). The owner (`PGUSER`,
+usually `postgres`) is used only at startup. Stop the API first, then run this
+once from the same folder:
 
 ```powershell
 cd "C:\Users\User\OneDrive\Desktop\Migration using ai\PostgreDataMigrationAppWithCSVLoader"
-python scripts\create_app_role.py
+python scripts\create_app_role.py --env dev
 ```
 
 It connects as the owner with the `PG*` values from step 3, so run it in a
 window where they're set (`PGPORT` 5433 and `PGPASSWORD` for PostgreSQL 18).
 It creates the role with a random password and writes the role's settings to
-`%USERPROFILE%\.te-migration\app-db.env`. It never prints the password.
-`start-api.ps1` loads that file. Until you run it, the API prints
-`APP_DB_USER not set` and runs as the owner. Running it again sets a new password.
+`%USERPROFILE%\.te-migration\app-db-dev.env`. It never prints the password.
+`start-api.ps1` loads that file, choosing it from `API_ENV` (default `dev`).
+Until you run it, the API prints `APP_DB_USER not set` and runs as the owner.
+Running it again sets a new password.
+
+`--env` is required (#173). Both the role name and the credential file come from
+it, so setting up a second environment on the same PostgreSQL server leaves the
+first one working. Standing up Test here, for example, is
+`--env test` with that environment's `PG*` values set, and it creates
+`te_app_test` with its own `app-db-test.env`. Before #173 there was one shared
+`te_app` role and one `app-db.env`: setting up Test rotated the password Dev was
+using, and Dev's connections failed on their next reconnect with
+`password authentication failed`. This is the normal shape for a dev PC — the
+PostgreSQL 17 instance on 5432 and the PostgreSQL 18 one on 5433 each hold
+several environments.
+
+**Upgrading from before #173.** If you already have
+`%USERPROFILE%\.te-migration\app-db.env`, run the command above once. It writes
+the new per-environment file and renames the old one to
+`app-db.env.superseded-dev`, so `start-api.ps1` stops reading it; nothing is
+deleted, so `mv` puts it back. Once every environment has been re-run with
+`--env`, the old cluster-wide `te_app` role is unused and the script prints the
+`DROP ROLE` to remove it.
 
 ### Change or reset a password (#117)
 
