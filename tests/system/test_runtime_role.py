@@ -91,9 +91,22 @@ class RuntimeRole(unittest.TestCase):
             cur.execute("SELECT current_user")
             self.assertEqual(cur.fetchone()[0], self.role)
 
+    def test_the_staged_import_works_as_the_runtime_role(self):
+        # M6: the import creates a table and a TEMP staging table, and COPYs into it, all as this role.
+        name = f"staged_{uuid.uuid4().hex[:8]}.csv"
+        up = self.client.post("/api/csv/uploads", json={"fileName": name, "content": f"v\n{name}\n"}).json()["uploadId"]
+        for action, body in (("submit", None), ("approval", {"decision": "approve"})):
+            res = self.client.post(f"/api/csv/uploads/{up}/{action}", json=body)
+            self.assertEqual(res.status_code, 200, res.text)
+        res = self.client.post(f"/api/csv/uploads/{up}/import", headers={"Idempotency-Key": "role-test"})
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(res.json()["reconciliation"]["imported"], 1)
+        self.assertEqual(self.client.delete(f"/api/csv/files/{res.json()['fileId']}").status_code, 200)
+
     def test_runtime_role_cannot_change_or_unprotect_append_only_tables(self):
         schema = settings.UPLOADS_SCHEMA
-        tables = ("audit_log", "uploads", "upload_blobs", "source_rows", "row_decisions", "cell_edits")
+        tables = ("audit_log", "uploads", "upload_blobs", "source_rows", "row_decisions", "cell_edits", "row_flags",
+                  "submissions", "approvals", "imports")
         statements = [f"{verb} {{}}.{table}" for table in tables for verb in ("DELETE FROM", "TRUNCATE")]
         statements += ["UPDATE {}.audit_log SET actor = 'x'", "UPDATE {}.uploads SET status = 'failed'",
                        "UPDATE {}.row_decisions SET reason = 'x'", "UPDATE {}.cell_edits SET new_value = 'x'",  # N15

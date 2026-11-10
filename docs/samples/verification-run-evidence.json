@@ -1,0 +1,267 @@
+{
+  "started_utc": "2026-11-09T09:07:53+00:00",
+  "health": {
+    "status": "ok",
+    "database": "te_mgmt_dev",
+    "host": "localhost:5432",
+    "postgres": "PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+    "uploads_schema": "csv_uploads"
+  },
+  "environment": {
+    "code_commit": "01602c18eb10e4888fd9debb0c4d7fd7c573c008",
+    "tracked_files_modified": false,
+    "python": "3.13.18",
+    "os": "Linux-6.18.44-fc-v310-x86_64-with-glibc2.39"
+  },
+  "te": {
+    "file": "orgs_sample.csv",
+    "bytes": 295,
+    "sha256": "593c2d41f415f178193b97643b7a5beb373f1c490d58b46ad27cf8ca3ec0a09b",
+    "source_rows": 10,
+    "source_lines": {
+      "1": "Alpha Systems Pty Ltd,prime,AU",
+      "2": "Bravo Test Unit,test_unit,AU",
+      "3": "Charlie Aerospace,subcontractor,US",
+      "4": "Delta Research,academic,AU",
+      "5": "Echo Defence,government,AU",
+      "6": "Alpha Systems Pty Ltd,prime,AU",
+      "7": "Foxtrot Labs,startup,AU",
+      "8": "Golf Integration,prime,AUS",
+      "9": ",prime,AU",
+      "10": "Hotel Dynamics,subcontractor,GB"
+    },
+    "api": {
+      "http": 200,
+      "preview": {
+        "status": "ok",
+        "inferredTypes": [
+          "text",
+          "text",
+          "text"
+        ],
+        "teTableMatch": "organisations"
+      },
+      "response": {
+        "status": "ok",
+        "fileId": "1",
+        "tableName": "tenant_dev.organisations",
+        "totalRows": 10,
+        "insertedRows": 6,
+        "duplicateRowsSkipped": 0,
+        "failedRows": 4,
+        "columns": [
+          "name",
+          "org_type",
+          "country"
+        ],
+        "types": [
+          "text",
+          "text",
+          "text"
+        ],
+        "rowErrors": [
+          {
+            "rowNumber": 6,
+            "reason": "duplicate key value violates unique constraint \"organisations_name_key\""
+          },
+          {
+            "rowNumber": 7,
+            "reason": "new row for relation \"organisations\" violates check constraint \"organisations_org_type_check\""
+          },
+          {
+            "rowNumber": 8,
+            "reason": "value too long for type character(2)"
+          },
+          {
+            "rowNumber": 9,
+            "reason": "null value in column \"name\" of relation \"organisations\" violates not-null constraint"
+          }
+        ],
+        "uploadId": "1"
+      }
+    },
+    "target": "tenant_dev.organisations",
+    "db_row_count": 6,
+    "db_rows": [
+      [
+        "Alpha Systems Pty Ltd",
+        "prime",
+        "AU"
+      ],
+      [
+        "Bravo Test Unit",
+        "test_unit",
+        "AU"
+      ],
+      [
+        "Charlie Aerospace",
+        "subcontractor",
+        "US"
+      ],
+      [
+        "Delta Research",
+        "academic",
+        "AU"
+      ],
+      [
+        "Echo Defence",
+        "government",
+        "AU"
+      ],
+      [
+        "Hotel Dynamics",
+        "subcontractor",
+        "GB"
+      ]
+    ],
+    "registry": {
+      "file_hash": "593c2d41f415f178193b97643b7a5beb373f1c490d58b46ad27cf8ca3ec0a09b",
+      "row_count": 6,
+      "total_rows": 10,
+      "failed_rows": 4
+    },
+    "expected_rejects": {
+      "6": "duplicate name (unique constraint)",
+      "7": "org_type 'startup' not in the allowed list (check constraint)",
+      "8": "country 'AUS' too long for a 2-character code",
+      "9": "name is empty (not-null constraint)"
+    },
+    "rejected_row_numbers": [
+      6,
+      7,
+      8,
+      9
+    ],
+    "loaded_matches_source": true
+  },
+  "dynamic": {
+    "file": "equipment_register.csv",
+    "bytes": 476,
+    "sha256": "14fab9c3bfb55400c5fb9744420f81e073d9dca7fc9abbe30e7d341cdf5abf62",
+    "source_rows": 8,
+    "api": {
+      "http": 200,
+      "preview": {
+        "status": "ok",
+        "inferredTypes": [
+          "text",
+          "text",
+          "text",
+          "date",
+          "int8"
+        ],
+        "teTableMatch": null
+      },
+      "response": {
+        "status": "ok",
+        "fileId": "2",
+        "tableName": "csv_14fab9c3bfb55400",
+        "totalRows": 8,
+        "insertedRows": 8,
+        "duplicateRowsSkipped": 0,
+        "failedRows": 0,
+        "columns": [
+          "asset_id",
+          "description",
+          "category",
+          "calibration_due",
+          "quantity"
+        ],
+        "types": [
+          "text",
+          "text",
+          "text",
+          "date",
+          "int8"
+        ],
+        "rowErrors": [],
+        "overwritten": false,
+        "replacedFileName": null,
+        "uploadId": "2"
+      }
+    },
+    "table": "csv_14fab9c3bfb55400",
+    "db_row_count": 8,
+    "db_columns": [
+      [
+        "asset_id",
+        "text"
+      ],
+      [
+        "description",
+        "text"
+      ],
+      [
+        "category",
+        "text"
+      ],
+      [
+        "calibration_due",
+        "date"
+      ],
+      [
+        "quantity",
+        "bigint"
+      ]
+    ],
+    "registry_file_hash": "14fab9c3bfb55400c5fb9744420f81e073d9dca7fc9abbe30e7d341cdf5abf62",
+    "duplicate_same_name": {
+      "status": "duplicate_file",
+      "reason": "content",
+      "existingFileName": "equipment_register.csv",
+      "tableName": "csv_14fab9c3bfb55400",
+      "existingRowCount": 8,
+      "uploadId": "3"
+    },
+    "duplicate_renamed": {
+      "status": "duplicate_file",
+      "reason": "content",
+      "existingFileName": "equipment_register.csv",
+      "tableName": "csv_14fab9c3bfb55400",
+      "existingRowCount": 8,
+      "uploadId": "4"
+    }
+  },
+  "posture": {
+    "unauthenticated_request_status": 200,
+    "database_roles_connected": [
+      "postgres"
+    ],
+    "audit_log_owner": "postgres"
+  },
+  "audit": {
+    "log": {
+      "total": 2,
+      "limit": 200,
+      "offset": 0,
+      "entries": [
+        {
+          "id": "2",
+          "action": "upload",
+          "fileId": 2,
+          "fileName": "equipment_register.csv",
+          "tableName": "csv_14fab9c3bfb55400",
+          "mode": "dynamic",
+          "performedAt": "2026-11-09T09:07:54.050344+00:00",
+          "actor": "admin"
+        },
+        {
+          "id": "1",
+          "action": "upload",
+          "fileId": 1,
+          "fileName": "orgs_sample.csv",
+          "tableName": "tenant_dev.organisations",
+          "mode": "te",
+          "performedAt": "2026-11-09T09:07:54.013017+00:00",
+          "actor": "admin"
+        }
+      ]
+    },
+    "verify": {
+      "rows": 2,
+      "intact": true,
+      "firstBadId": null
+    }
+  },
+  "finished_utc": "2026-11-09T09:07:54+00:00"
+}

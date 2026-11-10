@@ -8,9 +8,11 @@ session (API-key or dev) keeps the deployment's default schemas.
 
 from __future__ import annotations
 
+import re
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
+from pathlib import Path
 
 from psycopg2 import sql
 
@@ -70,9 +72,130 @@ def migrate_tenant(slug: str) -> None:
 
     with owner_connect() as conn:
         with conn.cursor() as cur:
-            provision_te_tables(cur, schema_for(slug), settings.TE_SCHEMA)
-            conn.commit()
+            migrate_te_schema(conn, cur, schema_for(slug))
             grant_runtime(cur, schema_for(slug), create=True)
+
+
+TE_VERSION_TABLE = "alembic_version_te"
+TE_BASELINE = "te0001"
+_TE_VERSION_COMMENT = re.compile(r"te_schema_version=(\w+)")
+
+
+def _te_config(schema: str):
+    from alembic.config import Config
+
+    cfg = Config()
+    cfg.set_main_option("script_location", str(Path(__file__).resolve().parent.parent / "alembic_te"))
+    cfg.attributes["schema"] = schema
+    return cfg
+
+
+def te_head() -> str:
+    """The newest T&E migration this release knows (build/te_core_schema.sql must stamp the same)."""
+    from alembic.script import ScriptDirectory
+
+    return ScriptDirectory.from_config(_te_config("unused")).get_current_head()
+
+
+def template_te_version(cur, template: str) -> str | None:
+    """The T&E migration the template schema is at, as build/te_core_schema.sql stamped it."""
+    cur.execute("SELECT obj_description(oid, 'pg_namespace') FROM pg_namespace WHERE nspname = %s", (template,))
+    row = cur.fetchone()
+    m = _TE_VERSION_COMMENT.search(row[0] or "") if row else None
+    return m.group(1) if m else None
+
+
+def _te_tables_present(cur, schema: str) -> set[str]:
+    cur.execute("SELECT c.relname FROM pg_class c WHERE c.relnamespace = to_regnamespace(%s) "
+                "AND c.relkind = 'r' AND c.relname = ANY(%s)", (schema, TE_TABLES))
+    return {r[0] for r in cur.fetchall()}
+
+
+def migrate_te_schema(conn, cur, schema: str) -> str:
+    """Bring one tenant's T&E tables to the newest migration (#184). Returns what was done.
+
+    - no T&E tables: clone them from the template (#99), stamp the tenant at the template's
+      version, and upgrade from there;
+    - tables but no version table (a tenant from before versioned migrations): stamp the
+      baseline, then upgrade;
+    - otherwise: upgrade.
+
+    Each tenant's migrations are one transaction; one that fails (for instance on
+    cross-program rows, which te0002 lists) leaves that tenant as it was. Serialised per
+    tenant across processes by an advisory lock, so two API workers starting together
+    cannot both provision or upgrade the same schema. Commits.
+    """
+    from alembic import command
+    from alembic.util import CommandError
+
+    cfg, template = _te_config(schema), settings.TE_SCHEMA
+    cur.execute("SELECT pg_advisory_lock(hashtextextended(%s, 0))", (f"te_schema:{schema}",))
+    try:
+        present = _te_tables_present(cur, schema)
+        cur.execute("SELECT to_regclass(%s)", (f'"{schema}"."{TE_VERSION_TABLE}"',))
+        versioned = cur.fetchone()[0] is not None
+        conn.commit()
+        if versioned and len(present) == len(TE_TABLES):
+            action, stamp = "upgraded", None
+        elif not present:
+            template_version = template_te_version(cur, template)
+            if template_version is None:
+                raise RuntimeError(
+                    f"T&E template schema {template!r} has no te_schema_version stamp; it was deployed by an "
+                    "older build/te_core_schema.sql. Redeploy it with build/deploy_all.sh first.")
+            provision_te_tables(cur, schema, template)
+            conn.commit()
+            action, stamp = "provisioned", template_version
+        else:
+            if len(present) < len(TE_TABLES):
+                provision_te_tables(cur, schema, template)
+                conn.commit()
+            action, stamp = "adopted", None if versioned else TE_BASELINE
+        try:
+            with _migrate_lock:  # Alembic's op/context are process-global; the advisory lock covers other processes
+                if stamp:
+                    command.stamp(cfg, stamp)
+                command.upgrade(cfg, "head")
+        except CommandError as exc:
+            raise RuntimeError(f"Tenant schema {schema!r}: {exc}. If the template is newer than this release, "
+                               "deploy the matching release; if older, redeploy it with "
+                               "build/deploy_all.sh.") from exc
+        return action
+    finally:
+        conn.rollback()
+        cur.execute("SELECT pg_advisory_unlock(hashtextextended(%s, 0))", (f"te_schema:{schema}",))
+        conn.commit()
+
+
+def _use_template_names(cur, schema: str, template: str, tables: list[str]) -> None:
+    """Give the cloned indexes and unique constraints the template's names (#184).
+
+    ``CREATE TABLE ... LIKE ... INCLUDING ALL`` names them by PostgreSQL's default rules
+    (``test_cases_phase_id_idx``), not the template's (``idx_testcases_phase``). A migration
+    that drops or renames an index by name would then work on the template and fail on every
+    tenant. Matched on what each index is (table, columns, method), since the names differ.
+    """
+    def listing(sch: str) -> list[tuple]:
+        cur.execute(
+            "SELECT t.relname, i.relname, pg_get_indexdef(i.oid), c.conname FROM pg_index x "
+            "JOIN pg_class i ON i.oid = x.indexrelid JOIN pg_class t ON t.oid = x.indrelid "
+            "LEFT JOIN pg_constraint c ON c.conindid = x.indexrelid AND c.contype = 'u' "
+            "WHERE t.relnamespace = %s::regnamespace AND t.relname = ANY(%s) AND NOT x.indisprimary",
+            (sch, tables))
+        return [(t, i, re.sub(r"^CREATE (UNIQUE )?INDEX \S+ ON \S+ ", r"\1", d), con)
+                for t, i, d, con in cur.fetchall()]
+
+    mine = {(t, tail): (i, con) for t, i, tail, con in listing(schema)}
+    for table, name, tail, constraint in listing(template):
+        have = mine.get((table, tail))
+        if have is None or have[0] == name:
+            continue
+        if constraint and have[1]:  # renaming a unique constraint renames its index too
+            cur.execute(sql.SQL("ALTER TABLE {}.{} RENAME CONSTRAINT {} TO {}").format(
+                sql.Identifier(schema), sql.Identifier(table), sql.Identifier(have[1]), sql.Identifier(constraint)))
+        elif not constraint and not have[1]:
+            cur.execute(sql.SQL("ALTER INDEX {}.{} RENAME TO {}").format(
+                sql.Identifier(schema), sql.Identifier(have[0]), sql.Identifier(name)))
 
 
 def provision_te_tables(cur, schema: str, template: str) -> int:
@@ -101,6 +224,7 @@ def provision_te_tables(cur, schema: str, template: str) -> int:
     for table in missing:
         cur.execute(sql.SQL("CREATE TABLE {}.{} (LIKE {}.{} INCLUDING ALL)").format(
             sql.Identifier(schema), sql.Identifier(table), sql.Identifier(template), sql.Identifier(table)))
+    _use_template_names(cur, schema, template, missing)
 
     def defs(query: str) -> list[tuple]:
         cur.execute(query, (template, missing))

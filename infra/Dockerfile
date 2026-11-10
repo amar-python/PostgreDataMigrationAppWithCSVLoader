@@ -5,7 +5,16 @@
 #   2. Load input CSVs (input_data/load_input_data.sql)
 #   3. Run the eval suite (evals/runner.py --tiers p,i,s)
 #
-# Entrypoint dispatches on the first arg: deploy | load | evals | shell.
+# Entrypoint dispatches on the first arg: deploy | render | load | evals | full | shell.
+#
+# The image holds only the launcher TEMPLATES (build/environments/*.example.sql);
+# the concrete env_<env>.sql carries credentials and is never baked in (#174).
+# `deploy` writes it at run time from the container's settings (#172):
+#   PGDATABASE   -> the database to deploy into (db_name)
+#   PGUSER       -> its owner and the login that deploys (db_owner)
+#   APP_DB_PASSWORD -> password of the application role the deployment creates;
+#                  passed to psql by \getenv, never written to a file or logged.
+# `render` prints the launcher it would use, without touching PostgreSQL.
 #
 # Build from the PostgreDataMigrationApp repo root:
 #   docker build -f infra/Dockerfile -t te-migration:dev .
@@ -17,6 +26,7 @@
 #   docker run --rm \
 #     -e PGHOST=postgres -e PGPORT=5432 -e PGUSER=postgres \
 #     -e PGPASSWORD=devpass -e PGDATABASE=te_dev \
+#     -e APP_DB_PASSWORD=app-devpass \
 #     -e TARGET_ENV=dev \
 #     te-migration:dev deploy
 
