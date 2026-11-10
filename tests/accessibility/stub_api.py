@@ -14,6 +14,7 @@ No Playwright import here: this module only describes data and a request handler
 from __future__ import annotations
 
 import json
+from urllib.parse import quote
 from typing import Any, Callable
 
 SESSION = {"token": "a11y-scan-token", "expiresAt": "2099-01-01T00:00:00Z",
@@ -127,9 +128,11 @@ def seed_script(session: dict | None, jobs: list[dict] | None) -> str:
     parts = []
     if session is not None:
         parts.append(f"sessionStorage.setItem('te.session', {json.dumps(json.dumps(session))});")
-    if jobs is not None:
+    if jobs is not None and session is not None:
+        # The app keeps history per signed-in tenant and user (#176), so plant it under that user's key.
+        key = "csv-migrator:jobs:v1:{}:{}".format(quote(session["tenant"], safe=""), quote(session["username"], safe=""))
         parts.append(
-            "(() => { const KEY = 'csv-migrator:jobs:v1', set = Storage.prototype.setItem;"
+            f"(() => {{ const KEY = {json.dumps(key)}, set = Storage.prototype.setItem;"
             " Storage.prototype.setItem = function (k, v) { if (k === KEY && v === '[]') return;"
             " return set.call(this, k, v); };"
             f" set.call(localStorage, KEY, {json.dumps(json.dumps(jobs))}); }})();"
