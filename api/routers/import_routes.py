@@ -8,13 +8,14 @@ import binascii
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from api import policy
 from api.auth import allow, tenant_scope
 from api.config import settings
 from api.db import Conn
 from api.routers.csv_routes import HeaderRename
 from api.services import staged_import
 
-router = APIRouter(prefix="/api/csv/uploads", tags=["import"], dependencies=[Depends(tenant_scope)])
+router = APIRouter(prefix="/api/csv/uploads", tags=["import"], dependencies=[Depends(tenant_scope), Depends(policy.mark_classification)])
 
 
 class StageRequest(BaseModel):

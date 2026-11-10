@@ -5,12 +5,14 @@ from __future__ import annotations
 import base64
 import binascii
 import logging
+from datetime import datetime
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from psycopg2 import sql
 from pydantic import BaseModel, Field
 
+from api import policy
 from api.auth import allow, tenant_scope
 from api.config import settings
 from api.tenancy import uploads_schema
@@ -19,6 +21,7 @@ from api.services.audit import coerce_file_id, record_audit, write_audit
 from api.services.csv_parse import build_preview
 from api.services.dynamic_loader import upload_dynamic
 from api.services.originals import record_upload
+from api.services.reports import like_pattern
 from api.services.staged_import import derive_state, state_columns, state_join
 from api.services.te_loader import match_te_table, upload_te
 
@@ -29,7 +32,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/csv",
     tags=["csv"],
-    dependencies=[Depends(tenant_scope)],
+    dependencies=[Depends(tenant_scope), Depends(policy.mark_classification)],
 )
 
 
@@ -174,22 +177,53 @@ def list_files() -> list[dict]:
             ]
 
 
+_UPLOAD_STATUSES = ("staged", "imported", "partly_imported", "failed", "duplicate", "rejected")
+# The first logged error, else the first warning: why a failed, rejected, duplicate or partly imported upload
+# came out as it did (M7, #111; BR-35). Staged and fully imported uploads have none.
+_FAILURE_REASON = (
+    "CASE WHEN u.status IN ('failed', 'rejected', 'duplicate', 'partly_imported') THEN "
+    "(SELECT t.l ->> 'message' FROM jsonb_array_elements(COALESCE(u.logs, '[]'::jsonb)) WITH ORDINALITY t(l, n) "
+    " WHERE t.l ->> 'level' IN ('error', 'warn') ORDER BY (t.l ->> 'level' = 'error') DESC, t.n LIMIT 1) END"
+)
+
+
 @router.get("/uploads", dependencies=[Depends(allow("list_files"))])
-def list_uploads(limit: int = 100, offset: int = 0) -> list[dict]:
-    """Every upload attempt and its outcome, newest first (M3b, #107; BR-23). ``state`` is the M6 workflow state."""
+def list_uploads(
+    limit: int = 100,
+    offset: int = 0,
+    status: str | None = Query(None, description="one of " + ", ".join(_UPLOAD_STATUSES)),
+    uploader: str | None = None,
+    file: str | None = Query(None, description="file name contains this text, ignoring case"),
+    date_from: datetime | None = Query(None, alias="from", description="uploaded on or after this time"),
+    date_to: datetime | None = Query(None, alias="to", description="uploaded before this time"),
+) -> list[dict]:
+    """Every upload attempt and its outcome, newest first (M3b, #107; BR-23), filterable (M7, #111; BR-35).
+
+    ``state`` is the M6 workflow state; ``failureReason`` says why an attempt didn't import cleanly.
+    """
+    if status is not None and status not in _UPLOAD_STATUSES:
+        raise HTTPException(422, f"Unknown status {status!r}; expected one of {list(_UPLOAD_STATUSES)}")
+    where, params = [], []
+    for clause, value in (("u.status = %s", status), ("u.uploader = %s", uploader),
+                          ("u.file_name ILIKE %s ESCAPE '\\'", None if file is None else like_pattern(file)),
+                          ("u.uploaded_at >= %s", date_from), ("u.uploaded_at < %s", date_to)):
+        if value is not None:
+            where.append(sql.SQL(clause))
+            params.append(value)
+    clause = sql.SQL(" WHERE ") + sql.SQL(" AND ").join(where) if where else sql.SQL("")
     with Conn() as conn, conn.cursor() as cur:
         cur.execute(sql.SQL(
             "SELECT u.id, u.file_name, u.sha256, u.byte_size, u.uploader, u.mode, u.status, u.total_rows, "
-            "u.imported_rows, u.failed_rows, u.csv_file_id, u.uploaded_at, {cols} "
-            "FROM {s}.uploads u {join} ORDER BY u.id DESC LIMIT %s OFFSET %s"
-        ).format(cols=state_columns(), s=sql.Identifier(uploads_schema()), join=state_join()),
-            (max(1, min(limit, 500)), max(0, offset)))
+            "u.imported_rows, u.failed_rows, u.csv_file_id, u.uploaded_at, {reason}, {cols} "
+            "FROM {s}.uploads u {join}{where} ORDER BY u.id DESC LIMIT %s OFFSET %s"
+        ).format(reason=sql.SQL(_FAILURE_REASON), cols=state_columns(), s=sql.Identifier(uploads_schema()),
+                 join=state_join(), where=clause), [*params, max(1, min(limit, 500)), max(0, offset)])
         keys = ("id", "file_name", "sha256", "byte_size", "uploader", "mode", "status", "total_rows",
-                "imported_rows", "failed_rows", "csv_file_id", "uploaded_at")
+                "imported_rows", "failed_rows", "csv_file_id", "uploaded_at", "failure_reason")
         out = []
         for r in cur.fetchall():
-            u = dict(zip(keys, r[:12]))
-            u["state"] = derive_state(u["status"], r[12], r[13], r[14])
+            u = dict(zip(keys, r[:13]))
+            u["state"] = derive_state(u["status"], r[13], r[14], r[15])
             out.append(u)
     for u in out:
         u["id"] = str(u["id"])
@@ -228,7 +262,7 @@ def upload_original(upload_id: int) -> Response:
     name, digest, content = row
     return Response(bytes(content), media_type="text/csv", headers={
         "Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}",
-        "X-Content-SHA256": digest})
+        "X-Content-SHA256": digest, policy.HEADER: settings.DATA_CLASSIFICATION})
 
 
 @router.get("/tables/{table_name}/rows", dependencies=[Depends(allow("read_rows"))])
