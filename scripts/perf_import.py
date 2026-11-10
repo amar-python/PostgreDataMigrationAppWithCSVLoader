@@ -160,6 +160,21 @@ def run(rows: int) -> dict:
             "peakPythonMB": peak_memory_mb()}
 
 
+def preflight() -> None:
+    """Try the database once and say plainly what's wrong. The API's own start-up retries 30 times, built for a
+    database that is still starting, which makes a wrong password or port look like a hang."""
+    import psycopg2
+
+    try:
+        psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
+                         password=settings.PG_PASSWORD, dbname=settings.PG_DATABASE, connect_timeout=5).close()
+    except psycopg2.OperationalError as exc:
+        sys.exit(f"Cannot connect to PostgreSQL as '{settings.PG_USER}' at {settings.PG_HOST}:{settings.PG_PORT}, "
+                 f"database '{settings.PG_DATABASE}':\n  {str(exc).strip()}\n"
+                 "Check PGHOST, PGPORT, PGUSER, PGPASSWORD and PGDATABASE. In PowerShell they are set with, for example, "
+                 '$env:PGPORT="5433" (a variable set in an earlier command stays set for the whole session).')
+
+
 def verdict(report: dict, max_import: float = MAX_IMPORT_SECONDS, max_page: float = MAX_FIRST_PAGE_SECONDS) -> dict:
     t = report["timings"]
     return {"importUnderTarget": t["upToImported"] <= max_import,
@@ -172,6 +187,7 @@ def main() -> int:
     ap.add_argument("--enforce", action="store_true", help="exit 1 if a target is missed")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
+    preflight()
     report = run(args.rows)
     report["targets"] = {"maxImportSeconds": MAX_IMPORT_SECONDS, "maxFirstPageSeconds": MAX_FIRST_PAGE_SECONDS,
                          **verdict(report)}
