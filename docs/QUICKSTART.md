@@ -79,9 +79,11 @@ Requires Git Bash. Pass PG credentials explicitly:
 
 Expected output: `[✓] PostgreSQL reachable` followed by `[✓] Succeeded: dev`.
 
-> **Note:** If you see `[✗] Deployment failed for dev` but the previous run
-> already succeeded, this is a false positive — the database already exists.
-> Run `bash build/deploy_all.sh dev` to confirm the real status.
+> **Note:** If `[✗] Deployment FAILED` appears with `syntax error at or near "ï»¿"`,
+> your `build/environments/env_<env>.sql` was copied from an older template that
+> started with a UTF-8 byte-order mark. Recreate it from the template
+> (`cp build/environments/env_dev.example.sql build/environments/env_dev.sql`),
+> or set `PGCLIENTENCODING=UTF8` (PowerShell: `$env:PGCLIENTENCODING="UTF8"`).
 
 ---
 
@@ -254,7 +256,7 @@ Restart-Service postgresql-x64-18
 | "Can't reach the API at http://localhost:8000. Is it running?" | API not running | Start it with `.\scripts\start-api.ps1` |
 | `start-api.ps1` says "Port 8000 is already in use by PID …" | An older API is still running, maybe in a window you've forgotten (#118) | Close that window, or run the `taskkill` line it prints, then start again |
 | `npm run dev` fails with "Missing script" | Wrong directory | Must run from `csv-table-hub-main\`, not repo root |
-| Deployment shows `[✗] failed for dev` | DB already exists | False positive — run `bash build/deploy_all.sh dev` to confirm |
+| Deployment shows `[✗] failed for dev` with `syntax error at or near "ï»¿"` | `env_dev.sql` has a UTF-8 BOM (old template) | Recreate it from `env_dev.example.sql`, or set `PGCLIENTENCODING=UTF8` |
 
 ---
 

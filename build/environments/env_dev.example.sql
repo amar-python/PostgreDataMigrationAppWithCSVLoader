@@ -1,4 +1,4 @@
-﻿-- env_dev.example.sql  (TEMPLATE - safe to commit; no real secrets)
+-- env_dev.example.sql  (TEMPLATE - safe to commit; no real secrets)
 -- Copy to env_dev.sql (gitignored) and fill in, or inject app_password at deploy.
 \set env_label          DEV
 \set db_name            te_mgmt_dev
