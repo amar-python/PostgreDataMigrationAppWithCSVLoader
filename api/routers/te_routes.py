@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends
 
+from api import policy
 from api.auth import allow, tenant_scope
 from api.config import TE_TABLES
 from api.tenancy import te_schema
@@ -11,7 +12,7 @@ from api.db import Conn
 router = APIRouter(
     prefix="/api/te",
     tags=["te"],
-    dependencies=[Depends(tenant_scope)],
+    dependencies=[Depends(tenant_scope), Depends(policy.mark_classification)],
 )
 
 

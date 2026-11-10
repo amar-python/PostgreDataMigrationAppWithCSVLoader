@@ -7,6 +7,8 @@ server behaviour matches what the UI previews. Kept dependency-free (no pandas)
 
 from __future__ import annotations
 
+import csv
+import io
 import re
 from datetime import datetime, timezone
 from typing import Optional
@@ -67,8 +69,11 @@ _BOOL_FALSE = {"false", "f", "no", "n", "0"}
 _IDENT_RE = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
 
 
-def parse_csv(text: str) -> list[list[str]]:
-    """Parse CSV handling quoted fields, escaped quotes and embedded newlines."""
+def parse_csv(text: str, max_rows: int | None = None) -> list[list[str]]:
+    """Parse CSV handling quoted fields, escaped quotes and embedded newlines.
+
+    ``max_rows`` stops after that many rows (the preview needs only the first ones).
+    """
     rows: list[list[str]] = []
     field = ""
     row: list[str] = []
@@ -105,6 +110,8 @@ def parse_csv(text: str) -> list[list[str]]:
         if ch == "\n":
             row.append(field)
             rows.append(row)
+            if max_rows is not None and len(rows) >= max_rows:
+                return rows
             row = []
             field = ""
             i += 1
@@ -291,9 +298,29 @@ def cast_value(raw: str, col_type: str) -> tuple[bool, Optional[object], Optiona
     return True, raw, None
 
 
+_FAST_PREVIEW_CHARS = 200_000  # below this a whole parse is cheap, so small files keep the exact old behaviour
+
+
+def _preview_rows(text: str, head: int) -> tuple[list[list[str]], int]:
+    """The first ``head`` rows (or all of a short file) and how many data rows the file has (M7, #111).
+
+    Parsing 100,000 rows in Python took 1.4 s, most of the first preview page. A large file is parsed only as far
+    as the head, and its rows are counted with the C csv reader: the count is the "approx" in totalRowsApprox, and
+    differs from a full parse only by trailing blank rows. If the head ends in blank lines the whole file is
+    parsed, as before, because a full parse drops trailing blank rows and that could change the head.
+    """
+    if len(text) > _FAST_PREVIEW_CHARS:
+        rows = parse_csv(text, max_rows=head)
+        if len(rows) >= head and any(cell != "" for cell in rows[-1]):
+            counted = sum(1 for row in csv.reader(io.StringIO(text, newline="")) if row)
+            return rows, max(counted - 1, 0)
+    rows = parse_csv(text)
+    return rows, max(len(rows) - 1, 0)
+
+
 def build_preview(text: str, sample_rows: int = 10, infer_rows: int = 200) -> dict:
     """Preview payload: headers, sanitised columns, inferred types, sample rows."""
-    rows = parse_csv(text)
+    rows, total_rows = _preview_rows(text, infer_rows + 1)
     if not rows:
         return {"status": "invalid_structure", "reason": "empty"}
     if len(rows) == 1:
@@ -317,5 +344,5 @@ def build_preview(text: str, sample_rows: int = 10, infer_rows: int = 200) -> di
         "columns": columns,
         "inferredTypes": inferred,
         "sampleRows": [r[:ncols] + [""] * (ncols - len(r)) for r in data[:sample_rows]],
-        "totalRowsApprox": len(data),
+        "totalRowsApprox": total_rows,
     }

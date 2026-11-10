@@ -1,5 +1,5 @@
 .PHONY: test-free test-gate test-evals test-e2e test-all \
-        test-unit test-system test-sit test-performance test-accessibility test-uat \
+        test-unit test-system test-egress-blocked check-bundle test-sit test-performance test-accessibility test-uat \
         lint lint-diff health \
         eval-list eval-compare eval-summary select-tests \
         csv-load csv-list csv-demo
@@ -50,6 +50,15 @@ test-unit:
 
 test-system:
 	$(call run_category,tests/system)
+
+# Egress blocked (M7, #111; BR-37): the API tests with any connection that isn't to this machine refused and
+# recorded. Fails if the application tries one, even if the code swallows the error. See docs/SOVEREIGNTY.md.
+test-egress-blocked:
+	python3 -m pytest tests/system --block-egress -v
+
+# Scan a built frontend for anything it could load from outside (M7). Build first: cd csv-table-hub-main && npm ci && npx vite build
+check-bundle:
+	python3 scripts/check_bundle_egress.py csv-table-hub-main/.output
 
 test-sit:
 	$(call run_category,tests/system_integration)
