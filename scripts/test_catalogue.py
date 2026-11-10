@@ -2,19 +2,19 @@
 """Generate docs/TEST_CASES.md from the test tree (#169).
 
 Usage:
-    python3 scripts/test_catalogue.py          # generate docs/TEST_CASES.md
-    python3 scripts/test_catalogue.py --check  # CI mode: fail if doc is stale
+    python3 scripts/test_catalogue.py          # write docs/TEST_CASES.md
 
-Walks every *.py file under tests/, extracts test functions/methods with
-their docstrings and pytest markers, and produces a Markdown table grouped
-by file.  The --check flag compares the freshly generated content against
-the committed file and exits non-zero if they differ (with a diff).
+Walks every test_*.py under tests/, extracts test functions/methods with their
+docstrings and pytest markers, and produces a Markdown table grouped by file.
+
+The output is not committed (it is gitignored). It changes with every test added
+or moved, so a committed copy conflicted whenever two branches touched tests.
+CI generates it on every run and attaches it as the `test-catalogue` artifact;
+run this script to get a local copy.
 """
 from __future__ import annotations
 
-import argparse
 import ast
-import difflib
 import sys
 from pathlib import Path
 
@@ -75,7 +75,7 @@ def _collect_tests(filepath: Path) -> list[dict]:
                 if isinstance(item, ast.FunctionDef) and item.name.startswith("test"):
                     markers = class_markers + _extract_markers(item.decorator_list)
                     tests.append({
-                        "file": str(rel),
+                        "file": rel.as_posix(),
                         "class": node.name,
                         "name": item.name,
                         "line": item.lineno,
@@ -85,7 +85,7 @@ def _collect_tests(filepath: Path) -> list[dict]:
         elif isinstance(item := node, ast.FunctionDef) and item.name.startswith("test"):
             markers = _extract_markers(item.decorator_list)
             tests.append({
-                "file": str(rel),
+                "file": rel.as_posix(),
                 "class": "",
                 "name": item.name,
                 "line": item.lineno,
@@ -132,37 +132,7 @@ def generate() -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true",
-                        help="CI mode: exit 1 if docs/TEST_CASES.md is stale")
-    args = parser.parse_args()
-
     fresh = generate()
-
-    if args.check:
-        if not OUTPUT.exists():
-            print("docs/TEST_CASES.md does not exist. Run:\n"
-                  "  python3 scripts/test_catalogue.py\n"
-                  "and commit the result.", file=sys.stderr)
-            return 1
-
-        existing = OUTPUT.read_text(encoding="utf-8")
-        if existing == fresh:
-            print("docs/TEST_CASES.md is up to date.")
-            return 0
-
-        diff = difflib.unified_diff(
-            existing.splitlines(keepends=True),
-            fresh.splitlines(keepends=True),
-            fromfile="docs/TEST_CASES.md (committed)",
-            tofile="docs/TEST_CASES.md (generated)",
-        )
-        sys.stderr.writelines(diff)
-        print("\ndocs/TEST_CASES.md is stale. Run:\n"
-              "  python3 scripts/test_catalogue.py\n"
-              "and commit the result.", file=sys.stderr)
-        return 1
-
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(fresh, encoding="utf-8")
     count = fresh.count("| `")
