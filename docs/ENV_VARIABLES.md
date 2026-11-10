@@ -47,7 +47,7 @@ Read by `api/config.py`. Set these in the shell before running
 | `LOGIN_LOCKOUT_MINUTES` | `15` | No | Length of the failure window and of the lock. |
 | `OIDC_ISSUER` | _(empty)_ | No | Turns on OIDC sign-in (#95). Must match the ID token's `iss`. Leave empty for air-gapped installs that use local accounts. |
 | `OIDC_AUDIENCE` | _(empty)_ | If OIDC is on | This app's client id; must match the token's `aud`. |
-| `OIDC_JWKS_URL` | _(empty)_ | If OIDC is on | The IdP's signing keys: `https://…` (fetched, refreshed when keys rotate) or `file:///…` (a JWKS file published inside an enclave). `http://` is refused. |
+| `OIDC_JWKS_URL` | _(empty)_ | If OIDC is on | The IdP's signing keys: `https://…` (fetched, and refreshed when keys rotate: at most every 30 s; a private CA needs `SSL_CERT_FILE`, see `docs/OIDC_REAL_IDP_CHECK.md`) or `file:///…` (a JWKS file published inside an enclave). `http://` is refused. |
 | `OIDC_USERNAME_CLAIM` | `preferred_username` | No | Token claim that names the local user. The user must already exist and be a member of the tenant; nobody is created from claims. |
 | `TE_SCHEMA` | `te_dev` | No | Schema holding the 12 fixed T&E tables. Switch to `te_test`, `te_staging`, or `te_prod` per environment. |
 | `MAX_UPLOAD_BYTES` | `52428800` (50 MB) | No | Maximum file size accepted by the upload endpoint. |
