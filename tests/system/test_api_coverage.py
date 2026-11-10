@@ -317,16 +317,24 @@ class AuditLogEndpoint(_IntegrationBase):
 
 @pytest.mark.integration
 class OverwriteUpload(_IntegrationBase):
-    """The overwrite flag must replace, not refuse, a duplicate filename."""
+    """A repeated filename becomes the next version; nothing is overwritten (M5, decision 2)."""
 
-    def test_overwrite_replaces_existing_file(self):
-        content_a = f"col_a,col_b\n{self.tag},first\n"
-        content_b = f"col_a,col_b\n{self.tag},second\n"
-        self._upload_dynamic(content=content_a)
-        r = self._upload_dynamic(content=content_b, overwrite=True)
-        body = r.json()
+    def test_same_name_new_content_is_the_next_version(self):
+        r1 = self._upload_dynamic(content=f"col_a,col_b\n{self.tag},first\n").json()
+        body = self._upload_dynamic(content=f"col_a,col_b\n{self.tag},second\n").json()
         self.assertEqual(body["status"], "ok", body)
-        self.assertTrue(body.get("overwritten"))
+        self.assertEqual((r1["version"], body["version"]), (1, 2))
+        self.assertFalse(body["overwritten"])
+        tables = {f["table_name"] for f in self.client.get("/api/csv/files").json() if self.tag in f["file_name"]}
+        self.assertEqual(tables, {r1["tableName"], body["tableName"]}, "the earlier version must survive")
+
+    def test_overwrite_flag_still_never_replaces(self):
+        self._upload_dynamic(content=f"col_a,col_b\n{self.tag},first\n")
+        body = self._upload_dynamic(content=f"col_a,col_b\n{self.tag},second\n", overwrite=True).json()
+        self.assertEqual(body["status"], "ok", body)
+        self.assertEqual(body["version"], 2)
+        self.assertFalse(body["overwritten"])
+        self.assertIsNone(body["replacedFileName"])
 
     def test_overwrite_false_refuses_duplicate(self):
         content = f"col_a,col_b\n{self.tag},val\n"
@@ -334,26 +342,17 @@ class OverwriteUpload(_IntegrationBase):
         r = self._upload_dynamic(content=content, overwrite=False)
         self.assertEqual(r.json()["status"], "duplicate_file")
 
-    def test_overwrite_creates_new_table(self):
-        content_a = f"col_a,col_b\n{self.tag},first\n"
-        content_b = f"col_a,col_b\n{self.tag},second\n"
-        r1 = self._upload_dynamic(content=content_a)
-        table_a = r1.json()["tableName"]
-        r2 = self._upload_dynamic(content=content_b, overwrite=True)
-        table_b = r2.json()["tableName"]
-        self.assertNotEqual(table_a, table_b,
-                            "different content should produce a different table hash")
+    def test_overwrite_flag_does_not_bypass_exact_file_dedup(self):
+        content = f"col_a,col_b\n{self.tag},val\n"
+        self._upload_dynamic(content=content)
+        body = self._upload_dynamic(content=content, overwrite=True).json()
+        self.assertEqual(body["status"], "duplicate_file", body)
 
-    def test_overwrite_response_has_fields(self):
-        content_a = f"col_a,col_b\n{self.tag},first\n"
-        content_b = f"col_a,col_b\n{self.tag},second\n"
-        self._upload_dynamic(content=content_a)
-        r = self._upload_dynamic(content=content_b, overwrite=True)
-        body = r.json()
-        self.assertIn("overwritten", body)
-        self.assertIn("replacedFileName", body)
-        self.assertIsInstance(body["overwritten"], bool)
-        self.assertIsInstance(body["replacedFileName"], str)
+    def test_each_version_has_its_own_table(self):
+        t1 = self._upload_dynamic(content=f"col_a,col_b\n{self.tag},first\n").json()["tableName"]
+        t2 = self._upload_dynamic(content=f"col_a,col_b\n{self.tag},second\n").json()["tableName"]
+        self.assertNotEqual(t1, t2)
+        self.assertTrue(t1.endswith("_v1") and t2.endswith("_v2"), (t1, t2))
 
 
 # ---------------------------------------------------------------------------

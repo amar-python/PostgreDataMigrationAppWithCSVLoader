@@ -72,9 +72,8 @@ class RegistryRace(unittest.TestCase):
     def test_concurrent_same_name_different_content(self):
         """Two threads upload different content under the same filename.
 
-        The UNIQUE(file_name) constraint means only one can register. The
-        other must fail or be treated as a reupload (depending on the
-        code path), but not leave a second registry row.
+        Both are kept (M5): the per-dataset lock gives them versions 1 and 2, never the
+        same version, and neither replaces the other.
         """
         fname = f"race_name_{self.tag}.csv"
         content_a = f"a,b\nA,{self.tag}\n"
@@ -89,7 +88,5 @@ class RegistryRace(unittest.TestCase):
 
         files_resp = self.client.get("/api/csv/files").json()
         matches = [f for f in files_resp if f.get("file_name") == fname]
-        self.assertLessEqual(
-            len(matches), 1,
-            f"At most one registry row per filename: {matches}",
-        )
+        self.assertEqual([r["status"] for r in results], ["ok", "ok"], results)
+        self.assertEqual(sorted(m["table_name"][-3:] for m in matches), ["_v1", "_v2"], matches)

@@ -1,9 +1,11 @@
 """Dynamic mode: each CSV becomes its own typed table in the uploads schema.
 
-Mirrors the frontend's previous Supabase flow (create_csv_table RPC + upsert):
-  - table name derived from content hash: csv_<sha256[:16]>
+  - a repeated filename is the next version of its dataset, never an overwrite (M5, decision 2):
+    table name csv_<slug>_v<n>, where slug comes from the filename
+  - the same bytes twice in one tenant are refused (exact-file dedup, BR-28)
   - columns typed via whitelist, plus _id / _row_hash / _created_at
-  - in-file duplicate rows skipped via _row_hash
+  - in-file duplicate rows skipped via _row_hash; rows already in an earlier version
+    of the dataset are loaded but flagged, and the user decides per row (decision 3, BR-29)
 All identifiers go through psycopg2.sql.Identifier — no string interpolation.
 """
 
@@ -12,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
 
 import psycopg2.errors
@@ -21,7 +24,6 @@ from psycopg2.extras import execute_values
 from api.config import settings
 from api.tenancy import uploads_schema
 from api.db import Conn
-from api.services.destructive_ops import safe_cleanup_prior
 from api.services.csv_parse import (
     ALLOWED_TYPES,
     apply_header_mapping,
@@ -50,6 +52,68 @@ def _log(logs: list, step: str, message: str, level: str = "info", count: int | 
     if count is not None:
         entry["count"] = count
     logs.append(entry)
+
+
+def dataset_slug(file_name: str) -> str:
+    """Lower-case ASCII slug of a filename without .csv, at most 40 characters.
+
+    Must agree with the backfill expression in alembic/versions/0009_versioned_datasets.py.
+    """
+    s = re.sub(r"[^a-z0-9]+", "_", re.sub(r"\.csv$", "", file_name, flags=re.I).lower()).strip("_")
+    return s[:40].strip("_") or "dataset"
+
+
+_SYSTEM_COLUMNS = ("_id", "_row_hash", "_created_at", "_source_row_id", "_import_id")  # the last two: staged imports (M6)
+_UDT = {"boolean": "bool"}  # information_schema udt_name where it differs from our type name
+
+
+def _schema_diff(cur, schema: str, prior_table: str, columns: list[str], col_types: list[str]) -> dict | None:
+    """How the new columns compare with the previous version's. None if that table is gone.
+
+    Additions are compatible; a removed or retyped column is not. Informational only: the
+    previous version's table is never altered, so nothing destructive can happen here.
+    """
+    cur.execute("SELECT column_name, udt_name FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = %s", (schema, prior_table))
+    old = {n: t for n, t in cur.fetchall() if n not in _SYSTEM_COLUMNS}
+    if not old:
+        return None
+    new = {c: _UDT.get(t, t) for c, t in zip(columns, col_types)}
+    removed = [c for c in old if c not in new]
+    changed = [{"column": c, "was": old[c], "now": new[c]} for c in new if c in old and old[c] != new[c]]
+    return {"compatible": not removed and not changed,
+            "added": [c for c in new if c not in old], "removed": removed, "changed": changed}
+
+
+def _earlier_version_matches(cur, schema: str, priors: list, hashes: list[str], rows: list[int]) -> list[dict]:
+    """Rows (by number) whose hash is already in an earlier version's table. Newest matching version wins.
+
+    ``priors`` is newest first: (registry id, file name, table name, version). A prior whose
+    table has gone is skipped. Hashes made before the v2 scheme (#178) simply won't match.
+    """
+    by_hash = dict(zip(hashes, rows))
+    pending = set(by_hash)
+    flags: list[dict] = []
+    for file_id, file_name, table_name, version in priors:
+        if not pending:
+            break
+        todo = list(pending)
+        hits: list[str] = []
+        cur.execute("SAVEPOINT prior_table")
+        try:
+            for i in range(0, len(todo), 5000):
+                cur.execute(sql.SQL("SELECT _row_hash FROM {}.{} WHERE _row_hash = ANY(%s)").format(
+                    sql.Identifier(schema), sql.Identifier(table_name)), (todo[i:i + 5000],))
+                hits += [h for (h,) in cur.fetchall()]
+        except psycopg2.errors.UndefinedTable:
+            cur.execute("ROLLBACK TO SAVEPOINT prior_table")
+            continue
+        cur.execute("RELEASE SAVEPOINT prior_table")
+        for h in hits:
+            pending.discard(h)
+            flags.append({"rowNumber": by_hash[h], "matchedFileId": str(file_id),
+                          "matchedFileName": file_name, "matchedVersion": version})
+    return sorted(flags, key=lambda f: f["rowNumber"])
 
 
 def upload_dynamic(
@@ -168,66 +232,47 @@ def _do_upload(
     session: dict | None = None,
     types_provenance: str = "inferred_unconfirmed",
 ) -> dict:
-    replaced_file_name: str | None = None
     with Conn() as conn:
         with conn.cursor() as cur:
-            # Duplicate FILENAME check
-            _log(logs, "duplicate_check", "Checking existing filename")
-            cur.execute(
-                sql.SQL(
-                    "SELECT id, file_name, table_name, file_hash, row_count, mode "
-                    "FROM {}.csv_files WHERE file_name = %s"
-                ).format(sql.Identifier(schema)),
-                (file_name,),
-            )
-            name_match = cur.fetchone()
-            if name_match:
-                if not overwrite:
-                    _log(logs, "duplicate_check", f"Filename already exists ({name_match[1]})", "warn")
-                    return {
-                        "status": "duplicate_file",
-                        "reason": "content" if name_match[3] == file_hash else "name",
-                        "existingFileName": name_match[1],
-                        "tableName": name_match[2],
-                        "existingRowCount": name_match[4] or 0,
-                        "logs": logs,
-                    }
-                _log(logs, "overwrite", f'Overwriting previous upload "{name_match[1]}"', "warn")
-                safe_cleanup_prior(cur, session, schema, name_match[2], name_match[5])
-                cur.execute(
-                    sql.SQL("DELETE FROM {}.csv_files WHERE id = %s").format(sql.Identifier(schema)),
-                    (name_match[0],),
-                )
-                replaced_file_name = name_match[1]
+            dataset = dataset_slug(file_name)
+            # One upload per dataset at a time, so two uploads of the same filename can't pick the
+            # same version. Released at commit or rollback.
+            # ponytail: held through row casting; take it just before the insert if big same-name uploads queue.
+            cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"{schema}.{dataset}",))
+            if overwrite:
+                _log(logs, "overwrite", "Overwrite is not supported (decision 2): storing a new version instead", "warn")
 
-            # Duplicate CONTENT check
+            # Exact-file duplicate check. The registry is per tenant, so this is a per-tenant check.
             _log(logs, "duplicate_check", "Checking existing content hash")
             cur.execute(
                 sql.SQL(
-                    "SELECT id, file_name, table_name, row_count, mode "
-                    "FROM {}.csv_files WHERE file_hash = %s"
+                    "SELECT file_name, table_name, row_count FROM {}.csv_files WHERE file_hash = %s"
                 ).format(sql.Identifier(schema)),
                 (file_hash,),
             )
             content_match = cur.fetchone()
             if content_match:
-                if not overwrite:
-                    _log(logs, "duplicate_check", f"Content matches existing file ({content_match[1]})", "warn")
-                    return {
-                        "status": "duplicate_file",
-                        "reason": "content",
-                        "existingFileName": content_match[1],
-                        "tableName": content_match[2],
-                        "existingRowCount": content_match[3] or 0,
-                        "logs": logs,
-                    }
-                _log(logs, "overwrite", f'Overwriting previous content match "{content_match[1]}"', "warn")
-                safe_cleanup_prior(cur, session, schema, content_match[2], content_match[4])
-                cur.execute(
-                    sql.SQL("DELETE FROM {}.csv_files WHERE id = %s").format(sql.Identifier(schema)),
-                    (content_match[0],),
-                )
-                replaced_file_name = replaced_file_name or content_match[1]
+                _log(logs, "duplicate_check", f"Content matches existing file ({content_match[0]})", "warn")
+                return {
+                    "status": "duplicate_file",
+                    "reason": "content",
+                    "existingFileName": content_match[0],
+                    "tableName": content_match[1],
+                    "existingRowCount": content_match[2] or 0,
+                    "logs": logs,
+                }
+
+            # Earlier versions of this dataset, newest first.
+            cur.execute(
+                sql.SQL(
+                    "SELECT id, file_name, table_name, version FROM {}.csv_files "
+                    "WHERE dataset = %s ORDER BY version DESC"
+                ).format(sql.Identifier(schema)),
+                (dataset,),
+            )
+            priors = cur.fetchall()
+            version = priors[0][3] + 1 if priors else 1
+            _log(logs, "version", f'"{dataset}" version {version}', count=version)
 
             # Column validation
             columns = sanitize_columns(rows[0])
@@ -258,8 +303,19 @@ def _do_upload(
                 _log(logs, "error", "Unsupported column type provided", "error")
                 return {"status": "error", "message": "Unsupported column type provided.", "logs": logs}
 
-            # Create table
-            table_name = f"csv_{file_hash[:16]}"
+            # Compare with the previous version. Informational: its table is never altered.
+            schema_check = None
+            if priors:
+                schema_check = _schema_diff(cur, schema, priors[0][2], columns, col_types)
+                if schema_check:
+                    schema_check["comparedTo"] = {"fileName": priors[0][1], "version": priors[0][3],
+                                                  "tableName": priors[0][2]}
+                    _log(logs, "schema_check", "Columns match the previous version" if schema_check["compatible"]
+                         else "Columns differ from the previous version",
+                         "info" if schema_check["compatible"] else "warn")
+
+            # Create table. Plain CREATE, not IF NOT EXISTS: a name clash must fail, not append to a stranger's table.
+            table_name = f"csv_{dataset}_v{version}"
             col_defs = sql.SQL(", ").join(
                 sql.SQL("{} {}").format(sql.Identifier(c), sql.SQL(_TYPE_SQL[t]))
                 for c, t in zip(columns, col_types)
@@ -267,7 +323,7 @@ def _do_upload(
             _log(logs, "create_table", f"create table {table_name} ({len(columns)} cols)")
             cur.execute(
                 sql.SQL(
-                    "CREATE TABLE IF NOT EXISTS {}.{} "
+                    "CREATE TABLE {}.{} "
                     "(_id BIGSERIAL PRIMARY KEY, {}, _row_hash TEXT NOT NULL UNIQUE, "
                     "_created_at TIMESTAMPTZ NOT NULL DEFAULT now())"
                 ).format(sql.Identifier(schema), sql.Identifier(table_name), col_defs)
@@ -277,6 +333,7 @@ def _do_upload(
             data_rows = rows[1:]
             seen: set[str] = set()
             to_insert: list[tuple] = []
+            insert_rows: list[int] = []  # source row number of each to_insert entry
             row_errors: list[dict] = []
             failed_row_count = 0
             duplicates = 0
@@ -322,6 +379,7 @@ def _do_upload(
                     continue
                 seen.add(row_hash)
                 to_insert.append(tuple(values) + (row_hash,))
+                insert_rows.append(row_number)
 
             _log(
                 logs,
@@ -343,6 +401,13 @@ def _do_upload(
                 return {"status": "error", "message": msg, "rowErrors": row_errors,
                         "totalRows": len(data_rows), "failedRows": failed_row_count,
                         "columns": columns, "types": col_types, "logs": logs}
+
+            # BR-29: rows whose exact content is already in an earlier version of this dataset are
+            # still loaded, but flagged. The user decides per row (decision 3), through review.
+            flags = _earlier_version_matches(cur, schema, priors, [r[-1] for r in to_insert], insert_rows)
+            if flags:
+                _log(logs, "cross_upload_duplicates", f"{len(flags)} rows already exist in an earlier version",
+                     "warn", count=len(flags))
 
             # Insert
             inserted = 0
@@ -375,11 +440,11 @@ def _do_upload(
                 cur.execute(
                     sql.SQL(
                         "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names, "
-                        "total_rows, duplicate_rows_skipped, failed_rows, types_provenance) "
-                        "VALUES (%s, %s, %s, 'dynamic', %s, %s, %s, %s, %s, %s) RETURNING id"
+                        "total_rows, duplicate_rows_skipped, failed_rows, types_provenance, dataset, version) "
+                        "VALUES (%s, %s, %s, 'dynamic', %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id"
                     ).format(sql.Identifier(schema)),
                     (file_name, file_hash, table_name, inserted, columns,
-                     len(data_rows), duplicates, failed_row_count, types_provenance),
+                     len(data_rows), duplicates, failed_row_count, types_provenance, dataset, version),
                 )
                 file_id = cur.fetchone()[0]
             except psycopg2.errors.UniqueViolation:
@@ -395,7 +460,7 @@ def _do_upload(
                 _log(logs, "duplicate_check", "Lost race to a concurrent identical upload", "warn")
                 return {
                     "status": "duplicate_file",
-                    "reason": "content" if existing and existing[0] != file_name else "name",
+                    "reason": "content",  # only UNIQUE (file_hash) can fail here: versions are serialised by the lock
                     "existingFileName": existing[0] if existing else file_name,
                     "tableName": existing[1] if existing else table_name,
                     "existingRowCount": (existing[2] or 0) if existing else 0,
@@ -418,6 +483,14 @@ def _do_upload(
         "typesProvenance": types_provenance,
         "rowErrors": row_errors,
         "logs": logs,
-        "overwritten": replaced_file_name is not None,
-        "replacedFileName": replaced_file_name,
+        "dataset": dataset,
+        "version": version,
+        "schemaCheck": schema_check,
+        "duplicateRowsAcrossUploads": len(flags),
+        "crossUploadDuplicates": flags[:settings.MAX_ROW_ERRORS_REPORTED],
+        # Full list for record_upload, which stores it; the route removes it before replying.
+        "_duplicateFlags": flags,
+        # Never overwritten (decision 2). Kept so older clients reading these fields still work.
+        "overwritten": False,
+        "replacedFileName": None,
     }
