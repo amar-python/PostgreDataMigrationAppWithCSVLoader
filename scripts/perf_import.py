@@ -19,7 +19,6 @@ import argparse
 import json
 import os
 import platform
-import resource
 import sys
 import time
 import uuid
@@ -27,7 +26,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fastapi.testclient import TestClient  # noqa: E402
+try:
+    from fastapi.testclient import TestClient  # noqa: E402
+except (ImportError, RuntimeError) as exc:   # starlette's TestClient needs httpx2, which api/requirements.txt doesn't list
+    sys.exit(f"{exc}\nInstall it with: pip install httpx2")
 from psycopg2 import sql  # noqa: E402
 
 from api.config import settings  # noqa: E402
@@ -51,13 +53,58 @@ def make_csv(rows: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _windows_memory():
+    """(total physical bytes, this process's peak working set in bytes) from the Windows API."""
+    import ctypes
+    from ctypes import wintypes
+
+    class MemoryStatus(ctypes.Structure):
+        _fields_ = [("dwLength", wintypes.DWORD), ("dwMemoryLoad", wintypes.DWORD), ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong), ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong), ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong), ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+    class ProcessCounters(ctypes.Structure):
+        _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD), ("PeakWorkingSetSize", ctypes.c_size_t),
+                    ("WorkingSetSize", ctypes.c_size_t), ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPagedPoolUsage", ctypes.c_size_t), ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t), ("PagefileUsage", ctypes.c_size_t),
+                    ("PeakPagefileUsage", ctypes.c_size_t)]
+
+    status = MemoryStatus()
+    status.dwLength = ctypes.sizeof(status)
+    ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
+    counters = ProcessCounters()
+    counters.cb = ctypes.sizeof(counters)
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    ctypes.windll.psapi.GetProcessMemoryInfo(kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb)
+    return status.ullTotalPhys, counters.PeakWorkingSetSize
+
+
+def peak_memory_mb() -> int | None:
+    """This process's peak memory in MB, or None where the platform can't say. Never raises: it is only a readout."""
+    try:
+        try:
+            import resource
+        except ImportError:   # Windows has no resource module
+            return round(_windows_memory()[1] / 1024 / 1024)
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss   # KiB on Linux, bytes on macOS
+        return round(peak / (1024 * 1024 if sys.platform == "darwin" else 1024))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def hardware() -> dict:
     mem_gb = None
     try:
         mem_gb = round(int(next(line for line in Path("/proc/meminfo").read_text().splitlines()
                                 if line.startswith("MemTotal")).split()[1]) / 1024 / 1024, 1)
     except (OSError, StopIteration):
-        pass
+        try:
+            mem_gb = round(_windows_memory()[0] / 1024 ** 3, 1)
+        except Exception:  # noqa: BLE001 — a readout, not a requirement
+            pass
     # CPUs this process may use (taskset or a container limit lowers it), not the machine's total.
     cpus = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count()
     return {"cpus": cpus, "memoryGB": mem_gb, "python": platform.python_version(),
@@ -107,10 +154,10 @@ def run(rows: int) -> dict:
                 cur.execute(sql.SQL("DELETE FROM {}.users WHERE username = %s").format(control), (f"{slug}_u",))
                 conn.commit()
     timings["upToImported"] = round(sum(timings[k] for k in ("stage", "submit", "approve", "import")), 3)
-    # ru_maxrss is KiB on Linux. This process only (the API and the CSV in memory), not PostgreSQL's.
+    # This process only (the API and the CSV in memory), not PostgreSQL's.
     return {"rows": rows, "timings": timings, "reconciliation": result["reconciliation"],
             "csvMB": round(len(content.encode()) / 1024 / 1024, 1), "hardware": hardware(),
-            "peakPythonMB": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)}
+            "peakPythonMB": peak_memory_mb()}
 
 
 def verdict(report: dict, max_import: float = MAX_IMPORT_SECONDS, max_page: float = MAX_FIRST_PAGE_SECONDS) -> dict:
@@ -132,10 +179,12 @@ def main() -> int:
         print(json.dumps(report, indent=2))
     else:
         t, hw = report["timings"], report["hardware"]
-        print(f"{report['rows']:,} rows ({report['csvMB']} MB) on {hw['cpus']} CPUs, {hw['memoryGB']} GB: {hw['os']}")
+        memory = "unknown memory" if hw["memoryGB"] is None else f"{hw['memoryGB']} GB"
+        print(f"{report['rows']:,} rows ({report['csvMB']} MB) on {hw['cpus']} CPUs, {memory}: {hw['os']}")
         for name in ("preview", "stage", "reviewPage", "submit", "approve", "import", "upToImported"):
             print(f"  {name:<13}{t[name]:>8.2f} s")
-        print(f"  peak memory of this process: {report['peakPythonMB']} MB (PostgreSQL's is separate)")
+        peak = report["peakPythonMB"]
+        print(f"  peak memory of this process: {'unknown' if peak is None else f'{peak} MB'} (PostgreSQL's is separate)")
         print(f"  reconciliation {report['reconciliation']}")
         ok = report["targets"]
         print(f"  import (stage to imported) <= {MAX_IMPORT_SECONDS:.0f} s: {'yes' if ok['importUnderTarget'] else 'NO'}; "
