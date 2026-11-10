@@ -54,8 +54,10 @@ def install() -> None:
     _originals.update(connect=socket.socket.connect, connect_ex=socket.socket.connect_ex,
                       getaddrinfo=socket.getaddrinfo)
 
+    unix = getattr(socket, "AF_UNIX", None)   # Windows' Python has none
+
     def check_address(sock, address, what):
-        if sock.family == socket.AF_UNIX or not isinstance(address, tuple) or is_local(address[0]):
+        if (unix is not None and sock.family == unix) or not isinstance(address, tuple) or is_local(address[0]):
             return
         raise _blocked(f"{what} {address[0]}:{address[1] if len(address) > 1 else ''}")
 
