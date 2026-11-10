@@ -34,8 +34,24 @@ describe("processing log steps", () => {
     expect(unknown).toEqual([]);
   });
 
+  it("lists each step once in the source (two fixes for one missing step once left duplicates)", () => {
+    // zod collapses duplicate enum values, so the parsed schema can't show them: read the source.
+    const source = readFileSync(join(__dirname, "../lib/csv.functions.ts"), "utf8");
+    const block = source.slice(source.indexOf("export const processingLogSchema"));
+    const steps = [...block.slice(0, block.indexOf("level:")).matchAll(/^\s+"([a-z_]+)",$/gm)].map(
+      (m) => m[1],
+    );
+    expect(steps.length).toBeGreaterThan(10);
+    expect(steps.filter((s, i) => steps.indexOf(s) !== i)).toEqual([]);
+  });
+
   it("accepts the header_mapping entry a dynamic upload with a header mapping returns", () => {
-    const entry = { ts: 1, step: "header_mapping", level: "info", message: "Applied 2 header renames" };
+    const entry = {
+      ts: 1,
+      step: "header_mapping",
+      level: "info",
+      message: "Applied 2 header renames",
+    };
     expect(processingLogSchema.safeParse(entry).success).toBe(true);
   });
 });
