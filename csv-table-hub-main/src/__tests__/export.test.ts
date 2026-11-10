@@ -305,3 +305,67 @@ describe("downloadAuditReport", () => {
     expect(text).toContain("Imported");
   });
 });
+
+// ─── print window (PDF): the one place HTML is built by hand ──────────────────
+//
+// The print window is written with document.write(), not React, so nothing escapes for us, and
+// it shares the app's origin (and so its sessionStorage, which holds the sign-in token). File
+// names, cell values and reasons all come from uploaded CSVs. Security review pack, #112.
+
+describe("print window HTML (PDF) escapes everything user-supplied", () => {
+  const HOSTILE = [
+    `<script>alert(1)</script>`,
+    `"><img src=x onerror=alert(1)>`,
+    `'-alert(1)-'`,
+    `&lt;already&gt; & </td><td>`,
+  ];
+
+  let written: string;
+
+  beforeEach(() => {
+    written = "";
+    vi.useFakeTimers();
+    vi.spyOn(window, "open").mockImplementation(() => ({
+      document: { write: (html: string) => { written += html; }, close: vi.fn() },
+      focus: vi.fn(),
+      print: vi.fn(),
+      close: vi.fn(),
+    }) as unknown as Window);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  function assertNothingExecutable() {
+    expect(written).not.toMatch(/<script/i);
+    expect(written).not.toMatch(/<img/i);
+    expect(written).not.toMatch(/<[^>]+\sonerror\s*=/i);   // no tag carries an event handler
+    for (const text of HOSTILE) expect(written).not.toContain(text);
+    expect(written).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+  }
+
+  it("error report: the file name (title), headers and every cell", () => {
+    const rows = HOSTILE.map((h, i) => ({
+      file: h, row_number: i, column: h, value: h, reason: h, plain_english: h,
+    }));
+    downloadErrorReport(HOSTILE[0], rows, "pdf");
+    expect(written).toContain("<table>");
+    assertNothingExecutable();
+  });
+
+  it("audit report: every cell", () => {
+    const rows = HOSTILE.map((h) => ({
+      file: h, status: h, imported_at: h, total_rows: h, inserted_rows: h,
+      duplicate_rows_skipped: h, failed_rows: h, table_name: h, header_mapping: h, cancellation_reason: h,
+    }));
+    downloadAuditReport(rows as AuditReportRow[], "pdf");
+    assertNothingExecutable();
+  });
+
+  it("the rest of the page is fixed markup: only table cells vary", () => {
+    downloadAuditReport([], "pdf");
+    expect(written).toMatch(/^<!DOCTYPE html><html><head>/);
+    expect(written).toContain("<title>Audit report</title>");
+  });
+});
