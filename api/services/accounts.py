@@ -53,6 +53,16 @@ def create_tenant(cur, slug: str, name: str) -> int:
     return cur.fetchone()[0]
 
 
+def set_self_approval(cur, slug: str, allowed: bool) -> None:
+    """Let a tenant's members approve data they uploaded or submitted themselves (decision 5, M6).
+
+    Off by default. For a tenant with one user, who couldn't otherwise approve anything. The caller commits.
+    """
+    cur.execute(_q("UPDATE {c}.tenants SET allow_self_approval = %s WHERE slug = %s"), (allowed, slug))
+    if cur.rowcount != 1:
+        raise ValueError(f"No tenant {slug!r}")
+
+
 def create_user(cur, username: str, password: str) -> int:
     cur.execute(_q("INSERT INTO {c}.users (username, password_hash) VALUES (%s, %s) RETURNING id"),
                 (username, hash_password(password)))

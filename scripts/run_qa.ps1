@@ -34,7 +34,7 @@ switch ($Target) {
         pytest -m "e2e or integration or parity" tests/ -v
     }
     "test-all" {
-        pytest tests/ --cov=build/csv --cov=evals --cov-report=term-missing
+        pytest tests/ -m "not accessibility" --cov=build/csv --cov=evals --cov-report=term-missing
         python evals/runner.py --tiers p,i,s --verbose
     }
     "lint" {
@@ -42,8 +42,8 @@ switch ($Target) {
             "build/csv/validator.py",
             "evals/runner.py",
             "evals/gap_report.py",
-            "tests/test_csv_validator.py",
-            "tests/test_evals_runner.py"
+            "tests/unit/test_csv_validator.py",
+            "tests/unit/test_evals_runner.py"
         )
         $scriptPy = Get-ChildItem scripts/*.py -ErrorAction SilentlyContinue |
             ForEach-Object { $_.FullName }

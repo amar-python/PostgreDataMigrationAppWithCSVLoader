@@ -88,7 +88,7 @@ $u = $up.uploadId
 
 ## Not covered here
 - **The review screen** (M4b, PR #143) has its own component tests (`review-table.test.tsx`) and the browser check `scripts/e2e/m4-review.js`.
-- **T&E-mode uploads** store no column types, so their values are reviewed as text with no type checks. That's a known limit, noted on #142.
+- **T&E-mode uploads** store the target table's column types (#190), and review shows the database's reason for rows it rejected (CHECK, FK, UNIQUE) until the row is edited. Edited T&E rows are re-checked against types only; constraints are checked at M6's import. Uploads made before #190 have no stored types and review as text.
 - **Applying review to the import** belongs to M6 (#110). It isn't tested here, because it isn't built yet.
 
 ## Record of runs

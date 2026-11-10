@@ -121,6 +121,11 @@ export function classifyThrownError(jobName: string, err: unknown): JobOutcome {
   };
 }
 
+/** Stop is honest only before the request is sent; once the server has it, it finishes the import (#188). */
+export function canStop(job: Pick<Job, "status">): boolean {
+  return job.status === "reading" || job.status === "uploading";
+}
+
 export function buildCancelPatch(reason?: string): Partial<Job> {
   return { status: "cancelled", progress: 100, cancellationReason: reason ?? "Cancelled by user" };
 }
@@ -136,6 +141,11 @@ export function decideOverwriteAction(job: Job | undefined): OverwriteAction {
   return { action: "retry-overwrite" };
 }
 
+/** An upload attempt a reviewer should look at: it failed outright or lost some rows (#187). */
+export function needsAttention(status: string): boolean {
+  return status === "failed" || status === "partly_imported" || status === "rejected";
+}
+
 /** "51 of 171 rows failed", for a registered upload with failures (#123); else null. */
 export function failedRowsNote(f: {
   failed_rows?: number | null;
@@ -145,4 +155,14 @@ export function failedRowsNote(f: {
   return f.total_rows
     ? `${f.failed_rows} of ${f.total_rows} rows failed`
     : `${f.failed_rows} rows failed`;
+}
+
+/**
+ * Says so when a dynamic table's column types were never confirmed by a person (#195);
+ * null for confirmed tables and for T&E tables, which have no inferred types.
+ */
+export function typesProvenanceNote(f: { types_provenance?: string | null }): string | null {
+  return f.types_provenance === "inferred_unconfirmed"
+    ? "Column types were not confirmed by a person."
+    : null;
 }

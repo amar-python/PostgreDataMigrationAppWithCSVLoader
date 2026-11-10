@@ -15,10 +15,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api import db, oidc
+from api import db, oidc, policy
 from api.config import settings
 from api.ratelimit import rate_limit_middleware
-from api.routers import audit_routes, auth_routes, csv_routes, review_routes, te_routes
+from api.routers import (audit_routes, auth_routes, csv_routes, import_routes, policy_routes, review_routes,
+                         te_routes)
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ async def lifespan(app: FastAPI):
     # router open, and a warning in a container log is easy to miss.
     assert_auth_configured(settings.API_ENV, settings.API_KEY)
     oidc.check_config()
+    policy.check_config(settings.DATA_CLASSIFICATION, settings.AUDIT_RETENTION_YEARS)
     if not settings.API_KEY:
         logger.warning(
             "API_KEY is not set - every endpoint is unauthenticated. "
@@ -87,7 +89,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE"],  # PUT: review changes (M4, #108)
-    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization", "Idempotency-Key"],  # the last: M6 import (#110)
+    expose_headers=["X-Data-Classification"],  # so the browser can read the marking (M7)
 )
 
 # O-03: rate limiting. Registered after CORSMiddleware so it sits outside it in
@@ -98,8 +101,10 @@ app.middleware("http")(rate_limit_middleware)
 app.include_router(auth_routes.router)
 app.include_router(csv_routes.router)
 app.include_router(review_routes.router)
+app.include_router(import_routes.router)
 app.include_router(te_routes.router)
 app.include_router(audit_routes.router)
+app.include_router(policy_routes.router)
 
 
 @app.exception_handler(psycopg2.pool.PoolError)

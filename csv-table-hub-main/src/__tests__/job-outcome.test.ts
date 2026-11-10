@@ -8,7 +8,7 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyUploadResult, classifyThrownError, buildCancelPatch,
-  buildCancelToastMessage, decideOverwriteAction, failedRowsNote,
+  buildCancelToastMessage, canStop, decideOverwriteAction, failedRowsNote, typesProvenanceNote,
 } from "@/lib/job-outcome";
 import type { UploadResult } from "@/lib/csv.functions";
 import type { Job } from "@/lib/job-types";
@@ -103,6 +103,15 @@ describe("classifyThrownError", () => {
   });
 });
 
+describe("canStop (#188)", () => {
+  it("is true only before the request is sent", () => {
+    expect(canStop({ status: "reading" })).toBe(true);
+    expect(canStop({ status: "uploading" })).toBe(true);
+    const rest = ["processing", "done", "error", "duplicate", "cancelled", "interrupted"] as const;
+    for (const status of rest) expect(canStop({ status })).toBe(false);
+  });
+});
+
 describe("buildCancelPatch / buildCancelToastMessage", () => {
   it("defaults the cancellation reason when none is given", () => {
     expect(buildCancelPatch()).toEqual({
@@ -145,5 +154,18 @@ describe("failedRowsNote (#123)", () => {
     expect(failedRowsNote({ failed_rows: 0, total_rows: 10 })).toBeNull();
     expect(failedRowsNote({ failed_rows: null, total_rows: null })).toBeNull();
     expect(failedRowsNote({})).toBeNull();
+  });
+});
+
+describe("typesProvenanceNote (#195)", () => {
+  it("says so when the column types were never confirmed", () => {
+    expect(typesProvenanceNote({ types_provenance: "inferred_unconfirmed" })).toBe(
+      "Column types were not confirmed by a person.",
+    );
+  });
+  it("is silent for confirmed tables, T&E tables and rows from before the flag", () => {
+    expect(typesProvenanceNote({ types_provenance: "user_confirmed" })).toBeNull();
+    expect(typesProvenanceNote({ types_provenance: null })).toBeNull();
+    expect(typesProvenanceNote({})).toBeNull();
   });
 });

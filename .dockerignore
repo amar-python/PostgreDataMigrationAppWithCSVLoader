@@ -16,6 +16,23 @@
 !.env.example
 env.dev.example
 
+# RV-S4 (#174): gitignore does NOT filter the Docker build context, so these
+# must be listed here too. setup.sh / provision_full_test_env.sh write real dev
+# credentials into config.local.env, and deploy_all.sh reads concrete
+# env_<env>.sql files generated from the .example.sql templates. Baking either
+# into an image layer leaks credentials irreversibly (layers are immutable and
+# cached), so they are excluded here AND never named by a COPY in
+# infra/Dockerfile. Either layer alone stops the leak; both stop it for files
+# added under build/ in future. Mirrors .gitignore lines 2-8.
+**/config.local.env
+**/config.local.env.*
+**/*.local.env
+build/environments/env_dev.sql
+build/environments/env_test.sql
+build/environments/env_staging.sql
+build/environments/env_prod.sql
+!build/environments/*.example.sql
+
 # Python virtualenvs, bytecode and test caches
 __pycache__/
 *.py[cod]

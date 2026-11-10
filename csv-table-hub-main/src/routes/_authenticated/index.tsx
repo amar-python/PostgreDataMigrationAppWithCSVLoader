@@ -23,7 +23,7 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  filesQuery, loadFiles, previewCsvTable, getUploadDetail, previewCsv, listTeTables, uploadCsv,
+  filesQuery, uploadsQuery, loadFiles, type UploadAttempt, previewCsvTable, getUploadDetail, previewCsv, listTeTables, uploadCsv,
   type CsvFileSummary, type ColumnType, type TeTableInfo,
 } from "@/lib/csv.functions";
 import { parseCsvPreview, COLUMN_TYPE_LABEL, sanitizeColumns, type CsvPreview } from "@/lib/csv-preview";
@@ -34,13 +34,15 @@ import {
 } from "@/lib/mapping-templates";
 import { downloadErrorReport, buildErrorRows, type ExportFormat } from "@/lib/export";
 import type { Job, JobStatus } from "@/lib/job-types";
+import { readFileBase64 } from "@/lib/file-bytes";
 import { formatLocalTime, formatUtc } from "@/lib/utils";
 import {
-  classifyUploadResult, classifyThrownError, buildCancelPatch, buildCancelToastMessage,
-  decideOverwriteAction, failedRowsNote,
+  classifyUploadResult, classifyThrownError, buildCancelPatch, buildCancelToastMessage, canStop,
+  decideOverwriteAction, failedRowsNote, typesProvenanceNote,
 } from "@/lib/job-outcome";
+import { needsAttention } from "@/lib/job-outcome";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -69,6 +71,7 @@ export const Route = createFileRoute("/_authenticated/")({
 
 function Home() {
   const { data: files } = useSuspenseQuery(filesQuery);
+  const { data: uploads } = useSuspenseQuery(uploadsQuery);
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
       <Toaster richColors position="top-right"/>
@@ -91,6 +94,7 @@ function Home() {
       <main className="mx-auto max-w-5xl space-y-8 px-6 py-10">
         <Uploader/>
         <FilesList files={files}/>
+        <UploadAttempts uploads={uploads}/>
       </main>
     </div>
   );
@@ -169,6 +173,8 @@ export function Uploader() {
         reader.readAsText(file);
       });
       if (ctrl.signal.aborted) return;
+      const contentBase64 = await readFileBase64(file); // #185: keep the original bytes, not the decoded text
+      if (ctrl.signal.aborted) return;
       updateJob(job.id,{status:"uploading",progress:75});
       await new Promise(r=>setTimeout(r,30));
       if (ctrl.signal.aborted) return;
@@ -181,11 +187,13 @@ export function Uploader() {
       const headerMapping = isTe ? undefined : mapping;
 
       const res = await uploadCsv({
-        fileName:job.name, content, types, overwrite,
+        fileName:job.name, content, contentBase64, types, overwrite,
+        typesConfirmed: !!types?.length, // #195: the types come from the mapping the user confirmed
         headerMapping: headerMapping?.map(c=>({original:c.original,renamed:c.renamed})),
         mode: job.mode, targetTable: job.targetTable,
       });
-      if (ctrl.signal.aborted) return;
+      // #188: the request is already on the server, which finishes it whatever the UI does.
+      // Never discard the result (Stop isn't offered from here on), so the user sees what happened.
       abortMap.current.delete(job.id);
 
       const outcome = classifyUploadResult(job.name,res,mapping);
@@ -195,7 +203,7 @@ export function Uploader() {
       if (outcome.invalidateRoute) await router.invalidate();
     } catch(err) {
       abortMap.current.delete(job.id);
-      if (ctrl.signal.aborted) return; // already cancelled
+      if (ctrl.signal.aborted) return; // stopped before the request was sent
       const outcome = classifyThrownError(job.name,err);
       updateJob(job.id,outcome.patch);
       toast[outcome.toast.type](outcome.toast.message);
@@ -381,7 +389,9 @@ function JobRow({job,onRetry,onOverwrite,onCancel}:{job:Job;onRetry:(id:string)=
               <StatusPill status={job.status}/>
               {(hasRowErrors||isError||isDuplicate)&&<ExportErrorsMenu job={job}/>}
               {/* F8: cancel button for active jobs */}
-              {isRunning&&<Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground" onClick={()=>onCancel(job.id)}><XIcon className="mr-1 h-3 w-3"/>Stop</Button>}
+              {/* #188: Stop is only true before the request is sent; after that the server finishes the import. */}
+              {canStop(job)&&<Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground" onClick={()=>onCancel(job.id)}><XIcon className="mr-1 h-3 w-3"/>Stop</Button>}
+              {job.status==="processing"&&<span className="text-xs text-muted-foreground">Sent to the server; it can't be stopped now</span>}
               {isDuplicate&&<Button size="sm" variant="outline" className="h-7 px-2" onClick={()=>onOverwrite(job.id)}><RotateCw className="mr-1 h-3 w-3"/>Overwrite</Button>}
               {(isError||isDuplicate||isInterrupted)&&<Button size="sm" variant="ghost" className="h-7 px-2" onClick={()=>onRetry(job.id)}><RotateCw className="mr-1 h-3 w-3"/>Retry</Button>}
             </div>
@@ -670,6 +680,36 @@ function DiffDialog({job,onConfirm,onCancel}:{job:Job|null;onConfirm:()=>void;on
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
+// #187 (BR-25): every upload attempt, so a failed or partly failed one is reachable for review.
+const ATTEMPT_LABEL: Record<string,string> = { imported:"Imported", partly_imported:"Partly imported", failed:"Failed", rejected:"Rejected", duplicate:"Duplicate" };
+export function UploadAttempts({uploads}:{uploads:UploadAttempt[]}){
+  const [onlyProblems,setOnlyProblems]=useState(true);
+  const shown=onlyProblems?uploads.filter(u=>needsAttention(u.status)):uploads;
+  if(!uploads.length) return null;
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <div><CardTitle className="text-base">Upload attempts</CardTitle><CardDescription>Every upload, including ones that failed, with its stored rows.</CardDescription></div>
+        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={onlyProblems} onChange={e=>setOnlyProblems(e.target.checked)}/>Only failed or partial</label>
+      </CardHeader>
+      <CardContent>
+        {shown.length===0?<p className="text-sm text-muted-foreground">No failed or partly failed uploads.</p>:(
+          <ul className="divide-y">
+            {shown.map(u=>(
+              <li key={u.id} className="flex items-center gap-3 py-2 text-sm">
+                <span className="min-w-0 flex-1 truncate font-medium" title={u.file_name}>{u.file_name}</span>
+                <Badge variant={needsAttention(u.status)?"destructive":"secondary"}>{ATTEMPT_LABEL[u.status]??u.status}</Badge>
+                <span className="w-28 text-right text-xs tabular-nums text-muted-foreground">{u.failed_rows?`${u.failed_rows} of ${u.total_rows??"?"} rows failed`:`${u.total_rows??0} rows`}</span>
+                {u.status!=="rejected"&&<Button asChild size="sm" variant="ghost" className="h-7 px-2"><Link to="/review/$uploadId" params={{uploadId:u.id}}>Review</Link></Button>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function FilesList({files}:{files:CsvFileSummary[]}){
   const [preview,setPreview]=useState<CsvFileSummary|null>(null);
   const [page,setPage]=useState(1);
@@ -742,7 +782,7 @@ function PreviewTable({file}:{file:CsvFileSummary}){
           {rows.length===0&&<TableRow><TableCell colSpan={file.column_names.length} className="text-center text-muted-foreground">No rows.</TableCell></TableRow>}
         </TableBody>
       </Table>
-      <p className="p-2 text-xs text-muted-foreground">Showing up to 50 rows. Table has {file.row_count} row{file.row_count===1?"":"s"} total.{failedRowsNote(file)&&<span className="text-destructive"> {failedRowsNote(file)} validation and weren't imported.</span>}</p>
+      <p className="p-2 text-xs text-muted-foreground">Showing up to 50 rows. Table has {file.row_count} row{file.row_count===1?"":"s"} total.{failedRowsNote(file)&&<span className="text-destructive"> {failedRowsNote(file)} validation and weren't imported.</span>}{typesProvenanceNote(file)&&<span className="text-amber-600 dark:text-amber-500"> {typesProvenanceNote(file)}</span>}</p>
       {file.upload_id&&(file.failed_rows??0)>0&&<StoredRowErrors uploadId={file.upload_id} fileName={file.file_name}/>}
     </div>
   );

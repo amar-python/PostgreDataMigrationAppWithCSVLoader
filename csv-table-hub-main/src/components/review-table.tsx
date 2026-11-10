@@ -161,7 +161,8 @@ function ReviewLine({
 }) {
   const excluded = row.decision === "exclude";
   const errorFor = (name: string) => row.errors.find((e) => e.column === name);
-  const extra = errorFor("(beyond header)");
+  // Reasons not tied to a column: "(beyond header)" cells, or "(database)" for a row the target rejected (#190).
+  const extra = row.errors.find((e) => !columns.includes(e.column));
   return (
     <TableRow className={excluded ? "opacity-50" : undefined}>
       <TableCell className="text-right tabular-nums text-xs text-muted-foreground">

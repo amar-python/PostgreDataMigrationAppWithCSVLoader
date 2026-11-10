@@ -219,10 +219,10 @@ Or use the convenience script from the repo root:
 python -m pytest tests\ -m "unit or regression or security or snapshot" -q
 
 # Integration tests — requires running API + provisioned database
-python -m pytest tests\test_api_integration.py -v
+python -m pytest tests\system\test_api_integration.py -v
 
 # T&E mode integration tests
-python -m pytest tests\test_te_loader_integration.py -v
+python -m pytest tests\system\test_te_loader_integration.py -v
 
 # Per-environment contract tests
 python -m pytest tests\environments\ -v
@@ -317,7 +317,7 @@ PostgreDataMigrationAppWithCSVLoader/
 │
 ├── env.dev.example               ← dev environment template
 ├── docs/ENV_VARIABLES.md              ← all env vars documented
-├── docs/API_INTEGRATION.md            ← frontend ↔ API endpoint mapping
+├── docs/API_INTEGRATION.md            ← API design notes: auth, known gaps, migrations
 └── docs/VCRM.md                       ← business requirement traceability
 ```
 
@@ -328,7 +328,8 @@ PostgreDataMigrationAppWithCSVLoader/
 - `docs/STARTER_GUIDE.md` — orientation, key concepts, and a guided first
   walkthrough (dynamic mode vs T&E mode, running the test suite end to end)
 - `docs/ENV_VARIABLES.md` — full list of every environment variable
-- `docs/API_INTEGRATION.md` — frontend ↔ backend endpoint mapping and gaps
+- `docs/API_INTEGRATION.md` — API design notes: auth model, known gaps, migrations
+  (route list: `http://localhost:8000/docs` with the API running)
 - `docs/VCRM.md` — business requirement traceability (142 SQL assertions)
 - `docs/ARCHITECTURE.md` — three-layer architecture rationale
 - `evals/USAGE.md` — eval runner flags and CI integration

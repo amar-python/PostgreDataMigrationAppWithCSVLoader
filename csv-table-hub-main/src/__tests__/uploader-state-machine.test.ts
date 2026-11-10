@@ -124,7 +124,7 @@ describe("Uploader state machine", () => {
     await waitFor(() => expect(screen.getByText(/^failed$/i)).toBeInTheDocument());
   });
 
-  it("clicking Stop while uploading marks the job cancelled and ignores the late result", async () => {
+  it("offers no Stop once the request is on the server, and shows the import that finishes (#188)", async () => {
     let resolveUpload: (v: unknown) => void;
     uploadCsv.mockReturnValue(
       new Promise((resolve) => {
@@ -132,21 +132,17 @@ describe("Uploader state machine", () => {
       }),
     );
 
-    const user = await dropAndConfirm(csvFile());
+    await dropAndConfirm(csvFile());
 
-    const stopBtn = await screen.findByRole("button", { name: /stop/i });
-    await user.click(stopBtn);
+    // The request is sent: the server will finish it whatever the UI does, so Stop would lie.
+    expect(await screen.findByText(/sent to the server/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /stop/i })).not.toBeInTheDocument();
 
-    await waitFor(() => expect(screen.getByText(/^cancelled$/i)).toBeInTheDocument());
-
-    // The in-flight promise resolving afterwards must not flip the job back
-    // to "done" — runJob checks ctrl.signal.aborted before applying the result.
     resolveUpload!({ status: "ok", fileId: "1", tableName: "t", totalRows: 1,
       insertedRows: 1, duplicateRowsSkipped: 0, failedRows: 0, columns: [],
       types: [], rowErrors: [], logs: [] });
-    await new Promise((r) => setTimeout(r, 50));
-    expect(screen.getByText(/^cancelled$/i)).toBeInTheDocument();
-    expect(screen.queryByText(/^imported$/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/^imported$/i)).toBeInTheDocument());
+    expect(screen.queryByText(/^cancelled$/i)).not.toBeInTheDocument();
   });
 
   it("overwrite flow: confirming the diff dialog re-uploads with overwrite=true", async () => {
@@ -188,5 +184,51 @@ describe("Uploader state machine", () => {
     await waitFor(() => expect(uploadCsv).toHaveBeenCalled());
     const call = uploadCsv.mock.calls[0][0];
     expect(call.overwrite).toBe(true);
+  });
+
+  it("sends the file's raw bytes alongside the decoded text (#185)", async () => {
+    uploadCsv.mockResolvedValue({
+      status: "ok",
+      fileId: "1",
+      tableName: "csv_abc123",
+      totalRows: 1,
+      insertedRows: 1,
+      duplicateRowsSkipped: 0,
+      failedRows: 0,
+      columns: ["id", "name"],
+      types: ["int8", "text"],
+      rowErrors: [],
+      logs: [],
+    });
+    const raw = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode("id,name\n1,foo\n")]);
+    await dropAndConfirm(new File([raw], "bom.csv", { type: "text/csv" }));
+
+    await waitFor(() => expect(uploadCsv).toHaveBeenCalled());
+    const call = uploadCsv.mock.calls[0][0];
+    expect(Array.from(Uint8Array.from(atob(call.contentBase64), (c) => c.charCodeAt(0)))).toEqual(Array.from(raw));
+    expect(call.content.startsWith("id,name")).toBe(true); // the BOM is not in the decoded text
+  });
+
+  it("marks the types as confirmed when they come from the user's confirmed mapping (#195)", async () => {
+    uploadCsv.mockResolvedValue({
+      status: "ok",
+      fileId: "1",
+      tableName: "csv_abc123",
+      totalRows: 2,
+      insertedRows: 2,
+      duplicateRowsSkipped: 0,
+      failedRows: 0,
+      columns: ["id", "name"],
+      types: ["int8", "text"],
+      typesProvenance: "user_confirmed",
+      rowErrors: [],
+      logs: [],
+    });
+    await dropAndConfirm(csvFile());
+
+    await waitFor(() => expect(uploadCsv).toHaveBeenCalled());
+    const call = uploadCsv.mock.calls[0][0];
+    expect(call.types).toEqual(["int8", "text"]);
+    expect(call.typesConfirmed).toBe(true);
   });
 });
