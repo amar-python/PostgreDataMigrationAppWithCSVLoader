@@ -1,0 +1,157 @@
+name: Container bundle
+
+# #128 (BR-38): the platform as three containers that install with no internet access on
+# Windows, macOS and Linux. This builds the bundle on every change to what goes into it and
+# proves the part CI can: on Linux, from nothing, with the containers cut off from the
+# internet, the installer loads the images, starts the stack and passes the 7-check smoke
+# test. macOS and Windows runners cannot run Linux containers, so those two are proved by
+# hand (docs/offline-install.md, "Container bundle").
+
+on:
+  pull_request:
+    paths:
+      - 'container/**'
+      - 'api/**'
+      - 'alembic/**'
+      - 'alembic_te/**'
+      - 'alembic.ini'
+      - 'csv-table-hub-main/**'
+      - 'build/deploy_all.sh'
+      - 'build/te_core_schema.sql'
+      - 'build/environments/env_prod.example.sql'
+      - 'scripts/create_tenant_admin.py'
+      - '.github/workflows/container-bundle.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'container/**'
+      - 'api/**'
+      - 'alembic/**'
+      - 'alembic_te/**'
+      - 'alembic.ini'
+      - 'csv-table-hub-main/**'
+      - 'build/deploy_all.sh'
+      - 'build/te_core_schema.sql'
+      - 'build/environments/env_prod.example.sql'
+      - 'scripts/create_tenant_admin.py'
+      - '.github/workflows/container-bundle.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  images:
+    name: ${{ matrix.arch }} images, installed with ${{ matrix.runtime }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Each CPU's images are built on a runner with that CPU: no emulation.
+          - { arch: amd64, runner: ubuntu-latest,    runtime: docker }
+          - { arch: arm64, runner: ubuntu-24.04-arm, runtime: docker }
+          # The same amd64 images, installed with Podman instead (podman-compose provider).
+          - { arch: amd64, runner: ubuntu-latest,    runtime: podman }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The bundle is always built with Docker; Podman is only ever on the installing side.
+      - name: Build the three images and save them
+        run: bash container/build_bundle.sh images
+
+      - name: Assemble a bundle for this CPU
+        run: bash container/build_bundle.sh assemble dist/te-images-*-${{ matrix.arch }}.tar
+
+      - name: Install Podman and its compose provider
+        if: matrix.runtime == 'podman'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman netavark aardvark-dns
+          sudo pip install podman-compose
+
+      - name: Offline install test (no images, containers cut off from the internet)
+        run: |
+          set -euo pipefail
+          RT="${{ matrix.runtime }}"
+          EGRESS="$(ip route show default | awk '{print $5; exit}')"
+          BUNDLE_TGZ="$(ls dist/te-container-bundle-*.tar.gz)"
+          WORK="$(mktemp -d)"; tar -xzf "$BUNDLE_TGZ" -C "$WORK"
+          BUNDLE_DIR="$(ls -d "$WORK"/te-container-bundle-*)"
+
+          # Cut containers off from the internet. Docker's rule goes in DOCKER-USER; Podman
+          # forwards through its own chains, so it needs one on FORWARD as well.
+          sudo iptables -I DOCKER-USER 1 -o "$EGRESS" -j REJECT
+          sudo iptables -I FORWARD 1 -o "$EGRESS" -j REJECT
+
+          # Prove the cut-off works before relying on it: load the images, try to reach out.
+          if [ "$RT" = podman ]; then sudo podman load -i "$BUNDLE_DIR"/images-*.tar >/dev/null; else docker load -i "$BUNDLE_DIR"/images-*.tar >/dev/null; fi
+          PROBE='import urllib.request as u
+          try: u.urlopen("https://pypi.org/simple/", timeout=8); print("REACHED"); raise SystemExit(1)
+          except OSError: print("blocked")'
+          if [ "$RT" = podman ]; then
+            sudo podman run --rm --entrypoint python localhost/te-api:"$(cat "$BUNDLE_DIR/VERSION")" -c "$PROBE"
+          else
+            docker run --rm --entrypoint python te-api:"$(cat "$BUNDLE_DIR/VERSION")" -c "$PROBE"
+          fi
+
+          # Start from nothing: remove every image so the installer must load them itself.
+          docker rm -f $(docker ps -aq) 2>/dev/null || true
+          docker system prune -af --volumes >/dev/null
+          if [ "$RT" = podman ]; then sudo podman rmi -af >/dev/null; fi
+
+          cd "$BUNDLE_DIR"
+          if [ "$RT" = podman ]; then
+            sudo env PODMAN_COMPOSE_PROVIDER=podman-compose TE_RUNTIME=podman "PATH=$PATH" bash install.sh | tee "$WORK/install.log"
+          else
+            TE_RUNTIME=docker bash install.sh | tee "$WORK/install.log"
+          fi
+          grep -q '^7 of 7 passed' "$WORK/install.log"
+          echo "::notice::installed offline with ${RT} on ${{ matrix.arch }}: 7 of 7 smoke checks passed"
+
+      - name: Show container logs if the install failed
+        if: failure()
+        run: |
+          docker ps -a || true; docker compose -f container/docker-compose.yml logs --no-color 2>/dev/null | tail -60 || true
+          sudo podman ps -a || true; sudo podman logs --tail 40 te_api_1 2>/dev/null || true
+
+      - name: Upload this CPU's images
+        if: success() && matrix.runtime == 'docker'
+        uses: actions/upload-artifact@v7
+        with:
+          name: te-images-${{ matrix.arch }}
+          path: dist/te-images-*-${{ matrix.arch }}.tar
+          retention-days: 7
+          compression-level: 0
+
+  bundle:
+    name: assemble the bundle (amd64 + arm64)
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download both CPUs' images
+        uses: actions/download-artifact@v7
+        with:
+          pattern: te-images-*
+          path: dist
+          merge-multiple: true
+
+      - name: Assemble one bundle for both CPUs
+        run: |
+          ls -la dist
+          bash container/build_bundle.sh assemble dist/te-images-*-amd64.tar dist/te-images-*-arm64.tar
+
+      - name: Upload the bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: te-container-bundle
+          path: |
+            dist/te-container-bundle-*.tar.gz
+            dist/te-container-bundle-*.tar.gz.sha256
+          retention-days: 14
+          compression-level: 0

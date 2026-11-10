@@ -1,0 +1,74 @@
+# The T&E platform as three containers (#128, BR-38). Used by install.sh / install.ps1,
+# which write the .env this file reads (secrets are generated on first run and are never
+# in an image). Works with Docker (`docker compose`) and Podman (`podman compose`).
+#
+# Images are only ever loaded from the bundle: `image:` with no `build:`, and
+# pull_policy: never, so a missing image is an error, not a download. That is what makes
+# the stack installable with no internet access.
+name: te
+
+services:
+  db:
+    image: te-db:${TE_VERSION:?TE_VERSION is not set; run install.sh, which writes .env}
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      TE_DB_PASSWORD: ${TE_DB_PASSWORD:?}
+      TE_RUNTIME_PASSWORD: ${TE_RUNTIME_PASSWORD:?}
+    volumes:
+      - te-db:/var/lib/postgresql/data
+    healthcheck:
+      # Over TCP: the temporary server used for first-start setup listens on the socket
+      # only, so this passes only once the schema is deployed and the real server is up.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d te_mgmt_prod"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+
+  api:
+    image: te-api:${TE_VERSION}
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      API_ENV: prod
+      API_KEY: ${API_KEY:?}
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: te_prod_user
+      PGPASSWORD: ${TE_DB_PASSWORD:?}
+      PGDATABASE: te_mgmt_prod
+      APP_DB_USER: te_prod_runtime
+      APP_DB_PASSWORD: ${TE_RUNTIME_PASSWORD:?}
+      TE_SCHEMA: te_prod
+      CORS_ORIGINS: http://${TE_HOST:-localhost}:8080
+    ports:
+      - "8000:8000"
+    healthcheck:
+      # CMD-SHELL, one string: Podman splits the arguments of the CMD array form on spaces
+      # when they arrive through a compose provider, which breaks `python -c "<code>"`.
+      test: ["CMD-SHELL", "python -c \"import urllib.request as u; u.urlopen('http://localhost:8000/api/health', timeout=3)\""]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+      start_period: 5s
+
+  frontend:
+    image: te-frontend:${TE_VERSION}
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      # What the browser calls. TE_HOST is the name or address people use to reach this
+      # machine; the default only works from the machine itself.
+      API_PUBLIC_URL: http://${TE_HOST:-localhost}:8000
+    ports:
+      - "8080:8080"
+
+volumes:
+  te-db:
