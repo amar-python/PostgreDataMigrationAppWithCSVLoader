@@ -79,7 +79,7 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 168 | Accessibility CI job | ✅ | Done on `main` (#222): `tests/accessibility/` and its CI job. The issue is still open, and could be closed |
 | 172 | Production database name disagreement | ✅ | `tests/unit/test_prod_db_naming.py` (merged, #213). The issue is still open |
 | 173 | Cluster-wide `te_app` role | 📎 | PR #208 (`test_runtime_role_per_env.py`; it will need to follow the new `tests/` layout) |
-| 174 | Docker image can bake local credentials | 📎 | PR #204 (`test_docker_image_secrets.py`; it will need to follow the new `tests/` layout) |
+| 174 | Docker image can bake local credentials | ✅ | `tests/test_docker_image_secrets.py` (merged, #204). Closed |
 | 184 | Tenant T&E schemas have no upgrade path | ✅ | `tests/system/test_tenant_te_migrations.py` (merged, #213). The issue is still open |
 | 195 | Confirm inferred types, provenance flag | ✅ | `tests/system/test_type_provenance.py` (merged, #213). The issue is still open |
 | 198 | Track checks that completed after merging #197 | — | process |

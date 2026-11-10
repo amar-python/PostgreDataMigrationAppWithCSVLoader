@@ -31,9 +31,6 @@ export const processingLogSchema = z.object({
     "register",
     "overwrite",
     // M5 (#109): versioned datasets and the checks against earlier versions.
-    "version",
-    "schema_check",
-    "cross_upload_duplicates",
     "done",
     "error",
   ]),
