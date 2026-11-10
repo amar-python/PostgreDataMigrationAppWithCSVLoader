@@ -191,6 +191,9 @@ def scan():
 
     def _scan(page, scenario: str) -> axe_baseline.Outcome:
         page.wait_for_load_state("networkidle")
+        # A dialog still fading in is blended with the page behind it, so axe reads false
+        # colour-contrast failures. Let every running animation finish before scanning.
+        page.evaluate("Promise.all(document.getAnimations().map(a => a.finished.catch(() => {})))")
         result = Axe().run(page, options={"runOnly": {"type": "tag", "values": axe_baseline.WCAG_21_AA_TAGS}})
         violations = result.response["violations"]
         outcome = axe_baseline.compare(scenario, violations, baseline)
