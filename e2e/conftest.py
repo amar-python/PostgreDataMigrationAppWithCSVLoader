@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 import requests
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Page, expect, sync_playwright
 from psycopg2 import sql
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -29,6 +29,9 @@ from api.config import settings  # noqa: E402
 from api.db import Conn  # noqa: E402
 from api.services import accounts  # noqa: E402
 from api.tenancy import migrate_tenant, schema_for  # noqa: E402
+
+# Streamlit and the app re-run and redraw after each action; the default 5 s is tight on a cold start.
+expect.set_options(timeout=10_000)
 
 API_PORT, WEB_PORT, ST_PORT = 8000, 8080, 8501
 PASSWORD = "e2e correct horse battery"

@@ -6,6 +6,7 @@ import re
 import uuid
 
 import pytest
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 
 from conftest import streamlit_sign_in
@@ -22,12 +23,23 @@ def upload(stack):
 
 
 def _select_row(page, index: int) -> None:
-    """st.dataframe draws on a canvas: click the selection checkbox of the row at `index`."""
+    """st.dataframe draws on a canvas: click the selection checkbox of the row at `index`.
+
+    Streamlit re-runs the script after every action and redraws the grid, so a click can land
+    before it is ready: try again if the row's detail panel doesn't appear.
+    """
     grid = page.locator('[data-testid="stDataFrame"]').first
-    grid.wait_for()
-    box = grid.bounding_box()
-    page.mouse.click(box["x"] + 15, box["y"] + 35 + 35 * index + 17)
-    page.get_by_role("heading", name=f"Row {index + 1}").wait_for()
+    heading = page.get_by_role("heading", name=f"Row {index + 1}")
+    for attempt in range(3):
+        grid.wait_for()
+        box = grid.bounding_box()
+        page.mouse.click(box["x"] + 15, box["y"] + 35 + 35 * index + 17)
+        try:
+            heading.wait_for(timeout=5000)
+            return
+        except PlaywrightTimeoutError:
+            if attempt == 2:
+                raise
 
 
 def test_an_uploader_can_look_but_not_change(page, stack, upload):
@@ -74,7 +86,9 @@ def test_a_reviewer_excludes_a_row_with_a_reason(page, stack, upload):
     dialog.get_by_label("Reason (required)").fill("duplicate")
     dialog.get_by_label("Reason (required)").press("Tab")
     dialog.get_by_role("button", name="Save").click()
-    expect(page.get_by_text(re.compile(r"\d+ excluded"))).to_be_visible()
+    expect(page.get_by_role("dialog")).to_have_count(0)
+    # "0 excluded" also matches \d+, so wait for a non-zero count: the exclusion has been applied.
+    expect(page.get_by_text(re.compile(r"\b[1-9]\d* excluded"))).to_be_visible()
     _select_row(page, 13)
     expect(page.get_by_text(re.compile("Decision: exclude"))).to_be_visible()
 

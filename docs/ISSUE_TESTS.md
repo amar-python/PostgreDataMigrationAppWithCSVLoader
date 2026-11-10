@@ -1,7 +1,7 @@
 # Which test verifies which issue
 
 Every issue in the tracker at 9 Nov 2026 (46 closed, 23 open), with the test that fails if it comes back, or the reason there is none.
-Hand-kept: when you close an issue, add its row. State as of 10 Nov 2026. `docs/TEST_CASES.md` (generated) lists every pytest test; this file answers "is issue N guarded?".
+Hand-kept: when you close an issue, add its row. State as of 10 Nov 2026 (M5, M6, M7 and #229 merged). `docs/TEST_CASES.md` (generated) lists every pytest test; this file answers "is issue N guarded?".
 
 Legend: **✅** guarded by a test · **⚠️** guarded, but the test is a known failure until the defect is fixed (strict, so it turns red when it is) · **📎** fix and tests are in an open PR, not on `main` yet · **👤** needs a person or another system · **—** nothing to test.
 
@@ -70,9 +70,9 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 60 | Air-gapped install procedure | ✅ / 👤 | `tests/unit/test_open_issues.py` (scripts parse, stop on error, guide names them). The offline dry run, due 15 Nov, is manual |
 | 109 | ART M5: dedup and naming | ✅ | `tests/system/test_versioned_datasets.py` (merged, #226). The issue is still open |
 | 110 | ART M6: approval and staged import | ✅ | `tests/system/test_staged_import.py` (merged, #227). The issue is still open. Server-side cancel (#188 option b) was meant to follow here; I did not check whether it landed |
-| 111 | ART M7: sovereignty and reports | — | milestone, not built |
-| 112 | Security review before the first external tenant | 👤 | review by a person. The #176 tests are evidence for it |
-| 113 | Check OIDC sign-in against the real IdP | ✅ / 👤 | `tests/unit/test_oidc_https_jwks.py` covers the https key fetch, rotation and certificate checks. A sign-in against Keycloak or Entra ID is manual |
+| 111 | ART M7: sovereignty and reports | ✅ | `tests/performance/test_import_scale.py`, `tests/egress_guard.py` (merged, #228). Closed |
+| 112 | Security review before the first external tenant | 👤 | review by a person; `docs/SECURITY_REVIEW_PACK.md` (merged, #229) is the input. The #176 tests are evidence for it |
+| 113 | Check OIDC sign-in against the real IdP | ✅ / 👤 | `tests/system/test_oidc_https.py`, `tests/system/test_check_oidc.py` (merged, #229) and `tests/unit/test_oidc_https_jwks.py` (https key fetch, rotation, certificate checks; overlaps the first). A sign-in against Keycloak or Entra ID stays manual: `docs/OIDC_REAL_IDP_CHECK.md`. Closed |
 | 128 | Offline bundle for Windows, macOS and Linux | — | only the Ubuntu bundle exists |
 | 159 | Verify `docs/VCRM.md` against the DID | 👤 | compare with an external document |
 | 167 | Reorganise `tests/` into category folders | ✅ | Done on `main` (#221); `tests/README.md` says where a new test goes. The issue is still open, and could be closed |
