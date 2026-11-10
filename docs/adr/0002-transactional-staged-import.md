@@ -69,3 +69,14 @@ T&E mode moves to the same flow. Its row-level error isolation becomes a review-
 - Loader signatures change. The existing `/api/csv/upload` stays as a compatibility path until the frontend moves to the review flow, and is then removed in a later milestone.
 - Needs Alembic migrations first (assessment finding F4).
 - Tests must include failure injection mid-import (no partial target rows, no audit row), a retry after failure, and a retry after success (no duplicate rows).
+
+## Implementation note (M6, #110, 2026-11-09)
+
+Built as decided, with these differences:
+
+- **Validation is in Python, not SQL.** Approved rows are checked with `cast_value` (the contract the loaders and the frontend share) before COPY. A row that fails stops the approval, so nothing invalid reaches staging. The COPY goes into a temporary staging table, then one `INSERT ... SELECT` promotes it.
+- **Dynamic mode only.** T&E mode has not moved to this flow, so it still imports directly with row-level isolation. So does `POST /api/csv/upload`, which stays as the compatibility path.
+- **`UNIQUE (upload_id)` on `imports`**, stricter than the ADR's `(upload_id, approval_id)`: an upload is imported once, ever.
+- **Approval snapshots the review.** `approvals` records the newest row decision and cell edit at that moment, and the import applies exactly those. Review is refused once an upload is approved or imported.
+- **Failed imports leave no record.** The import record is written inside the import's transaction, so it exists only if the data does. A retry with the same `Idempotency-Key` simply runs again.
+- **Bound:** `statement_timeout` of 120 s on the import transaction; the 100,000-row cap stays.

@@ -5,6 +5,8 @@
 #   ./deploy_all.sh                        # deploy all 4 environments
 #   ./deploy_all.sh dev test               # deploy dev and test only
 #   PGHOST=myserver ./deploy_all.sh prod   # target a specific host
+#   ./deploy_all.sh --dry-run prod         # show the database and owner each
+#                                          # launcher names, touch nothing
 #
 # Prerequisites:
 #   - psql installed and on PATH
@@ -44,8 +46,21 @@ warn()    { echo -e "${YELLOW}[⚠]${NC} $*"; }
 error()   { echo -e "${RED}[✗]${NC} $*" >&2; }
 separator(){ echo "────────────────────────────────────────────────────────────"; }
 
+# launcher_var FILE NAME — the value of `\set NAME value` in a launcher, quotes
+# stripped; empty if the launcher doesn't set it.
+launcher_var() {
+   sed -nE "s/^[[:space:]]*\\\\set[[:space:]]+$2[[:space:]]+'?([^'[:space:]]*)'?.*/\\1/p" "$1" | head -n 1
+}
+
 # ── Parse arguments ───────────────────────────────────────────────────────────
-ENVS_TO_DEPLOY=("${@:-${ALL_ENVS[@]}}")
+# --dry-run prints each environment's target database and owner, as read from
+# its launcher, and exits before touching PostgreSQL.
+DRY_RUN=false
+REQUESTED=()
+for arg in "$@"; do
+   if [[ "${arg}" == "--dry-run" ]]; then DRY_RUN=true; else REQUESTED+=("${arg}"); fi
+done
+ENVS_TO_DEPLOY=("${REQUESTED[@]:-${ALL_ENVS[@]}}")
 
 # Validate each requested environment
 for env in "${ENVS_TO_DEPLOY[@]}"; do
@@ -75,10 +90,30 @@ for env in "${ENVS_TO_DEPLOY[@]}"; do
       continue
    fi
 
-   DB_NAME="te_mgmt_${env}"
+   # The launcher is the single source of truth for the database name and owner
+   # (#172). Hard-coding them here let the deployer disagree with the launcher
+   # and with the infrastructure that built the server. The defaults below are
+   # the on-prem names, used only when a launcher doesn't set them.
+   DB_NAME="$(launcher_var "${env_file}" db_name)"
+   DB_NAME="${DB_NAME:-te_mgmt_${env}}"
+   DB_OWNER="$(launcher_var "${env_file}" db_owner)"
+   DB_OWNER="${DB_OWNER:-postgres}"
+   unsafe=""
+   for ident in "${DB_NAME}" "${DB_OWNER}"; do
+      [[ "${ident}" =~ ^[a-z_][a-z0-9_]*$ ]] || unsafe="${ident}"
+   done
+   if [[ -n "${unsafe}" ]]; then
+      error "Unsafe identifier '${unsafe}' in ${env_file} (use lower-case letters, digits and underscores)"
+      FAILED+=("${env}")
+      continue
+   fi
 
    echo ""
-   warn "Deploying environment: ${env^^}  (database: ${DB_NAME})"
+   warn "Deploying environment: ${env^^}  (database: ${DB_NAME}, owner: ${DB_OWNER})"
+   if [[ "${DRY_RUN}" == true ]]; then
+      SUCCEEDED+=("${env}")
+      continue
+   fi
 
    # Create the database if it doesn't exist.
    # CREATE DATABASE cannot run inside a transaction, so we handle it here
@@ -89,7 +124,7 @@ for env in "${ENVS_TO_DEPLOY[@]}"; do
       log "Creating database: ${DB_NAME}"
       ${PSQL} -d postgres -c \
          "CREATE DATABASE \"${DB_NAME}\"
-            WITH OWNER = postgres
+            WITH OWNER = \"${DB_OWNER}\"
             ENCODING = 'UTF8'
             TEMPLATE = template0
             CONNECTION LIMIT = -1" || {

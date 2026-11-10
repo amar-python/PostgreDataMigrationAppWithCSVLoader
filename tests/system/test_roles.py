@@ -36,6 +36,9 @@ _ROUTES = {
     "read_audit": ("GET", "/api/audit/log"),
     "reset_password": ("POST", "/api/auth/users/{user}/password"),
     "review_rows": ("PUT", "/api/csv/uploads/{upload}/rows/1/decision"),
+    "submit_import": ("POST", "/api/csv/uploads/{upload}/submit"),
+    "approve_import": ("POST", "/api/csv/uploads/{upload}/approval"),
+    "run_import": ("POST", "/api/csv/uploads/{upload}/import"),
 }
 
 
@@ -124,6 +127,8 @@ class RoleMatrixOverTheApi(unittest.TestCase):
             body = {"newPassword": "a brand new passphrase"}
         if action == "review_rows":
             body = {"decision": "exclude", "reason": "role matrix test"}
+        if action == "approve_import":
+            body = {"decision": "reject", "reason": "role matrix test"}
         res = self.client.request(method, path.format(table=table, id=file_id, user=user, upload=upload_id),
                                   headers=self.headers[role], json=body)
         return res.status_code

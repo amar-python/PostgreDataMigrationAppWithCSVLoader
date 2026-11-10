@@ -1,7 +1,7 @@
 # Which test verifies which issue
 
 Every issue in the tracker at 9 Nov 2026 (46 closed, 23 open), with the test that fails if it comes back, or the reason there is none.
-Hand-kept: when you close an issue, add its row. `docs/TEST_CASES.md` (generated) lists every pytest test; this file answers "is issue N guarded?".
+Hand-kept: when you close an issue, add its row. State as of 10 Nov 2026. `docs/TEST_CASES.md` (generated) lists every pytest test; this file answers "is issue N guarded?".
 
 Legend: **✅** guarded by a test · **⚠️** guarded, but the test is a known failure until the defect is fixed (strict, so it turns red when it is) · **📎** fix and tests are in an open PR, not on `main` yet · **👤** needs a person or another system · **—** nothing to test.
 
@@ -36,7 +36,7 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 169 | Test catalogue generator | ✅ | `tests/unit/test_tooling_issues.py` and the CI freshness step |
 | 170 | All-failed T&E import removed the prior dataset | ✅ | `tests/system/test_te_reupload_registry.py` (`…keeps_a_prior_dynamic_table…`), `tests/system/test_failed_uploads.py` |
 | 171 | `setup.sh` truncated the config on failure | ✅ | `tests/unit/test_tooling_issues.py` (runs the real config-write block) |
-| 175 | Overwrite and mode switch bypassed the delete gate | ✅ | `tests/system/test_issue_regressions.py` (`UploadCannotBypassTheDeleteGate`) |
+| 175 | An uploader could destroy a dataset through overwrite or a mode switch | ✅ | `tests/system/test_issue_regressions.py` (`UploadCannotDestroyAnExistingDataset`). Guarded by outcome: M5 (#109) stores a repeated filename as a new version and ignores `overwrite`, so the dynamic path no longer drops anything; the T&E path still needs delete permission and is tested as such |
 | 176 | Browser history leaks across tenants | ⚠️ | `fe: tenant-isolation.test.tsx`, `e2e/test_react_ui.py`. Closed as moot (the React screen is being replaced, #212), but the leak is live in the shipped app. Both tests turn red when it is fixed |
 | 177 | Composite FKs for program consistency | ✅ | `tests/suites/test_06_program_consistency.sql` (Tier S) |
 | 178 | Distinct rows dropped as duplicates | ✅ | `tests/system/test_issue_regressions.py` (`RowDedupKeepsDistinctRows`) |
@@ -48,7 +48,7 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 185 | Preserved original differed from uploaded bytes | ✅ | `tests/system/test_original_bytes.py`, `fe: file-bytes.test.ts` |
 | 186 | Header mappings ignored | ✅ | `tests/system/test_header_mapping.py`, `fe: log-step-contract.test.ts` (the schema accepts the step it added) |
 | 187 | Failed uploads unreachable from the browser | ✅ | `fe: upload-attempts.test.tsx`, `fe: files-refresh.test.ts`, `e2e/test_react_ui.py` |
-| 188 | Cancel did not interrupt an import | ✅ | `fe: uploader-state-machine.test.ts`, `fe: job-outcome.test.ts`, `e2e/test_react_ui.py`. Server-side cancel is not built (#110) |
+| 188 | Cancel did not interrupt an import | ✅ | `fe: uploader-state-machine.test.ts`, `fe: job-outcome.test.ts`, `e2e/test_react_ui.py`. Server-side cancel was left for #110 (M6, now merged); not verified here |
 | 189 | T&E errors named the wrong source row | ✅ | `tests/system/test_issue_regressions.py` (`TeDatabaseErrorsNameTheSourceRow`) |
 | 190 | T&E review showed no validation errors | ✅ | `tests/system/test_review.py`, `tests/system/test_api_coverage.py`, `fe: review-table.test.tsx` |
 | 191 | Registry race | ✅ | `tests/system/test_registry_race.py` |
@@ -66,10 +66,10 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 32 | `az` CLI SSL error on the dev machine | 👤 | one machine's setup |
 | 34 | `terraform plan` provider handshake fails locally | 👤 | one machine's setup |
 | 57 | Add SECURITY.md | ✅ | `tests/unit/test_open_issues.py`. The issue's done-when ("on `main`") is met, so it could be closed. The file still carries a placeholder address, noted in a comment inside it |
-| 59 | Sample Migration Verification Report | 📎 | PR #216 (docs) |
+| 59 | Sample Migration Verification Report | — | docs, merged (#216). The issue is still open and could be closed |
 | 60 | Air-gapped install procedure | ✅ / 👤 | `tests/unit/test_open_issues.py` (scripts parse, stop on error, guide names them). The offline dry run, due 15 Nov, is manual |
-| 109 | ART M5: dedup and naming | — | milestone, not built |
-| 110 | ART M6: approval and staged import | — | milestone, not built. Server-side cancel (#188 option b) belongs here |
+| 109 | ART M5: dedup and naming | ✅ | `tests/system/test_versioned_datasets.py` (merged, #226). The issue is still open |
+| 110 | ART M6: approval and staged import | ✅ | `tests/system/test_staged_import.py` (merged, #227). The issue is still open. Server-side cancel (#188 option b) was meant to follow here; I did not check whether it landed |
 | 111 | ART M7: sovereignty and reports | — | milestone, not built |
 | 112 | Security review before the first external tenant | 👤 | review by a person. The #176 tests are evidence for it |
 | 113 | Check OIDC sign-in against the real IdP | ✅ / 👤 | `tests/unit/test_oidc_https_jwks.py` covers the https key fetch, rotation and certificate checks. A sign-in against Keycloak or Entra ID is manual |
@@ -77,11 +77,11 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 159 | Verify `docs/VCRM.md` against the DID | 👤 | compare with an external document |
 | 167 | Reorganise `tests/` into category folders | ✅ | Done on `main` (#221); `tests/README.md` says where a new test goes. The issue is still open, and could be closed |
 | 168 | Accessibility CI job | ✅ | Done on `main` (#222): `tests/accessibility/` and its CI job. The issue is still open, and could be closed |
-| 172 | Production database name disagreement | 📎 | PR #213 (`tests/test_prod_db_naming.py`) |
-| 173 | Cluster-wide `te_app` role | 📎 | PR #208 (`tests/test_runtime_role_per_env.py`) |
-| 174 | Docker image can bake local credentials | 📎 | PR #204 (`tests/test_docker_image_secrets.py`) |
-| 184 | Tenant T&E schemas have no upgrade path | 📎 | PR #213 (`tests/test_tenant_te_migrations.py`) |
-| 195 | Confirm inferred types, provenance flag | 📎 | PR #213 (`tests/test_type_provenance.py`) |
+| 172 | Production database name disagreement | ✅ | `tests/unit/test_prod_db_naming.py` (merged, #213). The issue is still open |
+| 173 | Cluster-wide `te_app` role | 📎 | PR #208 (`test_runtime_role_per_env.py`; it will need to follow the new `tests/` layout) |
+| 174 | Docker image can bake local credentials | 📎 | PR #204 (`test_docker_image_secrets.py`; it will need to follow the new `tests/` layout) |
+| 184 | Tenant T&E schemas have no upgrade path | ✅ | `tests/system/test_tenant_te_migrations.py` (merged, #213). The issue is still open |
+| 195 | Confirm inferred types, provenance flag | ✅ | `tests/system/test_type_provenance.py` (merged, #213). The issue is still open |
 | 198 | Track checks that completed after merging #197 | — | process |
 | 210 | Background job queue for large imports | — | feature, not built |
 | 212 | Plan the Streamlit migration | — | a plan. `e2e/test_streamlit_spike.py` is the baseline it must keep passing |

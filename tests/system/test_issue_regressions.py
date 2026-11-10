@@ -4,7 +4,7 @@ One class per issue, each named for the defect it keeps from coming back:
 
   #183  rate limiter used the (unvalidated) X-API-Key prefix as the caller's identity
   #178  distinct CSV rows silently dropped as "duplicates" (ambiguous hash serialisation)
-  #175  uploader could destroy a dataset through overwrite or a mode switch
+  #175  uploader could destroy a dataset through overwrite or a mode switch (guarded by outcome)
   #189  T&E database errors reported the wrong source row
 
 Integration classes need a live PostgreSQL, as in CI. Run: pytest tests/system/test_issue_regressions.py
@@ -188,37 +188,63 @@ class UploadPaths(unittest.TestCase):
 
 
 @pytest.mark.integration
-class UploadCannotBypassTheDeleteGate(UploadPaths):
-    """#175: overwrite and mode switch drop the prior table, so they need delete permission."""
+class UploadCannotDestroyAnExistingDataset(UploadPaths):
+    """#175: an uploader (no delete permission) must not be able to destroy a dataset by uploading.
+
+    The mechanism has changed since #175 was fixed: M5 (#109) stores a repeated filename as the next
+    version and ignores `overwrite`, so a dynamic upload no longer drops anything. These tests assert the
+    outcome that has to hold under either design: the original table and its rows survive. The T&E path
+    still replaces a prior load, so it still needs delete permission, and is tested as such.
+    """
 
     def _dynamic(self, name: str) -> dict:
         res = self._post("tenant_admin", fileName=name, content=f"k\n{self.tag}\n").json()
         self.assertEqual(res["status"], "ok", res)
         return res
 
-    def test_uploader_cannot_overwrite_an_existing_dataset(self):
-        name = f"gate_{self.tag}.csv"
-        self._dynamic(name)
-        res = self._post("uploader", fileName=name, content=f"k\n{self.tag}_new\n", overwrite=True)
-        self.assertEqual(res.status_code, 403, res.text)
-        self.assertIn(name, self._file_names(), "the refused overwrite must leave the dataset in place")
+    def _registered_tables(self) -> set[str]:
+        files = self.client.get("/api/csv/files", headers=self.headers["tenant_admin"]).json()
+        return {f["table_name"] for f in files}
 
-    def test_uploader_cannot_switch_mode_over_an_existing_dataset(self):
+    def _rows(self, table: str) -> list[str]:
+        res = self.client.get(f"/api/csv/tables/{table}/rows", headers=self.headers["tenant_admin"],
+                              params={"limit": 50})
+        self.assertEqual(res.status_code, 200, res.text)
+        return [r["k"] for r in res.json()["rows"]]
+
+    def test_an_uploader_overwrite_leaves_the_existing_dataset_intact(self):
+        name = f"gate_{self.tag}.csv"
+        original = self._dynamic(name)["tableName"]
+        res = self._post("uploader", fileName=name, content=f"k\n{self.tag}_new\n", overwrite=True)
+        self.assertIn(res.status_code, (200, 403), res.text)  # refused, or stored as a new version
+        self.assertIn(original, self._registered_tables(), "the existing dataset must still be registered")
+        self.assertEqual(self._rows(original), [self.tag], "and its rows must be untouched")
+
+    def test_an_uploader_mode_switch_leaves_the_existing_dataset_intact(self):
         name = f"switch_{self.tag}.csv"
-        self._dynamic(name)
+        original = self._dynamic(name)["tableName"]
         res = self._post("uploader", fileName=name, mode="te", targetTable="organisations",
                          content=f"name,org_type,country\nORG_{self.tag},government,AU\n")
-        self.assertEqual(res.status_code, 403, res.text)
-        self.assertIn(name, self._file_names(), "the refused mode switch must leave the dataset in place")
+        self.assertIn(res.status_code, (200, 403), res.text)
+        self.assertIn(original, self._registered_tables(), "the existing dataset must still be registered")
+        self.assertEqual(self._rows(original), [self.tag], "and its rows must be untouched")
 
-    def test_tenant_admin_may_overwrite(self):
+    def test_an_uploader_cannot_replace_a_prior_te_load(self):
+        name = f"te_{self.tag}.csv"
+        first = self._post("tenant_admin", fileName=name, mode="te", targetTable="organisations",
+                           content=f"name,org_type,country\nORG_A_{self.tag},government,AU\n")
+        self.assertEqual(first.json()["status"], "ok", first.text)
+        again = self._post("uploader", fileName=name, mode="te", targetTable="organisations",
+                           content=f"name,org_type,country\nORG_B_{self.tag},government,AU\n")
+        self.assertEqual(again.status_code, 403, again.text)
+
+    def test_a_tenant_admin_may_upload_the_same_name_again(self):
         name = f"admin_{self.tag}.csv"
         self._dynamic(name)
         res = self._post("tenant_admin", fileName=name, content=f"k\n{self.tag}_new\n", overwrite=True)
-        self.assertEqual(res.status_code, 200, res.text)
-        self.assertEqual(res.json()["status"], "ok", res.text)
+        self.assertEqual((res.status_code, res.json()["status"]), (200, "ok"), res.text)
 
-    def test_uploader_can_still_upload_a_new_file(self):
+    def test_an_uploader_can_still_upload_a_new_file(self):
         res = self._post("uploader", fileName=f"fresh_{self.tag}.csv", content=f"k\n{self.tag}\n")
         self.assertEqual((res.status_code, res.json()["status"]), (200, "ok"), res.text)
 
