@@ -22,15 +22,32 @@ if (-not $env:PGPASSWORD) {
 
 # M3d (#107): requests use the runtime role made by scripts\create_app_role.py,
 # which can't change the audit log. The owner above is only used at startup.
-$appDbEnv = Join-Path $env:USERPROFILE ".te-migration\app-db.env"
+#
+# RV-S3 (#173): the role and its credential file are per environment
+# (te_app_<env>, app-db-<env>.env), so two environments sharing one PostgreSQL
+# cluster - the usual dev-PC setup - no longer rotate each other's password.
+# API_ENV names the environment, matching api\config.py's own default of "dev".
+if (-not $env:API_ENV) { $env:API_ENV = "dev" }
+$appDbEnv = Join-Path $env:USERPROFILE (".te-migration\app-db-{0}.env" -f $env:API_ENV)
+$legacyAppDbEnv = Join-Path $env:USERPROFILE ".te-migration\app-db.env"
 if ((-not $env:APP_DB_USER) -and (Test-Path $appDbEnv)) {
     foreach ($line in Get-Content $appDbEnv) {
         $k, $v = $line -split "=", 2
         if ($k) { Set-Item -Path "env:$k" -Value $v }
     }
 }
+if ((-not $env:APP_DB_USER) -and (Test-Path $legacyAppDbEnv)) {
+    # Pre-#173 file, from before the role was per environment. Honoured so an
+    # existing dev PC still starts, but it holds the cluster-wide te_app role,
+    # whose password any other environment's provisioning run will have reset.
+    Write-Host ("Using the pre-#173 credential file {0}. It holds the shared te_app role, which another environment's setup can invalidate. Re-provision with: python scripts\create_app_role.py --env {1}" -f $legacyAppDbEnv, $env:API_ENV) -ForegroundColor Yellow
+    foreach ($line in Get-Content $legacyAppDbEnv) {
+        $k, $v = $line -split "=", 2
+        if ($k) { Set-Item -Path "env:$k" -Value $v }
+    }
+}
 if (-not $env:APP_DB_USER) {
-    Write-Host "APP_DB_USER not set - requests run as the owner. Run once: python scripts\create_app_role.py" -ForegroundColor Yellow
+    Write-Host ("APP_DB_USER not set - requests run as the owner. Run once: python scripts\create_app_role.py --env {0}" -f $env:API_ENV) -ForegroundColor Yellow
 }
 
 if (-not $env:API_KEY) {

@@ -61,7 +61,7 @@ $u = $up.uploadId
 | P12 | BR-36 | Every role (uploader, reviewer, tenant admin, auditor) can view rows and history | Automated only (no tool yet creates members with other roles) | 200 for each role | `test_review_cases.py::test_P12_every_role_can_view_rows_and_history` |
 | P13 | BR-35 | Each change writes an audit row with before and after values, and the hash chain stays intact | `(Call Get "/api/audit/verify").intact` | `True` | `test_review.py::test_changes_are_audited_and_insert_only` |
 | P14 | Decision 1 | The imported table doesn't change | `(Call Get "/api/csv/files").Where({ $_.upload_id -eq $u }).row_count` | `2` (rows 1 and 3, as imported at upload) | `test_review.py::test_cell_edits_are_versions_over_the_unchanged_original` |
-| P15 | BR-35 | Review changes work through the runtime role `te_app` | On your PC, the API runs as `te_app` since M3d. P06 and P07 passing there is the check | P06 and P07 pass | `test_runtime_role.py::test_the_api_works_as_the_runtime_role` |
+| P15 | BR-35 | Review changes work through the runtime role `te_app_<env>` | On your PC, the API runs as `te_app_dev` since M3d (`te_app` before #173). P06 and P07 passing there is the check | P06 and P07 pass | `test_runtime_role.py::test_the_api_works_as_the_runtime_role` |
 | P16 | — | The browser may send `PUT` (CORS preflight) | Use the Review screen from #143: Exclude a row | The change saves | `test_api_coverage.py::test_preflight_allows_put_for_review_changes` |
 | P17 | BR-26 | An untouched row has an empty history | `(Call Get "/api/csv/uploads/$($f.uploadId)/rows/1/history").Count` | `0` | `test_review.py::test_refusals` |
 
@@ -83,7 +83,7 @@ $u = $up.uploadId
 | N12 | — | A missing field, or a field of the wrong type, is refused | `Call Put "/api/csv/uploads/$u/rows/1/decision" @{decision="exclude"}` | `HTTP 422` | `test_review_cases.py::test_N12_missing_or_wrong_body_fields` |
 | N13 | BR-35 | The review tables refuse UPDATE, DELETE and TRUNCATE, even for the owner | Automated only (needs direct SQL) | Refused with `insufficient_privilege` | `test_review.py::test_changes_are_audited_and_insert_only`, `test_review_cases.py::test_N13_review_tables_reject_update_delete_and_truncate` |
 | N14 | Decision 3 | The database itself refuses a blank reason | Automated only (needs direct SQL) | Refused by a CHECK constraint | `test_review_cases.py::test_N14_database_rejects_a_blank_reason` |
-| N15 | BR-35 | The runtime role can't change the review tables | Automated only (needs direct SQL as `te_app`) | Refused by privilege, not by the trigger | `test_runtime_role.py::test_runtime_role_cannot_change_or_unprotect_append_only_tables` |
+| N15 | BR-35 | The runtime role can't change the review tables | Automated only (needs direct SQL as `te_app_<env>`) | Refused by privilege, not by the trigger | `test_runtime_role.py::test_runtime_role_cannot_change_or_unprotect_append_only_tables` |
 | N16 | — | A non-numeric upload id is refused | `Call Get "/api/csv/uploads/abc/rows"` | `HTTP 422` | `test_review_cases.py::test_N16_a_non_numeric_upload_id` |
 
 ## Not covered here
