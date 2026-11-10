@@ -75,7 +75,7 @@ def _collect_tests(filepath: Path) -> list[dict]:
                 if isinstance(item, ast.FunctionDef) and item.name.startswith("test"):
                     markers = class_markers + _extract_markers(item.decorator_list)
                     tests.append({
-                        "file": str(rel),
+                        "file": rel.as_posix(),
                         "class": node.name,
                         "name": item.name,
                         "line": item.lineno,
@@ -85,7 +85,7 @@ def _collect_tests(filepath: Path) -> list[dict]:
         elif isinstance(item := node, ast.FunctionDef) and item.name.startswith("test"):
             markers = _extract_markers(item.decorator_list)
             tests.append({
-                "file": str(rel),
+                "file": rel.as_posix(),
                 "class": "",
                 "name": item.name,
                 "line": item.lineno,
