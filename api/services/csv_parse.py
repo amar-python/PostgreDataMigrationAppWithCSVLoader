@@ -7,6 +7,8 @@ server behaviour matches what the UI previews. Kept dependency-free (no pandas)
 
 from __future__ import annotations
 
+import csv
+import io
 import re
 from datetime import datetime, timezone
 from typing import Optional
@@ -67,8 +69,11 @@ _BOOL_FALSE = {"false", "f", "no", "n", "0"}
 _IDENT_RE = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
 
 
-def parse_csv(text: str) -> list[list[str]]:
-    """Parse CSV handling quoted fields, escaped quotes and embedded newlines."""
+def parse_csv(text: str, max_rows: int | None = None) -> list[list[str]]:
+    """Parse CSV handling quoted fields, escaped quotes and embedded newlines.
+
+    ``max_rows`` stops after that many rows (the preview needs only the first ones).
+    """
     rows: list[list[str]] = []
     field = ""
     row: list[str] = []
@@ -105,6 +110,8 @@ def parse_csv(text: str) -> list[list[str]]:
         if ch == "\n":
             row.append(field)
             rows.append(row)
+            if max_rows is not None and len(rows) >= max_rows:
+                return rows
             row = []
             field = ""
             i += 1
@@ -133,21 +140,7 @@ def sanitize_columns(headers: list[str]) -> list[str]:
     counter: dict[str, int] = {}
     out: list[str] = []
     for idx, h in enumerate(headers):
-        base = (h or f"column_{idx + 1}").lower().strip()
-        base = re.sub(r"[^a-z0-9_]+", "_", base)
-        # Check reserved names (all of which have a leading underscore, e.g.
-        # "_id") before stripping underscores — otherwise "_id" strips to
-        # "id" first and never matches _RESERVED, silently losing the
-        # collision guard against the real system columns.
-        if base in _RESERVED:
-            base = f"{base}_col"
-        base = base.strip("_")
-        if not base:
-            base = f"column_{idx + 1}"
-        if base[0].isdigit():
-            base = f"col_{base}"
-        if len(base) > 55:
-            base = base[:55]
+        base = _base_column_name(h, idx)
         name = base
         while name in assigned:
             counter[base] = counter.get(base, 0) + 1
@@ -155,6 +148,62 @@ def sanitize_columns(headers: list[str]) -> list[str]:
         assigned.add(name)
         out.append(name)
     return out
+
+
+def _base_column_name(header: str, idx: int) -> str:
+    """One header's safe identifier, before de-duplication against its siblings."""
+    base = (header or f"column_{idx + 1}").lower().strip()
+    base = re.sub(r"[^a-z0-9_]+", "_", base)
+    # Check reserved names (all of which have a leading underscore, e.g.
+    # "_id") before stripping underscores — otherwise "_id" strips to
+    # "id" first and never matches _RESERVED, silently losing the
+    # collision guard against the real system columns.
+    if base in _RESERVED:
+        base = f"{base}_col"
+    base = base.strip("_")
+    if not base:
+        base = f"column_{idx + 1}"
+    if base[0].isdigit():
+        base = f"col_{base}"
+    if len(base) > 55:
+        base = base[:55]
+    return base
+
+
+def apply_header_mapping(
+    headers: list[str], mapping: list[dict] | None
+) -> tuple[list[str], str | None]:
+    """Apply user-confirmed header renames (#186) to the raw header row.
+
+    ``mapping`` is a list of ``{"original": ..., "renamed": ...}``. A blank
+    ``renamed`` keeps the original. Returns ``(headers, error)``; on error the
+    headers are returned unchanged and nothing should be loaded. A rename is
+    refused, rather than silently bent into ``name_2``, when it would collide
+    with another column — the user asked for that exact name.
+    """
+    if not mapping:
+        return headers, None
+
+    renames: dict[str, str] = {}
+    for entry in mapping:
+        original = entry["original"]
+        if original in renames:
+            return headers, f'Header mapping lists "{original}" more than once.'
+        if original not in headers:
+            return headers, f'Header mapping refers to "{original}", which is not a header in this file.'
+        renames[original] = (entry.get("renamed") or "").strip()
+
+    mapped = [renames.get(h) or h for h in headers]
+    renamed_idx = {i for i, h in enumerate(headers) if renames.get(h)}
+    by_base: dict[str, list[int]] = {}
+    for i, h in enumerate(mapped):
+        by_base.setdefault(_base_column_name(h, i), []).append(i)
+    for base, idxs in by_base.items():
+        if len(idxs) > 1 and renamed_idx.intersection(idxs):
+            clash = next(i for i in idxs if i in renamed_idx)
+            return headers, (f'Renaming a column to "{mapped[clash]}" would give two columns the '
+                             f'name "{base}". Choose a different name.')
+    return mapped, None
 
 
 def extra_cells(raw: list[str], width: int) -> list[str]:
@@ -249,9 +298,29 @@ def cast_value(raw: str, col_type: str) -> tuple[bool, Optional[object], Optiona
     return True, raw, None
 
 
+_FAST_PREVIEW_CHARS = 200_000  # below this a whole parse is cheap, so small files keep the exact old behaviour
+
+
+def _preview_rows(text: str, head: int) -> tuple[list[list[str]], int]:
+    """The first ``head`` rows (or all of a short file) and how many data rows the file has (M7, #111).
+
+    Parsing 100,000 rows in Python took 1.4 s, most of the first preview page. A large file is parsed only as far
+    as the head, and its rows are counted with the C csv reader: the count is the "approx" in totalRowsApprox, and
+    differs from a full parse only by trailing blank rows. If the head ends in blank lines the whole file is
+    parsed, as before, because a full parse drops trailing blank rows and that could change the head.
+    """
+    if len(text) > _FAST_PREVIEW_CHARS:
+        rows = parse_csv(text, max_rows=head)
+        if len(rows) >= head and any(cell != "" for cell in rows[-1]):
+            counted = sum(1 for row in csv.reader(io.StringIO(text, newline="")) if row)
+            return rows, max(counted - 1, 0)
+    rows = parse_csv(text)
+    return rows, max(len(rows) - 1, 0)
+
+
 def build_preview(text: str, sample_rows: int = 10, infer_rows: int = 200) -> dict:
     """Preview payload: headers, sanitised columns, inferred types, sample rows."""
-    rows = parse_csv(text)
+    rows, total_rows = _preview_rows(text, infer_rows + 1)
     if not rows:
         return {"status": "invalid_structure", "reason": "empty"}
     if len(rows) == 1:
@@ -275,5 +344,5 @@ def build_preview(text: str, sample_rows: int = 10, infer_rows: int = 200) -> di
         "columns": columns,
         "inferredTypes": inferred,
         "sampleRows": [r[:ncols] + [""] * (ncols - len(r)) for r in data[:sample_rows]],
-        "totalRowsApprox": len(data),
+        "totalRowsApprox": total_rows,
     }

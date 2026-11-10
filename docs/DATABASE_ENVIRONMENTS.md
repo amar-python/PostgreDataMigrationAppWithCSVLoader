@@ -16,6 +16,14 @@ for names: `build/config.env.example` (template) / `build/config.local.env`
 | **staging** | `te_mgmt_staging` | `te_staging` | `te_stg_user` | 25 | no (`SEED_STAGING=false`) |
 | **prod** | `te_mgmt_prod` | `te_prod` | `te_prod_user` | 50 | no (`SEED_PROD=false`) |
 
+The database name and owner are read from each environment's launcher
+(`build/environments/env_<env>.sql`, `db_name` and `db_owner`) by
+`build/deploy_all.sh`; the table above is what the committed templates set.
+**Azure production differs:** the database is `te_prod`, owned by `pgadmin`, because
+Terraform creates it and Azure has no `postgres` role. The migration job's
+entrypoint writes that into its launcher at run time. See
+`DECISIONS/2026-11-09-prod-db-naming.md`.
+
 Every environment also gets a `csv_uploads` schema in its own database
 (same name across environments — no collision, since each environment is a
 separate database). Controlled by `CSV_UPLOADS_SCHEMA` (default

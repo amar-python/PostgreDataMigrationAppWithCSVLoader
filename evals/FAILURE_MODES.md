@@ -79,6 +79,9 @@ Tier S initial scope: only S1.
 - ~~**Cross-environment structural equivalence** (Dev vs Test vs Staging vs Prod) — Tier E, future.~~
   *Now covered as of 2026-09-10:* Tier E scenario 01 compares all four deployed
   schemas column by column and treats reordered columns as drift. Closes VCRM BR-01.
+  Scenario 02 is its negative control: against the real database, an empty schema must
+  read as empty and comparing it with Dev must report the missing tables, so 01 cannot
+  pass a deploy that wrote nothing.
 - **Domain-rule deep dives beyond suite 05** — Tier D, future.
 - **Validator behaviour on >128KB single field** — beyond the current 50KB eval and Python `csv` default field-size assumptions.
 

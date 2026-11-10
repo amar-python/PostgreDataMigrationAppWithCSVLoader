@@ -234,6 +234,43 @@ describe("downloadErrorReport XLSX", () => {
   });
 });
 
+// ─── downloadErrorReport — XLSX formula guard (#193) ─────────────────────────
+
+describe("downloadErrorReport XLSX formula guard", () => {
+  let cap: ReturnType<typeof captureBlob>;
+
+  beforeEach(() => { cap = captureBlob(); });
+  afterEach(() => { cap.reset(); });
+
+  it.each([
+    ['=HYPERLINK("http://x","y")'],
+    ["+cmd|' /C calc'!A0"],
+    ["-2+3"],
+    ["@SUM(A1:A2)"],
+    ["\tcmd"],
+  ])("neutralises formula payload %s in XLSX", async (value) => {
+    const rows = buildErrorRows("data.csv", [{ rowNumber: 1, column: "c", value, reason: "test" }]);
+    downloadErrorReport("data.csv", rows, "xlsx");
+    const buf = await cap.blob!.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const ws = wb.Sheets["Errors"];
+    const parsed = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+    expect((parsed[0] as any).value).toBe(`'${value}`);
+  });
+
+  it("leaves plain negative numbers unchanged in XLSX", async () => {
+    const rows = buildErrorRows("data.csv", [
+      { rowNumber: 1, column: "n", value: "-5", reason: "+3.2" },
+    ]);
+    downloadErrorReport("data.csv", rows, "xlsx");
+    const buf = await cap.blob!.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const parsed = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets["Errors"]);
+    expect((parsed[0] as any).value).toBe("-5");
+    expect((parsed[0] as any).reason).toBe("+3.2");
+  });
+});
+
 // ─── downloadAuditReport ──────────────────────────────────────────────────────
 
 describe("downloadAuditReport", () => {
@@ -266,5 +303,123 @@ describe("downloadAuditReport", () => {
     expect(text).toContain("file,status,imported_at");
     expect(text).toContain("a.csv");
     expect(text).toContain("Imported");
+  });
+});
+
+// ─── print window (PDF): the one place HTML is built by hand ──────────────────
+//
+// The print window is written with document.write(), not React, so nothing escapes for us, and
+// it shares the app's origin (and so its sessionStorage, which holds the sign-in token). File
+// names, cell values and reasons all come from uploaded CSVs. Security review pack, #112.
+
+describe("print window HTML (PDF) escapes everything user-supplied", () => {
+  const HOSTILE = [
+    `<script>alert(1)</script>`,
+    `"><img src=x onerror=alert(1)>`,
+    `'-alert(1)-'`,
+    `&lt;already&gt; & </td><td>`,
+  ];
+
+  let written: string;
+
+  beforeEach(() => {
+    written = "";
+    vi.useFakeTimers();
+    vi.spyOn(window, "open").mockImplementation(() => ({
+      document: { write: (html: string) => { written += html; }, close: vi.fn() },
+      focus: vi.fn(),
+      print: vi.fn(),
+      close: vi.fn(),
+    }) as unknown as Window);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  function assertNothingExecutable() {
+    expect(written).not.toMatch(/<script/i);
+    expect(written).not.toMatch(/<img/i);
+    expect(written).not.toMatch(/<[^>]+\sonerror\s*=/i);   // no tag carries an event handler
+    for (const text of HOSTILE) expect(written).not.toContain(text);
+    expect(written).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+  }
+
+  it("error report: the file name (title), headers and every cell", () => {
+    const rows = HOSTILE.map((h, i) => ({
+      file: h, row_number: i, column: h, value: h, reason: h, plain_english: h,
+    }));
+    downloadErrorReport(HOSTILE[0], rows, "pdf");
+    expect(written).toContain("<table>");
+    assertNothingExecutable();
+  });
+
+  it("audit report: every cell", () => {
+    const rows = HOSTILE.map((h) => ({
+      file: h, status: h, imported_at: h, total_rows: h, inserted_rows: h,
+      duplicate_rows_skipped: h, failed_rows: h, table_name: h, header_mapping: h, cancellation_reason: h,
+    }));
+    downloadAuditReport(rows as AuditReportRow[], "pdf");
+    assertNothingExecutable();
+  });
+
+  it("the rest of the page is fixed markup: only table cells vary", () => {
+    downloadAuditReport([], "pdf");
+    expect(written).toMatch(/^<!DOCTYPE html><html><head>/);
+    expect(written).toContain("<title>Audit report</title>");
+  });
+});
+
+// ─── XLSX formula guard — the cell is stored as text (#193) ───────────────────
+// The tests above read values back through sheet_to_json. What actually stops a
+// spreadsheet evaluating a cell is that it is stored as TEXT with no formula, so
+// assert that directly, for each payload class the issue names, and for the audit
+// report as well as the error report.
+
+describe("XLSX formula guard: cell type", () => {
+  let cap: ReturnType<typeof captureBlob>;
+
+  beforeEach(() => {
+    cap = captureBlob();
+  });
+  afterEach(() => {
+    cap.reset();
+  });
+
+  async function cellAt(addr: string, sheet: string): Promise<XLSX.CellObject> {
+    const wb = XLSX.read(await cap.blob!.arrayBuffer(), { type: "array" });
+    return wb.Sheets[sheet][addr];
+  }
+
+  it.each(["=cmd", "+cmd", "-cmd", "@cmd", "\t=cmd"])(
+    "error report: %j is a text cell with no formula, carrying the guard prefix",
+    async (value) => {
+      const rows = buildErrorRows("d.csv", [{ rowNumber: 1, column: "c", value, reason: "bad" }]);
+      downloadErrorReport("d.csv", rows, "xlsx");
+      const cell = await cellAt("D2", "Errors"); // ERROR_HEADERS: file,row_number,column,value,...
+      expect(cell.t).toBe("s");
+      expect(cell.f).toBeUndefined();
+      expect(cell.v).toBe(`'${value}`);
+    },
+  );
+
+  it("audit report: a formula-like file name is guarded too", async () => {
+    downloadAuditReport(
+      [
+        {
+          file: "=cmd",
+          status: "Imported",
+          imported_at: "x",
+          total_rows: 1,
+          inserted_rows: 1,
+          duplicate_rows_skipped: 0,
+          failed_rows: 0,
+          table_name: "t",
+        },
+      ],
+      "xlsx",
+    );
+    const cell = await cellAt("A2", "Audit");
+    expect([cell.t, cell.f, cell.v]).toEqual(["s", undefined, "'=cmd"]);
   });
 });

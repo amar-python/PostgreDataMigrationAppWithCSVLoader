@@ -6,7 +6,9 @@
 > current state. Affected lines are marked inline.
 >
 > - **Tier E** — implemented. `evals/datasets/tier_e/01_envs_have_identical_structure`.
->   Runs in the `integration-postgres` CI job. Closes VCRM BR-01.
+>   Runs in the `integration-postgres` CI job. Closes VCRM BR-01. Scenario
+>   `02_empty_schema_is_detected` is its negative control: it shows 01 can see a deploy
+>   that wrote nothing.
 > - **Tier X** — implemented. `evals/datasets/tier_x/01_sqlite_schema_structure`.
 >   Deliberately **not** in CI per [ADR-0001](../docs/adr/0001-postgresql-first.md)
 >   (PostgreSQL first); run it with `make evals-engines`.

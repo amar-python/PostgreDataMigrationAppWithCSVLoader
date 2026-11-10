@@ -32,7 +32,11 @@ const page = {
     row(2, ["x", "b"], {
       errors: [{ column: "n", value: "x", reason: '"x" is not a whole number' }],
     }),
-    row(3, ["3", "c"], { decision: "exclude", decisionReason: "duplicate of row 1" }),
+    row(3, ["3", "c"], {
+      decision: "exclude",
+      decisionReason: "duplicate of row 1",
+      errors: [{ column: "(database)", value: "", reason: "violates check constraint" }],
+    }),
   ],
 };
 
@@ -82,6 +86,8 @@ it("shows every row with its validation, edits and decision", async () => {
   );
   expect(screen.getByText("Invalid")).toBeInTheDocument();
   expect(screen.getByText("Excluded")).toHaveAttribute("title", "duplicate of row 1");
+  // #190: a reason not tied to a column (the database rejected the row) is shown beside it.
+  expect(screen.getByText("violates check constraint")).toBeInTheDocument();
 });
 
 it("a reviewer excludes a row with a required reason", async () => {

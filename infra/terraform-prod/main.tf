@@ -227,6 +227,26 @@ resource "azurerm_key_vault_secret" "pg_password" {
   depends_on = [azurerm_role_assignment.kv_admin_terraform]
 }
 
+# Password for the application role (te_prod_user) that the migration job
+# creates. The job reads it as APP_DB_PASSWORD; it is never baked into the image
+# or written to a launcher file (#172, #174).
+resource "random_password" "app_password" {
+  length           = 32
+  special          = true
+  min_lower        = 4
+  min_upper        = 4
+  min_numeric      = 4
+  override_special = "!@#$%^&*()-_=+"
+}
+
+resource "azurerm_key_vault_secret" "app_password" {
+  name         = "pg-app-password"
+  value        = random_password.app_password.result
+  key_vault_id = azurerm_key_vault.kv.id
+
+  depends_on = [azurerm_role_assignment.kv_admin_terraform]
+}
+
 # --- PostgreSQL Flexible Server (managed, HA-capable) -------------------
 
 resource "azurerm_postgresql_flexible_server" "pg" {
@@ -271,11 +291,25 @@ resource "azurerm_postgresql_flexible_server" "pg" {
   }
 }
 
+# The production database on Azure is te_prod, owned by the server's admin login
+# (pgadmin). The migration job receives both as PGDATABASE and PGUSER, and its
+# entrypoint writes them into the launcher it deploys with (infra/entrypoint.sh),
+# so this resource is the only place the name is set. The on-prem installer keeps
+# its own name, te_mgmt_prod (DECISIONS/2026-11-09-prod-db-naming.md).
 resource "azurerm_postgresql_flexible_server_database" "te_prod" {
   name      = "te_prod"
   server_id = azurerm_postgresql_flexible_server.pg.id
   charset   = "UTF8"
   collation = "en_US.utf8"
+}
+
+# The schema needs uuid-ossp, pg_trgm and dblink. Azure refuses CREATE EXTENSION
+# for anything not allow-listed here, so without this the first deployment fails
+# partway through creating the schema.
+resource "azurerm_postgresql_flexible_server_configuration" "extensions" {
+  name      = "azure.extensions"
+  server_id = azurerm_postgresql_flexible_server.pg.id
+  value     = "dblink,pg_trgm,uuid-ossp"
 }
 
 resource "azurerm_postgresql_flexible_server_configuration" "log_statement" {
@@ -477,6 +511,10 @@ resource "azurerm_container_app_job" "migration" {
         name        = "PGPASSWORD"
         secret_name = "pg-password"
       }
+      env {
+        name        = "APP_DB_PASSWORD"
+        secret_name = "app-password"
+      }
     }
   }
 
@@ -484,6 +522,12 @@ resource "azurerm_container_app_job" "migration" {
     name                = "pg-password"
     identity            = azurerm_user_assigned_identity.runner.id
     key_vault_secret_id = azurerm_key_vault_secret.pg_password.id
+  }
+
+  secret {
+    name                = "app-password"
+    identity            = azurerm_user_assigned_identity.runner.id
+    key_vault_secret_id = azurerm_key_vault_secret.app_password.id
   }
 
   tags = local.tags
