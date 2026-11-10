@@ -1,0 +1,10 @@
+# Accessibility scans (tests/accessibility/, the `accessibility` job in
+# .github/workflows/quality-gate.yml). Kept apart from requirements-dev.txt so the
+# other jobs, and developers who never scan, do not install a browser driver.
+#
+#   pip install -r requirements-a11y.txt
+#   python -m playwright install chromium
+#   (cd csv-table-hub-main && npm ci)
+#   python -m pytest tests/accessibility -v
+playwright>=1.64.1
+axe-playwright-python>=0.1.8

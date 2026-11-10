@@ -1,0 +1,42 @@
+Tier E scenario 02 - negative control for scenario 01
+=====================================================
+
+What it proves
+--------------
+Scenario 01 passes when Test, Staging and Prod have the same structure as Dev.
+That is only worth anything if "a deploy wrote nothing" is something it can see.
+This scenario shows that, against the real database:
+
+1. A schema with no tables is read as having no tables by the same query
+   scenario 01 uses (_column_signature), and a failed query is reported as a
+   failure rather than as "no tables" (the confusion behind issue #45).
+2. Comparing Dev's real schema with that empty one reports the missing tables
+   (_diff_signatures), so scenario 01 would fail on it.
+
+If either stops being true, scenario 01 could go green while a deploy silently
+wrote nothing.
+
+How
+---
+It creates a throwaway empty schema "_te_empty_neg_ctrl" in Dev's database,
+reads its signature, compares it with Dev's, and drops it again. The drop never
+uses CASCADE: if anything else is found in that schema the scenario fails rather
+than deleting what is not its own.
+
+It refuses to run (fails) if Dev has fewer than min_reference_tables tables,
+because comparing nothing with nothing would prove nothing. Scenario 01 deploys
+Dev first, so run them together (the default for --tiers e); with --only, deploy
+Dev beforehand.
+
+Relationship to the unit tests
+------------------------------
+tests/test_evals_tier_e_x.py covers the same logic with a mocked psql. This is the
+same claim against a real server, which is what mocks cannot show.
+
+Fails rather than skips
+-----------------------
+No PostgreSQL means a failure, as for scenario 01 (FIXES_APPLIED.md F5).
+
+Run
+---
+  python3 evals/runner.py --tiers e --verbose

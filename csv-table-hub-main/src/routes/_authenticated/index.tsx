@@ -38,7 +38,7 @@ import { readFileBase64 } from "@/lib/file-bytes";
 import { formatLocalTime, formatUtc } from "@/lib/utils";
 import {
   classifyUploadResult, classifyThrownError, buildCancelPatch, buildCancelToastMessage, canStop,
-  decideOverwriteAction, failedRowsNote,
+  decideOverwriteAction, failedRowsNote, typesProvenanceNote,
 } from "@/lib/job-outcome";
 import { needsAttention } from "@/lib/job-outcome";
 import { Button } from "@/components/ui/button";
@@ -188,6 +188,7 @@ export function Uploader() {
 
       const res = await uploadCsv({
         fileName:job.name, content, contentBase64, types, overwrite,
+        typesConfirmed: !!types?.length, // #195: the types come from the mapping the user confirmed
         headerMapping: headerMapping?.map(c=>({original:c.original,renamed:c.renamed})),
         mode: job.mode, targetTable: job.targetTable,
       });
@@ -781,7 +782,7 @@ function PreviewTable({file}:{file:CsvFileSummary}){
           {rows.length===0&&<TableRow><TableCell colSpan={file.column_names.length} className="text-center text-muted-foreground">No rows.</TableCell></TableRow>}
         </TableBody>
       </Table>
-      <p className="p-2 text-xs text-muted-foreground">Showing up to 50 rows. Table has {file.row_count} row{file.row_count===1?"":"s"} total.{failedRowsNote(file)&&<span className="text-destructive"> {failedRowsNote(file)} validation and weren't imported.</span>}</p>
+      <p className="p-2 text-xs text-muted-foreground">Showing up to 50 rows. Table has {file.row_count} row{file.row_count===1?"":"s"} total.{failedRowsNote(file)&&<span className="text-destructive"> {failedRowsNote(file)} validation and weren't imported.</span>}{typesProvenanceNote(file)&&<span className="text-amber-600 dark:text-amber-500"> {typesProvenanceNote(file)}</span>}</p>
       {file.upload_id&&(file.failed_rows??0)>0&&<StoredRowErrors uploadId={file.upload_id} fileName={file.file_name}/>}
     </div>
   );

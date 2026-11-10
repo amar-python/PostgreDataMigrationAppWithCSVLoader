@@ -7,6 +7,9 @@ never see who loaded it. Every mutating action now writes a row through here.
 
 Known limitation (deliberate, documented)
 -----------------------------------------
+This applies to ``POST /api/csv/upload`` only. The approval flow (M6, api/services/staged_import.py)
+writes its audit rows in the same transaction as the import, using ``write_audit``.
+
 The loaders in ``api/services/{dynamic,te}_loader.py`` own and commit their own
 transactions, so the audit row for an upload is written *after* the load has
 already committed rather than inside the same transaction. A crash in the narrow
@@ -38,7 +41,8 @@ logger = logging.getLogger(__name__)
 
 # Actions the log is allowed to record. A typo becomes a loud failure here rather
 # than an unqueryable string in the table.
-VALID_ACTIONS = frozenset({"upload", "delete", "password_reset", "row_decision", "cell_edit"})
+VALID_ACTIONS = frozenset({"upload", "delete", "password_reset", "row_decision", "cell_edit",
+                           "submit", "approve", "reject", "import"})
 
 # Who is acting (M3a, #107). tenant_scope sets it per request: the signed-in
 # username, or "api_key" for a request made with the shared key.

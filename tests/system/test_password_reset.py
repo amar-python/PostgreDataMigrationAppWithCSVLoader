@@ -18,7 +18,7 @@ from api.config import settings
 from api.db import Conn
 from api.services import accounts
 from api.tenancy import migrate_tenant, schema_for
-from tests.system_integration.test_accounts import _PW, _Accounts
+from tests.system.test_accounts import _PW, _Accounts
 
 _NEW = "a brand new passphrase"
 _ROOT = Path(__file__).resolve().parents[2]

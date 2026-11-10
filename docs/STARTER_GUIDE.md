@@ -57,7 +57,7 @@ Both modes go through the same `POST /api/csv/upload` endpoint, with a
 The same codebase runs against four isolated databases — Dev, Test, Staging,
 Prod — each with its own database name, schema, and app user (table in the
 main `README.md` under "Multi-Environment Setup"). Staging and Prod are never
-seeded with sample data; `tests/environments/` enforces that automatically.
+seeded with sample data; `tests/system_integration/environments/` enforces that automatically.
 If you're not sure which environment a command is touching, check
 `docs/DATABASE_ENVIRONMENTS.md` and `docs/ENV_VARIABLES.md` before running
 anything destructive.
@@ -135,14 +135,14 @@ because of a specific past incident:
 
 - **All SQL identifiers (table/column names) go through
   `psycopg2.sql.Identifier()`** — never f-string interpolation. This is
-  AST-checked by `tests/test_security.py`.
+  AST-checked by `tests/unit/test_security.py`.
 - **pytest markers matter**: `unit`, `integration`, `e2e`, `regression`,
   `security`, `snapshot`, `parity`. Run `unit` (and friends) for a fast,
   DB-free sanity check; `integration` and `e2e` need a live, provisioned
   PostgreSQL. See `pytest.ini` for the full marker list.
 - **Staging and Prod are never seeded** — if you're touching provisioning
   scripts, don't make that possible even accidentally; there's a contract
-  test for it in `tests/environments/`.
+  test for it in `tests/system_integration/environments/`.
 
 ## If something doesn't work
 

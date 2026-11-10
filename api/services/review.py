@@ -12,6 +12,7 @@ from psycopg2 import sql
 
 from api.services.audit import current_actor, write_audit
 from api.services.csv_parse import cast_value, extra_cells, ragged_row_reason, sanitize_columns
+from api.services.staged_import import state_of
 from api.tenancy import uploads_schema
 
 MAX_PAGE = 500
@@ -49,6 +50,14 @@ def _upload(cur, upload_id: int) -> dict:
     db_errors = {e["rowNumber"]: e["reason"] for e in (stored_errors or [])
                  if mode == "te" and "column" not in e and "rowNumber" in e}
     return {"fileName": name, "columns": columns, "types": types, "total": total, "_dbErrors": db_errors}
+
+
+def _flags(cur, upload_id: int, numbers: list[int]) -> dict:
+    """Rows that duplicate an earlier version of the dataset (M5, BR-29); the user decides per row."""
+    cur.execute(sql.SQL(
+        "SELECT row_number, matched_file_name, matched_version FROM {}.row_flags "
+        "WHERE upload_id = %s AND row_number = ANY(%s)").format(_s()), (upload_id, numbers))
+    return {n: {"fileName": f, "version": v} for n, f, v in cur.fetchall()}
 
 
 def _validate(cells: list[str], raw: list[str], columns: list[str], types: list[str]) -> list[dict]:
@@ -92,6 +101,7 @@ def _rows(cur, upload_id: int, meta: dict, numbers: list[int] | None = None,
             "ORDER BY row_number").format(_s()), (upload_id, numbers))
     source = cur.fetchall()
     decisions, edits = _latest(cur, upload_id, [n for n, _ in source])
+    duplicates = _flags(cur, upload_id, [n for n, _ in source])
     width = len(meta["columns"])
     out = []
     for n, raw in source:
@@ -106,6 +116,7 @@ def _rows(cur, upload_id: int, meta: dict, numbers: list[int] | None = None,
             "editedColumns": sorted(edits.get(n, {})),
             "decision": decision["decision"] if decision else "include",
             "decisionReason": decision["reason"] if decision else None,
+            "duplicateOfEarlierVersion": duplicates.get(n),
             "errors": errors,
         })
     return out
@@ -130,6 +141,13 @@ def _check_row(meta: dict, row_number: int) -> None:
         raise ReviewError(404, f"Row {row_number} doesn't exist; this upload has {meta['total']} rows")
 
 
+def _check_open(cur, upload_id: int) -> None:
+    """An approved or imported upload is frozen: what was approved is what gets imported (M6)."""
+    state = (state_of(cur, upload_id) or {}).get("state")
+    if state in ("approved", "imported"):
+        raise ReviewError(409, f"This upload is {state}, so its rows can no longer be changed")
+
+
 def _reason(reason: str) -> str:
     if not (reason or "").strip():
         raise ReviewError(422, "A reason is required")
@@ -140,6 +158,7 @@ def decide(cur, upload_id: int, row_number: int, decision: str, reason: str) -> 
     """Include or exclude one row. The caller commits."""
     meta = _upload(cur, upload_id)
     _check_row(meta, row_number)
+    _check_open(cur, upload_id)
     if decision not in ("include", "exclude"):
         raise ReviewError(422, "decision must be 'include' or 'exclude'")
     reason = _reason(reason)
@@ -158,6 +177,7 @@ def edit(cur, upload_id: int, row_number: int, column: str, value: str, reason: 
     """Set one cell's value as a new version. ``column`` is a name or a 0-based index. The caller commits."""
     meta = _upload(cur, upload_id)
     _check_row(meta, row_number)
+    _check_open(cur, upload_id)
     names = meta["columns"]
     index = int(column) if column.isdigit() else (names.index(column) if column in names else -1)
     if not 0 <= index < len(names):

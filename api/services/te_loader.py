@@ -86,11 +86,16 @@ def match_te_table(columns: list[str]) -> str | None:
 
 
 def _cleanup_prior_registry_entries(cur, file_name, file_hash):
-    """Remove prior csv_files entries. Uses sql.Identifier, no f-strings."""
+    """Remove prior csv_files entries. Uses sql.Identifier, no f-strings.
+
+    A file name matches only non-dynamic entries: dynamic uploads of the same name are
+    versions of a dataset and are never replaced (M5, decision 2). Identical content
+    (file_hash) still matches any mode.
+    """
     cur.execute(
         sql.SQL(
             "SELECT table_name, mode FROM {s}.csv_files"
-            " WHERE file_name = %s OR file_hash = %s"
+            " WHERE (file_name = %s AND mode <> 'dynamic') OR file_hash = %s"
         ).format(s=sql.Identifier(uploads_schema())),
         (file_name, file_hash),
     )
@@ -107,7 +112,7 @@ def _cleanup_prior_registry_entries(cur, file_name, file_hash):
             )
     cur.execute(
         sql.SQL(
-            "DELETE FROM {s}.csv_files WHERE file_name = %s OR file_hash = %s"
+            "DELETE FROM {s}.csv_files WHERE (file_name = %s AND mode <> 'dynamic') OR file_hash = %s"
         ).format(s=sql.Identifier(uploads_schema())),
         (file_name, file_hash),
     )
@@ -221,7 +226,7 @@ def upload_te(file_name: str, content: str, target_table: str, *, session: dict 
             file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
             cur.execute(
                 sql.SQL(
-                    "SELECT 1 FROM {s}.csv_files WHERE file_name = %s OR file_hash = %s"
+                    "SELECT 1 FROM {s}.csv_files WHERE (file_name = %s AND mode <> 'dynamic') OR file_hash = %s"
                 ).format(s=sql.Identifier(uploads_schema())),
                 (file_name, file_hash),
             )

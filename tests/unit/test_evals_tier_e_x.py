@@ -127,6 +127,139 @@ class TierEColumnSignatureQuery(unittest.TestCase):
 
 
 @pytest.mark.unit
+class TierEEmptySchemaControl(unittest.TestCase):
+    """Scenario 02, the negative control for scenario 01.
+
+    Against a real server it proves scenario 01 can see "a deploy wrote nothing".
+    Here psql and the schema query are mocked, to pin the control's own logic:
+    above all that it FAILS when the comparison stops reporting an empty schema,
+    since a control that cannot fail is worth nothing.
+    """
+
+    REF = {"t%d" % i: ["id:uuid:NO"] for i in range(12)}
+    EXPECTED = {
+        "reference_env": "dev",
+        "expected": {"min_reference_tables": 12, "empty_schema_tables": 0,
+                     "diff_reports_missing_tables": True},
+    }
+
+    def _run(self, signatures, psql=None, diff=None, expected=None):
+        """Run the control; returns (result, psql mock, signature mock)."""
+        ok = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+        result = runner.ScenarioResult(tier="e", name="02_empty_schema_is_detected")
+        with patch.object(runner, "_column_signature", side_effect=signatures) as sig, \
+             patch.object(runner, "_psql_run",
+                          **({"side_effect": psql} if psql else {"return_value": ok})) as run:
+            if diff is None:
+                runner._run_empty_schema_negative_control(result, expected or self.EXPECTED)
+            else:
+                with patch.object(runner, "_diff_signatures", return_value=diff):
+                    runner._run_empty_schema_negative_control(result, expected or self.EXPECTED)
+        return result, run, sig
+
+    @staticmethod
+    def _sql(run):
+        return [c.args[1] for c in run.call_args_list]
+
+    def test_passes_when_an_empty_schema_reads_empty_and_the_comparison_flags_it(self):
+        result, run, _ = self._run([self.REF, {}])
+        self.assertTrue(result.passed, result.errors)
+        self.assertEqual(result.actual["reference_tables"], 12)
+        self.assertEqual(result.actual["empty_schema_tables"], 0)
+        self.assertGreaterEqual(result.actual["differences_reported"], 1)
+
+    def test_fails_when_the_comparison_no_longer_reports_the_missing_tables(self):
+        # The point of a control: neutralise the thing it guards and it must go red.
+        result, _, _ = self._run([self.REF, {}], diff=[])
+        self.assertFalse(result.passed)
+        self.assertTrue(any("would pass a deploy that wrote nothing" in e
+                            for e in result.errors), result.errors)
+
+    def test_fails_when_an_empty_schema_reports_tables(self):
+        result, _, _ = self._run([self.REF, {"x": ["id:uuid:NO"]}])
+        self.assertFalse(result.passed)
+        self.assertIn("an empty schema returned 1 tables, expected 0", result.errors)
+
+    def test_a_failed_query_on_the_empty_schema_is_not_read_as_no_tables(self):
+        result, _, _ = self._run([self.REF, RuntimeError("connection lost")])
+        self.assertFalse(result.passed)
+        self.assertTrue(any("must not be reported as 'no tables'" in e
+                            and "connection lost" in e for e in result.errors), result.errors)
+
+    def test_refuses_to_run_against_an_empty_reference_and_creates_nothing(self):
+        result, run, _ = self._run([{}])
+        self.assertFalse(result.passed)
+        self.assertTrue(any("Deploy it first" in e for e in result.errors), result.errors)
+        run.assert_not_called()
+
+    def test_a_failed_reference_query_is_reported_and_creates_nothing(self):
+        result, run, _ = self._run([RuntimeError("db down")])
+        self.assertFalse(result.passed)
+        self.assertIn("reference env dev: db down", result.errors)
+        run.assert_not_called()
+
+    def test_creates_then_drops_the_throwaway_schema(self):
+        _, run, _ = self._run([self.REF, {}])
+        sql = self._sql(run)
+        self.assertEqual(len(sql), 2)
+        self.assertIn("CREATE SCHEMA", sql[0])
+        self.assertTrue(sql[1].startswith("DROP SCHEMA IF EXISTS"))
+        self.assertIn(runner._EMPTY_CONTROL_SCHEMA, sql[1])
+
+    def test_drops_the_throwaway_schema_even_when_the_check_fails(self):
+        _, run, _ = self._run([self.REF, RuntimeError("boom")])
+        self.assertTrue(self._sql(run)[-1].startswith("DROP SCHEMA IF EXISTS"))
+
+    def test_never_drops_with_cascade(self):
+        _, run, _ = self._run([self.REF, {}])
+        self.assertFalse(any("CASCADE" in q.upper() for q in self._sql(run)), self._sql(run))
+
+    def test_a_failed_drop_is_reported(self):
+        ok = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+        bad = subprocess.CompletedProcess([], 1, stdout="", stderr="ERROR: cannot drop")
+        result, _, _ = self._run([self.REF, {}], psql=[ok, bad])
+        self.assertFalse(result.passed)
+        self.assertTrue(any("could not drop the throwaway schema" in e
+                            and "cannot drop" in e for e in result.errors), result.errors)
+
+    def test_a_failed_create_is_reported_and_no_schema_query_is_run_on_it(self):
+        bad = subprocess.CompletedProcess([], 1, stdout="", stderr="ERROR: permission denied")
+        result, _, sig = self._run([self.REF], psql=[bad])
+        self.assertFalse(result.passed)
+        self.assertTrue(any("could not create the throwaway schema" in e
+                            for e in result.errors), result.errors)
+        self.assertEqual(sig.call_count, 1, "only the reference was queried")
+
+    def test_an_unknown_reference_env_is_reported(self):
+        result, run, _ = self._run([], expected={"reference_env": "nope", "expected": {}})
+        self.assertFalse(result.passed)
+        self.assertTrue(any("not one of the environments" in e for e in result.errors))
+        run.assert_not_called()
+
+    def test_the_scenario_is_dispatched_by_name(self):
+        scenario = Path("evals/datasets/tier_e/02_empty_schema_is_detected")
+        with patch.object(runner, "_load_expected", return_value={"expected": {}}), \
+             patch.object(runner, "_can_connect_pg", return_value=True), \
+             patch.object(runner, "_run_empty_schema_negative_control") as control:
+            runner.run_tier_e_scenario(scenario)
+        control.assert_called_once()
+
+    def test_an_unknown_tier_e_scenario_is_still_an_error(self):
+        with patch.object(runner, "_load_expected", return_value={"expected": {}}), \
+             patch.object(runner, "_can_connect_pg", return_value=True):
+            result = runner.run_tier_e_scenario(Path("evals/datasets/tier_e/99_unknown"))
+        self.assertIn("Unknown tier-E scenario: 99_unknown", result.errors)
+
+    def test_the_scenario_files_exist_and_agree(self):
+        root = Path(__file__).resolve().parents[2] / "evals"
+        self.assertTrue((root / "datasets/tier_e/02_empty_schema_is_detected/NOTES.txt").is_file())
+        expected = runner._load_expected("e", "02_empty_schema_is_detected")
+        self.assertEqual(expected["scenario"], "02_empty_schema_is_detected")
+        self.assertEqual(expected["expected"]["empty_schema_tables"], 0)
+        self.assertIs(expected["expected"]["diff_reports_missing_tables"], True)
+
+
+@pytest.mark.unit
 class TierXSqliteStructure(unittest.TestCase):
     """O-08: SQLite DDL execution and structural readback."""
 

@@ -13,7 +13,7 @@ remediation text rather than skipping.
 
 Run::
 
-    pytest tests/system_integration/test_te_loader_integration.py
+    pytest tests/test_te_loader_integration.py
 
 Requires a provisioned dev environment:
     bash scripts/provision_full_test_env.sh
@@ -235,9 +235,9 @@ class TeUploadOrganisations(unittest.TestCase):
 
 @pytest.mark.integration
 class DynamicOverwriteOfTeOriginFile(unittest.TestCase):
-    """Issue #27 — a dynamic-mode overwrite of a TE-origin registry entry must
-    not attempt to DROP the shared T&E table (table_name is "schema.table" for
-    TE-mode rows, not a bare csv_<hash> identifier this schema owns)."""
+    """Issue #27, reworked for M5 — a dynamic upload that reuses a T&E file's name must not
+    touch the shared T&E table (table_name is "schema.table" for TE-mode rows) or its registry
+    entry. It is a dataset of its own; nothing is overwritten (decision 2)."""
 
     @classmethod
     def setUpClass(cls):
@@ -281,10 +281,9 @@ class DynamicOverwriteOfTeOriginFile(unittest.TestCase):
         cls.ctx.__exit__(None, None, None)
         settings.allow_destructive = cls._orig_allow_destructive
 
-    def test_dynamic_overwrite_of_te_origin_entry_succeeds(self):
-        """A dynamic-mode overwrite of a filename previously registered in
-        TE mode must succeed (not crash, not silently no-op) and the registry
-        must reflect the new dynamic-mode table, not a stale TE reference."""
+    def test_dynamic_upload_with_a_te_files_name_leaves_the_te_entry_alone(self):
+        """The dynamic upload succeeds, and the registry then holds both the T&E entry and the
+        new dynamic dataset."""
         pid = os.getpid()
         org_name = f"TE_TEST_{pid}_overwrite_origin"
         self.__class__._inserted.append(org_name)
@@ -305,7 +304,7 @@ class DynamicOverwriteOfTeOriginFile(unittest.TestCase):
             "/api/csv/upload",
             json={
                 "fileName": fname,
-                "content": "col_a\nsome_value\n",
+                "content": f"col_a\nsome_value_{pid}\n",
                 "overwrite": True,
             },
         ).json()
@@ -318,13 +317,10 @@ class DynamicOverwriteOfTeOriginFile(unittest.TestCase):
         files = self.client.get("/api/csv/files").json()
         matches = [f for f in files if f["file_name"] == fname]
         self.assertEqual(
-            len(matches), 1,
-            f"expected exactly one registry entry for {fname!r}, found {matches}",
-        )
-        self.assertEqual(
-            matches[0]["mode"], "dynamic",
-            "registry entry must reflect the new dynamic-mode table, not the stale TE entry",
+            sorted(m["mode"] for m in matches), ["dynamic", "te"],
+            f"expected the T&E entry and the new dynamic dataset for {fname!r}, found {matches}",
         )
 
-        # Clean up the dynamic table this test created.
-        self.client.delete(f"/api/csv/files/{matches[0]['id']}")
+        # Clean up both registry entries (and the dynamic table) this test created.
+        for m in matches:
+            self.client.delete(f"/api/csv/files/{m['id']}")

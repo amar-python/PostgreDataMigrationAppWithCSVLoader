@@ -10,31 +10,20 @@ import unittest
 import uuid
 
 import pytest
-from fastapi.testclient import TestClient
 from psycopg2 import sql
 
 from api.config import settings
 from api.db import Conn
-from api.main import app
 
 
+# self.client comes from live_api; registry_cleanup deletes what these tests registered.
 @pytest.mark.integration
+@pytest.mark.usefixtures("destructive_enabled", "live_api", "registry_cleanup")
 class EveryRowFailed(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls._orig_allow_destructive = settings.allow_destructive
-        settings.allow_destructive = True
-        cls.ctx = TestClient(app)
-        cls.client = cls.ctx.__enter__()
-
-    @classmethod
-    def tearDownClass(cls):
-        settings.allow_destructive = cls._orig_allow_destructive
-        cls.ctx.__exit__(None, None, None)
-
     def setUp(self):
         self.tag = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
         self.name = f"allfail_{self.tag}.csv"
+        self.registry_cleanup.append(self.name)
 
     def _upload(self, content: str, types: list[str], overwrite: bool = False) -> dict:
         return self.client.post("/api/csv/upload", json={

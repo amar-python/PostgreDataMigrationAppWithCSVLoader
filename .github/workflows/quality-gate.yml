@@ -164,17 +164,22 @@ jobs:
       # the build on any skip.
       # The API reads PGDATABASE (api/config.py). The schema lives in
       # te_mgmt_dev, not the job-level default "postgres" (issue #45).
-      # Accessibility tests need Playwright browsers and a running frontend,
-      # neither of which exists in this job — they run in the `accessibility`
-      # job below. Deselected, not skipped: test_report.py accounts for them
-      # under NOT RUN.
+      # Accessibility scans need a browser and the frontend, not this database;
+      # they run in the `accessibility` job below (#168) and are reported here as
+      # NOT RUN, not as skipped.
       - name: Full test suite — final result with skip accounting
         env:
           PGDATABASE: te_mgmt_dev
         run: python3 scripts/test_report.py --markers "not accessibility" --strict
 
+      # M7 (#111, BR-37): the API tests again, with every connection that isn't to this machine refused and
+      # recorded. Fails if the application tries one, even when the code swallows the error.
+      - name: API tests with network egress blocked
+        env:
+          PGDATABASE: te_mgmt_dev
+        run: python3 -m pytest tests/system --block-egress -q
+
       # #194: measure api/services coverage with per-loader floors.
-      # Accessibility tests need a browser and a running frontend (own job below).
       - name: api/services coverage gate
         env:
           PGDATABASE: te_mgmt_dev
@@ -195,20 +200,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-  # WCAG 2.1 AA scans (#168). Needs a browser and a running frontend, so it
-  # cannot ride either job above.
-  #
-  # The scan step is continue-on-error ON PURPOSE: the frontend has known,
-  # unfixed accessibility defects (sonner toast contrast, selects without
-  # accessible names, download-menu aria-labels, upload progress bar), so the
-  # scans fail today and that failure is the backlog, not a regression. The
-  # report is uploaded as an artifact either way. Remove continue-on-error —
-  # and only then add this job to branch protection — once the frontend fixes
-  # land.
+  # #168: WCAG 2.1 A and AA scans of the frontend (csv-table-hub-main) with
+  # Playwright + axe-core in Chromium, against the Vite dev server. The API is
+  # stubbed, so this job needs no database and a backend-only change cannot
+  # alter what it scans. Known violations are recorded in
+  # tests/accessibility/known_violations.json: the job fails on a NEW violation
+  # and when a recorded one is fixed (so the list only shrinks). Not yet a
+  # required check; make it one after a few green runs (see the issue).
   accessibility:
-    name: accessibility (WCAG 2.1 AA)
+    name: accessibility (Playwright + axe-core, WCAG 2.1 AA)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -220,56 +221,46 @@ jobs:
           cache: 'pip'
           cache-dependency-path: |
             requirements-dev.txt
+            requirements-a11y.txt
             api/requirements.txt
 
-      - name: Install dev dependencies
-        run: pip install -r requirements-dev.txt -r api/requirements.txt
-
-      - name: Install Playwright Chromium
-        run: python -m playwright install --with-deps chromium
-
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: csv-table-hub-main/package-lock.json
 
-      # npm, not bun: bun.lock is out of step with package.json (zod ^3 vs ^4),
-      # so `bun install --frozen-lockfile` fails; package-lock.json is current.
+      - name: Install dev dependencies
+        # api/requirements.txt is needed too: tests/conftest.py imports the API
+        # app, so pytest collection fails without FastAPI.
+        run: pip install -r requirements-dev.txt -r api/requirements.txt -r requirements-a11y.txt
+
       - name: Install frontend dependencies
         working-directory: csv-table-hub-main
-        run: npm ci --no-audit --no-fund
+        run: npm ci
 
-      - name: Start the Vite dev server
+      # #112: the frontend's own unit tests (vitest). No job ran them before, so a change to the one place the app
+      # builds HTML by hand (the print window in src/lib/export.ts) could lose its escaping without anything failing.
+      - name: Frontend unit tests (vitest)
         working-directory: csv-table-hub-main
-        run: |
-          npx vite dev --host 127.0.0.1 --port 5173 --strictPort > "$RUNNER_TEMP/vite.log" 2>&1 &
-          for i in $(seq 1 60); do
-            if curl -fsS -o /dev/null http://127.0.0.1:5173/auth; then
-              echo "dev server up after ${i}s"; exit 0
-            fi
-            sleep 1
-          done
-          echo "::error::dev server did not answer on 127.0.0.1:5173 within 60s"
-          cat "$RUNNER_TEMP/vite.log"
-          exit 1
+        run: npm test
 
-      - name: WCAG 2.1 AA scans
-        continue-on-error: true
+      - name: Install Chromium for Playwright
+        run: python -m playwright install --with-deps chromium
+
+      # Prints the same final block as the other jobs. --strict fails on any skip.
+      # The scans start `npm run dev` themselves (tests/accessibility/conftest.py).
+      - name: Accessibility scans — final result with skip accounting
         env:
-          A11Y_BASE_URL: http://127.0.0.1:5173
-        run: |
-          python -m pytest tests/accessibility -v \
-            --junitxml="$RUNNER_TEMP/accessibility.xml"
+          A11Y_REPORT_DIR: accessibility-report
+        run: python3 scripts/test_report.py --markers accessibility --strict
 
-      - name: Upload accessibility results
+      - name: Upload accessibility report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: accessibility-results
-          path: |
-            ${{ runner.temp }}/accessibility.xml
-            ${{ runner.temp }}/vite.log
+          name: accessibility-report
+          path: accessibility-report/
           if-no-files-found: ignore
           retention-days: 30

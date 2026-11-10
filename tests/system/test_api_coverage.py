@@ -317,16 +317,24 @@ class AuditLogEndpoint(_IntegrationBase):
 
 @pytest.mark.integration
 class OverwriteUpload(_IntegrationBase):
-    """The overwrite flag must replace, not refuse, a duplicate filename."""
+    """A repeated filename becomes the next version; nothing is overwritten (M5, decision 2)."""
 
-    def test_overwrite_replaces_existing_file(self):
-        content_a = f"col_a,col_b\n{self.tag},first\n"
-        content_b = f"col_a,col_b\n{self.tag},second\n"
-        self._upload_dynamic(content=content_a)
-        r = self._upload_dynamic(content=content_b, overwrite=True)
-        body = r.json()
+    def test_same_name_new_content_is_the_next_version(self):
+        r1 = self._upload_dynamic(content=f"col_a,col_b\n{self.tag},first\n").json()
+        body = self._upload_dynamic(content=f"col_a,col_b\n{self.tag},second\n").json()
         self.assertEqual(body["status"], "ok", body)
-        self.assertTrue(body.get("overwritten"))
+        self.assertEqual((r1["version"], body["version"]), (1, 2))
+        self.assertFalse(body["overwritten"])
+        tables = {f["table_name"] for f in self.client.get("/api/csv/files").json() if self.tag in f["file_name"]}
+        self.assertEqual(tables, {r1["tableName"], body["tableName"]}, "the earlier version must survive")
+
+    def test_overwrite_flag_still_never_replaces(self):
+        self._upload_dynamic(content=f"col_a,col_b\n{self.tag},first\n")
+        body = self._upload_dynamic(content=f"col_a,col_b\n{self.tag},second\n", overwrite=True).json()
+        self.assertEqual(body["status"], "ok", body)
+        self.assertEqual(body["version"], 2)
+        self.assertFalse(body["overwritten"])
+        self.assertIsNone(body["replacedFileName"])
 
     def test_overwrite_false_refuses_duplicate(self):
         content = f"col_a,col_b\n{self.tag},val\n"
@@ -334,26 +342,17 @@ class OverwriteUpload(_IntegrationBase):
         r = self._upload_dynamic(content=content, overwrite=False)
         self.assertEqual(r.json()["status"], "duplicate_file")
 
-    def test_overwrite_creates_new_table(self):
-        content_a = f"col_a,col_b\n{self.tag},first\n"
-        content_b = f"col_a,col_b\n{self.tag},second\n"
-        r1 = self._upload_dynamic(content=content_a)
-        table_a = r1.json()["tableName"]
-        r2 = self._upload_dynamic(content=content_b, overwrite=True)
-        table_b = r2.json()["tableName"]
-        self.assertNotEqual(table_a, table_b,
-                            "different content should produce a different table hash")
+    def test_overwrite_flag_does_not_bypass_exact_file_dedup(self):
+        content = f"col_a,col_b\n{self.tag},val\n"
+        self._upload_dynamic(content=content)
+        body = self._upload_dynamic(content=content, overwrite=True).json()
+        self.assertEqual(body["status"], "duplicate_file", body)
 
-    def test_overwrite_response_has_fields(self):
-        content_a = f"col_a,col_b\n{self.tag},first\n"
-        content_b = f"col_a,col_b\n{self.tag},second\n"
-        self._upload_dynamic(content=content_a)
-        r = self._upload_dynamic(content=content_b, overwrite=True)
-        body = r.json()
-        self.assertIn("overwritten", body)
-        self.assertIn("replacedFileName", body)
-        self.assertIsInstance(body["overwritten"], bool)
-        self.assertIsInstance(body["replacedFileName"], str)
+    def test_each_version_has_its_own_table(self):
+        t1 = self._upload_dynamic(content=f"col_a,col_b\n{self.tag},first\n").json()["tableName"]
+        t2 = self._upload_dynamic(content=f"col_a,col_b\n{self.tag},second\n").json()["tableName"]
+        self.assertNotEqual(t1, t2)
+        self.assertTrue(t1.endswith("_v1") and t2.endswith("_v2"), (t1, t2))
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +424,7 @@ class TeUploadPipeline(_IntegrationBase):
         body = r.json()
         self.assertEqual(body["status"], "error", body)
         self.assertGreaterEqual(body["failedRows"], 1,
-            "Invalid enum value should fail at row level, not crash the endpoint")
+                                "Invalid enum value should fail at row level, not crash the endpoint")
         self.assertIn("rowNumber", body["rowErrors"][0])
 
     def test_null_in_not_null_column_reported_per_row(self):
@@ -435,7 +434,7 @@ class TeUploadPipeline(_IntegrationBase):
         body = r.json()
         self.assertEqual(body["status"], "error", body)
         self.assertGreaterEqual(body["failedRows"], 1,
-            "NULL in a NOT NULL column should fail at row level")
+                                "NULL in a NOT NULL column should fail at row level")
         self.assertIn("rowNumber", body["rowErrors"][0])
 
     def test_unknown_target_table_returns_error(self):
@@ -454,7 +453,7 @@ class TeUploadPipeline(_IntegrationBase):
         """A T&E re-upload that loads rows replaces the registry entry.
 
         An identical file would collide on the unique name and change nothing
-        (#215, see tests/test_te_reupload_registry.py).
+        (#215, see tests/system/test_te_reupload_registry.py).
         """
         r1 = self._upload_te(self._org_csv(f"{self.tag}_reup_1"))
         self.assertEqual(r1.json()["status"], "ok", r1.json())
@@ -463,7 +462,7 @@ class TeUploadPipeline(_IntegrationBase):
         files = self.client.get("/api/csv/files").json()
         matches = [f for f in files if f["file_name"] == f"{self.tag}.csv"]
         self.assertEqual(len(matches), 1,
-            "Re-upload should replace the registry entry, not create a duplicate")
+                         "Re-upload should replace the registry entry, not create a duplicate")
 
     def test_te_client_side_type_validation_reports_column_and_value(self):
         """BUG-028: a bad value on a client-validatable column (BOOLEAN here)
@@ -483,14 +482,14 @@ class TeUploadPipeline(_IntegrationBase):
         self.assertEqual(body["status"], "ok", body)
         self.assertEqual(body["failedRows"], 1)
         self.assertEqual(body["insertedRows"], 1,
-            "The valid row should still land while the bad row is skipped.")
+                         "The valid row should still land while the bad row is skipped.")
         self.assertTrue(body["rowErrors"], "rowErrors must be populated")
         err = body["rowErrors"][0]
         # These two fields are the fingerprint of the client-side path.
         self.assertEqual(err.get("column"), "is_active",
-            f"Client-side validator must set column; got {err!r}")
+                         f"Client-side validator must set column; got {err!r}")
         self.assertEqual(err.get("value"), "NOT_A_BOOL",
-            f"Client-side validator must set value; got {err!r}")
+                         f"Client-side validator must set value; got {err!r}")
         self.assertIn("true/false", err["reason"].lower())
 
     def test_te_upload_rejects_over_row_cap(self):
@@ -514,7 +513,7 @@ class TeUploadPipeline(_IntegrationBase):
             files = self.client.get("/api/csv/files").json()
             matches = [f for f in files if f["file_name"] == f"{self.tag}.csv"]
             self.assertFalse(matches,
-                "An over-cap upload must not create a registry entry.")
+                             "An over-cap upload must not create a registry entry.")
         finally:
             cfg.settings.MAX_ROWS = original
 
@@ -530,6 +529,6 @@ class DeleteGateUnit(unittest.TestCase):
         try:
             r = client.delete("/api/csv/files/1")
             self.assertEqual(r.status_code, 403,
-                "DELETE must return 403 when API_ALLOW_DESTRUCTIVE=false")
+                             "DELETE must return 403 when API_ALLOW_DESTRUCTIVE=false")
         finally:
             cfg.settings.allow_destructive = original

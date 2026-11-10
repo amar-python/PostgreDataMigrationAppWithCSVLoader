@@ -5,7 +5,16 @@
 #   2. Load input CSVs (input_data/load_input_data.sql)
 #   3. Run the eval suite (evals/runner.py --tiers p,i,s)
 #
-# Entrypoint dispatches on the first arg: deploy | load | evals | shell.
+# Entrypoint dispatches on the first arg: deploy | render | load | evals | full | shell.
+#
+# The image holds only the launcher TEMPLATES (build/environments/*.example.sql);
+# the concrete env_<env>.sql carries credentials and is never baked in (#174).
+# `deploy` writes it at run time from the container's settings (#172):
+#   PGDATABASE   -> the database to deploy into (db_name)
+#   PGUSER       -> its owner and the login that deploys (db_owner)
+#   APP_DB_PASSWORD -> password of the application role the deployment creates;
+#                  passed to psql by \getenv, never written to a file or logged.
+# `render` prints the launcher it would use, without touching PostgreSQL.
 #
 # Build from the PostgreDataMigrationApp repo root:
 #   docker build -f infra/Dockerfile -t te-migration:dev .
@@ -17,6 +26,7 @@
 #   docker run --rm \
 #     -e PGHOST=postgres -e PGPORT=5432 -e PGUSER=postgres \
 #     -e PGPASSWORD=devpass -e PGDATABASE=te_dev \
+#     -e APP_DB_PASSWORD=app-devpass \
 #     -e TARGET_ENV=dev \
 #     te-migration:dev deploy
 
@@ -47,7 +57,22 @@ WORKDIR /opt/migration
 # Copy only what the runner needs (NOT the .git folder, IDE configs, etc.).
 # Build context is the PostgreDataMigrationApp repo root, so paths are
 # relative to that — NO `PostgreDataMigrationApp/` prefix.
-COPY --chown=app:app build/        ./build/
+#
+# RV-S4 (#174): build/ is copied as an explicit source list, NOT as
+# `COPY build/ ./build/`. A broad copy pulls in whatever a developer's checkout
+# happens to hold — build/config.local.env (written by setup.sh) and the
+# concrete build/environments/env_<env>.sql files both carry real credentials,
+# are gitignored, and gitignore does not filter the Docker build context. They
+# are also listed in .dockerignore; this list is the second layer, and the one
+# that keeps holding when someone adds a new config file under build/.
+# Adding a file to the image means adding it here on purpose.
+COPY --chown=app:app build/*.sh                        ./build/
+COPY --chown=app:app build/*.sql                       ./build/
+COPY --chown=app:app build/config.env.example          ./build/
+COPY --chown=app:app build/environments/*.example.sql  ./build/environments/
+COPY --chown=app:app build/schema/                     ./build/schema/
+COPY --chown=app:app build/csv/                        ./build/csv/
+COPY --chown=app:app build/adapters/                   ./build/adapters/
 COPY --chown=app:app tests/        ./tests/
 COPY --chown=app:app evals/        ./evals/
 COPY --chown=app:app infra/entrypoint.sh ./entrypoint.sh

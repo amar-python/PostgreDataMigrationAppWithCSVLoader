@@ -7,5 +7,9 @@ pytestmark = [pytest.mark.integration, pytest.mark.parity]
 
 
 class DevEnvironment(EnvironmentContract, unittest.TestCase):
-    ENV = "dev"; DB = "te_mgmt_dev"; SCHEMA = "te_dev"
-    APP_USER = "te_dev_user"; CONN_LIMIT = 10; SEEDED = True
+    ENV = "dev"
+    DB = "te_mgmt_dev"
+    SCHEMA = "te_dev"
+    APP_USER = "te_dev_user"
+    CONN_LIMIT = 10
+    SEEDED = True

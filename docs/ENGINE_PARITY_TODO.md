@@ -96,7 +96,7 @@ temp_documents   -> references test_programs   (independent of the chain above)
 Then, in the same commit, move each table from `known_missing_tables` into
 `expected_tables` in
 `evals/expected/tier_x/01_sqlite_schema_structure.json`. Tier X will fail until
-you do — `tests/test_evals_tier_e_x.py` asserts that the two lists together
+you do — `tests/unit/test_evals_tier_e_x.py` asserts that the two lists together
 account for all 12 tables, and that everything listed as missing is genuinely
 absent. That is the reminder working as designed.
 

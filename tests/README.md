@@ -1,42 +1,71 @@
-# Test categories
+# Tests
 
-Tests are grouped by **what they need to run**, not by what they cover. The
-folder is the grouping; `tests/conftest.py` gives every test the marker of its
-folder, so `pytest -m sit` and `pytest tests/system_integration` select the
-same set.
+Python tests are grouped by **what they need to run**, one folder per category. The
+folder a test lives in is its category; `conftest.py` adds the matching marker
+automatically.
 
-| Folder | Marker | Needs | Target |
+| Folder | Needs | Marker | Run with |
 |---|---|---|---|
-| `unit/` | `unit` | nothing | `make test-unit` |
-| `system/` | `system` | PostgreSQL | `make test-system` |
-| `system_integration/` | `sit` | PostgreSQL, a deployed environment | `make test-sit` |
-| `performance/` | `performance` | PostgreSQL | `make test-performance` |
-| `accessibility/` | `accessibility` | Playwright browsers + the Vite dev server | `make test-accessibility` |
-| `uat/` | `uat` | PostgreSQL | `make test-uat` |
+| `unit/` | Nothing: no database, no network. Includes the regression, security-scan and snapshot tests | `unit` (explicit) | `make test-unit` |
+| `system/` | The API and a live PostgreSQL | `system` (automatic) | `make test-system` |
+| `system_integration/` | The whole pipeline: shell loaders, every deployed environment, cross-environment parity | `sit` (automatic) | `make test-sit` |
+| `performance/` | Load and timing tests (none yet) | `performance` (automatic) | `make test-performance` |
+| `accessibility/` | Chromium, the frontend's dev server and Node; the API is stubbed. WCAG 2.1 AA scans, own CI job ([README](accessibility/README.md), #168) | `accessibility` (automatic) | `make test-accessibility` |
+| `uat/` | User-acceptance scenarios (none yet) | `uat` (automatic) | `make test-uat` |
 
-The older behaviour markers (`integration`, `e2e`, `regression`, `security`,
-`snapshot`, `parity`) still apply and still drive CI's tier split. A test can
-carry both: `tests/unit/test_regression.py` is `unit` *and* `regression`.
+Which folder does a new test go in? Ask what is the least it needs: nothing →
+`unit/`; the API against PostgreSQL → `system/`; several components or environments
+together → `system_integration/`.
 
-## Which folder does a new test go in?
+The finer markers still work and are what CI selects on: `integration`, `e2e`,
+`regression`, `security`, `snapshot`, `parity`. The free tier (and the Windows job)
+runs `unit or regression or security or snapshot`, so a test that needs a database
+must not carry `unit`.
 
-- Imports a module and asserts on its return value → `unit/`
-- Drives one component through its public surface (the HTTP API, the loader
-  CLI) and needs a database → `system/`
-- Crosses components, or checks a deployed schema or environment → `system_integration/`
-- Asserts a timing or throughput budget → `performance/`
-- Asserts a WCAG rule against rendered pages → `accessibility/`
-- Traces to an issue or a user story and reads as a user would describe it → `uat/`
+A file is placed by its heaviest need. Six files in `system/` also hold database-free
+classes (marked `unit`); they run in the free tier because that selects on the marker,
+not the folder. So `-m unit` and `-m system` overlap by those classes.
 
-## No-skip policy
+## Not Python, so not moved
 
-An unmet prerequisite **fails** with remediation text; it does not skip.
-`scripts/test_report.py --strict` enforces this in CI. The shared fixtures in
-`tests/conftest.py` (`live_api`, `registry_cleanup`, `te_org_cleanup`,
-`destructive_enabled`, `unique_tag`) already follow it — prefer them over a
-per-module `setUpClass` that swallows a connection error.
+`suites/` and `framework/` are the SQL assertion suites (`run_tests.sh` runs them),
+`snapshots/` holds golden files, and `run_python_tests.ps1` is the Windows runner.
 
-## Non-Python suites
+## Running
 
-`suites/` and `framework/` hold the SQL assertion suites, run by
-`evals/runner.py` (Tier S), not by pytest.
+```bash
+make test-unit                       # one category
+python -m pytest tests/system -v     # the same, directly
+python -m pytest -m "not accessibility"   # everything except the browser job
+python -m pytest tests/system/test_roles.py   # one file
+```
+
+Database-backed tests **fail, never skip**, when PostgreSQL isn't reachable; start one
+first (`scripts/provision_full_test_env.sh`). A category with no tests yet (`make
+test-performance`, `make test-uat`) reports that and succeeds.
+
+## Shared fixtures (`conftest.py`)
+
+For tests that drive the live API. `unittest.TestCase` classes can't take fixture
+arguments, so each fixture also sets an attribute; use them with
+`@pytest.mark.usefixtures(...)`:
+
+| Fixture | Scope | Gives you |
+|---|---|---|
+| `live_api` | class | the API started with its database pool; `self.client` |
+| `destructive_enabled` | class | `API_ALLOW_DESTRUCTIVE` on for the class, restored after |
+| `registry_cleanup` | test | `self.registry_cleanup`: append a file name and its registry row is deleted afterwards |
+| `te_org_cleanup` | test | `self.te_org_cleanup`: append organisation names inserted into the T&E schema; deleted afterwards |
+
+`system/test_failed_uploads.py` and one test in `system/test_review.py` use them. The
+other 19 files that start the API by hand haven't been converted.
+
+## Paths
+
+A test file reaches the repository root with `Path(__file__).resolve().parents[2]`
+(`tests/<category>/<file>`); `tests/snapshots/` is `parents[1] / "snapshots"`.
+
+## The catalogue
+
+`docs/TEST_CASES.md` lists every test and is generated: run
+`python3 scripts/test_catalogue.py` after adding or moving tests. CI fails if it is stale.

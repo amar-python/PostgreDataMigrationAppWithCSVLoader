@@ -93,6 +93,36 @@ class TestAllJobsHaveConsistentStructure(unittest.TestCase):
             )
 
 
+class TestAccessibilityJob(unittest.TestCase):
+    """#168: the accessibility scans have their own job, and no other job collects them."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.jobs = _load_workflow().get("jobs", {})
+
+    def _run_text(self, job_id: str) -> str:
+        return "\n".join(s.get("run", "") for s in self.jobs[job_id].get("steps", []))
+
+    def test_has_accessibility_job_that_runs_only_the_accessibility_marker(self):
+        self.assertIn("accessibility", self.jobs)
+        self.assertIn('--markers accessibility', self._run_text("accessibility"))
+
+    def test_accessibility_job_installs_a_browser_and_the_frontend(self):
+        text = self._run_text("accessibility")
+        self.assertIn("playwright install", text)
+        self.assertIn("npm ci", text)
+        self.assertIn("requirements-a11y.txt", text)
+
+    def test_integration_job_excludes_accessibility_everywhere_it_runs_the_whole_tree(self):
+        text = self._run_text("integration-postgres")
+        self.assertIn('--markers "not accessibility"', text)
+        self.assertIn('pytest tests/ -m "not accessibility"', text)
+
+    def test_free_tier_markers_cannot_select_accessibility_tests(self):
+        text = self._run_text("free-tier")
+        self.assertNotIn("accessibility", text.split("--markers", 1)[1].splitlines()[0])
+
+
 class TestGapAnalysisG2Accepted(unittest.TestCase):
     """G2 is accepted as out-of-scope, not closed.
     Checks the decision is recorded in docs/GAP_ANALYSIS.md.

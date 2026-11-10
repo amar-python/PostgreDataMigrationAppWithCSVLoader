@@ -3,6 +3,10 @@
 import os
 
 
+# M7 (#111): the classifications a deployment can honour. PROTECTED needs IRAP-assessed hosting (#49).
+CLASSIFICATIONS = ("UNOFFICIAL", "OFFICIAL", "OFFICIAL: Sensitive")
+
+
 class Settings:
     PG_HOST: str = os.environ.get("PGHOST", "localhost")
     PG_PORT: int = int(os.environ.get("PGPORT", "5432"))
@@ -19,6 +23,10 @@ class Settings:
     UPLOADS_SCHEMA: str = os.environ.get("CSV_UPLOADS_SCHEMA", "csv_uploads")
     # M2 (#92): tenants, users, memberships and sessions, shared by all tenants.
     CONTROL_SCHEMA: str = os.environ.get("CONTROL_SCHEMA", "control")
+    # M7 (#111, decision 7): marked on every response (X-Data-Classification); see api/policy.py.
+    DATA_CLASSIFICATION: str = os.environ.get("DATA_CLASSIFICATION", "OFFICIAL: Sensitive").strip()
+    # Minimum years to keep audit rows. Nothing in the app deletes them; this binds any operator purge.
+    AUDIT_RETENTION_YEARS: int = int(os.environ.get("AUDIT_RETENTION_YEARS", "7"))
     # Lifetime of a sign-in session, in hours.
     SESSION_TTL_HOURS: int = int(os.environ.get("SESSION_TTL_HOURS", "12"))
     # #102: lock an account after this many failed sign-ins within the window,
