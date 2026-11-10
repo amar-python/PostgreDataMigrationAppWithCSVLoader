@@ -200,30 +200,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-  # #112: the frontend's own unit tests (vitest). No other job ran them, so a change to the one place the app
-  # builds HTML by hand (the print window in src/lib/export.ts) could lose its escaping without anything failing.
-  frontend-tests:
-    name: frontend tests (vitest)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: csv-table-hub-main/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: csv-table-hub-main
-        run: npm ci
-
-      - name: Frontend unit tests
-        working-directory: csv-table-hub-main
-        run: npm test
-
   # #168: WCAG 2.1 A and AA scans of the frontend (csv-table-hub-main) with
   # Playwright + axe-core in Chromium, against the Vite dev server. The API is
   # stubbed, so this job needs no database and a backend-only change cannot
@@ -263,6 +239,12 @@ jobs:
       - name: Install frontend dependencies
         working-directory: csv-table-hub-main
         run: npm ci
+
+      # #112: the frontend's own unit tests (vitest). No job ran them before, so a change to the one place the app
+      # builds HTML by hand (the print window in src/lib/export.ts) could lose its escaping without anything failing.
+      - name: Frontend unit tests (vitest)
+        working-directory: csv-table-hub-main
+        run: npm test
 
       - name: Install Chromium for Playwright
         run: python -m playwright install --with-deps chromium
