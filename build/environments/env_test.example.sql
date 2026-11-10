@@ -1,4 +1,4 @@
-﻿-- env_test.example.sql  (TEMPLATE - safe to commit; no real secrets)
+-- env_test.example.sql  (TEMPLATE - safe to commit; no real secrets)
 -- Copy to env_test.sql (gitignored) and fill in, or inject app_password at deploy.
 \set env_label          TEST
 \set db_name            te_mgmt_test

@@ -42,6 +42,7 @@ PY_TESTS=(
     tests/test_tenant_isolation.py
     tests/test_roles.py
     tests/test_oidc.py
+    tests/test_sql_no_bom.py
 )
 
 # Collect scripts/*.py dynamically

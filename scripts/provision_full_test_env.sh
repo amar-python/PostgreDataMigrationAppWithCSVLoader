@@ -44,7 +44,7 @@ for env in "${ENVS[@]}"; do
     src="${BUILD}/environments/env_${env}.example.sql"
     dst="${BUILD}/environments/env_${env}.sql"
     [[ -f "$src" ]] || die "Missing template: $src"
-    cp "$src" "$dst"
+    sed '1s/^\xEF\xBB\xBF//' "$src" > "$dst"   # strip any UTF-8 BOM (breaks psql on Windows)
     ok "env_${env}.sql created from template"
 done
 
