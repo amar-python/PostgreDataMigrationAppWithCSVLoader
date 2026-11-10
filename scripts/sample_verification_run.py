@@ -100,7 +100,7 @@ def collect(api: Api, conn) -> dict:
     schema, table = resp["tableName"].split(".")
     cur.execute(f'SELECT name, org_type, country FROM "{schema}"."{table}" ORDER BY name')
     db_rows = [list(r) for r in cur.fetchall()]
-    cur.execute(f'SELECT file_hash, row_count, total_rows, failed_rows FROM "{schema}".csv_files WHERE file_name=%s',
+    cur.execute(f'SELECT file_hash, row_count, total_rows, failed_rows, id FROM "{schema}".csv_files WHERE file_name=%s',
                 ("orgs_sample.csv",))
     reg = cur.fetchone()
     expected_loaded = sorted(r for i, r in enumerate(src_rows, 1) if i not in EXPECTED_REJECTS)
@@ -108,7 +108,7 @@ def collect(api: Api, conn) -> dict:
         "file": "orgs_sample.csv", "bytes": len(orgs_bytes), "sha256": hashlib.sha256(orgs_bytes).hexdigest(),
         "source_rows": len(src_rows), "source_lines": {i: ",".join(r) for i, r in enumerate(src_rows, 1)},
         "api": a, "target": resp["tableName"], "db_row_count": len(db_rows), "db_rows": db_rows,
-        "registry": {"file_hash": reg[0], "row_count": reg[1], "total_rows": reg[2], "failed_rows": reg[3]},
+        "registry": {"file_hash": reg[0], "row_count": reg[1], "total_rows": reg[2], "failed_rows": reg[3], "id": reg[4]},
         "expected_rejects": EXPECTED_REJECTS,
         "rejected_row_numbers": sorted(e["rowNumber"] for e in resp.get("rowErrors", [])),
         "loaded_matches_source": sorted(db_rows) == expected_loaded,
@@ -133,6 +133,14 @@ def collect(api: Api, conn) -> dict:
         "duplicate_same_name": upload(api, "equipment_register.csv", eq, "dynamic")["response"],
         "duplicate_renamed": upload(api, "equipment_register_copy.csv", eq, "dynamic")["response"],
     }
+
+    # --- Re-upload of the T&E file (#215): every row now collides, so nothing may change --
+    again = upload(api, "orgs_sample.csv", orgs, "te", "organisations")["response"]
+    cur.execute(f'SELECT id, row_count, failed_rows FROM "{schema}".csv_files WHERE file_name=%s', ("orgs_sample.csv",))
+    after = cur.fetchall()
+    cur.execute(f'SELECT count(*) FROM "{schema}"."{table}"')
+    ev["te_reupload"] = {"status": again.get("status"), "inserted": again.get("insertedRows"),
+                         "registry_after": [list(r) for r in after], "db_row_count_after": cur.fetchone()[0]}
 
     # --- Observed deployment posture (read from the running system, not from our env) --
     unauth = urllib.request.Request(api.base + "/api/csv/files")
@@ -188,10 +196,17 @@ def checks(ev: dict) -> list[tuple[str, str, bool]]:
         ("Dynamic: the same content under a new filename is refused",
          f"{dy['duplicate_renamed'].get('status')} (reason: {dy['duplicate_renamed'].get('reason')})",
          dy["duplicate_renamed"].get("status") == "duplicate_file" and dy["duplicate_renamed"].get("reason") == "content"),
-        ("Audit: one entry per successful load; refused duplicates leave none",
+        ("Audit: one entry per successful load; refused or fully failed uploads leave none",
          f"{au['log']['total']} entries for 2 loads", au["log"]["total"] == 2 and len(entries) == 2),
         ("Audit: hash chain recomputed and intact",
          f"intact={au['verify'].get('intact')}, rows checked={au['verify'].get('rows')}", au["verify"].get("intact") is True),
+        ("T&E: re-uploading the same file, where every row now fails, is refused and changes nothing",
+         f"status {ev['te_reupload']['status']}; registry (id, loaded, failed) {ev['te_reupload']['registry_after']} "
+         f"vs before {[[te['registry']['id'], te['registry']['row_count'], te['registry']['failed_rows']]]}; "
+         f"database rows {ev['te_reupload']['db_row_count_after']}",
+         ev["te_reupload"]["status"] == "error"
+         and ev["te_reupload"]["registry_after"] == [[te["registry"]["id"], te["registry"]["row_count"], te["registry"]["failed_rows"]]]
+         and ev["te_reupload"]["db_row_count_after"] == te["db_row_count"]),
     ]
 
 
@@ -273,7 +288,7 @@ def render(ev: dict, rows: list[tuple[str, str, bool]]) -> str:
         "## 8. What this report does and does not show",
         "",
         "**Shows:** for these two files, every source row is either in the database or rejected with the database's own reason; "
-        "loaded values equal source values; file hashes are recorded correctly; duplicates are refused; the audit trail has one entry per successful load and its hash chain verifies.",
+        "loaded values equal source values; file hashes are recorded correctly; duplicates are refused; a re-upload that fails every row changes nothing; the audit trail has one entry per successful load and its hash chain verifies.",
         "",
         "**Does not show:**",
         "",
@@ -285,7 +300,8 @@ def render(ev: dict, rows: list[tuple[str, str, bool]]) -> str:
         f"{', so the database itself would not stop the API altering the audit log. The audit chain is designed to reveal such changes, but this run did not test that' if po['audit_log_owner'] in po['database_roles_connected'] else ''}.",
         "- Independent assurance. The checks were written and run by the system's developers. They are repeatable by a reviewer, not a third-party assessment.",
         "- Conformance to any Defence standard. No claim of alignment with ASDEFCON or any DID is made here.",
-        "- That re-uploading a file is safe. The re-upload case for T&E mode has a known defect, tracked as #215.",
+        "- Re-upload behaviour beyond check 13. Only one case was exercised: re-uploading an identical file, where every row fails. "
+        "Overwriting a file with changed content, and concurrent uploads, were not exercised here.",
         "",
         "**Reproduce:** deploy the dev schema to an empty database, create a tenant admin, start the API, then run "
         "`python scripts/sample_verification_run.py`. The raw responses behind this report are in "
