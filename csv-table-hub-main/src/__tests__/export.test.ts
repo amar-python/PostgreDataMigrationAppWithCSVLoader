@@ -369,3 +369,57 @@ describe("print window HTML (PDF) escapes everything user-supplied", () => {
     expect(written).toContain("<title>Audit report</title>");
   });
 });
+
+// ─── XLSX formula guard — the cell is stored as text (#193) ───────────────────
+// The tests above read values back through sheet_to_json. What actually stops a
+// spreadsheet evaluating a cell is that it is stored as TEXT with no formula, so
+// assert that directly, for each payload class the issue names, and for the audit
+// report as well as the error report.
+
+describe("XLSX formula guard: cell type", () => {
+  let cap: ReturnType<typeof captureBlob>;
+
+  beforeEach(() => {
+    cap = captureBlob();
+  });
+  afterEach(() => {
+    cap.reset();
+  });
+
+  async function cellAt(addr: string, sheet: string): Promise<XLSX.CellObject> {
+    const wb = XLSX.read(await cap.blob!.arrayBuffer(), { type: "array" });
+    return wb.Sheets[sheet][addr];
+  }
+
+  it.each(["=cmd", "+cmd", "-cmd", "@cmd", "\t=cmd"])(
+    "error report: %j is a text cell with no formula, carrying the guard prefix",
+    async (value) => {
+      const rows = buildErrorRows("d.csv", [{ rowNumber: 1, column: "c", value, reason: "bad" }]);
+      downloadErrorReport("d.csv", rows, "xlsx");
+      const cell = await cellAt("D2", "Errors"); // ERROR_HEADERS: file,row_number,column,value,...
+      expect(cell.t).toBe("s");
+      expect(cell.f).toBeUndefined();
+      expect(cell.v).toBe(`'${value}`);
+    },
+  );
+
+  it("audit report: a formula-like file name is guarded too", async () => {
+    downloadAuditReport(
+      [
+        {
+          file: "=cmd",
+          status: "Imported",
+          imported_at: "x",
+          total_rows: 1,
+          inserted_rows: 1,
+          duplicate_rows_skipped: 0,
+          failed_rows: 0,
+          table_name: "t",
+        },
+      ],
+      "xlsx",
+    );
+    const cell = await cellAt("A2", "Audit");
+    expect([cell.t, cell.f, cell.v]).toEqual(["s", undefined, "'=cmd"]);
+  });
+});
