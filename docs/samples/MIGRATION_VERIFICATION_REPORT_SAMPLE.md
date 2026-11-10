@@ -4,15 +4,15 @@
 
 | | |
 |---|---|
-| Run started (UTC) | 2026-11-09T09:07:53+00:00 |
-| Run finished (UTC) | 2026-11-09T09:07:54+00:00 |
-| Code version | `01602c18eb` (clean working tree) |
+| Run started (UTC) | 2026-11-10T05:55:31+00:00 |
+| Run finished (UTC) | 2026-11-10T05:55:32+00:00 |
+| Code version | `f25c94f2d6` (clean working tree) |
 | Database | PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1) |
-| Platform | Python 3.13.18, Linux-6.18.44-fc-v310-x86_64-with-glibc2.39 |
+| Platform | Python 3.13.18, Linux-6.18.44-fc-v338-x86_64-with-glibc2.39 |
 
 ## 1. Result
 
-**RECONCILED**: 12 of 12 checks passed. Of 10 source rows in the T&E file, **6 were loaded and 4 were rejected by the database**, for the reasons in section 4; nothing was lost or silently altered. The 8-row dynamic file loaded in full.
+**RECONCILED**: 13 of 13 checks passed. Of 10 source rows in the T&E file, **6 were loaded and 4 were rejected by the database**, for the reasons in section 4; nothing was lost or silently altered. The 8-row dynamic file loaded in full.
 
 ## 2. Source files
 
@@ -37,8 +37,9 @@ Each check compares the system's output against the database itself, a hash comp
 | 8 | Dynamic: file hash recorded by the system equals an independently computed SHA-256 | 14fab9c3bfb55400… | PASS |
 | 9 | Dynamic: re-upload of the same file is refused | duplicate_file | PASS |
 | 10 | Dynamic: the same content under a new filename is refused | duplicate_file (reason: content) | PASS |
-| 11 | Audit: one entry per successful load; refused duplicates leave none | 2 entries for 2 loads | PASS |
+| 11 | Audit: one entry per successful load; refused or fully failed uploads leave none | 2 entries for 2 loads | PASS |
 | 12 | Audit: hash chain recomputed and intact | intact=True, rows checked=2 | PASS |
+| 13 | T&E: re-uploading the same file, where every row now fails, is refused and changes nothing | status error; registry (id, loaded, failed) [[1, 6, 4]] vs before [[1, 6, 4]]; database rows 6 | PASS |
 
 ## 4. Rejected rows (T&E file)
 
@@ -66,7 +67,7 @@ Read back from `tenant_dev.organisations` after the load (6 rows):
 
 ## 6. Dynamic mode and duplicate handling
 
-`equipment_register.csv` created table `csv_14fab9c3bfb55400` with 8 rows. Column types detected:
+`equipment_register.csv` created table `csv_equipment_register_v1` with 8 rows. Column types detected:
 
 | Column | PostgreSQL type |
 |---|---|
@@ -84,12 +85,12 @@ Re-uploading the same file returned `duplicate_file` (reason: `content`); upload
 
 | Action | File | Target | Mode | Actor | Time (UTC) |
 |---|---|---|---|---|---|
-| upload | equipment_register.csv | csv_14fab9c3bfb55400 | dynamic | admin | 2026-11-09T09:07:54.050344+00:00 |
-| upload | orgs_sample.csv | tenant_dev.organisations | te | admin | 2026-11-09T09:07:54.013017+00:00 |
+| upload | equipment_register.csv | csv_equipment_register_v1 | dynamic | admin | 2026-11-10T05:55:32.044474+00:00 |
+| upload | orgs_sample.csv | tenant_dev.organisations | te | admin | 2026-11-10T05:55:31.982480+00:00 |
 
 ## 8. What this report does and does not show
 
-**Shows:** for these two files, every source row is either in the database or rejected with the database's own reason; loaded values equal source values; file hashes are recorded correctly; duplicates are refused; the audit trail has one entry per successful load and its hash chain verifies.
+**Shows:** for these two files, every source row is either in the database or rejected with the database's own reason; loaded values equal source values; file hashes are recorded correctly; duplicates are refused; a re-upload that fails every row changes nothing; the audit trail has one entry per successful load and its hash chain verifies.
 
 **Does not show:**
 
@@ -97,6 +98,6 @@ Re-uploading the same file returned `duplicate_file` (reason: `content`); upload
 - A hardened deployment. Observed during this run: a request with no credentials at all returned HTTP **200** (the API key is not set, so unauthenticated access is open); the API's database connections used role(s) **postgres** and the audit table is owned by **postgres**, so the database itself would not stop the API altering the audit log. The audit chain is designed to reveal such changes, but this run did not test that.
 - Independent assurance. The checks were written and run by the system's developers. They are repeatable by a reviewer, not a third-party assessment.
 - Conformance to any Defence standard. No claim of alignment with ASDEFCON or any DID is made here.
-- That re-uploading a file is safe. The re-upload case for T&E mode has a known defect, tracked as #215.
+- Re-upload behaviour beyond check 13. Only one case was exercised: re-uploading an identical file, where every row fails. Overwriting a file with changed content, and concurrent uploads, were not exercised here.
 
 **Reproduce:** deploy the dev schema to an empty database, create a tenant admin, start the API, then run `python scripts/sample_verification_run.py`. The raw responses behind this report are in `docs/samples/verification-run-evidence.json`.
