@@ -34,6 +34,8 @@ Read by `api/config.py`. Set these in the shell before running
 |---|---|---|---|
 | `API_KEY` | _(empty)_ | **Yes** | Shared secret sent in `X-API-Key` header. Empty = unauthenticated (local dev only). Set a strong random value for any non-localhost deployment. |
 | `API_ALLOW_DESTRUCTIVE` | `false` | No | Set to `true` to enable `DELETE /api/csv/files/{id}`. Deliberately opt-in — never leave enabled in shared or prod environments. |
+| `DATA_CLASSIFICATION` | `OFFICIAL: Sensitive` | No | Marked on every API response in `X-Data-Classification` (decision 7). One of `UNOFFICIAL`, `OFFICIAL`, `OFFICIAL: Sensitive`. `PROTECTED` is refused at startup: it needs IRAP-assessed hosting (#49). See `docs/SOVEREIGNTY.md`. |
+| `AUDIT_RETENTION_YEARS` | `7` | No | Minimum years to keep audit rows (decision 7; confirm against the client's records authority). Nothing in the app deletes them; this binds any operator purge. At least 1. |
 | `API_MAX_ROWS` | `100000` | No | Maximum data rows accepted per upload. Files over this limit are rejected before any per-row work. |
 | `API_MAX_ROW_ERRORS` | `200` | No | Maximum row errors included in the JSON response body. Summary counts still reflect the true total. |
 | `API_POOL_GETCONN_TIMEOUT` | `5.0` | No | Seconds a request waits to borrow a database connection from the pool. Exceeded = 503 response. |

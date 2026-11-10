@@ -10,7 +10,7 @@ Every member of a tenant has one role (ADR-0003). This table is enforced by `PER
 | read_rows | `GET /api/csv/tables/{table}/rows`, `GET /api/csv/uploads/{id}/original`, `GET /api/csv/uploads/{id}/rows`, `GET /api/csv/uploads/{id}/rows/{n}/history` | ✓ | ✓ | ✓ | ✓ |
 | list_te | `GET /api/te/tables` | ✓ | ✓ | ✓ | ✓ |
 | delete_file | `DELETE /api/csv/files/{id}` | | | ✓ | |
-| read_audit | `GET /api/audit/log`, `GET /api/audit/verify` | | | ✓ | ✓ |
+| read_audit | `GET /api/audit/log`, `GET /api/audit/events`, `GET /api/audit/verify` | | | ✓ | ✓ |
 | reset_password | `POST /api/auth/users/{username}/password` | | | ✓ | |
 | review_rows | `PUT /api/csv/uploads/{id}/rows/{n}/decision`, `PUT /api/csv/uploads/{id}/rows/{n}/cells/{column}` | | ✓ | ✓ | |
 | submit_import | `POST /api/csv/uploads/{id}/submit` | ✓ | | ✓ | |
