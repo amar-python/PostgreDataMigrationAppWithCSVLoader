@@ -1,23 +1,22 @@
-"""React app in a real browser: #187, #188 and the live #176 leak."""
+"""React app in a real browser: #176, #187 and #188."""
 
 from __future__ import annotations
 
 import re
 import uuid
 
-import pytest
 from playwright.sync_api import expect
 
 from conftest import react_sign_in
-
-CSV = b"id,name\n1,a\n2,b\n"
 
 
 def _tag() -> str:
     return uuid.uuid4().hex[:8]
 
 
-def _choose_file(page, name: str, content: bytes = CSV) -> None:
+def _choose_file(page, name: str, content: bytes | None = None) -> None:
+    # Unique content each time: a tenant rejects a second file with identical content as a duplicate (M5).
+    content = content or f"id,name\n1,{_tag()}\n2,b\n".encode()
     page.set_input_files('input[type="file"]', {"name": name, "mimeType": "text/csv", "buffer": content})
     page.get_by_role("button", name=re.compile("confirm & import", re.I)).click()
 
@@ -66,11 +65,8 @@ def test_188_stop_is_not_offered_once_the_request_is_on_the_server(page, stack):
     expect(page.get_by_text("Cancelled", exact=True)).to_have_count(0)
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "#176 is live: upload history is kept under one global localStorage key, so a second tenant on the same "
-    "browser sees the first one's file names. Closed as moot (the React screen is being replaced, #212), "
-    "but the app still ships. This test turns red when the leak is fixed: then drop the marker."))
 def test_176_the_next_tenant_does_not_see_the_previous_tenants_history(page, stack):
+    """#176: upload history is kept per signed-in tenant and user, not under one global key."""
     name = f"acme_private_{_tag()}.csv"
     react_sign_in(page, stack, "admin")
     _choose_file(page, name)

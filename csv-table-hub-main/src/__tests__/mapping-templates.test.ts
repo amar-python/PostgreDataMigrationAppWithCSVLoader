@@ -1,6 +1,7 @@
 // src/__tests__/mapping-templates.test.ts
 // Covers: loadTemplates, saveTemplate, deleteTemplate, findMatchingTemplate, touchTemplate
-// All state lives in localStorage, which jsdom provides.
+// All state lives in localStorage, which jsdom provides, under the signed-in user's key (#176).
+// Tenant isolation itself is tested in tenant-isolation.test.tsx.
 
 import { describe, it, expect, beforeEach } from "vitest";
 import {
@@ -12,7 +13,7 @@ import {
   type MappingTemplate,
 } from "@/lib/mapping-templates";
 
-const KEY = "csv-migrator:mapping-templates";
+const KEY = "csv-migrator:mapping-templates:acme:alice"; // the signed-in test user below
 
 function makeTemplate(id: string, headers: string[]): MappingTemplate {
   return {
@@ -25,6 +26,16 @@ function makeTemplate(id: string, headers: string[]): MappingTemplate {
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.setItem(
+    "te.session",
+    JSON.stringify({
+      token: "t",
+      expiresAt: "2099-01-01T00:00:00Z",
+      username: "alice",
+      tenant: "acme",
+      role: "uploader",
+    }),
+  );
 });
 
 describe("loadTemplates", () => {
