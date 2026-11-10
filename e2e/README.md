@@ -1,11 +1,10 @@
 # Browser end-to-end tests
 
 Playwright (Python) against the real API, the React app and the Streamlit spike, in Chromium.
-They cover what the vitest and pytest suites cannot: #187 and #188 in a real browser, the live #176
-leak (an expected failure until it is fixed), and the #154 Streamlit review screen.
+They cover what the vitest and pytest suites cannot: #176, #187 and #188 in a real browser, and the #154 Streamlit review screen.
 
 Not part of the default `pytest` run (`testpaths = tests`) and not wired into CI: they need three
-local servers and a browser, and #168 / PR #214 decide how browser tests join CI.
+local servers and a browser. (The accessibility scans have their own CI job, #168.)
 
 ## Run
 

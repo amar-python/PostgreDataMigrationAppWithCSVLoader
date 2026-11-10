@@ -37,7 +37,7 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 170 | All-failed T&E import removed the prior dataset | ✅ | `tests/system/test_te_reupload_registry.py` (`…keeps_a_prior_dynamic_table…`), `tests/system/test_failed_uploads.py` |
 | 171 | `setup.sh` truncated the config on failure | ✅ | `tests/unit/test_tooling_issues.py` (runs the real config-write block) |
 | 175 | An uploader could destroy a dataset through overwrite or a mode switch | ✅ | `tests/system/test_issue_regressions.py` (`UploadCannotDestroyAnExistingDataset`). Guarded by outcome: M5 (#109) stores a repeated filename as a new version and ignores `overwrite`, so the dynamic path no longer drops anything; the T&E path still needs delete permission and is tested as such |
-| 176 | Browser history leaks across tenants | ⚠️ | `fe: tenant-isolation.test.tsx`, `e2e/test_react_ui.py`. Closed as moot (the React screen is being replaced, #212), but the leak is live in the shipped app. Both tests turn red when it is fixed |
+| 176 | Browser history leaks across tenants | ✅ | `fe: tenant-isolation.test.tsx` (history and mapping templates, per tenant and user), `e2e/test_react_ui.py` (a second tenant in a real browser). Fixed in the React app; closed earlier as moot, the leak is closed in what ships |
 | 177 | Composite FKs for program consistency | ✅ | `tests/suites/test_06_program_consistency.sql` (Tier S) |
 | 178 | Distinct rows dropped as duplicates | ✅ | `tests/system/test_issue_regressions.py` (`RowDedupKeepsDistinctRows`) |
 | 179 | Frontend lint baseline | — | not a test: `npm run lint` is the check, and is not in CI. Closed as moot |
@@ -71,7 +71,7 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 109 | ART M5: dedup and naming | ✅ | `tests/system/test_versioned_datasets.py` (merged, #226). The issue is still open |
 | 110 | ART M6: approval and staged import | ✅ | `tests/system/test_staged_import.py` (merged, #227). The issue is still open. Server-side cancel (#188 option b) was meant to follow here; I did not check whether it landed |
 | 111 | ART M7: sovereignty and reports | ✅ | `tests/performance/test_import_scale.py`, `tests/egress_guard.py` (merged, #228). Closed |
-| 112 | Security review before the first external tenant | 👤 | review by a person; `docs/SECURITY_REVIEW_PACK.md` (merged, #229) is the input. The #176 tests are evidence for it |
+| 112 | Security review before the first external tenant | 👤 | review by a person; `docs/SECURITY_REVIEW_PACK.md` (merged, #229) is the input. The #176 tests are evidence for it (the leak is fixed) |
 | 113 | Check OIDC sign-in against the real IdP | ✅ / 👤 | `tests/system/test_oidc_https.py`, `tests/system/test_check_oidc.py` (merged, #229) and `tests/unit/test_oidc_https_jwks.py` (https key fetch, rotation, certificate checks; overlaps the first). A sign-in against Keycloak or Entra ID stays manual: `docs/OIDC_REAL_IDP_CHECK.md`. Closed |
 | 128 | Offline bundle for Windows, macOS and Linux | — | only the Ubuntu bundle exists |
 | 159 | Verify `docs/VCRM.md` against the DID | 👤 | compare with an external document |
@@ -86,11 +86,9 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 210 | Background job queue for large imports | — | feature, not built |
 | 212 | Plan the Streamlit migration | — | a plan. `e2e/test_streamlit_spike.py` is the baseline it must keep passing |
 
-## Known failure on purpose
+## Known failures on purpose
 
-A strict expected failure: the suite is green now and turns red when the defect is fixed, so the marker gets removed then.
-
-- **#176** (React localStorage history leak): `fe: tenant-isolation.test.tsx` (`it.fails`) and `e2e/test_react_ui.py`. Neither runs in the pytest CI step, which fails any skipped or expected-fail test (`scripts/test_report.py --strict`).
+None. #176 was the only one; it is fixed. (A strict expected failure turns red when the defect is fixed, so its marker had to go: `it.fails` in vitest and `xfail` in the browser test are plain tests now. CI's `--strict` pytest report fails any skipped or expected-fail test, so none can live there.)
 
 ## Found while writing these tests
 

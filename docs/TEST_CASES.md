@@ -1009,6 +1009,10 @@ To regenerate: `python3 scripts/test_catalogue.py`
 
 | `RaggedRowsOverTheApi.test_multiple_ragged_rows_each_get_a_reason` | integration | Every ragged row gets its own entry in rowErrors with a reason. |
 
+| `RaggedRowsOverTheApi.test_dynamic_mode_accounts_for_every_row_with_a_stored_reason` | integration | — |
+
+| `RaggedRowsOverTheApi.test_te_mode_accounts_for_every_row_with_a_stored_reason` | integration | — |
+
 | `test_non_empty_cells_beyond_the_header_are_returned` | — | — |
 
 | `test_trailing_empty_cells_are_not_extra` | — | — |
@@ -1023,17 +1027,25 @@ To regenerate: `python3 scripts/test_catalogue.py`
 
 | `test_multiple_ragged_rows_each_get_a_reason` | — | Every ragged row gets its own entry in rowErrors with a reason. |
 
+| `test_dynamic_mode_accounts_for_every_row_with_a_stored_reason` | — | — |
+
+| `test_te_mode_accounts_for_every_row_with_a_stored_reason` | — | — |
+
 ## `tests/system/test_registry_race.py`
 
 | Test | Markers | Objective |
 |---|---|---|
-| `RegistryRace.test_concurrent_identical_uploads_one_wins` | integration | Two threads upload the same content simultaneously. |
+| `RegistryRace.test_identical_file_uploaded_concurrently_registers_once` | integration | — |
 
-| `RegistryRace.test_concurrent_same_name_different_content` | integration | Two threads upload different content under the same filename. |
+| `RegistryRace.test_identical_content_under_different_names_registers_once` | integration | The case where file_hash, not file_name or the dataset lock, is the guard. |
 
-| `test_concurrent_identical_uploads_one_wins` | — | Two threads upload the same content simultaneously. |
+| `RegistryRace.test_same_name_different_content_gets_distinct_versions` | integration | Since M5 a repeated filename is the next version, never a rejection. Concurrent |
 
-| `test_concurrent_same_name_different_content` | — | Two threads upload different content under the same filename. |
+| `test_identical_file_uploaded_concurrently_registers_once` | — | — |
+
+| `test_identical_content_under_different_names_registers_once` | — | The case where file_hash, not file_name or the dataset lock, is the guard. |
+
+| `test_same_name_different_content_gets_distinct_versions` | — | Since M5 a repeated filename is the next version, never a rejection. Concurrent |
 
 ## `tests/system/test_reports_and_policy.py`
 
