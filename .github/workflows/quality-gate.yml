@@ -240,6 +240,12 @@ jobs:
         working-directory: csv-table-hub-main
         run: npm ci
 
+      # #112: the frontend's own unit tests (vitest). No job ran them before, so a change to the one place the app
+      # builds HTML by hand (the print window in src/lib/export.ts) could lose its escaping without anything failing.
+      - name: Frontend unit tests (vitest)
+        working-directory: csv-table-hub-main
+        run: npm test
+
       - name: Install Chromium for Playwright
         run: python -m playwright install --with-deps chromium
 
