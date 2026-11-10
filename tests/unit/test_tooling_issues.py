@@ -5,7 +5,7 @@
   #181  the SQL test wrapper must fail an environment whose assertions failed
   #182  the offline bundle build must stop when a package download fails
   #130  the frontend lock file must match package.json
-  #169  docs/TEST_CASES.md must be up to date with the tests
+  #169  the test catalogue generator must list every test file (the catalogue itself is generated, not committed)
   #194  the coverage-floor gate must fail below a floor
   #207  API_INTEGRATION.md must defer to the generated schema, and the schema must be served
 
@@ -182,12 +182,24 @@ class FrontendLockFileMatchesPackageJson(unittest.TestCase):
 
 # ── #169 ─────────────────────────────────────────────────────────────────────
 
-@pytest.mark.tooling
-class TestCatalogueIsCurrent(unittest.TestCase):
-    def test_docs_test_cases_matches_the_tests(self):
-        res = subprocess.run([sys.executable, "scripts/test_catalogue.py", "--check"], cwd=ROOT,
-                             capture_output=True, text=True, timeout=120)
-        self.assertEqual(res.returncode, 0, "run `python3 scripts/test_catalogue.py` and commit:\n" + res.stdout[-800:])
+@pytest.mark.unit
+class TestCatalogueGenerator(unittest.TestCase):
+    """The catalogue is generated in CI, not committed, so nothing else notices if the
+    generator quietly drops a file. It skips any file that does not parse."""
+
+    def test_the_catalogue_lists_every_test_file(self):
+        from scripts import test_catalogue as catalogue
+
+        text = catalogue.generate()
+        missing = []
+        for path in sorted((ROOT / "tests").rglob("test_*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            has_tests = any(isinstance(n, ast.FunctionDef) and n.name.startswith("test")
+                            for n in ast.walk(tree))
+            rel = path.relative_to(ROOT).as_posix()
+            if has_tests and f"## `{rel}`" not in text:
+                missing.append(rel)
+        self.assertEqual(missing, [], "test files the catalogue generator dropped")
 
 
 # ── #194 ─────────────────────────────────────────────────────────────────────

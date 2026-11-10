@@ -41,9 +41,10 @@ jobs:
       - name: Component health check
         run: make health
 
-      # #169: test catalogue freshness — fails if docs/TEST_CASES.md is stale.
-      - name: Test catalogue check
-        run: python3 scripts/test_catalogue.py --check
+      # #169: the test catalogue is generated here, not committed. This step fails
+      # the build if the generator itself breaks; the file is attached below.
+      - name: Generate test catalogue
+        run: python3 scripts/test_catalogue.py
 
       # Tier X (cross-engine) is deliberately absent: multi-engine support is
       # deferred by ADR-0001 (PostgreSQL first), so this pipeline is PostgreSQL
@@ -54,6 +55,15 @@ jobs:
 
       # Reports (incl. the VCRM gap report) are written to evals/reports/ and
       # would otherwise vanish with the runner — keep them for auditability.
+      - name: Upload test catalogue
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-catalogue
+          path: docs/TEST_CASES.md
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Upload eval reports
         if: always()
         uses: actions/upload-artifact@v7
