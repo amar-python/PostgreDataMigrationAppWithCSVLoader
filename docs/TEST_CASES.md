@@ -1791,34 +1791,6 @@ To regenerate: `python3 scripts/test_catalogue.py`
 
 | `test_dev_row_counts_stable_after_second_deploy` | — | — |
 
-## `tests/test_docker_image_secrets.py`
-
-| Test | Markers | Objective |
-|---|---|---|
-| `TestDockerfileParses.test_copy_lines_were_found` | — | — |
-
-| `TestDockerfileParses.test_no_line_continuations_in_copy` | — | — |
-
-| `TestExplicitCopyList.test_no_copy_source_matches_a_sensitive_file` | — | — |
-
-| `TestExplicitCopyList.test_templates_are_still_copied` | — | The fix must not cost the image the files it needs to run. |
-
-| `TestDockerignoreExcludesSecrets.test_sensitive_files_are_ignored` | — | — |
-
-| `TestDockerignoreExcludesSecrets.test_templates_are_not_ignored` | — | — |
-
-| `test_copy_lines_were_found` | — | — |
-
-| `test_no_line_continuations_in_copy` | — | — |
-
-| `test_no_copy_source_matches_a_sensitive_file` | — | — |
-
-| `test_templates_are_still_copied` | — | The fix must not cost the image the files it needs to run. |
-
-| `test_sensitive_files_are_ignored` | — | — |
-
-| `test_templates_are_not_ignored` | — | — |
-
 ## `tests/unit/test_a11y_baseline.py`
 
 | Test | Markers | Objective |
@@ -2158,6 +2130,34 @@ To regenerate: `python3 scripts/test_catalogue.py`
 | `test_splits_valid_and_skipped_rows` | — | Given a 4-row CSV (2 valid, 1 empty row, 1 column-mismatch), valid.csv gets the 2 good rows and skip.csv gets 2 annotated rows with a _skip_reason column. |
 
 | `test_returns_error_when_no_valid_rows` | — | When all data rows are invalid, the validator should exit 1 with 'No valid rows found' on stderr. |
+
+## `tests/unit/test_docker_image_secrets.py`
+
+| Test | Markers | Objective |
+|---|---|---|
+| `TestDockerfileParses.test_copy_lines_were_found` | — | — |
+
+| `TestDockerfileParses.test_no_line_continuations_in_copy` | — | — |
+
+| `TestExplicitCopyList.test_no_copy_source_matches_a_sensitive_file` | — | — |
+
+| `TestExplicitCopyList.test_templates_are_still_copied` | — | The fix must not cost the image the files it needs to run. |
+
+| `TestDockerignoreExcludesSecrets.test_sensitive_files_are_ignored` | — | — |
+
+| `TestDockerignoreExcludesSecrets.test_templates_are_not_ignored` | — | — |
+
+| `test_copy_lines_were_found` | — | — |
+
+| `test_no_line_continuations_in_copy` | — | — |
+
+| `test_no_copy_source_matches_a_sensitive_file` | — | — |
+
+| `test_templates_are_still_copied` | — | The fix must not cost the image the files it needs to run. |
+
+| `test_sensitive_files_are_ignored` | — | — |
+
+| `test_templates_are_not_ignored` | — | — |
 
 ## `tests/unit/test_egress_guard.py`
 
