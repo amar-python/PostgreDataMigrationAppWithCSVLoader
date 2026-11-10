@@ -1,5 +1,5 @@
 .PHONY: test-free test-gate test-evals test-e2e test-all \
-        test-unit test-system test-sit test-performance test-accessibility test-uat \
+        test-unit test-system test-egress-blocked check-bundle security-evidence test-sit test-performance test-accessibility test-uat \
         lint lint-diff health \
         eval-list eval-compare eval-summary select-tests \
         csv-load csv-list csv-demo
@@ -50,6 +50,25 @@ test-unit:
 
 test-system:
 	$(call run_category,tests/system)
+
+# Egress blocked (M7, #111; BR-37): the API tests with any connection that isn't to this machine refused and
+# recorded. Fails if the application tries one, even if the code swallows the error. See docs/SOVEREIGNTY.md.
+test-egress-blocked:
+	python3 -m pytest tests/system --block-egress -v
+
+# Scan a built frontend for anything it could load from outside (M7). Build first: cd csv-table-hub-main && npm ci && npx vite build
+check-bundle:
+	python3 scripts/check_bundle_egress.py csv-table-hub-main/.output
+
+# The tests behind docs/SECURITY_REVIEW_PACK.md (#112): authentication, tenant isolation, roles, upload handling and the
+# audit trail. Needs PostgreSQL. A passing run is evidence for the reviewer, not the review.
+security-evidence:
+	python3 -m pytest tests/system/test_accounts.py tests/system/test_password_reset.py tests/system/test_oidc.py \
+	    tests/system/test_oidc_https.py tests/system/test_check_oidc.py tests/system/test_tenant_isolation.py \
+	    tests/system/test_tenant_te_migrations.py tests/system/test_roles.py tests/system/test_runtime_role.py \
+	    tests/system/test_audit_append_only.py tests/system/test_preserved_uploads.py tests/system/test_staged_import.py \
+	    tests/system/test_versioned_datasets.py tests/system/test_reports_and_policy.py \
+	    tests/unit/test_security.py tests/unit/test_api_hardening.py tests/unit/test_sovereignty.py -v
 
 test-sit:
 	$(call run_category,tests/system_integration)

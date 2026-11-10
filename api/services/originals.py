@@ -51,6 +51,10 @@ def store_upload(cur, file_name: str, content: str, mode: str, result: dict, *,
     data = original if original is not None else content.encode("utf-8")
     ok = result.get("status") == "ok"
     s = sql.Identifier(uploads_schema())
+    logs = list(result.get("logs") or [])
+    # Keep the reason a rejected or failed attempt was given, so reports can say why (M7, BR-35).
+    if result.get("message") and not ok and not any(entry.get("message") == result["message"] for entry in logs):
+        logs.append({"step": "result", "level": "error", "message": result["message"]})
     cur.execute(sql.SQL(
         "INSERT INTO {}.uploads (file_name, sha256, byte_size, uploader, mode, status, "
         "total_rows, imported_rows, failed_rows, csv_file_id, row_errors, logs, columns, column_types, "
@@ -59,7 +63,7 @@ def store_upload(cur, file_name: str, content: str, mode: str, result: dict, *,
          outcome(result), result.get("totalRows"), result.get("insertedRows"),
          result.get("failedRows"), coerce_file_id(result.get("fileId")) if ok else None,
          Json((result.get("rowErrors") or [])[:settings.MAX_ROW_ERRORS_REPORTED]),
-         Json(result.get("logs") or []), result.get("columns"), result.get("types"), result.get("typesProvenance")))
+         Json(logs), result.get("columns"), result.get("types"), result.get("typesProvenance")))
     upload_id = cur.fetchone()[0]
     cur.execute(sql.SQL("INSERT INTO {}.upload_blobs (upload_id, content) VALUES (%s, %s)").format(s),
                 (upload_id, data))

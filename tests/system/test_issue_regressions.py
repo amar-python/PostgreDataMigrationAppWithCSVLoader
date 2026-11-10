@@ -189,34 +189,47 @@ class UploadPaths(unittest.TestCase):
 
 @pytest.mark.integration
 class UploadCannotBypassTheDeleteGate(UploadPaths):
-    """#175: overwrite and mode switch drop the prior table, so they need delete permission."""
+    """#175: an upload must never destroy an existing dataset, whatever the role.
+
+    Originally ``overwrite`` and a mode switch dropped the prior table, so they needed
+    delete permission. Since versioned datasets (M5) nothing is dropped: a repeated
+    name becomes a new version and ``overwrite`` is ignored. The gate is therefore
+    held by the absence of any destructive path, and real deletes keep their own
+    permission check (covered by the delete-endpoint tests).
+    """
 
     def _dynamic(self, name: str) -> dict:
         res = self._post("tenant_admin", fileName=name, content=f"k\n{self.tag}\n").json()
         self.assertEqual(res["status"], "ok", res)
         return res
 
-    def test_uploader_cannot_overwrite_an_existing_dataset(self):
+    def test_uploader_overwrite_makes_a_new_version_and_keeps_the_original(self):
         name = f"gate_{self.tag}.csv"
-        self._dynamic(name)
+        first = self._dynamic(name)
         res = self._post("uploader", fileName=name, content=f"k\n{self.tag}_new\n", overwrite=True)
-        self.assertEqual(res.status_code, 403, res.text)
-        self.assertIn(name, self._file_names(), "the refused overwrite must leave the dataset in place")
+        self.assertEqual(res.status_code, 200, res.text)
+        body = res.json()
+        self.assertEqual((body["status"], body["version"], body["overwritten"]), ("ok", 2, False), body)
+        self.assertNotEqual(body["tableName"], first["tableName"])
+        self.assertEqual(self._file_names().count(name), 2, "both versions must stay registered")
 
-    def test_uploader_cannot_switch_mode_over_an_existing_dataset(self):
+    def test_uploader_mode_switch_leaves_the_existing_dataset_in_place(self):
         name = f"switch_{self.tag}.csv"
-        self._dynamic(name)
+        first = self._dynamic(name)
         res = self._post("uploader", fileName=name, mode="te", targetTable="organisations",
                          content=f"name,org_type,country\nORG_{self.tag},government,AU\n")
-        self.assertEqual(res.status_code, 403, res.text)
-        self.assertIn(name, self._file_names(), "the refused mode switch must leave the dataset in place")
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(res.json()["status"], "ok", res.text)
+        files = {f["table_name"] for f in self.client.get(
+            "/api/csv/files", headers=self.headers["tenant_admin"]).json() if f["file_name"] == name}
+        self.assertIn(first["tableName"], files, "the dynamic dataset must survive the T&E upload")
 
-    def test_tenant_admin_may_overwrite(self):
+    def test_a_repeat_upload_by_tenant_admin_is_also_a_new_version(self):
         name = f"admin_{self.tag}.csv"
         self._dynamic(name)
         res = self._post("tenant_admin", fileName=name, content=f"k\n{self.tag}_new\n", overwrite=True)
         self.assertEqual(res.status_code, 200, res.text)
-        self.assertEqual(res.json()["status"], "ok", res.text)
+        self.assertEqual((res.json()["status"], res.json()["version"]), ("ok", 2), res.text)
 
     def test_uploader_can_still_upload_a_new_file(self):
         res = self._post("uploader", fileName=f"fresh_{self.tag}.csv", content=f"k\n{self.tag}\n")

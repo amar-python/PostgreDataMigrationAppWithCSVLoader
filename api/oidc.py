@@ -18,6 +18,9 @@ import jwt
 from api.config import settings
 
 ALGORITHMS = ["RS256", "ES256"]
+# Seconds to wait for the IdP's key set. PyJWT's default is 30, which would hold a request thread that long for
+# every sign-in attempt while the IdP is down or unreachable.
+JWKS_TIMEOUT_SECONDS = 5
 
 
 def enabled() -> bool:
@@ -36,12 +39,15 @@ def check_config() -> None:
 
 @lru_cache(maxsize=4)
 def _jwks(url: str):
-    """Key source for ``url``: https:// is fetched (and re-fetched on an unknown
-    key id, for IdP key rotation); file:// is a JWKS file published inside an
+    """Key source for ``url``: https:// is fetched; file:// is a JWKS file published inside an
     enclave. Plain http:// is refused, since keys fetched over it could be swapped.
+
+    An https:// key set is cached for PyJWT's lifespan (5 minutes), and an unknown key id triggers a
+    re-fetch, for IdP key rotation, but at most once per PyJWT's cooldown (30 seconds): so random key ids
+    can't be used to hammer the IdP, and a freshly rotated key can be refused for up to 30 seconds.
     """
     if url.startswith("https://"):
-        return jwt.PyJWKClient(url, cache_keys=True)
+        return jwt.PyJWKClient(url, cache_keys=True, timeout=JWKS_TIMEOUT_SECONDS)
     if url.startswith("file://"):
         return jwt.PyJWKSet.from_json(Path(url2pathname(urlparse(url).path)).read_text(encoding="utf-8"))
     raise ValueError(f"OIDC_JWKS_URL must be https:// or file://, got {url!r}")
@@ -58,12 +64,20 @@ def _signing_key(id_token: str):
         raise jwt.InvalidTokenError(f"unknown key id {kid!r}") from None
 
 
+def verify(id_token: str) -> dict:
+    """The token's claims once its signature, issuer, audience and expiry check out; raises ``jwt.PyJWTError`` if not.
+
+    ``username_from`` hides the reason; this keeps it, for scripts/check_oidc.py.
+    """
+    key = _signing_key(id_token)
+    return jwt.decode(id_token, key, algorithms=ALGORITHMS, audience=settings.OIDC_AUDIENCE,
+                      issuer=settings.OIDC_ISSUER, options={"require": ["exp", "iat", "iss", "aud"]})
+
+
 def username_from(id_token: str) -> str | None:
     """The verified token's username claim, or None if anything about it is wrong."""
     try:
-        key = _signing_key(id_token)
-        claims = jwt.decode(id_token, key, algorithms=ALGORITHMS, audience=settings.OIDC_AUDIENCE,
-                            issuer=settings.OIDC_ISSUER, options={"require": ["exp", "iat", "iss", "aud"]})
+        claims = verify(id_token)
     except jwt.PyJWTError:
         return None
     username = claims.get(settings.OIDC_USERNAME_CLAIM)
