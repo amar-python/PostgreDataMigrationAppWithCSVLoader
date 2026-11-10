@@ -435,6 +435,16 @@ class DataFidelityAndVersions(_Base):
 
 
 @pytest.mark.integration
+class BrowserAccess(_Base):
+    def test_a_browser_may_send_the_idempotency_key(self):
+        res = self.client.options("/api/csv/uploads/1/import", headers={
+            "Origin": "http://localhost:5173", "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "idempotency-key,authorization,content-type"})
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertIn("idempotency-key", res.headers["access-control-allow-headers"].lower())
+
+
+@pytest.mark.integration
 class WorkflowTablesAreInsertOnly(_Base):
     def test_no_update_or_delete_on_submissions_approvals_imports(self):
         import psycopg2.errors

@@ -87,7 +87,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE"],  # PUT: review changes (M4, #108)
-    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization", "Idempotency-Key"],  # the last: M6 import (#110)
 )
 
 # O-03: rate limiting. Registered after CORSMiddleware so it sits outside it in
