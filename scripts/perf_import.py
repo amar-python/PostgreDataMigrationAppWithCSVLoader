@@ -53,8 +53,8 @@ def make_csv(rows: int) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _windows_memory():
-    """(total physical bytes, this process's peak working set in bytes) from the Windows API."""
+def _windows_total_memory() -> int:
+    """Total physical memory in bytes, from the Windows API."""
     import ctypes
     from ctypes import wintypes
 
@@ -64,6 +64,25 @@ def _windows_memory():
                     ("ullAvailPageFile", ctypes.c_ulonglong), ("ullTotalVirtual", ctypes.c_ulonglong),
                     ("ullAvailVirtual", ctypes.c_ulonglong), ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
 
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.GlobalMemoryStatusEx.argtypes = [ctypes.POINTER(MemoryStatus)]
+    kernel32.GlobalMemoryStatusEx.restype = wintypes.BOOL
+    status = MemoryStatus()
+    status.dwLength = ctypes.sizeof(status)
+    if not kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return status.ullTotalPhys
+
+
+def _windows_peak_memory() -> int:
+    """This process's peak working set in bytes, from the Windows API.
+
+    Every argument type is declared: GetCurrentProcess returns a pseudo-handle (-1), which ctypes would otherwise pass
+    as a 32-bit int and overflow on 64-bit Windows.
+    """
+    import ctypes
+    from ctypes import wintypes
+
     class ProcessCounters(ctypes.Structure):
         _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD), ("PeakWorkingSetSize", ctypes.c_size_t),
                     ("WorkingSetSize", ctypes.c_size_t), ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
@@ -71,15 +90,16 @@ def _windows_memory():
                     ("QuotaNonPagedPoolUsage", ctypes.c_size_t), ("PagefileUsage", ctypes.c_size_t),
                     ("PeakPagefileUsage", ctypes.c_size_t)]
 
-    status = MemoryStatus()
-    status.dwLength = ctypes.sizeof(status)
-    ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(ProcessCounters), wintypes.DWORD]
+    psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
     counters = ProcessCounters()
     counters.cb = ctypes.sizeof(counters)
-    kernel32 = ctypes.windll.kernel32
-    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
-    ctypes.windll.psapi.GetProcessMemoryInfo(kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb)
-    return status.ullTotalPhys, counters.PeakWorkingSetSize
+    if not psapi.GetProcessMemoryInfo(kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return counters.PeakWorkingSetSize
 
 
 def peak_memory_mb() -> int | None:
@@ -88,7 +108,7 @@ def peak_memory_mb() -> int | None:
         try:
             import resource
         except ImportError:   # Windows has no resource module
-            return round(_windows_memory()[1] / 1024 / 1024)
+            return round(_windows_peak_memory() / 1024 / 1024)
         peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss   # KiB on Linux, bytes on macOS
         return round(peak / (1024 * 1024 if sys.platform == "darwin" else 1024))
     except Exception:  # noqa: BLE001
@@ -102,7 +122,7 @@ def hardware() -> dict:
                                 if line.startswith("MemTotal")).split()[1]) / 1024 / 1024, 1)
     except (OSError, StopIteration):
         try:
-            mem_gb = round(_windows_memory()[0] / 1024 ** 3, 1)
+            mem_gb = round(_windows_total_memory() / 1024 ** 3, 1)
         except Exception:  # noqa: BLE001 — a readout, not a requirement
             pass
     # CPUs this process may use (taskset or a container limit lowers it), not the machine's total.
