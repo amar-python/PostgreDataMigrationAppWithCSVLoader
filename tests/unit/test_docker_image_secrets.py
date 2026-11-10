@@ -32,7 +32,7 @@ import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.security]
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DOCKERFILE = ROOT / "infra" / "Dockerfile"
 DOCKERIGNORE = ROOT / ".dockerignore"
 

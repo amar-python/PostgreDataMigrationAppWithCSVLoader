@@ -1,4 +1,4 @@
-﻿-- env_staging.example.sql  (TEMPLATE - safe to commit; no real secrets)
+-- env_staging.example.sql  (TEMPLATE - safe to commit; no real secrets)
 -- Copy to env_staging.sql (gitignored) and fill in, or inject app_password at deploy.
 \set env_label          STAGING
 \set db_name            te_mgmt_staging
