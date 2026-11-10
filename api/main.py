@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from api import db, oidc
 from api.config import settings
 from api.ratelimit import rate_limit_middleware
-from api.routers import audit_routes, auth_routes, csv_routes, review_routes, te_routes
+from api.routers import audit_routes, auth_routes, csv_routes, import_routes, review_routes, te_routes
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE"],  # PUT: review changes (M4, #108)
-    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization", "Idempotency-Key"],  # the last: M6 import (#110)
 )
 
 # O-03: rate limiting. Registered after CORSMiddleware so it sits outside it in
@@ -98,6 +98,7 @@ app.middleware("http")(rate_limit_middleware)
 app.include_router(auth_routes.router)
 app.include_router(csv_routes.router)
 app.include_router(review_routes.router)
+app.include_router(import_routes.router)
 app.include_router(te_routes.router)
 app.include_router(audit_routes.router)
 

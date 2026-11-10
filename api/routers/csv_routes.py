@@ -19,6 +19,7 @@ from api.services.audit import coerce_file_id, record_audit, write_audit
 from api.services.csv_parse import build_preview
 from api.services.dynamic_loader import upload_dynamic
 from api.services.originals import record_upload
+from api.services.staged_import import derive_state, state_columns, state_join
 from api.services.te_loader import match_te_table, upload_te
 
 logger = logging.getLogger(__name__)
@@ -146,8 +147,10 @@ def list_files() -> list[dict]:
                 sql.SQL(
                     "SELECT f.id, f.file_name, f.table_name, f.mode, f.row_count, f.column_names, f.created_at, "
                     "f.total_rows, f.duplicate_rows_skipped, f.failed_rows, u.uploader, u.id, f.types_provenance "
-                    "FROM {s}.csv_files f LEFT JOIN LATERAL (SELECT uploader, id FROM {s}.uploads "
-                    "  WHERE csv_file_id = f.id ORDER BY id DESC LIMIT 1) u ON true "
+                    "FROM {s}.csv_files f LEFT JOIN LATERAL (SELECT x.uploader, x.id FROM {s}.uploads x "
+                    "  WHERE x.csv_file_id = f.id "
+                    "     OR x.id = (SELECT i.upload_id FROM {s}.imports i WHERE i.csv_file_id = f.id) "
+                    "  ORDER BY x.id DESC LIMIT 1) u ON true "
                     "ORDER BY f.created_at DESC, f.id DESC"
                 ).format(s=sql.Identifier(uploads_schema()))
             )
@@ -173,15 +176,21 @@ def list_files() -> list[dict]:
 
 @router.get("/uploads", dependencies=[Depends(allow("list_files"))])
 def list_uploads(limit: int = 100, offset: int = 0) -> list[dict]:
-    """Every upload attempt and its outcome, newest first (M3b, #107; BR-23)."""
+    """Every upload attempt and its outcome, newest first (M3b, #107; BR-23). ``state`` is the M6 workflow state."""
     with Conn() as conn, conn.cursor() as cur:
         cur.execute(sql.SQL(
-            "SELECT id, file_name, sha256, byte_size, uploader, mode, status, total_rows, imported_rows, "
-            "failed_rows, csv_file_id, uploaded_at FROM {}.uploads ORDER BY id DESC LIMIT %s OFFSET %s"
-        ).format(sql.Identifier(uploads_schema())), (max(1, min(limit, 500)), max(0, offset)))
+            "SELECT u.id, u.file_name, u.sha256, u.byte_size, u.uploader, u.mode, u.status, u.total_rows, "
+            "u.imported_rows, u.failed_rows, u.csv_file_id, u.uploaded_at, {cols} "
+            "FROM {s}.uploads u {join} ORDER BY u.id DESC LIMIT %s OFFSET %s"
+        ).format(cols=state_columns(), s=sql.Identifier(uploads_schema()), join=state_join()),
+            (max(1, min(limit, 500)), max(0, offset)))
         keys = ("id", "file_name", "sha256", "byte_size", "uploader", "mode", "status", "total_rows",
                 "imported_rows", "failed_rows", "csv_file_id", "uploaded_at")
-        out = [dict(zip(keys, r)) for r in cur.fetchall()]
+        out = []
+        for r in cur.fetchall():
+            u = dict(zip(keys, r[:12]))
+            u["state"] = derive_state(u["status"], r[12], r[13], r[14])
+            out.append(u)
     for u in out:
         u["id"] = str(u["id"])
         u["csv_file_id"] = None if u["csv_file_id"] is None else str(u["csv_file_id"])
@@ -195,13 +204,14 @@ def upload_detail(upload_id: int) -> dict:
     Stored on the server, so any session in the tenant can read them."""
     with Conn() as conn, conn.cursor() as cur:
         cur.execute(sql.SQL(
-            "SELECT status, total_rows, imported_rows, failed_rows, row_errors, logs, uploader, file_name "
-            "FROM {}.uploads WHERE id = %s").format(sql.Identifier(uploads_schema())), (upload_id,))
+            "SELECT u.status, u.total_rows, u.imported_rows, u.failed_rows, u.row_errors, u.logs, u.uploader, "
+            "u.file_name, {cols} FROM {s}.uploads u {join} WHERE u.id = %s"
+        ).format(cols=state_columns(), s=sql.Identifier(uploads_schema()), join=state_join()), (upload_id,))
         row = cur.fetchone()
     if row is None:
         raise HTTPException(404, "No such upload")
     keys = ("status", "totalRows", "importedRows", "failedRows", "rowErrors", "logs", "uploader", "fileName")
-    return {"id": str(upload_id), **dict(zip(keys, row))}
+    return {"id": str(upload_id), **dict(zip(keys, row[:8])), "state": derive_state(row[0], *row[8:11])}
 
 
 @router.get("/uploads/{upload_id}/original", dependencies=[Depends(allow("read_rows"))])

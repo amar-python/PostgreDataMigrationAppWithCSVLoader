@@ -82,7 +82,9 @@ class MigrationsOnScratchSchema(unittest.TestCase):
     def test_upgrade_head_creates_tables_and_unique_constraints(self):
         command.upgrade(self.cfg, "head")
         self.assertTrue({"csv_files", "audit_log", "alembic_version"} <= self._tables())
-        self.assertEqual(self._constraints(), {"csv_files_file_hash_key", "csv_files_dataset_version_key"})
+        self.assertEqual(self._constraints(), {
+            "csv_files_file_hash_key", "csv_files_dataset_version_key",
+            "approvals_submission_id_key", "imports_upload_id_key", "imports_approval_id_key"})
 
     def test_control_schema_is_created_and_removed(self):
         command.upgrade(self.cfg, "head")
@@ -204,6 +206,72 @@ class MigrationsOnScratchSchema(unittest.TestCase):
             cur.execute("SELECT 1 FROM information_schema.columns WHERE table_schema = %s "
                         "AND table_name = 'csv_files' AND column_name = 'types_provenance'",
                         (settings.UPLOADS_SCHEMA,))
+            self.assertIsNone(cur.fetchone())
+
+    def _insert_upload(self, cur, status: str) -> int:
+        cur.execute(f'INSERT INTO "{settings.UPLOADS_SCHEMA}".uploads (file_name, sha256, byte_size, mode, status) '
+                    "VALUES ('u.csv', 'sha', 1, 'dynamic', %s) RETURNING id", (status,))
+        return cur.fetchone()[0]
+
+    def test_0011_adds_the_workflow_tables_and_the_tenant_setting(self):
+        command.upgrade(self.cfg, "head")
+        self.assertTrue({"submissions", "approvals", "imports"} <= self._tables())
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT column_default FROM information_schema.columns WHERE table_schema = %s "
+                        "AND table_name = 'tenants' AND column_name = 'allow_self_approval'", (settings.CONTROL_SCHEMA,))
+            self.assertEqual(cur.fetchone()[0], "false", "self-approval is off unless a tenant turns it on")
+            self._insert_upload(cur, "staged")   # the new status is accepted
+
+    def test_0011_the_database_checks_that_import_counts_reconcile(self):
+        command.upgrade(self.cfg, "head")
+        schema = settings.UPLOADS_SCHEMA
+        with self.conn.cursor() as cur:
+            up = self._insert_upload(cur, "staged")
+            cur.execute(f'INSERT INTO "{schema}".submissions (upload_id) VALUES (%s) RETURNING id', (up,))
+            sub = cur.fetchone()[0]
+            cur.execute(f'INSERT INTO "{schema}".approvals (submission_id, upload_id, decision, decisions_upto, edits_upto) '
+                        "VALUES (%s, %s, 'approve', 0, 0) RETURNING id", (sub, up))
+            appr = cur.fetchone()[0]
+            insert = (f'INSERT INTO "{schema}".imports (upload_id, approval_id, idempotency_key, rows_in, rows_excluded, '
+                      "rows_edited, rows_duplicate, rows_imported, csv_file_id, table_name) "
+                      "VALUES (%s, %s, 'k', %s, 1, 0, 1, %s, 1, 't')")
+            with self.assertRaises(psycopg2.errors.CheckViolation):
+                cur.execute(insert, (up, appr, 10, 7))     # 10 != 1 + 1 + 7
+            cur.execute(insert, (up, appr, 10, 8))         # 10 == 1 + 1 + 8
+
+    def test_0011_a_rejection_needs_a_reason_but_an_approval_does_not(self):
+        command.upgrade(self.cfg, "head")
+        schema = settings.UPLOADS_SCHEMA
+        with self.conn.cursor() as cur:
+            up = self._insert_upload(cur, "staged")
+            ids = []
+            for _ in range(3):
+                cur.execute(f'INSERT INTO "{schema}".submissions (upload_id) VALUES (%s) RETURNING id', (up,))
+                ids.append(cur.fetchone()[0])
+            insert = (f'INSERT INTO "{schema}".approvals (submission_id, upload_id, decision, reason, decisions_upto, '
+                      "edits_upto) VALUES (%s, %s, %s, %s, 0, 0)")
+            cur.execute(insert, (ids[0], up, "approve", None))
+            with self.assertRaises(psycopg2.errors.CheckViolation):
+                cur.execute(insert, (ids[1], up, "reject", "   "))
+            cur.execute(insert, (ids[2], up, "reject", "row 2 is wrong"))
+
+    def test_0011_downgrade_is_refused_while_an_upload_is_staged_and_drops_nothing(self):
+        command.upgrade(self.cfg, "head")
+        with self.conn.cursor() as cur:
+            self._insert_upload(cur, "staged")
+        with self.assertRaisesRegex(RuntimeError, "1 upload.*staged"):
+            command.downgrade(self.cfg, "0010")
+        self.assertTrue({"submissions", "approvals", "imports"} <= self._tables())
+
+    def test_0011_downgrade_removes_the_workflow_and_the_staged_status(self):
+        command.upgrade(self.cfg, "head")
+        command.downgrade(self.cfg, "0010")
+        self.assertFalse({"submissions", "approvals", "imports"} & self._tables())
+        with self.conn.cursor() as cur:
+            with self.assertRaises(psycopg2.errors.CheckViolation):
+                self._insert_upload(cur, "staged")
+            cur.execute("SELECT 1 FROM information_schema.columns WHERE table_schema = %s "
+                        "AND table_name = 'tenants' AND column_name = 'allow_self_approval'", (settings.CONTROL_SCHEMA,))
             self.assertIsNone(cur.fetchone())
 
     def test_existing_duplicates_stop_the_upgrade_with_remediation(self):

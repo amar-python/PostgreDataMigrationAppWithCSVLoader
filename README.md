@@ -31,8 +31,11 @@
   cross-engine evals run on demand only (`make evals-engines`).
 - **Scale:** performance at ≥ 1 M rows (BR-22) and cross-engine equivalence
   (BR-21) are deferred and untested.
-- **Audit timing:** the upload audit row is written after the load commits.
-  A crash in that window leaves a loaded table with no audit row.
+- **Audit timing:** an import through the approval flow (`POST /api/csv/uploads`, then
+  submit, approve and import) commits its data, its import record and its audit row
+  together, so a failure leaves none of them. The older `POST /api/csv/upload` still
+  loads first and writes the audit row afterwards: a crash in that window leaves a loaded
+  table with no audit row. T&E loads use that older path, and so skip approval.
 - **Authentication:** people sign in per user: local accounts with lockout,
   OIDC, four roles (`docs/ROLES.md`) and a schema per tenant. The shared
   `API_KEY` is for scripts and services only; the browser never holds it. The
