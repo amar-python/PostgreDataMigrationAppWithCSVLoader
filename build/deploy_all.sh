@@ -9,7 +9,7 @@
 #                                          # launcher names, touch nothing
 #
 # Prerequisites:
-#   - psql installed and on PATH
+#   - psql installed and on PATH (checked up front; a --dry-run does not need it)
 #   - Running as a PostgreSQL superuser (default: postgres)
 #   - Script run from the te_database_setup/ directory
 #
@@ -46,6 +46,56 @@ warn()    { echo -e "${YELLOW}[⚠]${NC} $*"; }
 error()   { echo -e "${RED}[✗]${NC} $*" >&2; }
 separator(){ echo "────────────────────────────────────────────────────────────"; }
 
+# On Windows the PostgreSQL installer puts psql.exe under Program Files but does not
+# add it to PATH. Look there, newest version first, so the message can name the exact
+# folder. PROGRAMFILES is C:\Program Files in Git Bash; cygpath converts it.
+find_installed_psql() {
+   local pf="${PROGRAMFILES:-}" root
+   if [[ -n "${pf}" ]] && command -v cygpath >/dev/null 2>&1; then
+      root="$(cygpath -u "${pf}")"
+   elif [[ "${pf}" == /* ]]; then
+      root="${pf}"
+   else
+      root="/c/Program Files"
+   fi
+   ls -1d "${root}"/PostgreSQL/*/bin/psql.exe 2>/dev/null | sort -V | tail -n 1 || true
+}
+
+# A real run needs psql. Without this check a missing psql was read as "the database
+# does not exist": the script printed a green "Creating database" and only then failed.
+require_psql() {
+   if command -v psql >/dev/null 2>&1; then return 0; fi
+   error "psql was not found on PATH. This script needs the PostgreSQL client tools."
+   local found
+   found="$(find_installed_psql)"
+   if [[ -n "${found}" ]]; then
+      echo "      PostgreSQL is installed, but its bin folder is not on PATH. In Git Bash:" >&2
+      echo "          export PATH=\"$(dirname "${found}"):\$PATH\"" >&2
+      echo "      then run this script again. To keep it, add that folder to the Windows PATH." >&2
+   else
+      case "$(uname -s 2>/dev/null || true)" in
+         MINGW*|MSYS*|CYGWIN*)
+            echo "      Install PostgreSQL (tick 'Command Line Tools'), then add its bin folder," >&2
+            echo "      for example C:\\Program Files\\PostgreSQL\\<version>\\bin, to the Windows PATH." >&2 ;;
+         Darwin*) echo "      Install it with: brew install libpq   (then add it to PATH as brew says)" >&2 ;;
+         *)       echo "      Install it with: apt install postgresql-client   (or your distribution's equivalent)" >&2 ;;
+      esac
+   fi
+   exit 1
+}
+
+# Say once, before touching anything, if the server cannot be reached: a wrong port, a
+# server that is not running or a missing password otherwise repeat for every environment.
+require_server() {
+   local out
+   if out="$(${PSQL} -d postgres -tA -c 'SELECT 1' 2>&1)"; then return 0; fi
+   error "Could not connect to PostgreSQL at ${PG_HOST}:${PG_PORT} as ${PG_USER}:"
+   printf '%s\n' "${out}" | sed 's/^/      /' >&2
+   echo "      Check that the server is running on that host and port, and that PGPASSWORD is set" >&2
+   echo "      for ${PG_USER}. Override with PGHOST, PGPORT, PGUSER and PGPASSWORD." >&2
+   exit 1
+}
+
 # launcher_var FILE NAME — the value of `\set NAME value` in a launcher, quotes
 # stripped; empty if the launcher doesn't set it.
 launcher_var() {
@@ -69,6 +119,13 @@ for env in "${ENVS_TO_DEPLOY[@]}"; do
       exit 1
    fi
 done
+
+# ── Prerequisites ─────────────────────────────────────────────────────────────
+# A dry run reads launchers only, so it needs neither psql nor a server.
+if [[ "${DRY_RUN}" != true ]]; then
+   require_psql
+   require_server
+fi
 
 # ── Main deployment loop ──────────────────────────────────────────────────────
 separator
@@ -118,8 +175,21 @@ for env in "${ENVS_TO_DEPLOY[@]}"; do
    # Create the database if it doesn't exist.
    # CREATE DATABASE cannot run inside a transaction, so we handle it here
    # at the shell level rather than inside te_core_schema.sql's DO block.
-   DB_EXISTS=$(${PSQL} -d postgres -tA -c \
-      "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'" 2>/dev/null || true)
+   # Only an empty answer from a query that SUCCEEDED means "absent". A failed query
+   # used to be swallowed (2>/dev/null || true) and read as absent. stderr goes to a
+   # file, not into the answer: psql can print a harmless warning there (Windows
+   # prints a console code-page one) that would otherwise read as "exists".
+   errfile="$(mktemp)"
+   if DB_EXISTS=$(${PSQL} -d postgres -tA -c \
+         "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'" 2>"${errfile}"); then
+      rm -f "${errfile}"
+   else
+      error "Could not check whether database ${DB_NAME} exists:"
+      sed 's/^/      /' "${errfile}" >&2
+      rm -f "${errfile}"
+      FAILED+=("${env}")
+      continue
+   fi
    if [[ -z "${DB_EXISTS}" ]]; then
       log "Creating database: ${DB_NAME}"
       ${PSQL} -d postgres -c \

@@ -67,5 +67,7 @@ A test file reaches the repository root with `Path(__file__).resolve().parents[2
 
 ## The catalogue
 
-`docs/TEST_CASES.md` lists every test and is generated: run
-`python3 scripts/test_catalogue.py` after adding or moving tests. CI fails if it is stale.
+`docs/TEST_CASES.md` lists every test. It is generated and **not committed**: run
+`python3 scripts/test_catalogue.py` for a local copy, or download the `test-catalogue`
+artifact from a CI run. It used to be committed, and every PR that added or moved a test
+conflicted on it whenever `main` regenerated it.

@@ -9,6 +9,7 @@ Deployment artefacts for the migration runner and the Azure environment stacks.
 | `terraform/` | Dev stack. |
 | `terraform-prod/` | Production stack. See `docs/PROD_DEPLOY.md`. |
 | `terraform-test/`, `terraform-staging/` | Test and staging stacks. Code only — the one-time Azure setup in #31 has not been done, so these cannot be applied yet. |
+| `cloudshell_setup.sh` | The one-time setup for those two stacks (Terraform state storage, optional GitHub Actions identity), run in Azure Cloud Shell because `az` and `terraform` cannot run on the dev machine (#32, #34). See `docs/CLOUD_SHELL_SETUP.md`. |
 | `azure-portal-walkthrough.md` | Click-through for the portal steps. |
 
 ## Never let a credential into an image layer

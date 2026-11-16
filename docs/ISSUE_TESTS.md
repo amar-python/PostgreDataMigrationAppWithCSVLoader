@@ -1,7 +1,7 @@
 # Which test verifies which issue
 
 Every issue in the tracker at 9 Nov 2026 (46 closed, 23 open), with the test that fails if it comes back, or the reason there is none.
-Hand-kept: when you close an issue, add its row. State as of 10 Nov 2026 (M5, M6, M7 and #229 merged). `docs/TEST_CASES.md` (generated) lists every pytest test; this file answers "is issue N guarded?".
+Hand-kept: when you close an issue, add its row. State as of 10 Nov 2026 (M5, M6, M7 and #229 merged). `docs/TEST_CASES.md` (generated, not committed: `python3 scripts/test_catalogue.py` or the CI `test-catalogue` artifact) lists every pytest test; this file answers "is issue N guarded?".
 
 Legend: **✅** guarded by a test · **⚠️** guarded, but the test is a known failure until the defect is fixed (strict, so it turns red when it is) · **📎** fix and tests are in an open PR, not on `main` yet · **👤** needs a person or another system · **—** nothing to test.
 

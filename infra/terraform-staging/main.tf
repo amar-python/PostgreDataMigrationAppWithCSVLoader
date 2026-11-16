@@ -38,7 +38,7 @@ terraform {
   #
   # backend "azurerm" {
   #   resource_group_name  = "rg-tfstate"
-  #   storage_account_name = "sttfstatestagingXXXXXX"  # from the one-time setup script
+  #   storage_account_name = "sttfstatestagingXXXXXX"  # printed by: bash infra/cloudshell_setup.sh staging
   #   container_name       = "tfstate"
   #   key                  = "te-staging.tfstate"
   # }
