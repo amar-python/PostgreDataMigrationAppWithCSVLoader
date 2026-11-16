@@ -239,7 +239,7 @@ docker compose logs api    # look at a problem (use `podman compose` with Podman
 docker compose down -v     # stop AND delete the database. This cannot be undone
 ```
 
-Backups and upgrades across versions are not covered here yet.
+**Keep `.env` with the data.** The database is created once, with the secrets in `.env`; they cannot be regenerated for an existing database. If you extract a newer bundle into a new folder, copy the old folder's `.env` (and `te-initial-admin`, if you still need it) into it before you run `install.sh`. Backups and upgrades across versions are not covered here yet.
 
 ### If something goes wrong
 
@@ -247,6 +247,7 @@ Backups and upgrades across versions are not covered here yet.
 |---|---|
 | `neither docker nor podman is installed`, or `... is installed but not running` | Install or start the runtime (Docker Desktop, or `podman machine start`) |
 | `checksum mismatch` | The bundle is damaged or incomplete: copy it again |
+| `a database volume (te_te-db) from an earlier install exists, but this folder has no .env` | The data outlives the folder. The secrets it was created with are in the old folder's `.env`: copy that file here and run again to keep the data. To start from nothing, **deleting the data**, run again with `TE_RESET=1` |
 | `this bundle has no images for <cpu>` | The bundle was built without that CPU. Rebuild with `assemble` given a tarball for it |
 | Port 8000 or 8080 already in use | Stop what is using it. The ports are fixed in `container/docker-compose.yml` |
 | `the API did not become healthy in 4 minutes` | Run `compose logs`. The usual cause is a port or disk problem |

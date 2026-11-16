@@ -95,6 +95,27 @@ Write-Host "loaded te-api, te-frontend, te-db ($TeVersion, $Arch)"
 # ---- 3. secrets -----------------------------------------------------------------------------
 Step '3/6 secrets and configuration'
 $FirstRun = -not (Test-Path -LiteralPath '.env')
+# The database volume outlives this folder. If one is left from an earlier install but .env is
+# gone, new secrets would not match the ones the database was created with (it is initialised
+# only once), and the API could never sign in. Say so now instead of failing 4 minutes later.
+if ($FirstRun) {
+    & $RT volume inspect te_te-db *> $null
+    if ($LASTEXITCODE -eq 0) {
+        if ((Get-Setting 'TE_RESET' '') -eq '1') {
+            Write-Host 'TE_RESET=1: removing the earlier database volume and its containers. This deletes its data.'
+            $env:TE_VERSION = 'x'; $env:POSTGRES_PASSWORD = 'x'; $env:TE_DB_PASSWORD = 'x'; $env:TE_RUNTIME_PASSWORD = 'x'; $env:API_KEY = 'x'
+            Compose down -v *> $null
+            & $RT volume rm -f te_te-db *> $null
+            & $RT volume inspect te_te-db *> $null
+            if ($LASTEXITCODE -eq 0) { Fail "could not remove the volume te_te-db; remove it by hand ($RT volume rm te_te-db) and run this again" }
+            foreach ($v in 'TE_VERSION', 'POSTGRES_PASSWORD', 'TE_DB_PASSWORD', 'TE_RUNTIME_PASSWORD', 'API_KEY') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
+        } else {
+            Fail ("a database volume (te_te-db) from an earlier install exists, but this folder has no .env, so the secrets it was created with are gone and the API could not sign in to it.`n" +
+                  "  To keep the data: copy the .env from the earlier install's folder into this one, then run this again.`n" +
+                  "  To start from nothing, DELETING that data: set TE_RESET=1 and run this again.")
+        }
+    }
+}
 if ($FirstRun) {
     $Secrets = @{
         POSTGRES_PASSWORD   = New-Hex 24

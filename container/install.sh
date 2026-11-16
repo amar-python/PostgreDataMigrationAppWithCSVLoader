@@ -66,6 +66,21 @@ echo "loaded te-api, te-frontend, te-db ($TE_VERSION, $ARCH)"
 step "3/6 secrets and configuration"
 rnd() { od -An -N24 -tx1 /dev/urandom | tr -d ' \n'; }   # 48 hex characters from the OS
 FIRST_RUN=0
+# The database volume outlives this folder. If one is left from an earlier install but .env is
+# gone, new secrets would not match the ones the database was created with (it is initialised
+# only once), and the API could never sign in. Say so now instead of failing 4 minutes later.
+if [ ! -f .env ] && $RT volume inspect te_te-db >/dev/null 2>&1; then
+  if [ "${TE_RESET:-}" = 1 ]; then
+    echo "TE_RESET=1: removing the earlier database volume and its containers. This deletes its data."
+    TE_VERSION=x POSTGRES_PASSWORD=x TE_DB_PASSWORD=x TE_RUNTIME_PASSWORD=x API_KEY=x $COMPOSE down -v >/dev/null 2>&1 || true
+    $RT volume rm -f te_te-db >/dev/null 2>&1 || true
+    $RT volume inspect te_te-db >/dev/null 2>&1 && die "could not remove the volume te_te-db; remove it by hand ($RT volume rm te_te-db) and run this again"
+  else
+    die "a database volume (te_te-db) from an earlier install exists, but this folder has no .env, so the secrets it was created with are gone and the API could not sign in to it.
+  To keep the data: copy the .env from the earlier install's folder into this one, then run this again.
+  To start from nothing, DELETING that data: run this again with TE_RESET=1."
+  fi
+fi
 if [ -f .env ]; then
   # Keep the existing secrets: the database volume was initialised with them. The bundle's
   # version is the one just loaded, so it must win over the old value in the file.

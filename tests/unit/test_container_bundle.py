@@ -88,6 +88,16 @@ class ComposeUsesOnlyBundledImages(unittest.TestCase):
                 self.assertRegex(str(services[svc]["environment"][var]), r"^\$\{[A-Z_]+:\?",
                                  "a secret must be required from .env, never written in the file")
 
+    def test_the_installers_look_for_the_volume_compose_creates(self):
+        """Compose names the volume <project>_<key>. The installers refuse to reuse an old database volume
+        with new secrets, and can only do that if they look for the right name."""
+        c = compose()
+        volume = f"{c['name']}_te-db"
+        self.assertIn("te-db", c["volumes"])
+        for name in ("install.sh", "install.ps1"):
+            with self.subTest(installer=name):
+                self.assertIn(f"{volume} ", (CONTAINER / name).read_text(encoding="utf-8").replace(")", " "))
+
     def test_database_data_is_on_a_named_volume(self):
         self.assertIn("te-db", compose()["volumes"])
         self.assertTrue(any(v.startswith("te-db:") for v in compose()["services"]["db"]["volumes"]))
