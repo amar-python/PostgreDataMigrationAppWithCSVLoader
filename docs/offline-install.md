@@ -2,6 +2,8 @@
 
 This is the procedure for installing the platform on a machine with no network access (#60). It covers the API, the frontend, PostgreSQL 16 and the T&E schema.
 
+**Windows, macOS, or an Ubuntu machine you would rather not install packages on?** Use the [container bundle](#container-bundle-windows-macos-and-linux-128) instead: the same platform as three containers, installed with Docker or Podman.
+
 It uses two scripts:
 
 | Script | Runs on | Does |
@@ -146,3 +148,130 @@ The rehearsal ran in Claude's Ubuntu 24.04 workspace, inside a Linux network nam
   - PostgreSQL 16 was already installed in the workspace, so only Node.js was newly installed from the bundle.
 
 These differences are why the clean-VM run is still needed.
+
+## Container bundle (Windows, macOS and Linux, #128)
+
+BR-38: the platform installs and runs with no internet access on any Windows, macOS or Linux host that has Docker or Podman. It is three containers instead of packages on the host.
+
+| Image | What it is |
+|---|---|
+| `te-api` | The FastAPI backend (Python 3.12). Port 8000 |
+| `te-frontend` | The web app (Node.js 22, the Nitro server build). Port 8080 |
+| `te-db` | PostgreSQL 16. On its first start it deploys the T&E schema and creates the application roles |
+
+Use this bundle when the host is Windows or macOS, or when you want nothing installed on the host but a container runtime. The Ubuntu procedure above installs natively and is unchanged.
+
+### What you need on the offline machine
+
+- **Docker** (Docker Desktop, or Docker Engine with the Compose plugin) **or Podman**. Docker Desktop needs a paid subscription for larger organisations; Podman is free.
+- Linux containers. On Windows, Docker Desktop must be in Linux-container mode (its default).
+- Podman also needs a compose provider (`podman-compose`, or `docker-compose` with Podman's API socket running) and its default networking (`netavark` and `aardvark-dns`, which an ordinary Podman install includes).
+- About 2 GB of free disk space for the images, and ports 8000 and 8080 free.
+- Nothing else. The installer needs no internet access and does not pull anything.
+
+### 1. Get the bundle (connected machine)
+
+CI builds it: download the `te-container-bundle` artifact from the **Container bundle** workflow run. It holds the images for **amd64** (Intel and AMD) and **arm64** (Apple Silicon, Windows on Arm), and the installer picks the one that matches the machine.
+
+To build it yourself, with Docker or Podman and internet access, once on each CPU type you want to support:
+
+```bash
+bash container/build_bundle.sh images                       # builds the three images, saves dist/te-images-<version>-<cpu>.tar
+bash container/build_bundle.sh assemble dist/te-images-*.tar  # one or more tarballs, one per CPU -> dist/te-container-bundle-<version>.tar.gz
+```
+
+`TE_RUNTIME=podman` builds with Podman. The `.tar.gz` has a `.sha256` file next to it.
+
+### 2. Move it to the offline machine
+
+Copy the `.tar.gz` and its `.sha256`, check the checksum, and extract:
+
+```bash
+sha256sum -c te-container-bundle-<version>.tar.gz.sha256     # macOS: shasum -a 256 -c
+tar -xzf te-container-bundle-<version>.tar.gz
+cd te-container-bundle-<version>
+```
+
+On Windows, check it with `Get-FileHash <file> -Algorithm SHA256` and extract with `tar -xzf` (built in) or 7-Zip. The installer also verifies every file inside the bundle (`SHA256SUMS`) before it does anything.
+
+### 3. Install
+
+| Host | Command, from inside the extracted folder |
+|---|---|
+| macOS, Linux | `bash install.sh` |
+| Windows | `powershell -ExecutionPolicy Bypass -File .\install.ps1` |
+
+Add the name or address people will use to reach this machine if it is not just this machine (for example `bash install.sh intranet-host`, or `-TeHost intranet-host` on Windows). The default, `localhost`, works only from the machine itself.
+
+Optional environment variables: `TE_RUNTIME` (`docker` or `podman`; default: whichever is installed, Docker first), `TE_TENANT` (default `main`), `TE_ADMIN_USER` (default `admin`), `TE_ADMIN_PASSWORD` (12+ characters; default: generated).
+
+The installer, in order:
+
+1. checks every file against `SHA256SUMS`;
+2. loads the images for this machine's CPU from the bundle (no download);
+3. generates the secrets into `.env` (readable only by you; never in an image);
+4. starts the database, API and web app, and waits until the API answers;
+5. creates the first tenant admin, once. A generated password is written to `te-initial-admin` (readable only by you): change it after first sign-in;
+6. runs the smoke test (below) and checks ports 8000 and 8080 answer on the host.
+
+Then open `http://localhost:8080` and sign in with the tenant and admin it printed.
+
+It is safe to run again: the secrets and data are kept, and the admin is not created a second time. Run it with a different host name to change the address the web app uses.
+
+### 4. Verify
+
+The installer's last step is the smoke test, `container/smoke_test.py`, which runs inside the API container so that it needs nothing on the host. It is the same seven checks as the Ubuntu install, and prints `7 of 7 passed`:
+
+1. API health
+2. the API rejects a request with no key
+3. a CSV uploads (2 rows inserted)
+4. the upload is listed with its persisted counts
+5. the web app serves its page
+6. the admin signs in
+7. the session is a tenant admin
+
+### Everyday operation
+
+```bash
+docker compose down        # stop. Your data is kept in the te-db volume
+docker compose up -d       # start again
+docker compose logs api    # look at a problem (use `podman compose` with Podman)
+docker compose down -v     # stop AND delete the database. This cannot be undone
+```
+
+Backups and upgrades across versions are not covered here yet.
+
+### If something goes wrong
+
+| Symptom | Cause and fix |
+|---|---|
+| `neither docker nor podman is installed`, or `... is installed but not running` | Install or start the runtime (Docker Desktop, or `podman machine start`) |
+| `checksum mismatch` | The bundle is damaged or incomplete: copy it again |
+| `this bundle has no images for <cpu>` | The bundle was built without that CPU. Rebuild with `assemble` given a tarball for it |
+| Port 8000 or 8080 already in use | Stop what is using it. The ports are fixed in `container/docker-compose.yml` |
+| `the API did not become healthy in 4 minutes` | Run `compose logs`. The usual cause is a port or disk problem |
+| Podman: `failed to connect to the docker API` | `podman compose` chose `docker-compose` and Podman's API socket is not running. Start it (`systemctl --user enable --now podman.socket`) or install `podman-compose` |
+| Podman: the API never turns healthy | Podman runs healthchecks from systemd timers, so a host without systemd shows `starting` forever |
+
+### What is proved, and where
+
+The offline test is: start from a machine with no images, with the containers cut off from the internet at the firewall, install from the extracted bundle, and pass the smoke test.
+
+| Host and runtime | Status |
+|---|---|
+| Linux amd64, Docker | **Passed**, 7 of 7, run by hand for #128. The Container bundle workflow repeats it on every change |
+| Linux amd64, Podman 4.9 with `podman-compose` | **Passed**, 7 of 7 |
+| Linux amd64, Podman 4.9 with `docker-compose` over its API socket | **Passed**, 7 of 7 (healthcheck timer emulated; the host had no systemd) |
+| Linux arm64, Docker | Built and tested on a native arm64 runner by the Container bundle workflow. Not run by hand |
+| `install.ps1` | **Passed**, 7 of 7, under PowerShell 7.4 on Linux against Docker. **Not yet run on Windows** |
+| Windows, Docker Desktop or Podman | **Not yet run.** Needed for BR-38 |
+| macOS (Apple Silicon), Docker Desktop or Podman | **Not yet run.** Needed for BR-38 |
+
+BR-38 is done when the smoke test passes 7 of 7 with networking off on Windows, macOS and Linux. Attach, for each: the installer's output, how you proved the network was off, the OS and runtime versions, and the bundle's version.
+
+### Known limits
+
+- No TLS: the web app and API are plain HTTP, as in the Ubuntu install. Put a reverse proxy in front for anything beyond a private network.
+- Windows containers are not supported; the images are Linux images.
+- The first tenant admin's password is written to a file the first time. Change it after signing in, and delete the file.
+- The installer has been run under PowerShell 7, not yet under Windows PowerShell 5.1, which it is written to support.
