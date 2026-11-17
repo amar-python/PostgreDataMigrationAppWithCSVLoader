@@ -7,6 +7,13 @@
 #   PGHOST=myserver ./deploy_all.sh prod   # target a specific host
 #   ./deploy_all.sh --dry-run prod         # show the database and owner each
 #                                          # launcher names, touch nothing
+#   ./deploy_all.sh --yes dev              # use a database that already exists
+#                                          # without asking (also -y)
+#
+# A database that already exists is never recreated. When a person is at the terminal,
+# the script asks before applying the schema to it; answer y to use it, anything else
+# skips that environment and changes nothing. With no terminal (CI, a container, a
+# pipe) or with --yes it uses the existing database without asking.
 #
 # Prerequisites:
 #   - psql installed and on PATH (checked up front; a --dry-run does not need it)
@@ -96,6 +103,20 @@ require_server() {
    exit 1
 }
 
+# A database that already exists is reused, never recreated. When a person is at the
+# terminal, ask first: deploying into a database they did not mean to touch should be
+# their decision. Scripts, CI and containers have no terminal (stdin and stderr must
+# both be one), so they keep using it, and --yes says the same explicitly.
+# Returns 0 to use the database, 1 to skip this environment.
+accept_existing_database() {
+   local db="$1" reply=""
+   if [[ "${ASSUME_YES}" == true ]] || ! [[ -t 0 && -t 2 ]]; then return 0; fi
+   warn "Database ${db} already exists on ${PG_HOST}:${PG_PORT}."
+   printf '      Use it and apply the T&E schema to it? [y/N] ' >&2
+   read -r reply || reply=""
+   [[ "${reply}" =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
 # launcher_var FILE NAME — the value of `\set NAME value` in a launcher, quotes
 # stripped; empty if the launcher doesn't set it.
 launcher_var() {
@@ -106,9 +127,14 @@ launcher_var() {
 # --dry-run prints each environment's target database and owner, as read from
 # its launcher, and exits before touching PostgreSQL.
 DRY_RUN=false
+ASSUME_YES=false
 REQUESTED=()
 for arg in "$@"; do
-   if [[ "${arg}" == "--dry-run" ]]; then DRY_RUN=true; else REQUESTED+=("${arg}"); fi
+   case "${arg}" in
+      --dry-run)  DRY_RUN=true ;;
+      --yes|-y)   ASSUME_YES=true ;;
+      *)          REQUESTED+=("${arg}") ;;
+   esac
 done
 ENVS_TO_DEPLOY=("${REQUESTED[@]:-${ALL_ENVS[@]}}")
 
@@ -137,6 +163,7 @@ separator
 
 FAILED=()
 SUCCEEDED=()
+SKIPPED=()
 
 for env in "${ENVS_TO_DEPLOY[@]}"; do
    env_file="${SCRIPT_DIR}/environments/env_${env}.sql"
@@ -204,6 +231,11 @@ for env in "${ENVS_TO_DEPLOY[@]}"; do
       }
       log "Database ${DB_NAME} created."
    else
+      if ! accept_existing_database "${DB_NAME}"; then
+         warn "Skipped ${env}: the existing database ${DB_NAME} was not accepted. Nothing was changed."
+         SKIPPED+=("${env}")
+         continue
+      fi
       log "Database ${DB_NAME} already exists — skipping CREATE."
    fi
 
@@ -227,6 +259,9 @@ echo "  Deployment Summary"
 separator
 if [[ ${#SUCCEEDED[@]} -gt 0 ]]; then
    log "Succeeded : ${SUCCEEDED[*]}"
+fi
+if [[ ${#SKIPPED[@]} -gt 0 ]]; then
+   warn "Skipped   : ${SKIPPED[*]}  (existing database not accepted)"
 fi
 if [[ ${#FAILED[@]} -gt 0 ]]; then
    error "Failed    : ${FAILED[*]}"
