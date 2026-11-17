@@ -33,7 +33,7 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 164 | Live pointers to superseded API doc | — | docs, closed not planned |
 | 165 | STARTER_GUIDE dedup claim | — | docs, closed not planned |
 | 166 | STARTER_GUIDE skips sign-in | — | docs |
-| 169 | Test catalogue generator | ✅ | `tests/unit/test_tooling_issues.py` and the CI freshness step |
+| 169 | Test catalogue generator | ✅ | `tests/unit/test_tooling_issues.py` (the generator lists every test file). The catalogue itself is generated in CI and not committed, so there is no freshness check any more |
 | 170 | All-failed T&E import removed the prior dataset | ✅ | `tests/system/test_te_reupload_registry.py` (`…keeps_a_prior_dynamic_table…`), `tests/system/test_failed_uploads.py` |
 | 171 | `setup.sh` truncated the config on failure | ✅ | `tests/unit/test_tooling_issues.py` (runs the real config-write block) |
 | 175 | An uploader could destroy a dataset through overwrite or a mode switch | ✅ | `tests/system/test_issue_regressions.py` (`UploadCannotDestroyAnExistingDataset`). Guarded by outcome: M5 (#109) stores a repeated filename as a new version and ignores `overwrite`, so the dynamic path no longer drops anything; the T&E path still needs delete permission and is tested as such |
@@ -85,6 +85,7 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 198 | Track checks that completed after merging #197 | — | process |
 | 210 | Background job queue for large imports | — | feature, not built |
 | 212 | Plan the Streamlit migration | — | a plan. `e2e/test_streamlit_spike.py` is the baseline it must keep passing |
+| 242 | Decide whether a dynamic upload must carry confirmed types | ✅ | `tests/system/test_require_type_confirmation.py`: option B, `API_REQUIRE_TYPE_CONFIRMATION` (off by default), both endpoints, nothing created on a refusal, T&E unaffected |
 
 ## Known failures on purpose
 
