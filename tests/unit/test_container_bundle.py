@@ -18,7 +18,6 @@ Building and running the images is exercised by .github/workflows/container-bund
 from __future__ import annotations
 
 import ast
-import json
 import os
 import re
 import subprocess
@@ -146,8 +145,8 @@ class DockerfilesCopyOnlyWhatExists(unittest.TestCase):
 
 @pytest.mark.unit
 class PowerShellInstallerAvoidsWindowsTraps(unittest.TestCase):
-    code = "\n".join(l for l in (CONTAINER / "install.ps1").read_text(encoding="utf-8").splitlines()
-                     if not l.lstrip().startswith("#"))
+    code = "\n".join(line for line in (CONTAINER / "install.ps1").read_text(encoding="utf-8").splitlines()
+                     if not line.lstrip().startswith("#"))
 
     def test_the_env_file_is_written_without_a_byte_order_mark(self):
         """-Encoding UTF8 adds a BOM in Windows PowerShell 5.1; a .env parser then reads it as part of the first key."""
@@ -172,8 +171,8 @@ class ScriptsParse(unittest.TestCase):
 
     def test_the_installer_uses_nothing_newer_than_bash_3_2(self):
         """macOS ships bash 3.2: no associative arrays, mapfile, or ${var,,} / ${var^^}."""
-        code = "\n".join(l for l in (CONTAINER / "install.sh").read_text(encoding="utf-8").splitlines()
-                         if not l.lstrip().startswith("#"))
+        code = "\n".join(line for line in (CONTAINER / "install.sh").read_text(encoding="utf-8").splitlines()
+                         if not line.lstrip().startswith("#"))
         for pattern in (r"declare\s+-A", r"\bmapfile\b", r"\breadarray\b", r"\$\{[A-Za-z_]+(,,|\^\^)\}", r"&>>"):
             with self.subTest(pattern=pattern):
                 self.assertNotRegex(code, pattern)
