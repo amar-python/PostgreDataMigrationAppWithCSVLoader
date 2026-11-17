@@ -260,10 +260,10 @@ The offline test is: start from a machine with no images, with the containers cu
 
 | Host and runtime | Status |
 |---|---|
-| Linux amd64, Docker | **Passed**, 7 of 7, run by hand for #128. The Container bundle workflow repeats it on every change |
-| Linux amd64, Podman 4.9 with `podman-compose` | **Passed**, 7 of 7 |
+| Linux amd64, Docker | **Passed**, 7 of 7, by hand and in CI. The Container bundle workflow repeats it on every change. The bundle CI built (both CPUs, about 550 MB) was also downloaded and installed by hand with the containers cut off: 7 of 7 |
+| Linux amd64, Podman with `podman-compose` | **Passed**, 7 of 7, by hand (Podman 4.9) and in CI |
 | Linux amd64, Podman 4.9 with `docker-compose` over its API socket | **Passed**, 7 of 7 (healthcheck timer emulated; the host had no systemd) |
-| Linux arm64, Docker | Built and tested on a native arm64 runner by the Container bundle workflow. Not run by hand |
+| Linux arm64, Docker | **Passed** in CI, 7 of 7, on a native arm64 runner (no emulation). Not run by hand |
 | `install.ps1` | **Passed**, 7 of 7, under PowerShell 7.4 on Linux against Docker. **Not yet run on Windows** |
 | Windows, Docker Desktop or Podman | **Not yet run.** Needed for BR-38 |
 | macOS (Apple Silicon), Docker Desktop or Podman | **Not yet run.** Needed for BR-38 |
