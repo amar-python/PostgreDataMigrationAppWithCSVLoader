@@ -71,6 +71,13 @@ def existing(cur, slug: str, username: str) -> Existing:
     return Existing(*cur.fetchone())
 
 
+def tenant_id(cur, slug: str) -> int | None:
+    """The id of the tenant with this slug, or None if there is none."""
+    cur.execute(_q("SELECT id FROM {c}.tenants WHERE slug = %s"), (slug,))
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
 def create_tenant(cur, slug: str, name: str) -> int:
     cur.execute(_q("INSERT INTO {c}.tenants (slug, name) VALUES (%s, %s) RETURNING id"), (slug, name))
     return cur.fetchone()[0]
