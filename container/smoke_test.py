@@ -6,7 +6,8 @@ API container and needs nothing on the host: no curl or bash, which a Windows ma
 does not have. The installer runs it with `compose exec`.
 
 Environment:
-  API_KEY          the deployment's key (required)
+  API_KEY          the deployment's key (required). Already in the API container's own
+                   environment, so the installers do not pass it in
   SMOKE_TENANT, SMOKE_USER, SMOKE_PASSWORD   the first tenant admin: checks 6 and 7. If any
                    is missing (a re-run of the installer no longer knows the password), those
                    two are skipped and the test reports "5 of 5"; the full result is 7 of 7.

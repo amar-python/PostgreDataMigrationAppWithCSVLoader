@@ -193,8 +193,10 @@ if ($FirstRun) {
 
 # ---- 6. smoke test --------------------------------------------------------------------------
 Step '6/6 smoke test'
-$env:API_KEY = $Secrets.API_KEY; $env:SMOKE_TENANT = $TeTenant; $env:SMOKE_USER = $TeAdminUser; $env:SMOKE_PASSWORD = $AdminPassword
-Compose exec -T -e API_KEY -e SMOKE_TENANT -e SMOKE_USER -e SMOKE_PASSWORD api python smoke_test.py
+# API_KEY is not forwarded: the API container already has it in its environment, and a bare
+# `-e API_KEY` makes podman-compose 1.6 re-read the service's ${API_KEY:?} and fail.
+$env:SMOKE_TENANT = $TeTenant; $env:SMOKE_USER = $TeAdminUser; $env:SMOKE_PASSWORD = $AdminPassword
+Compose exec -T -e SMOKE_TENANT -e SMOKE_USER -e SMOKE_PASSWORD api python smoke_test.py
 $smokeOk = ($LASTEXITCODE -eq 0)
 try {
     # The smoke test runs inside the containers; this checks the ports are published to the host.

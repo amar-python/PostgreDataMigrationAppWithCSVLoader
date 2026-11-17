@@ -142,9 +142,11 @@ fi
 
 # ---- 6. smoke test -----------------------------------------------------------------------
 step "6/6 smoke test"
-export API_KEY SMOKE_TENANT="$TE_TENANT" SMOKE_USER="$TE_ADMIN_USER" SMOKE_PASSWORD="${TE_ADMIN_PASSWORD:-}"
+# API_KEY is not forwarded: the API container already has it in its environment, and a bare
+# `-e API_KEY` makes podman-compose 1.6 re-read the service's ${API_KEY:?} and fail.
+export SMOKE_TENANT="$TE_TENANT" SMOKE_USER="$TE_ADMIN_USER" SMOKE_PASSWORD="${TE_ADMIN_PASSWORD:-}"
 smoke_rc=0
-$COMPOSE exec -T -e API_KEY -e SMOKE_TENANT -e SMOKE_USER -e SMOKE_PASSWORD api python smoke_test.py || smoke_rc=$?
+$COMPOSE exec -T -e SMOKE_TENANT -e SMOKE_USER -e SMOKE_PASSWORD api python smoke_test.py || smoke_rc=$?
 if command -v curl >/dev/null 2>&1; then
   # The smoke test runs inside the containers; this checks the ports are published to the host.
   curl -sf "http://localhost:8000/api/health" >/dev/null && curl -sf -o /dev/null "http://localhost:8080/" \

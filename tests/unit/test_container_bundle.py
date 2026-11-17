@@ -97,6 +97,20 @@ class ComposeUsesOnlyBundledImages(unittest.TestCase):
             with self.subTest(installer=name):
                 self.assertIn(f"{volume} ", (CONTAINER / name).read_text(encoding="utf-8").replace(")", " "))
 
+    def test_installers_do_not_forward_a_variable_the_service_already_defines(self):
+        """`compose exec -e NAME` (no value) must not name a variable a service's environment block defines.
+        podman-compose 1.6 looks a bare -e NAME up in that block, re-reads its raw `${NAME:?}` and raises
+        `required variable NAME is missing a value`. Found on a CI runner: the container already has the
+        value, so it never needs forwarding."""
+        defined = {k for svc in compose()["services"].values() for k in svc.get("environment", {})}
+        for name in ("install.sh", "install.ps1"):
+            text = (CONTAINER / name).read_text(encoding="utf-8")
+            for line in text.splitlines():
+                if "exec" in line and not line.lstrip().startswith("#"):
+                    forwarded = set(re.findall(r"-e\s+([A-Z][A-Z0-9_]*)(?![A-Z0-9_=])", line))
+                    with self.subTest(installer=name, line=line.strip()[:60]):
+                        self.assertFalse(forwarded & defined, f"forwards {sorted(forwarded & defined)}")
+
     def test_database_data_is_on_a_named_volume(self):
         self.assertIn("te-db", compose()["volumes"])
         self.assertTrue(any(v.startswith("te-db:") for v in compose()["services"]["db"]["volumes"]))
