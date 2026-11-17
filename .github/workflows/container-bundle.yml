@@ -81,10 +81,14 @@ jobs:
           WORK="$(mktemp -d)"; tar -xzf "$BUNDLE_TGZ" -C "$WORK"
           BUNDLE_DIR="$(ls -d "$WORK"/te-container-bundle-*)"
 
-          # Cut containers off from the internet. Docker's rule goes in DOCKER-USER; Podman
-          # forwards through its own chains, so it needs one on FORWARD as well.
-          sudo iptables -I DOCKER-USER 1 -o "$EGRESS" -j REJECT
-          sudo iptables -I FORWARD 1 -o "$EGRESS" -j REJECT
+          # Cut containers off from the internet. This is a forwarding chain at priority -200, so
+          # it runs before Docker's and Podman's own chains whichever of them set themselves up
+          # first (a plain iptables REJECT was bypassed for Podman on the runner: its rules were
+          # added after ours). Traffic to the host and between containers is not forwarded out of
+          # $EGRESS, so it is unaffected.
+          sudo apt-get install -y -qq nftables
+          printf 'table inet te_cutoff {\n  chain block {\n    type filter hook forward priority -200; policy accept;\n    oifname "%s" reject\n  }\n}\n' "$EGRESS" | sudo nft -f -
+          sudo nft list table inet te_cutoff
 
           # Prove the cut-off works before relying on it: load the images, try to reach out.
           if [ "$RT" = podman ]; then sudo podman load -i "$BUNDLE_DIR"/images-*.tar >/dev/null; else docker load -i "$BUNDLE_DIR"/images-*.tar >/dev/null; fi
