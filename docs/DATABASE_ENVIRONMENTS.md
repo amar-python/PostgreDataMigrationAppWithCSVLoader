@@ -80,6 +80,15 @@ work until that's done. The `.tf` files themselves are ready to review.
 the environment's `.sql` file (schema + seed data per the flags above), so
 it's also how you push schema changes to an existing environment.
 
+**A database that already exists.** It is never recreated. When you run the
+script at a terminal, it says the database exists and asks
+`Use it and apply the T&E schema to it? [y/N]`. `y` (or `yes`) continues; anything
+else, including just Enter, skips that environment, changes nothing and reports it
+as `Skipped` (the exit status stays 0). Each environment is asked about
+separately. With no terminal (CI, a container, a pipe) it uses the existing
+database without asking, as before. Pass `--yes` (or `-y`) to answer yes up front.
+A `--dry-run` and a database that does not exist yet never ask.
+
 ```bash
 # One environment
 PGHOST=localhost PGPORT=5433 PGUSER=postgres PGPASSWORD=<password> \
