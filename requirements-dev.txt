@@ -12,3 +12,4 @@ httpx2>=2.10.0
 # tests/unit/test_streamlit_shell.py runs the Streamlit app headless (AppTest). Keep in step with
 # streamlit_app/requirements.txt: a test fails if the two pins differ.
 streamlit==1.67.0
+openpyxl==3.1.5
