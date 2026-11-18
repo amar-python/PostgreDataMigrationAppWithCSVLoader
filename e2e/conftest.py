@@ -1,7 +1,7 @@
-"""Browser end-to-end tests: the real API, the real React app, the Streamlit spike and the Streamlit shell, in Chromium.
+"""Browser end-to-end tests: the real API, the real React app and the Streamlit app (the shell and its screens), in Chromium.
 
 Not collected by the default `pytest` run (testpaths = tests): they need Node dependencies, a
-browser and four local servers. See e2e/README.md.
+browser and three local servers. See e2e/README.md.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from api.tenancy import migrate_tenant, schema_for  # noqa: E402
 # Streamlit and the app re-run and redraw after each action; the default 5 s is tight on a cold start.
 expect.set_options(timeout=10_000)
 
-API_PORT, WEB_PORT, ST_PORT, SHELL_PORT = 8000, 8080, 8501, 8502
+API_PORT, WEB_PORT, SHELL_PORT = 8000, 8080, 8502
 SPIKE_PORT = 8503  # the #254 upload spike, started by e2e/test_streamlit_upload_spike.py itself
 PASSWORD = "e2e correct horse battery"
 
@@ -53,9 +53,8 @@ class Account:
 class Stack:
     api: str
     web: str
-    streamlit: str
     accounts: dict[str, Account] = field(default_factory=dict)
-    shell: str = ""  # the Streamlit app shell (#251), streamlit_app/
+    shell: str = ""  # the Streamlit app (#251 and its screens), streamlit_app/
 
     def token(self, who: str) -> str:
         a = self.accounts[who]
@@ -93,7 +92,7 @@ def _wait_for(url: str, what: str, seconds: int = 120) -> None:
 def prerequisites(request):
     """First of all, before the React build or any server: is everything the tests need there? Reports all
     that is missing at once (e2e/preflight.py), rather than the first error a missing piece happens to raise."""
-    ports = [API_PORT, WEB_PORT, ST_PORT, SHELL_PORT]
+    ports = [API_PORT, WEB_PORT, SHELL_PORT]
     if any("test_streamlit_upload_spike" in item.nodeid for item in request.session.items):
         ports.append(SPIKE_PORT)  # only when those tests are selected: a busy 8503 should not stop the rest
     found = preflight.problems(
@@ -122,7 +121,7 @@ def stack():
     for t in tenant_ids:
         migrate_tenant(t)
 
-    api, web, st, shell = (f"http://127.0.0.1:{p}" for p in (API_PORT, WEB_PORT, ST_PORT, SHELL_PORT))
+    api, web, shell = (f"http://127.0.0.1:{p}" for p in (API_PORT, WEB_PORT, SHELL_PORT))
     env = {**os.environ, "CORS_ORIGINS": web, "API_RATE_LIMIT_WRITES": "0", "API_RATE_LIMIT_READS": "0"}
     subprocess.run(["npm", "run", "build"], cwd=ROOT / "csv-table-hub-main", check=True, capture_output=True,
                    env={**env, "NITRO_PRESET": "node-server", "VITE_API_BASE": api})  # VITE_API_BASE is baked in
@@ -133,11 +132,7 @@ def stack():
         subprocess.Popen(["node", ".output/server/index.mjs"], cwd=ROOT / "csv-table-hub-main",
                          env={**env, "PORT": str(WEB_PORT), "HOST": "127.0.0.1"},
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True),
-        subprocess.Popen([sys.executable, "-m", "streamlit", "run", "spikes/streamlit_review/app.py",
-                          "--server.headless", "true", "--server.port", str(ST_PORT),
-                          "--browser.gatherUsageStats", "false"],
-                         cwd=ROOT, env={**env, "API_URL": api}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True),
-        # The app shell, started the way its README says: from its own folder, with no flag for telemetry,
+        # The Streamlit app, started the way its README says: from its own folder, with no flag for telemetry,
         # so the shipped .streamlit/config.toml is what is tested.
         subprocess.Popen([sys.executable, "-m", "streamlit", "run", "app.py", "--server.headless", "true",
                           "--server.port", str(SHELL_PORT)],
@@ -147,9 +142,8 @@ def stack():
     try:
         _wait_for(f"{api}/api/health", "the API")
         _wait_for(f"{web}/auth", "the React app")
-        _wait_for(f"{st}/_stcore/health", "Streamlit")
-        _wait_for(f"{shell}/_stcore/health", "the Streamlit shell")
-        yield Stack(api, web, st, accts, shell)
+        _wait_for(f"{shell}/_stcore/health", "the Streamlit app")
+        yield Stack(api, web, accts, shell)
     finally:
         for p in procs:  # each server leads its own process group, so npx's child dies with it
             try:
@@ -208,19 +202,8 @@ def react_sign_in(page: Page, stack: Stack, who: str) -> None:
     page.get_by_role("button", name="Sign out").wait_for()
 
 
-def streamlit_sign_in(page: Page, stack: Stack, who: str) -> None:
-    a = stack.accounts[who]
-    page.goto(stack.streamlit)
-    side = page.locator('[data-testid="stSidebar"]')
-    side.get_by_label("Tenant").fill(a.tenant)
-    side.get_by_label("Username").fill(a.username)
-    side.get_by_role("textbox", name="Password").fill(PASSWORD)
-    side.get_by_role("button", name="Sign in").click()
-    side.get_by_text(a.role, exact=True).wait_for()
-
-
 def shell_sign_in(page: Page, stack: Stack, who: str, password: str = PASSWORD) -> None:
-    """Sign in to the Streamlit app shell (#251): its sign-in form is the page itself, not the sidebar."""
+    """Sign in to the Streamlit app (#251): its sign-in form is the page itself, not the sidebar."""
     a = stack.accounts[who]
     shell_sign_in_as(page, stack, a.tenant, a.username, password)
 

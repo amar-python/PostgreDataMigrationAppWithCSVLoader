@@ -107,14 +107,19 @@ def sign_out() -> None:
     end_session()
 
 
+def lost_session() -> None:
+    """The server says this session is over (any 401): forget everything, say why, and start the run again."""
+    end_session("Your session has ended. Sign in again.")
+    st.rerun()
+
+
 def call(method: str, path: str, **kwargs):
     """Call the API as the signed-in user. Any 401 means the session is over: sign out and show why."""
     s = session()
     try:
         return api_client.request(method, path, token=s["token"] if s else None, **kwargs)
     except api_client.Unauthorized:
-        end_session("Your session has ended. Sign in again.")
-        st.rerun()
+        lost_session()
 
 
 def change_password(current: str, new: str) -> str | None:

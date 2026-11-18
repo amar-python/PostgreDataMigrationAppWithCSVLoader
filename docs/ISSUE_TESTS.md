@@ -14,7 +14,7 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 99 | Per-tenant T&E tables | ✅ | `tests/system/test_tenant_isolation.py` (own tables, per-tenant counts, keys and triggers kept) |
 | 102 | Lock accounts after failed sign-ins | ✅ | `tests/system/test_accounts.py` (`Lockout`) |
 | 107 | Immutable source, append-only audit | ✅ | `tests/system/test_preserved_uploads.py`, `test_audit_append_only.py`, `test_original_bytes.py` |
-| 108 | Review: paging, include/exclude, versioned edits | ✅ | `tests/system/test_review.py`, `test_review_cases.py`, `fe: review-table.test.tsx`, `e2e/test_streamlit_spike.py` |
+| 108 | Review: paging, include/exclude, versioned edits | ✅ | `tests/system/test_review.py`, `test_review_cases.py`, `fe: review-table.test.tsx`; the Streamlit screen (#252): `tests/unit/test_streamlit_review.py`, `e2e/test_streamlit_review.py` |
 | 114 | Delete merged branches | — | housekeeping |
 | 116 | Local PostgreSQL not reachable on 5433 | 👤 | one dev machine's setup; closed on evidence attached to the issue |
 | 117 | Password change and admin reset | ✅ | `tests/system/test_password_reset.py`, `fe: change-password.test.tsx` |
@@ -27,7 +27,7 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 133 | React hydration errors on `/auth` | ✅ | `fe: session.test.ts` |
 | 151 | Terraform storage accounts audit | — | investigation |
 | 152 | Frontend architecture decision | — | decision, see #154 and #212 |
-| 154 | Streamlit spike | ✅ | `e2e/test_streamlit_spike.py` |
+| 154 | Streamlit spike | ✅ | its four browser tests now run against the real screen: `e2e/test_streamlit_review.py` (the spike itself was removed with #252) |
 | 156 | Tracker home decision | — | decision |
 | 162 | Cosmetic tracker doc edits | — | docs |
 | 164 | Live pointers to superseded API doc | — | docs, closed not planned |
@@ -84,7 +84,7 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 195 | Confirm inferred types, provenance flag | ✅ | `tests/system/test_type_provenance.py` (merged, #213). The issue is still open |
 | 198 | Track checks that completed after merging #197 | — | process |
 | 210 | Background job queue for large imports | — | feature, not built |
-| 212 | Plan the Streamlit migration | — | a plan. `e2e/test_streamlit_spike.py` is the baseline it must keep passing |
+| 212 | Plan the Streamlit migration | — | a plan. `e2e/test_streamlit_review.py` is the baseline it must keep passing |
 | 242 | Decide whether a dynamic upload must carry confirmed types | ✅ | `tests/system/test_require_type_confirmation.py`: option B, `API_REQUIRE_TYPE_CONFIRMATION` (off by default), both endpoints, nothing created on a refusal, T&E unaffected |
 
 ## Known failures on purpose

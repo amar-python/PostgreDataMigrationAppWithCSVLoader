@@ -1,11 +1,11 @@
-# Streamlit front end (migration step 1: the app shell, #251)
+# Streamlit front end (migration steps 1 and 2: the app shell, #251, and the review screen, #252)
 
 Part of the plan in `DECISIONS/2026-11-16-streamlit-migration-plan.md` (#212). **The React app in
 `csv-table-hub-main/` is still the live front end.** This app is not wired into CI, the Docker image
 or the offline bundle yet; that is step 5 (#256).
 
-What exists so far: sign-in, session expiry, sign-out, change password, and a home page that says
-what the signed-in role can do. The screens (review, import history, upload) come with #252 to #255.
+What exists so far: sign-in, session expiry, sign-out, change password, a home page that says what the
+signed-in role can do, and the **Review** screen. The other screens (import history, upload) come with #253 to #255.
 
 ## Run it
 
@@ -37,9 +37,29 @@ turns usage statistics off (they are on by default).
   API remains the enforcer.
 - **Change password** uses `POST /api/auth/password`. This session stays; the server ends the others.
 
+## The Review screen (#252)
+
+Replaces the React review screen (`review-table.tsx`). Pick an upload (every attempt is listed, failed and
+partly failed ones included, with an "Only failed or partly failed" filter; a rejected file stored no rows, so
+there is nothing to review), then a row, by selecting it in the table **or** typing its number in the
+"Row number" box. The table is drawn on a canvas, so the box is what keyboard and screen-reader users use.
+
+- Each row shows why it is invalid (the database's own reason for a rejected T&E row too, #190), what was
+  edited, and its decision. **Edit a cell** and **Exclude/Include row** are forms: Enter saves, and a missing
+  reason is refused before anything is sent. **History** lists every change, who made it and why.
+- Roles that cannot review (uploader, auditor) can look and read the history, and are told so.
+- Changes are saved with the upload for review; they do not change the imported table (M4a, #108).
+- The list of uploads is cached for 30 seconds, per session ("Refresh the list" fetches it again). Rows are
+  never cached.
+- **Text from a file is shown as written.** A cell, a file name or a reason is put in a code span, so a cell
+  such as `[click here](https://example.test)` or `**bold**` cannot become a link or formatting in front of a
+  reviewer. (Escaping the punctuation was tried first and was not enough: Streamlit still links a bare URL.)
+- Not carried over from the React screen: a link straight to one upload's review (`/review/<id>`).
+
 ## Tests
 
-- `tests/unit/test_streamlit_shell.py`: fast, headless (Streamlit's `AppTest`, a faked API). Runs with
-  the unit tests.
-- `e2e/test_streamlit_shell.py`: one browser test that sign-out leaves nothing for the next tenant. Run
-  like the other end-to-end tests (`e2e/README.md`); not part of CI.
+- `tests/unit/test_streamlit_shell.py` and `tests/unit/test_streamlit_review.py`: fast, headless
+  (Streamlit's `AppTest`, a faked API). Run with the unit tests.
+- `e2e/test_streamlit_shell.py` and `e2e/test_streamlit_review.py`: in a real browser, against the real API
+  (what `AppTest` cannot do: click the table, a session the server ends, how a browser shows a cell's text).
+  Run like the other end-to-end tests (`e2e/README.md`); not part of CI.
