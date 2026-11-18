@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 import requests
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, expect, sync_playwright
 from psycopg2 import sql
 
@@ -27,6 +28,9 @@ sys.path.insert(0, str(ROOT))
 from api import db  # noqa: E402
 from api.config import settings  # noqa: E402
 from api.db import Conn  # noqa: E402
+from scripts import pg_login  # noqa: E402  (its server_available asks whether PostgreSQL is there)
+
+import preflight  # noqa: E402
 from api.services import accounts  # noqa: E402
 from api.tenancy import migrate_tenant, schema_for  # noqa: E402
 
@@ -35,7 +39,6 @@ expect.set_options(timeout=10_000)
 
 API_PORT, WEB_PORT, ST_PORT, SHELL_PORT = 8000, 8080, 8501, 8502
 PASSWORD = "e2e correct horse battery"
-REMEDY = "stop whatever listens on it (or the previous run's servers) and rerun"
 
 
 @dataclass
@@ -85,14 +88,19 @@ def _wait_for(url: str, what: str, seconds: int = 120) -> None:
     raise RuntimeError(f"{what} did not come up at {url} within {seconds}s")
 
 
+@pytest.fixture(scope="session", autouse=True)
+def prerequisites():
+    """First of all, before the React build or any server: is everything the tests need there? Reports all
+    that is missing at once (e2e/preflight.py), rather than the first error a missing piece happens to raise."""
+    found = preflight.problems(
+        root=ROOT, env=os.environ, pg_host=settings.PG_HOST, pg_port=settings.PG_PORT,
+        probe=pg_login.server_available, ports=(API_PORT, WEB_PORT, ST_PORT, SHELL_PORT), is_free=_port_is_free)
+    if found:
+        pytest.exit(preflight.report(found), returncode=3)
+
+
 @pytest.fixture(scope="session")
 def stack():
-    for port in (API_PORT, WEB_PORT, ST_PORT, SHELL_PORT):
-        if not _port_is_free(port):
-            raise RuntimeError(f"port {port} is in use: {REMEDY}")
-    if not (ROOT / "csv-table-hub-main/node_modules").exists():
-        raise RuntimeError("run `npm ci` in csv-table-hub-main first")
-
     db.init_pool()  # as scripts/create_tenant_admin.py does, outside the API process
     db.bootstrap()
     tag = f"{os.getpid()}_{uuid.uuid4().hex[:5]}"
@@ -165,7 +173,14 @@ def stack():
 def browser():
     with sync_playwright() as p:
         exe = os.environ.get("E2E_CHROMIUM") or None  # else the browser `playwright install` fetched
-        b = p.chromium.launch(executable_path=exe) if exe else p.chromium.launch()
+        try:
+            b = p.chromium.launch(executable_path=exe) if exe else p.chromium.launch()
+        except PlaywrightError as e:
+            if "Executable doesn't exist" not in str(e):
+                raise
+            pytest.exit("The browser tests cannot start: Playwright's Chromium is not installed for this "
+                        "Playwright version. Run `playwright install chromium`, or set E2E_CHROMIUM to an "
+                        "installed Chrome or Chromium.", returncode=3)
         yield b
         b.close()
 
