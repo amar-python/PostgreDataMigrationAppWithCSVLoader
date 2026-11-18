@@ -177,3 +177,36 @@ def test_allowed_screens_follow_permissions():
     assert allowed_screens("auditor") == ["review", "history"]
     assert allowed_screens("uploader")[0] == "upload"
     assert review.PAGE == 100
+
+
+def test_reason_box_is_empty_after_a_save(served):
+    at = _pick(view("review", RITA, served), 2)
+    _fill(at, "Reason (required)", "dup", nth=0)
+    at = _press(at, "Exclude")
+    assert [w.value for w in at.text_input if w.label == "Reason (required)"] == ["", ""]
+
+
+def test_edit_form_is_empty_after_a_save(served):
+    at = _pick(view("review", RITA, served), 2)
+    next(s for s in at.selectbox if s.label == "Column").select_index(1)
+    _fill(at, "New value", "20")
+    _fill(at, "Reason (required)", "typo", nth=1)
+    at = _press(at, "Save edit")
+    assert [w.value for w in at.text_input if w.label in ("New value", "Reason (required)")] == ["", "", ""]
+
+
+def test_review_asks_for_the_most_uploads_the_server_gives(served):
+    view("review", RITA, served)
+    assert ("GET", UP, {"limit": 500}) in served.params
+
+
+def test_review_says_when_the_list_is_cut_at_the_limit(served):
+    served.routes[("GET", UP)] = [{"id": i, "file_name": f"f{i}.csv", "status": "imported", "total_rows": 3}
+                                  for i in range(1, 501)]
+    at = view("review", RITA, served)
+    assert any("Showing the newest 500 uploads." in c.value for c in at.caption)
+
+
+def test_review_is_silent_below_the_limit(served):
+    at = view("review", RITA, served)
+    assert not any("Showing the newest" in c.value for c in at.caption)

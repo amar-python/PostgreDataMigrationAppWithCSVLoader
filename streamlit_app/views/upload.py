@@ -12,6 +12,7 @@ import streamlit as st
 import api_client
 import auth
 from outcomes import describe_result
+from views import history, review
 
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 52428800))  # the API's own limit, in bytes of text
 UPLOAD_TIMEOUT_SECONDS = 600  # a big import takes longer than the shell's 30 s
@@ -49,6 +50,11 @@ def build_payload(name: str, raw: bytes, text: str, *, mode: str, types: list[st
     return p
 
 
+def file_key(name: str, raw: bytes) -> str:
+    """A widget key for one chosen file: name and bytes, so two copies of the same file do not collide."""
+    return hashlib.sha256(name.encode() + b"\0" + raw).hexdigest()[:12]
+
+
 def _preview(name: str, text: str, digest: str) -> dict:
     cache = ss.setdefault("previews", {})
     if digest not in cache:  # the whole script re-runs on every click; do not re-parse each time
@@ -82,6 +88,8 @@ def _send(name: str, payload: dict, key: str) -> None:
                 "POST", "/api/csv/upload", json=payload, timeout=UPLOAD_TIMEOUT_SECONDS)
         except api_client.ApiError as e:
             ss["results"][key] = str(e)
+    review.uploads_list.clear()  # a new upload must show on Review and Import history at once
+    history._uploads.clear()
 
 
 def _show_result(name: str, res: dict | str) -> None:
@@ -112,7 +120,7 @@ def _render_file(f) -> dict | None:
     if problem:
         st.error(problem)
         return None
-    key = hashlib.sha256(raw).hexdigest()[:12]
+    key = file_key(f.name, raw)
     with st.expander(f"{f.name} · {len(raw):,} bytes", expanded=True):
         try:
             pv = _preview(f.name, text, key)

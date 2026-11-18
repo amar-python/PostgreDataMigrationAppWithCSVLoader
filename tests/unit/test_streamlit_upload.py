@@ -84,3 +84,36 @@ def test_screen_renders_with_the_templates_note(api):
     at = view("upload", api=api)
     assert not at.exception and at.title[0].value == "Upload"
     assert any("Saved mapping templates aren't available in this version." in c.value for c in at.caption)
+
+
+def test_same_bytes_under_two_names_get_different_keys():
+    raw = b"a,b\n1,2\n"
+    assert upload.file_key("orders.csv", raw) != upload.file_key("orders - Copy.csv", raw)
+    assert upload.file_key("orders.csv", raw) == upload.file_key("orders.csv", raw)
+
+
+def test_send_uses_the_long_timeout(monkeypatch):
+    call = Mock(return_value={"status": "ok"})
+    monkeypatch.setattr(upload.auth, "call", call)
+    upload._send("a.csv", {"fileName": "a.csv"}, "k")
+    assert call.call_args.kwargs["timeout"] == 600
+
+
+@pytest.mark.parametrize("outcome", [{"status": "ok"}, api_client.ApiError(400, "no")])
+def test_a_new_upload_clears_the_review_and_history_caches(monkeypatch, outcome):
+    from views import history, review
+    served = {"n": 0}
+
+    def fake(method, path, **kw):
+        if method == "POST":
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+        served["n"] += 1
+        return [served["n"]]
+    monkeypatch.setattr(upload.auth, "call", fake)
+    review.uploads_list.clear()
+    history._uploads.clear()
+    assert review.uploads_list("t") == [1] and history._uploads("t", ()) == [2]
+    upload._send("a.csv", {}, "k")
+    assert review.uploads_list("t") == [3] and history._uploads("t", ()) == [4]

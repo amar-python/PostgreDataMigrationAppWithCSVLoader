@@ -89,3 +89,14 @@ def test_says_the_history_is_shared(served):
 
 def test_allowed_screens_include_history():
     assert allowed_screens("auditor") == ["review", "history"]
+
+
+def test_history_says_when_the_list_is_cut_at_the_limit(served):
+    served.routes[("GET", UP)] = [{**UPLOADS[0], "id": i} for i in range(1, 501)]
+    at = view("history", ("acme", "audrey"), served)
+    assert any("Showing the newest 500; narrow the filters to see older ones." in c.value for c in at.caption)
+
+
+def test_history_is_silent_below_the_limit(served):
+    at = view("history", ("acme", "audrey"), served)
+    assert not any("Showing the newest" in c.value for c in at.caption)

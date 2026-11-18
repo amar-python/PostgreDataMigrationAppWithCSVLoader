@@ -11,15 +11,14 @@ import streamlit as st
 import api_client
 import auth
 import exports
-from outcomes import STATUS_LABELS, failed_rows_note
+from outcomes import STATUS_LABELS, UPLOADS_LIMIT, failed_rows_note
 
-LIMIT = 500
 ANY = "Any"
 
 
 def query_params(file: str, status: str | None, start: date | None, end: date | None) -> dict:
     """Only the filters that are set; the end date is inclusive, so the server gets the start of the next day."""
-    p: dict = {"limit": LIMIT}
+    p: dict = {"limit": UPLOADS_LIMIT}
     if file:
         p["file"] = file
     if status:
@@ -63,6 +62,8 @@ def render() -> None:
         st.info("No imports match these filters.")
         return
 
+    if len(uploads) >= UPLOADS_LIMIT:
+        st.caption(f"Showing the newest {UPLOADS_LIMIT}; narrow the filters to see older ones.")
     rows = exports.history_rows(uploads)
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
     d1, d2 = st.columns(2)

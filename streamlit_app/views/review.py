@@ -12,7 +12,7 @@ import streamlit as st
 
 import api_client
 import auth
-from outcomes import failed_rows_note, needs_attention
+from outcomes import UPLOADS_LIMIT, failed_rows_note, needs_attention
 
 PAGE = 100
 NEED_REASON = "Give a reason."
@@ -20,7 +20,7 @@ NEED_REASON = "Give a reason."
 
 @st.cache_data(ttl=30)
 def uploads_list(token: str) -> list[dict]:
-    return auth.call("GET", "/api/csv/uploads")
+    return auth.call("GET", "/api/csv/uploads", params={"limit": UPLOADS_LIMIT})
 
 
 def _tint(grid: pd.DataFrame, rows: list[dict], columns: list[str]):
@@ -44,7 +44,7 @@ def _grid_picked(grid_key: str, row_key: str, numbers: list[int]) -> None:
         st.session_state[row_key] = numbers[sel[0]]
 
 
-def _save(path: str, body: dict, reason: str, history_key: str) -> None:
+def _save(path: str, body: dict, reason: str, history_key: str, clear: tuple[str, ...]) -> None:
     if not reason.strip():
         st.error(NEED_REASON)
         return
@@ -55,6 +55,7 @@ def _save(path: str, body: dict, reason: str, history_key: str) -> None:
         return
     uploads_list.clear()
     st.session_state.pop(history_key, None)
+    st.session_state["review_clear"] = clear  # widgets cannot be reset once drawn; the next run drops them first
     st.rerun()
 
 
@@ -71,6 +72,8 @@ def _row_panel(uid: int, row: dict, columns: list[str]) -> None:
     n = row["rowNumber"]
     base = f"/api/csv/uploads/{uid}/rows/{n}"
     hist_key = f"review_hist_{uid}_{n}"
+    for k in st.session_state.pop("review_clear", ()):  # a saved reason must not linger to be re-sent
+        st.session_state.pop(k, None)
     st.markdown(f"### Row {n}")
     for e in row["errors"]:
         st.error(f"{e['column']}: {e['reason']}")
@@ -93,14 +96,15 @@ def _row_panel(uid: int, row: dict, columns: list[str]) -> None:
     with st.form(f"review_decision_{uid}_{n}"):
         reason = st.text_input("Reason (required)", key=f"review_dreason_{uid}_{n}")
         if st.form_submit_button(flip.title()):
-            _save(f"{base}/decision", {"decision": flip}, reason, hist_key)
+            _save(f"{base}/decision", {"decision": flip}, reason, hist_key, (f"review_dreason_{uid}_{n}",))
     with st.form(f"review_edit_{uid}_{n}"):
         col = st.selectbox("Column", range(len(columns)), format_func=lambda i: columns[i],
                            key=f"review_col_{uid}_{n}")
         value = st.text_input("New value", key=f"review_value_{uid}_{n}")
         reason = st.text_input("Reason (required)", key=f"review_ereason_{uid}_{n}")
         if st.form_submit_button("Save edit"):
-            _save(f"{base}/cells/{col}", {"value": value}, reason, hist_key)
+            _save(f"{base}/cells/{col}", {"value": value}, reason, hist_key,
+                  (f"review_value_{uid}_{n}", f"review_ereason_{uid}_{n}"))
 
 
 def render() -> None:
@@ -117,6 +121,8 @@ def render() -> None:
         st.info("No uploads yet.")
         return
 
+    if len(uploads) >= UPLOADS_LIMIT:
+        st.caption(f"Showing the newest {UPLOADS_LIMIT} uploads.")
     only = st.checkbox("Only failed or partly imported")
     shown = [u for u in uploads if needs_attention(u["status"])] if only else uploads
     if not shown:

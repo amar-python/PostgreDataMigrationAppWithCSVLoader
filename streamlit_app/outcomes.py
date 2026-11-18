@@ -3,6 +3,8 @@
 Overwrite no longer exists (M5) and Stop/cancel is gone, so their rules are not here.
 """
 
+UPLOADS_LIMIT = 500  # the most uploads GET /api/csv/uploads returns (the server caps it)
+
 STATUS_LABELS: dict[str, str] = {
     "imported": "Imported",
     "partly_imported": "Partly imported",

@@ -1,11 +1,11 @@
 # Streamlit front end (migration step 1: the app shell, #251)
 
 Part of the plan in `DECISIONS/2026-11-16-streamlit-migration-plan.md` (#212). **The React app in
-`csv-table-hub-main/` is still the live front end.** This app is not wired into CI, the Docker image
-or the offline bundle yet; that is step 5 (#256).
+`csv-table-hub-main/` is still the live front end.** This app is not wired into the Docker image or the
+offline bundle yet; that is step 5 (#256). The unit tests and the accessibility scans do cover it in CI.
 
-What exists so far: sign-in, session expiry, sign-out, change password, the Review screen (#252), and a home page that says
-what the signed-in role can do. The other screens (import history, upload) come with #253 to #255.
+Screens: sign-in, change password, a home page that says what the signed-in role can do, Review (#252),
+Import history (#253) and Upload (#255). Later screens appear only for roles that can use them.
 
 ## Run it
 
@@ -23,6 +23,9 @@ turns usage statistics off (they are on by default).
 
 `API_URL` says where the API is, for example `API_URL=http://api.internal:8000`.
 
+`MAX_UPLOAD_BYTES` (default 52428800, 50 MB) is the largest CSV the Upload screen accepts. **Set it to the
+same value for the app and the API**, or a file one side accepts is refused by the other.
+
 ## How it behaves
 
 - **Sign-in** uses `POST /api/auth/login`, with the same wording as the React app for a wrong tenant,
@@ -39,7 +42,8 @@ turns usage statistics off (they are on by default).
 
 ## Tests
 
-- `tests/unit/test_streamlit_shell.py`: fast, headless (Streamlit's `AppTest`, a faked API). Runs with
-  the unit tests.
+- `tests/unit/test_streamlit_*.py`: fast, headless (Streamlit's `AppTest`, a faked API). Run with
+  the unit tests in CI.
+- `tests/accessibility/`: axe scans of the Streamlit screens, in the CI accessibility job.
 - `e2e/test_streamlit_shell.py`: one browser test that sign-out leaves nothing for the next tenant. Run
   like the other end-to-end tests (`e2e/README.md`); not part of CI.

@@ -113,9 +113,9 @@ def app_url():
 
 
 @pytest.fixture(scope="session")
-def a11y_browser(app_url):
-    """One Chromium for the session, warmed up so Vite's first-load dependency
-    pre-bundling (which reloads the page once) cannot land in the middle of a scan."""
+def chromium():
+    """The one Chromium for the whole session. Playwright's sync API allows one ``sync_playwright()``
+    per process, so the React and Streamlit scans share this browser and each makes its own context."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -130,20 +130,28 @@ def a11y_browser(app_url):
             browser = pw.chromium.launch(**launch)
         except Exception as exc:  # noqa: BLE001
             _fail(f"Chromium could not start: {exc}\nRun: python -m playwright install chromium")
-        warm = browser.new_context()
-        warm.add_init_script(stub_api.seed_script(stub_api.SESSION, stub_api.JOBS))
-        warm.route("**/api/**", stub_api.handler(stub_api.default_responses(), []))
-        page = warm.new_page()
-        for path in ("/auth", "/", "/audit", "/review/101"):
-            try:
-                page.goto(app_url + path, wait_until="networkidle", timeout=120_000)
-            except Exception:  # noqa: BLE001  the scenarios report a page that really fails
-                pass
-        warm.close()
         yield browser
         browser.close()
     finally:
         pw.stop()
+
+
+@pytest.fixture(scope="session")
+def a11y_browser(app_url, chromium):
+    """The shared Chromium, warmed up so Vite's first-load dependency
+    pre-bundling (which reloads the page once) cannot land in the middle of a scan."""
+    browser = chromium
+    warm = browser.new_context()
+    warm.add_init_script(stub_api.seed_script(stub_api.SESSION, stub_api.JOBS))
+    warm.route("**/api/**", stub_api.handler(stub_api.default_responses(), []))
+    page = warm.new_page()
+    for path in ("/auth", "/", "/audit", "/review/101"):
+        try:
+            page.goto(app_url + path, wait_until="networkidle", timeout=120_000)
+        except Exception:  # noqa: BLE001  the scenarios report a page that really fails
+            pass
+    warm.close()
+    return browser
 
 
 @pytest.fixture
@@ -301,39 +309,23 @@ def streamlit_url(stub_api_url):
 
 
 @pytest.fixture
-def streamlit_page(streamlit_url):
+def streamlit_page(streamlit_url, chromium):
     """``streamlit_page(sign_in=True)`` -> a Page on the Streamlit app, signed in through the real form unless told not to."""
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        _fail("Playwright is not installed. Run: pip install -r requirements-a11y.txt "
-              "&& python -m playwright install chromium")
-    pw = sync_playwright().start()
-    browser = None
-    try:
-        launch = {}
-        if os.environ.get("A11Y_CHROMIUM_PATH"):
-            launch["executable_path"] = os.environ["A11Y_CHROMIUM_PATH"]
-        try:
-            browser = pw.chromium.launch(**launch)
-        except Exception as exc:  # noqa: BLE001
-            _fail(f"Chromium could not start: {exc}\nRun: python -m playwright install chromium")
-        context = browser.new_context(viewport={"width": 1280, "height": 900}, locale="en-AU",
-                                      timezone_id="UTC", color_scheme="light", reduced_motion="reduce")
+    context = chromium.new_context(viewport={"width": 1280, "height": 900}, locale="en-AU",
+                                   timezone_id="UTC", color_scheme="light", reduced_motion="reduce")
 
-        def _open(*, sign_in: bool = True):
-            page = context.new_page()
-            page.goto(streamlit_url, wait_until="networkidle", timeout=60_000)
-            if sign_in:
-                sign_in_as(page, stub_api.STREAMLIT_PASSWORD)
-                page.get_by_text("What your role can do").wait_for(state="visible", timeout=15_000)
-            return page
+    def _open(*, sign_in: bool = True):
+        page = context.new_page()
+        page.goto(streamlit_url, wait_until="networkidle", timeout=60_000)
+        if sign_in:
+            sign_in_as(page, stub_api.STREAMLIT_PASSWORD)
+            page.get_by_text("What your role can do").wait_for(state="visible", timeout=15_000)
+        return page
 
+    try:
         yield _open
     finally:
-        if browser:
-            browser.close()
-        pw.stop()
+        context.close()
 
 
 def sign_in_as(page, password: str) -> None:
