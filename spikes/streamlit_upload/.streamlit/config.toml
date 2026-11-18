@@ -1,0 +1,7 @@
+# Run from this folder. The API refuses more than MAX_UPLOAD_BYTES (50 MiB by default); Streamlit's
+# uploader defaults to 200 MB. Say the same number in both places (see README, "Size limit").
+[server]
+maxUploadSize = 50
+
+[browser]
+gatherUsageStats = false
