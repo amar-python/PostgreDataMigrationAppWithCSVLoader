@@ -951,6 +951,8 @@ raise last_err
 
 **Resolution 2026-08-02:** `init_pool()` now retries with exponential backoff. Total wait bounded by parameters; explicit re-raise on exhaustion.
 
+**Follow-up 2026-11-18:** the retry applied to every `OperationalError`, so a wrong password, missing database or role, or no `pg_hba.conf` entry also looped for up to ~4.5 minutes and was logged as "not reachable". Those now raise on the first attempt with a message naming the user, host and port and the variables to check (`tests/unit/test_db_init_pool.py`). Transient failures (refused, starting up, DNS, timeout) keep the retry above.
+
 ---
 
 ## BUG-027 — No upload row-count cap
