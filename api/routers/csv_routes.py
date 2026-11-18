@@ -21,6 +21,7 @@ from api.services.audit import coerce_file_id, record_audit, write_audit
 from api.services.csv_parse import build_preview
 from api.services.dynamic_loader import upload_dynamic
 from api.services.originals import record_upload
+from api.services.type_confirmation import require_confirmed_types
 from api.services.reports import like_pattern
 from api.services.staged_import import derive_state, state_columns, state_join
 from api.services.te_loader import match_te_table, upload_te
@@ -58,7 +59,11 @@ class UploadRequest(BaseModel):
     # original so its hash matches the uploader's copy; `content` is still what loads (#185).
     contentBase64: str | None = None
     # True when a person reviewed `types` before this call (dynamic mode only, #195).
-    typesConfirmed: bool = False
+    typesConfirmed: bool = Field(
+        default=False,
+        description="A person confirmed `types` (#195); the registry records `user_confirmed`, else `inferred_unconfirmed`. "
+                    "A server started with API_REQUIRE_TYPE_CONFIRMATION=true answers 422 to a dynamic upload "
+                    "unless this is true and `types` is sent (#242).")
 
 
 @router.post("/preview", dependencies=[Depends(allow("preview"))])
@@ -116,6 +121,7 @@ def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> 
     elif req.mode == "dynamic":
         if req.typesConfirmed and not req.types:
             raise HTTPException(422, "typesConfirmed requires the confirmed types to be sent in 'types'")
+        require_confirmed_types(req.types, req.typesConfirmed)  # #242, when the server is set to require it
         mapping = [m.model_dump() for m in req.headerMapping] if req.headerMapping else None
         result = upload_dynamic(req.fileName, req.content, req.types, req.overwrite,
                                 session=session, header_mapping=mapping, types_confirmed=req.typesConfirmed)
