@@ -370,3 +370,57 @@ export async function editCell(
 export async function rowHistory(uploadId: string, rowNumber: number): Promise<HistoryEntry[]> {
   return apiFetch(`${uploadPath(uploadId)}/rows/${rowNumber}/history`, z.array(historyEntrySchema));
 }
+
+// BR-35 (M7, #111): the server's filtered audit report.
+export const AUDIT_ACTIONS = ["upload", "delete", "password_reset", "row_decision", "cell_edit", "submit", "approve", "reject", "import"] as const;
+
+const auditEventSchema = z.object({
+  id: z.string(),
+  performedAt: z.string(),
+  actor: z.string().nullable().optional(),
+  action: z.string(),
+  fileId: z.union([z.string(), z.number()]).nullable().optional(),
+  fileName: z.string().nullable().optional(),
+  tableName: z.string().nullable().optional(),
+  mode: z.string().nullable().optional(),
+});
+export type AuditEvent = z.infer<typeof auditEventSchema>;
+
+const auditEventsPageSchema = z.object({
+  classification: z.string(),
+  total: z.number(),
+  limit: z.number(),
+  offset: z.number(),
+  entries: z.array(auditEventSchema),
+});
+export type AuditEventsPage = z.infer<typeof auditEventsPageSchema>;
+
+export type AuditFilters = { actor?: string; action?: string; file?: string; table?: string; from?: string; to?: string };
+
+/** Query string for GET /api/audit/events. Blank filters are left out; `to` is exclusive on the server. */
+export function auditEventsQuery(f: AuditFilters, extra: Record<string, string> = {}): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries({ ...f, ...extra })) if (v && v.trim()) q.set(k, v.trim());
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+export async function listAuditEvents(f: AuditFilters, offset = 0): Promise<AuditEventsPage> {
+  return apiFetch(`/api/audit/events${auditEventsQuery(f, { limit: "50", offset: String(offset) })}`, auditEventsPageSchema);
+}
+
+/** The matching events as a CSV file, formulas neutralised by the server. */
+export async function downloadAuditEventsCsv(f: AuditFilters): Promise<void> {
+  const res = await callApi(`${apiBase}/api/audit/events${auditEventsQuery(f, { format: "csv" })}`, { headers: authHeaders() });
+  if (res.status === 401) {
+    clearSession();
+    throw new Error("Your session has ended. Please sign in again.");
+  }
+  if (!res.ok) throw new Error(`Could not download the audit report (${res.status})`);
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "audit-events.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}

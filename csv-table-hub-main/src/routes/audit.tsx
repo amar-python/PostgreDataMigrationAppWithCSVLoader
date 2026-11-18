@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { downloadErrorReport, downloadAuditReport, buildErrorRows, mappingSummary, type ExportFormat, type AuditReportRow } from "@/lib/export";
 import type { Job, JobStatus } from "@/lib/job-types";
 import { requireSession } from "@/lib/session";
+import { ServerAuditEvents } from "@/components/ServerAuditEvents";
 
 export const Route = createFileRoute("/audit")({
   ssr: false,
@@ -53,6 +54,7 @@ function AuditPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [invalidRowsJob, setInvalidRowsJob] = useState<Job|null>(null);
   const [changelogOpen, setChangelogOpen] = useState(false);
+  const [serverOpen, setServerOpen] = useState(false);
 
   const terminalJobs = useMemo(() => jobs.filter(j=>!["reading","uploading","processing"].includes(j.status)), [jobs]);
 
@@ -232,6 +234,19 @@ function AuditPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Server audit events (BR-35); loaded only when opened. */}
+      <div className="mt-10">
+        <Collapsible open={serverOpen} onOpenChange={setServerOpen}>
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+              {serverOpen?<ChevronDown className="h-4 w-4"/>:<ChevronRight className="h-4 w-4"/>}
+              Server audit events
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-4">{serverOpen && <ServerAuditEvents/>}</CollapsibleContent>
+        </Collapsible>
+      </div>
 
       {/* Changelog */}
       <div className="mt-10">
