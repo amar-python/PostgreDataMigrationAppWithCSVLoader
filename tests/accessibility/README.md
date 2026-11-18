@@ -83,3 +83,16 @@ default over the stored import history, and the second reads that back, so saved
 shown after a reload. Production builds do not double-run effects. `stub_api.seed_script`
 drops writes of `[]` to that key so the audit page can be scanned with rows in it; without that, the
 page was scanned empty and passed without checking a single row. Remove the guard when the hook is fixed.
+
+## Streamlit scans
+
+The `test_streamlit_*` tests scan `streamlit_app/`. The app runs in a real `streamlit run`
+and calls the API from its Python server, so the stub is served over local HTTP
+(`stub_api_url` in conftest.py) and the app is started with `API_URL` pointing at it. Each
+test signs in through the real form (any password except `stub_api.STREAMLIT_PASSWORD` is
+refused) and navigates with the sidebar. Their recorded violations are the `streamlit_*`
+scenarios in `known_violations.json`.
+
+`st.dataframe` draws on a canvas, so axe cannot see inside grids: the Review and Import
+history tables are scanned around, not within. Keyboard and screen-reader access to those
+grids needs a manual check.

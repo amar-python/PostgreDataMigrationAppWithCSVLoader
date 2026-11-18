@@ -117,3 +117,51 @@ def test_signed_out_visitors_are_sent_to_sign_in(open_page, path):
     page = open_page(path, signed_in=False)
     page.wait_for_url("**/auth", timeout=TIMEOUT_MS)
     _shows(page, "Sign in to CSV Migrator")
+
+
+# --- Streamlit (streamlit_app/): the app that replaces the React frontend ---------------------------
+# The stub is served over HTTP (conftest.stub_api_url); pages are reached through the sidebar.
+# st.dataframe draws on a canvas, so axe cannot see inside grids (README.md).
+
+def test_streamlit_sign_in_page(streamlit_page, scan):
+    page = streamlit_page(sign_in=False)
+    _shows(page, "Sign in")
+    page.get_by_label("Tenant").wait_for(state="visible", timeout=TIMEOUT_MS)
+    scan(page, "streamlit_sign_in")
+
+
+def test_streamlit_sign_in_after_a_failed_attempt(streamlit_page, scan):
+    from tests.accessibility.conftest import sign_in_as
+    page = streamlit_page(sign_in=False)
+    sign_in_as(page, "not-the-password")
+    _shows(page, "Invalid tenant, username or password")
+    scan(page, "streamlit_sign_in_failed")
+
+
+def test_streamlit_home(streamlit_page, scan):
+    page = streamlit_page()
+    _shows(page, "Signed in as")
+    scan(page, "streamlit_home")
+
+
+def test_streamlit_upload_with_no_file_chosen(streamlit_page, scan):
+    page = streamlit_page()
+    page.get_by_role("link", name="Upload").click()
+    page.get_by_role("heading", name="Upload").first.wait_for(state="visible", timeout=TIMEOUT_MS)
+    scan(page, "streamlit_upload_empty")
+
+
+def test_streamlit_review(streamlit_page, scan):
+    page = streamlit_page()
+    page.get_by_role("link", name="Review").click()
+    # The first upload is selected by default; its rows (the stub's customers.csv) load.
+    _shows(page, "customers.csv")
+    scan(page, "streamlit_review")
+
+
+def test_streamlit_import_history_with_entries(streamlit_page, scan):
+    page = streamlit_page()
+    page.get_by_role("link", name="Import history").click()
+    _shows(page, "This history is shared by everyone in your tenant")
+    _shows(page, "History CSV")
+    scan(page, "streamlit_import_history")

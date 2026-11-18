@@ -66,6 +66,30 @@
       "rule": "color-contrast",
       "nodes": 2,
       "note": "the same two contrast failures as audit_log_with_history, still on the page behind the open menu"
+    },
+    {
+      "scenario": "streamlit_home",
+      "rule": "color-contrast",
+      "nodes": 1,
+      "note": "Streamlit st.caption text (grey on white) is below 4.5:1: the 'The server checks every request' line"
+    },
+    {
+      "scenario": "streamlit_upload_empty",
+      "rule": "color-contrast",
+      "nodes": 1,
+      "note": "Streamlit st.caption text (grey on white) is below 4.5:1: the 'Saved mapping templates' line"
+    },
+    {
+      "scenario": "streamlit_review",
+      "rule": "color-contrast",
+      "nodes": 2,
+      "note": "Streamlit st.caption text (grey on white) is below 4.5:1: the 'N of N rows failed' and 'N rows / excluded / edited' lines"
+    },
+    {
+      "scenario": "streamlit_import_history",
+      "rule": "color-contrast",
+      "nodes": 1,
+      "note": "Streamlit st.caption text (grey on white) is below 4.5:1: the 'shared by everyone in your tenant' line"
     }
   ]
 }

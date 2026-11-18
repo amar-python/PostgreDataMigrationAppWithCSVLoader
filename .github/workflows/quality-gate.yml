@@ -244,7 +244,7 @@ jobs:
       - name: Install dev dependencies
         # api/requirements.txt is needed too: tests/conftest.py imports the API
         # app, so pytest collection fails without FastAPI.
-        run: pip install -r requirements-dev.txt -r api/requirements.txt -r requirements-a11y.txt
+        run: pip install -r requirements-dev.txt -r api/requirements.txt -r requirements-a11y.txt -r streamlit_app/requirements.txt
 
       - name: Install frontend dependencies
         working-directory: csv-table-hub-main
