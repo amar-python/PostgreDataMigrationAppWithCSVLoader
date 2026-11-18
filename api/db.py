@@ -1,6 +1,7 @@
 """Connection pool + Alembic-driven schema bootstrap for the uploads registry."""
 
 import logging
+import re
 import time
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
@@ -21,6 +22,21 @@ _pool: psycopg2.pool.ThreadedConnectionPool | None = None
 _getconn_executor: ThreadPoolExecutor | None = None
 _MAXCONN = 8
 
+# Connection failures that waiting cannot fix: the server was reached and said no.
+# psycopg2 leaves exc.pgcode / exc.diag.sqlstate as None for connection-time errors
+# (checked on 2.9.13: libpq returns a message, not a result), so SQLSTATEs 28P01 /
+# 3D000 are unavailable and we match libpq's message text instead.
+# ponytail: denylist, not an allowlist of transient messages - a localised or
+# unrecognised message falls through to the old retry-everything behaviour
+# (slow, but never fails fast on a server that is just starting). Add the
+# message here if a new permanent failure shows up.
+_PERMANENT_CONN_ERROR = re.compile(
+    r"password authentication failed"
+    r"|no pg_hba\.conf entry"
+    r'|(database|role) ".*" does not exist'
+    r"|is not permitted to log in"
+)
+
 
 def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
     """Create the shared pool. Uses ThreadedConnectionPool so parallel FastAPI
@@ -30,9 +46,12 @@ def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
     BUG-026: on containerised infra Postgres may not accept connections when
     the API starts. Retry with exponential backoff (capped at 10s per attempt)
     instead of dying at boot. Total wait bounded by ``max_attempts`` × cap.
+    Failures retrying cannot fix (wrong password, no such database/role, no
+    pg_hba.conf entry) raise on the first attempt.
     """
     global _pool, _getconn_executor
     last_err: Exception | None = None
+    user = settings.APP_DB_USER or settings.PG_USER
     for attempt in range(1, max_attempts + 1):
         try:
             _pool = psycopg2.pool.ThreadedConnectionPool(
@@ -40,7 +59,7 @@ def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
                 maxconn=_MAXCONN,
                 host=settings.PG_HOST,
                 port=settings.PG_PORT,
-                user=settings.APP_DB_USER or settings.PG_USER,
+                user=user,
                 password=settings.APP_DB_PASSWORD if settings.APP_DB_USER else settings.PG_PASSWORD,
                 dbname=settings.PG_DATABASE,
             )
@@ -48,6 +67,14 @@ def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
                 logger.info("Connected to Postgres on attempt %d", attempt)
             break
         except psycopg2.OperationalError as exc:
+            if _PERMANENT_CONN_ERROR.search(str(exc)):
+                creds = "APP_DB_USER / APP_DB_PASSWORD" if settings.APP_DB_USER else "PGUSER / PGPASSWORD"
+                raise psycopg2.OperationalError(
+                    f"Could not connect to PostgreSQL at {settings.PG_HOST}:{settings.PG_PORT} "
+                    f"as {user}: the server was reached but refused the connection, "
+                    f"and retrying will not help.\n  {str(exc).strip()}\n"
+                    f"Check {creds} (and PGDATABASE, PGHOST, PGPORT)."
+                ) from exc
             last_err = exc
             delay = min(base_delay * (2 ** (attempt - 1)), 10.0)
             logger.warning(
