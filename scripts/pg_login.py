@@ -15,6 +15,11 @@ loads it into a PowerShell window for the other scripts (reset_password.py and s
 `check` exit status: 0 the login works, 2 the server refused it (waiting will not help: a wrong
 password, an unknown role, no pg_hba.conf entry), 3 the server could not be reached.
 Neither command ever prints the password.
+
+Both look for the server before they use a password. If PostgreSQL is not accepting connections
+there is nothing for a password to be tested against, so `save` does not ask for one and `check`
+does not try one. `check --server-only` does just that first step (exit 0 reachable, 3 not), which
+is what scripts/start-api.ps1 runs before it asks for a password.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import os
+import socket
 import sys
 from pathlib import Path
 
@@ -63,6 +69,23 @@ def write_env_file(path: Path, values: dict[str, str]) -> None:
             f.write(f"{key}={values[key]}\n")
 
 
+def server_available(host: str, port: str, timeout: int = 5) -> tuple[bool, str]:
+    """(reachable, a one-line reason): does anything accept a connection on host:port?
+
+    Sends no credentials and no data, so it can run before anyone is asked for a password. The
+    login is a separate question, answered by try_login. A host that is a directory (a Unix-socket
+    path) is not probed here; try_login says whether that connects."""
+    if host.startswith("/"):
+        return True, ""
+    try:
+        socket.create_connection((host, int(port)), timeout=timeout).close()
+    except ValueError:
+        return False, f"the port {port!r} is not a number"
+    except OSError as exc:
+        return False, f"nothing accepted a connection on {host}:{port} ({exc})"
+    return True, ""
+
+
 def try_login(host: str, port: str, user: str, password: str, timeout: int = 5) -> tuple[str, str]:
     """(OK | REFUSED | UNREACHABLE, a one-line reason). Connects to the always-present `postgres`
     database, so only the credentials are tested, not whether a particular database exists."""
@@ -80,8 +103,20 @@ def _login_from_env() -> tuple[str, str, str, str]:
             os.environ.get("PGUSER") or DEFAULT_USER, os.environ.get("PGPASSWORD", ""))
 
 
+def _not_reachable(host: str, port: str, reason: str) -> int:
+    print(f"Could not reach PostgreSQL at {host}:{port}.\n  {reason}\n"
+          "Check that the server is running on that host and port.", file=sys.stderr)
+    return 3
+
+
 def cmd_check(args) -> int:
     host, port, user, password = _login_from_env()
+    up, why = server_available(host, port)          # first: is anything there to log in to?
+    if not up:
+        return _not_reachable(host, port, why)
+    if args.server_only:
+        print(f"PostgreSQL is accepting connections at {host}:{port}.")
+        return 0
     status, reason = try_login(host, port, user, password)
     who = f"{user}@{host}:{port}"
     if status == OK:
@@ -90,15 +125,22 @@ def cmd_check(args) -> int:
     if status == REFUSED:
         print(f"PostgreSQL refused the login for {who}.\n  {reason}", file=sys.stderr)
         return 2
-    print(f"Could not reach PostgreSQL at {host}:{port}.\n  {reason}\n"
-          "Check that the server is running on that host and port.", file=sys.stderr)
-    return 3
+    return _not_reachable(host, port, reason)       # it went away, or is still starting up
 
 
 def cmd_save(args) -> int:
     host = args.host or os.environ.get("PGHOST") or DEFAULT_HOST
     port = str(args.port or os.environ.get("PGPORT") or DEFAULT_PORT)
     user = args.user or os.environ.get("PGUSER") or DEFAULT_USER
+    if not args.no_check:
+        # Before asking for a password: with no server there is nothing to test it against.
+        up, why = server_available(host, port)
+        if not up:
+            print(f"PostgreSQL could not be reached at {host}:{port}, so nothing was saved and no "
+                  f"password was asked for.\n  {why}\n"
+                  "Check that the server is running on that host and port, then run this again.",
+                  file=sys.stderr)
+            return 1
     if args.from_env:
         password = os.environ.get("PGPASSWORD", "")
     else:
@@ -152,6 +194,8 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_save)
 
     p = sub.add_parser("check", help="test the login in the current PG* variables")
+    p.add_argument("--server-only", action="store_true",
+                   help="only check that PostgreSQL is accepting connections; use no password")
     p.set_defaults(func=cmd_check)
 
     p = sub.add_parser("where", help="say where the saved login is")

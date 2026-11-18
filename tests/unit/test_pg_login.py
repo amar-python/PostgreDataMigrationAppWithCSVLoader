@@ -8,10 +8,15 @@ a running server), and the password is never printed.
 The PowerShell side (scripts/start-api.ps1, scripts/dev-env.ps1) cannot run here, so the tests pin
 what it depends on: the file format, the file name and the exit codes.
 
-No database needed: psycopg2.connect is monkeypatched.
+The server is looked for before a password is asked for or tried (`save` asks for none, and
+`check` tries none, when nothing is listening), and scripts/start-api.ps1 runs that step first.
+
+No database needed: psycopg2.connect is monkeypatched, and so is the reachability probe except in
+the tests of the probe itself, which use a socket on the loopback interface.
 """
 import os
 import re
+import socket
 from pathlib import Path
 
 import psycopg2
@@ -22,6 +27,7 @@ from scripts import pg_login
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
 ROOT = Path(__file__).resolve().parents[2]
+REAL_SERVER_AVAILABLE = pg_login.server_available  # the autouse fixture below replaces it
 SECRET = "p4ss=w0rd with 'quotes' and =signs"  # '=' and spaces: the awkward cases for KEY=VALUE
 
 REFUSED_MSG = ('connection to server at "localhost" (::1), port 5433 failed: '
@@ -42,6 +48,8 @@ def clean(monkeypatch, tmp_path):
     for name in ("PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "TE_PG_PASSWORD"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(pg_login.getpass, "getpass", lambda *a, **k: pytest.fail("asked for a password"))
+    # Whatever is or is not listening on this machine must not decide a test: say it is up.
+    monkeypatch.setattr(pg_login, "server_available", lambda host, port, timeout=5: (True, ""))
 
 
 @pytest.fixture
@@ -55,6 +63,12 @@ def connects(monkeypatch):
 
     monkeypatch.setattr(psycopg2, "connect", connect)
     return calls
+
+
+def _server_down(monkeypatch, reason="nothing accepted a connection on localhost:5433 (refused)"):
+    """Nothing is listening; also fail the test if anything then asks for or tries a password."""
+    monkeypatch.setattr(pg_login, "server_available", lambda host, port, timeout=5: (False, reason))
+    monkeypatch.setattr(psycopg2, "connect", lambda **k: pytest.fail("tried a login with no server"))
 
 
 def _fails(monkeypatch, message):
@@ -253,6 +267,122 @@ def test_check_uses_the_login_defaults_when_nothing_is_set(connects):
     assert (connects[0]["host"], connects[0]["port"], connects[0]["user"]) == ("localhost", "5433", "postgres")
 
 
+# ── the server is looked for first ────────────────────────────────────────────────────────
+
+def test_save_with_no_server_asks_for_no_password_tries_none_and_saves_nothing(monkeypatch, tmp_path, capsys):
+    _server_down(monkeypatch)  # getpass and psycopg2.connect both fail the test if reached
+
+    assert pg_login.main(["save"]) == 1
+
+    assert not _saved(tmp_path).exists()
+    err = capsys.readouterr().err
+    assert "could not be reached at localhost:5433" in err and "no password was asked for" in err
+    assert "nothing accepted a connection" in err, "the reason is shown"
+
+
+def test_save_with_no_server_ignores_a_password_it_was_already_given(monkeypatch, tmp_path):
+    _server_down(monkeypatch)
+    monkeypatch.setenv("TE_PG_PASSWORD", SECRET)
+
+    assert pg_login.main(["save"]) == 1
+    assert not _saved(tmp_path).exists()
+
+
+def test_save_looks_for_the_server_then_asks_for_the_password_then_tries_it(monkeypatch):
+    """The order itself: probe, prompt, login. Not just that each happens."""
+    order = []
+    monkeypatch.setattr(pg_login, "server_available", lambda h, p, timeout=5: (order.append("probe"), (True, ""))[1])
+    monkeypatch.setattr(pg_login.getpass, "getpass", lambda *a, **k: (order.append("prompt"), SECRET)[1])
+    monkeypatch.setattr(psycopg2, "connect", lambda **k: (order.append("login"), _Conn())[1])
+
+    assert pg_login.main(["save"]) == 0
+
+    assert order == ["probe", "prompt", "login"]
+
+
+def test_save_probes_the_host_and_port_it_will_log_in_to(monkeypatch):
+    seen = []
+    monkeypatch.setattr(pg_login, "server_available", lambda h, p, timeout=5: (seen.append((h, p)), (True, ""))[1])
+    monkeypatch.setattr(psycopg2, "connect", lambda **k: _Conn())
+    monkeypatch.setenv("TE_PG_PASSWORD", SECRET)
+
+    pg_login.main(["save", "--host", "db.example.test", "--port", "6543"])
+
+    assert seen == [("db.example.test", "6543")]
+
+
+def test_no_check_does_not_look_for_the_server_either(monkeypatch, tmp_path):
+    monkeypatch.setattr(pg_login, "server_available", lambda *a, **k: pytest.fail("probed"))
+    monkeypatch.setenv("TE_PG_PASSWORD", SECRET)
+
+    assert pg_login.main(["save", "--no-check"]) == 0
+    assert _saved(tmp_path).exists()
+
+
+def test_check_with_no_server_exits_3_without_trying_the_login(monkeypatch, capsys):
+    _server_down(monkeypatch)  # psycopg2.connect fails the test if it is reached
+    monkeypatch.setenv("PGPASSWORD", SECRET)
+
+    assert pg_login.main(["check"]) == 3
+
+    err = capsys.readouterr().err
+    assert "Could not reach PostgreSQL at localhost:5433" in err and "nothing accepted a connection" in err
+    assert "running" in err and SECRET not in err and "Traceback" not in err
+
+
+def test_check_server_only_needs_no_password_and_tries_none(monkeypatch, capsys):
+    monkeypatch.setattr(psycopg2, "connect", lambda **k: pytest.fail("tried a login"))
+
+    assert pg_login.main(["check", "--server-only"]) == 0   # no PGPASSWORD set at all
+
+    assert "accepting connections at localhost:5433" in capsys.readouterr().out
+
+
+def test_check_server_only_exits_3_when_there_is_no_server(monkeypatch, capsys):
+    _server_down(monkeypatch)
+    assert pg_login.main(["check", "--server-only"]) == 3
+    assert "Could not reach PostgreSQL" in capsys.readouterr().err
+
+
+def test_a_server_that_goes_away_after_the_probe_is_still_not_reachable(monkeypatch):
+    """The probe said up, then the login attempt could not connect: still 3, not a refusal."""
+    _fails(monkeypatch, UNREACHABLE_MSG)
+    monkeypatch.setenv("PGPASSWORD", SECRET)
+    assert pg_login.main(["check"]) == 3
+
+
+def test_the_probe_finds_a_listening_socket():
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+
+        assert REAL_SERVER_AVAILABLE("127.0.0.1", str(port), timeout=2) == (True, "")
+
+
+def test_the_probe_reports_a_port_nothing_listens_on():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]      # free again once the socket is closed
+
+    up, why = REAL_SERVER_AVAILABLE("127.0.0.1", str(port), timeout=2)
+
+    assert up is False
+    assert f"127.0.0.1:{port}" in why and "nothing accepted a connection" in why
+
+
+def test_the_probe_reports_a_port_that_is_not_a_number_and_a_host_that_does_not_exist():
+    up, why = REAL_SERVER_AVAILABLE("127.0.0.1", "five", timeout=2)
+    assert (up, "not a number" in why) == (False, True)
+
+    up, why = REAL_SERVER_AVAILABLE("no-such-host.invalid", "5432", timeout=2)
+    assert up is False and "no-such-host.invalid:5432" in why
+
+
+def test_a_unix_socket_directory_is_left_to_the_login_attempt():
+    assert REAL_SERVER_AVAILABLE("/var/run/postgresql", "5432") == (True, "")
+
+
 # ── where ─────────────────────────────────────────────────────────────────────────────────
 
 def test_where_says_when_nothing_is_saved(capsys):
@@ -343,3 +473,15 @@ def test_start_api_acts_on_the_exit_codes_pg_login_check_documents():
     assert "save --env $env:API_ENV --from-env" in code, "offers to save a typed login without typing it twice"
     doc = " ".join(pg_login.__doc__.split())
     assert "0 the login works, 2 the server refused it" in doc and "3 the server could not be reached" in doc
+
+
+def test_start_api_looks_for_the_server_before_it_asks_for_a_password():
+    """With PostgreSQL down, no password can work: it must not ask for one first."""
+    code = START_API.read_text(encoding="ascii")
+    probe = code.index("python $pgLogin check --server-only")   # the command, not the comment
+    prompt = code.index("PGPASSWORD not set - enter it now")
+    login_check = code.index("python $pgLogin check\n")
+
+    assert code.index('$pgLogin = Join-Path $PSScriptRoot "pg_login.py"') < probe, "defined before use"
+    assert probe < prompt < login_check
+    assert "if ($LASTEXITCODE -ne 0) { exit 1 }" in code[probe:prompt], "a missing server stops the script"

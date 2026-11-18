@@ -27,6 +27,14 @@ if (-not $env:PGHOST)     { $env:PGHOST     = "localhost" }
 if (-not $env:PGPORT)     { $env:PGPORT     = "5433" }
 if (-not $env:PGUSER)     { $env:PGUSER     = "postgres" }
 if (-not $env:PGDATABASE) { $env:PGDATABASE = "te_mgmt_dev" }
+
+# First, is PostgreSQL there at all? Ask before asking for a password: with the server down or on
+# another port, no password can work, so there is nothing to type. `pg_login.py check --server-only`
+# uses no password and exits 0 when the server accepts connections, 3 when it does not.
+$pgLogin = Join-Path $PSScriptRoot "pg_login.py"
+python $pgLogin check --server-only
+if ($LASTEXITCODE -ne 0) { exit 1 }
+
 if (-not $env:PGPASSWORD) {
     Write-Host "PGPASSWORD not set - enter it now (input hidden):" -ForegroundColor Yellow
     $sec = Read-Host -AsSecureString
@@ -67,10 +75,10 @@ if (-not $env:API_KEY) {
     Write-Host "API_KEY not set - every endpoint is unauthenticated (fine for local dev)." -ForegroundColor Yellow
 }
 
-# Test the owner login before starting. A wrong password then costs one clear message here and
-# a chance to type it again, not a failed start. `pg_login.py check` exits 0 when the login
-# works, 2 when PostgreSQL refused it (waiting will not help), 3 when it could not be reached.
-$pgLogin = Join-Path $PSScriptRoot "pg_login.py"
+# The server is there (checked above); now test the owner login before starting. A wrong password
+# then costs one clear message here and a chance to type it again, not a failed start.
+# `pg_login.py check` exits 0 when the login works, 2 when PostgreSQL refused it (waiting will not
+# help), 3 when the server went away in the meantime.
 $pgTries = 0
 while ($true) {
     python $pgLogin check
