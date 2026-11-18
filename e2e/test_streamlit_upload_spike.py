@@ -19,9 +19,8 @@ from playwright.sync_api import expect
 
 from api.db import Conn
 from api.tenancy import schema_for
-from conftest import PASSWORD, ROOT, _wait_for
+from conftest import PASSWORD, ROOT, SPIKE_PORT, _wait_for
 
-SPIKE_PORT = 8503
 NO_CANCEL = "Sent to the server; it can't be stopped now"
 MIB = 1024 * 1024
 ORGS = (ROOT / "docs" / "samples" / "orgs_sample.csv").read_bytes()
@@ -294,8 +293,14 @@ def test_q6_the_same_file_again_is_refused_and_a_changed_file_is_the_next_versio
     expect(page.get_by_text("Already imported", exact=False)).to_be_visible()
 
     # Same name, changed content: the next version. (Remove the first file from the uploader, as a person would.)
+    second = _people(5)
     page.get_by_role("button", name=f"Remove {name}").click()
-    page.locator('input[type="file"]').set_input_files(_csv(name, _people(5)))
-    page.get_by_text("I have checked the column names and types").click()
+    page.locator('input[type="file"]').set_input_files(_csv(name, second))
+    # Wait for the NEW file's group to replace the old one before ticking its box: the two have the same name, so
+    # without this the tick can land on the old group, and the new one stays unconfirmed with Upload disabled.
+    expect(page.get_by_text(f"{name} · {len(second.encode()):,} bytes")).to_be_visible()
+    confirm = page.get_by_text("I have checked the column names and types")
+    expect(confirm).to_have_count(1)
+    confirm.click()
     upload().click()
     expect(page.get_by_text("Version 2", exact=False)).to_be_visible(timeout=30_000)
