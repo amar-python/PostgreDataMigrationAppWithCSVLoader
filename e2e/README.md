@@ -1,15 +1,15 @@
 # Browser end-to-end tests
 
-Playwright (Python) against the real API, the React app and the Streamlit spike, in Chromium.
-They cover what the vitest and pytest suites cannot: #176, #187 and #188 in a real browser, and the #154 Streamlit review screen.
+Playwright (Python) against the real API, the React app, the Streamlit spike and the Streamlit app shell (#251), in Chromium.
+They cover what the vitest and pytest suites cannot: #176, #187 and #188 in a real browser, the #154 Streamlit review screen, and the shell's sign-in, sign-out and change-password.
 
-Not part of the default `pytest` run (`testpaths = tests`) and not wired into CI: they need three
+Not part of the default `pytest` run (`testpaths = tests`) and not wired into CI: they need four
 local servers and a browser. (The accessibility scans have their own CI job, #168.)
 
 ## Run
 
 PostgreSQL must be reachable as for the integration tests (`PG*` environment variables), the dev
-database deployed (`bash build/deploy_all.sh dev`), and ports 8000, 8080 and 8501 free.
+database deployed (`bash build/deploy_all.sh dev`), and ports 8000, 8080, 8501 and 8502 free.
 
 ```bash
 pip install playwright streamlit && playwright install chromium
