@@ -295,6 +295,8 @@ Restart-Service postgresql-x64-18
 | `start-api.ps1` says "Port 8000 is already in use by PID …" | An older API is still running, maybe in a window you've forgotten (#118) | Close that window, or run the `taskkill` line it prints, then start again |
 | `npm run dev` fails with "Missing script" | Wrong directory | Must run from `csv-table-hub-main\`, not repo root |
 | Deployment shows `[✗] failed for dev` with `syntax error at or near "ï»¿"` | `env_dev.sql` has a UTF-8 BOM (old template) | Recreate it from `env_dev.example.sql`, or set `PGCLIENTENCODING=UTF8` |
+| `psql was not found on PATH`, and the message says it is bash "inside WSL" (older versions hint at `apt install` even on Windows) | `bash` typed in PowerShell is the WSL launcher, which runs the script in Linux and cannot see the Windows `psql.exe` | Run it with Git's bash: `& "C:\Program Files\Git\bin\bash.exe" build/deploy_all.sh dev`, or from a Git Bash window |
+| The API stops at startup with `Could not connect to PostgreSQL at … as postgres to run the database migrations` | The owner login (`PGUSER` / `PGPASSWORD`) was refused. The API's runtime role connected, but the migrations use the owner. `start-api.ps1` only asks for `PGPASSWORD` when it is unset, so a stale value in a new window is used silently | In that window set the owner's password (`$env:PGPASSWORD = '<owner password>'`) and start the API again |
 
 ---
 
