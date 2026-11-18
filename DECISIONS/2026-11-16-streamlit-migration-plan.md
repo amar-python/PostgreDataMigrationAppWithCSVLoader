@@ -1,6 +1,6 @@
 # Decision: Plan for moving the frontend from React to Streamlit (#212)
 
-Status:  Proposed, for the owner to accept or change (nothing here is decided)
+Status:  Proposed, for the owner to accept or change (nothing here is decided). Implementation issues #251 to #258 were filed on its defaults; corrected 18 Nov, see "Corrections"
 Date:    2026-11-16
 Review:  When the upload-screen spike (step 4) is done: its outcome can change the order or the whole plan
 
@@ -12,12 +12,12 @@ Build the Streamlit app as a whole, screen by screen, and **switch over once, no
 |---|---|---|
 | 1 | App shell: sign-in, session expiry, role gating, sign-out that clears state, change password | `auth.tsx` 100, `session.ts` 128, `change-password.tsx` 121, `session-menu.tsx` 31, `__root.tsx` 126 |
 | 2 | Review screen: productionise the #154 spike | `review-table.tsx` 356, `review.$uploadId.tsx` 33 |
-| 3 | Audit screen | `audit.tsx` 254, `audit-log.ts` 35 |
+| 3 | Import-history screen, read from the server (not the server's audit log: see "Corrections") | `audit.tsx` 254, `audit-log.ts` 35, the audit parts of `export.ts` |
 | 4 | **Spike** the upload screen (2 days, like #154), then build it | `_authenticated/index.tsx` 810, `csv-preview.ts` 165, `job-outcome.ts` 168, `export.ts` 271, `mapping-templates.ts` 73, `use-local-storage.ts` 46 |
 | 5 | Package it for the offline bundle and Azure; switch the default URL | `csv.functions.ts` 372 (the API client) goes last |
-| 6 | One release later, delete `csv-table-hub-main/` | all of the above, about 3,300 lines and 20 test files |
+| 6 | One release later, delete `csv-table-hub-main/` | all of the above, about 3,300 lines and 20 test files, and the accessibility CI job (#168), which scans the React dev server and needs a replacement or a deliberate retirement |
 
-Why this order: the shell is needed by every page, so it comes first; review is already spiked; audit is read-only and low risk; upload is the largest and least proven screen, so it gets its own spike before anything is committed to.
+Why this order: the shell is needed by every page, so it comes first; review is already spiked; the import-history screen is read-only and low risk, though it changes where the history comes from; upload is the largest and least proven screen, so it gets its own spike before anything is committed to.
 
 ## The nine questions from #212
 
@@ -56,21 +56,34 @@ Only 10 packages overlap with the API's set, and they are small (0.9 MB), so the
 
 **9. Parked issues.** #176 (fixed in #235) and #179 disappear with the React code. #186: the API half is done; the rename UI comes with the upload screen. #187: the spike's upload picker already lists every attempt, failed ones included; it carries over with the review screen. #188: no Cancel button; say "sent to the server, can't be stopped", as React now does. #242: the upload screen must send `typesConfirmed` for the types the user confirmed.
 
+## Corrections (18 Nov)
+
+Found while filing the implementation issues; they change what the plan said or left out.
+
+1. **The React "audit" screen is not the server's audit log.** `audit.tsx` is the browser's own import history, kept in `localStorage`: filters by file name, status and date, a per-import error view, bulk selection, CSV and XLSX downloads, and an "App changelog" list (`audit-log.ts`, a developer changelog kept as a constant). The server's append-only audit log (`GET /api/audit/log`, `/api/audit/verify`, roles `tenant_admin` and `auditor`) has no screen in the React app at all. Step 3 therefore builds the history from `GET /api/csv/uploads` and `GET /api/csv/uploads/{id}`: it then belongs to the tenant and survives browsers and devices, and no `localStorage` is involved, so the #176 class of leak cannot recur. **Behaviour change for users: the history is no longer per browser.** Every export keeps the formula-injection guard from #193.
+2. **The accessibility CI job (#168, `tests/accessibility/`) scans the React dev server.** Question 8 above did not mention it. Deleting React (step 6) leaves that job with nothing to scan, so it needs a Streamlit equivalent or a deliberate decision to retire it, settled before the React app goes.
+3. **Saved mapping templates need a home.** They are kept per tenant and user in the browser since #235, and Streamlit has no `localStorage`. Options: drop them, keep them for the session only, or store them server-side (which needs API work). This belongs to the upload screen (step 4).
+
 ## What the owner decides
 
 1. Whole-app cutover (this plan) or per screen, accepting a second sign-in?
 2. Is OIDC sign-in in the UI wanted? (Not needed for parity.)
 3. Where should the Streamlit app run in Azure?
 4. Is about 116 MB more in the offline bundle (143 MB to roughly 260 MB) acceptable?
+5. Build a screen for the server's audit log, which has no UI today (correction 1)? Keep the in-app "App changelog", or drop it for release notes?
+6. What happens to saved mapping templates: drop, session-only, or server-side (correction 3)?
+7. Replace or retire the accessibility job when React goes (correction 2)?
 
 ## Not verified
 
 Telemetry off means no outside connection (step 5 of the dry run); WebSocket pass-through behind a proxy; upload-size behaviour; Streamlit's behaviour at the larger row counts of #210.
 
-## If accepted, file these issues
+## Issues filed (18 Nov), on this plan's defaults
 
-Shell (step 1) · Review (step 2) · Audit (step 3) · Upload spike (step 4) · Upload screen · Packaging and `install.sh` (step 5) · Cutover and deletion (step 6) · AppTest suite for the Streamlit screens.
+#251 App shell (step 1) · #252 Review screen (step 2) · #253 Import-history screen (step 3) · #254 Upload spike (step 4) · #255 Upload screen (step 4, after the spike) · #256 Packaging for the offline bundle and Azure (step 5) · #257 Cutover and deletion (step 6) · #258 AppTest and browser tests.
+
+#254 is the gate: if the upload spike comes out "wrong for this screen", the whole-app cutover assumption fails and #212 should be reopened.
 
 ## Related
 
-#212, #154 (spike), #60 (offline dry run), #242 (confirmed types), #187, #188, #176, #210
+#212, #251 to #258 (the implementation issues), #154 (spike), #60 (offline dry run), #242 (confirmed types), #168 (accessibility job), #193, #187, #188, #176, #210
