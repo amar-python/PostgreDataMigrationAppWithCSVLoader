@@ -13,7 +13,9 @@ a tenant admin, the API running. From the repo root, with the API's PG* vars set
     export TE_ADMIN_PASSWORD='<12+ chars>'      # the tenant admin's password
     python scripts/sample_verification_run.py   # --tenant dev --username admin by default
 
-Exits 1 if any check fails, so a regression shows up as a red report, not a quiet one.
+Exits 1 if any check fails, so a regression shows up as a red report, not a quiet one. Exits 2 when it
+cannot run at all: no password, a failed sign-in, or a database that is not fresh (the first upload is
+refused as a duplicate, so there is nothing to compare). It writes nothing in that case.
 """
 
 from __future__ import annotations
@@ -43,6 +45,10 @@ EXPECTED_REJECTS = {
     8: "country 'AUS' too long for a 2-character code",
     9: "name is empty (not-null constraint)",
 }
+
+
+class NotFresh(Exception):
+    """An upload was refused, so the database already holds what this run loads."""
 
 
 class Api:
@@ -79,6 +85,19 @@ def upload(api: Api, name: str, content: str, mode: str, target: str | None = No
     return {"http": status, "preview": {k: prev.get(k) for k in ("status", "inferredTypes", "teTableMatch")}, "response": resp}
 
 
+def loaded_table(result: dict, what: str) -> str:
+    """The table an upload created. A refused upload means the database is not fresh: stop and say so,
+    rather than fail later with a KeyError on a response that has no table in it."""
+    resp = result["response"]
+    if "tableName" in resp:
+        return resp["tableName"]
+    why = resp.get("message") or resp.get("reason") or resp.get("detail") or "no reason given"
+    raise NotFresh(
+        f"The {what} upload was refused (HTTP {result['http']}, status {resp.get('status')!r}: {why}).\n"
+        "This run needs a FRESH database, where nothing has been loaded, so that every count starts at zero "
+        "(see the prerequisites at the top of this file). Nothing was written.")
+
+
 def collect(api: Api, conn) -> dict:
     ev: dict = {"started_utc": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     cur = conn.cursor()
@@ -97,7 +116,7 @@ def collect(api: Api, conn) -> dict:
     src_rows = [ln.split(",") for ln in orgs.splitlines()[1:]]
     a = upload(api, "orgs_sample.csv", orgs, "te", "organisations")
     resp = a["response"]
-    schema, table = resp["tableName"].split(".")
+    schema, table = loaded_table(a, "orgs_sample.csv (Test and Evaluation)").split(".")
     cur.execute(f'SELECT name, org_type, country FROM "{schema}"."{table}" ORDER BY name')
     db_rows = [list(r) for r in cur.fetchall()]
     cur.execute(f'SELECT file_hash, row_count, total_rows, failed_rows, id FROM "{schema}".csv_files WHERE file_name=%s',
@@ -118,7 +137,7 @@ def collect(api: Api, conn) -> dict:
     eq_bytes = (SAMPLES / "equipment_register.csv").read_bytes()
     eq = eq_bytes.decode("utf-8")
     b = upload(api, "equipment_register.csv", eq, "dynamic")
-    bt = b["response"]["tableName"]
+    bt = loaded_table(b, "equipment_register.csv (dynamic)")
     bs = ev["te"]["target"].split(".")[0]  # dynamic tables live in the same tenant schema
     cur.execute(f'SELECT count(*) FROM "{bs}"."{bt}"')
     b_count = cur.fetchone()[0]
@@ -334,7 +353,11 @@ def main() -> int:
                             user=os.environ.get("PGUSER", "postgres"), password=os.environ.get("PGPASSWORD", ""),
                             dbname=os.environ.get("PGDATABASE", "te_mgmt_dev"))
     conn.autocommit = True
-    ev = collect(api, conn)
+    try:
+        ev = collect(api, conn)
+    except NotFresh as e:
+        print(e, file=sys.stderr)
+        return 2
     rows = checks(ev)
 
     (SAMPLES / "verification-run-evidence.json").write_text(json.dumps(ev, indent=2, default=str) + "\n", encoding="utf-8")
