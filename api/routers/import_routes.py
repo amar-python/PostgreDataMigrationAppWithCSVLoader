@@ -14,6 +14,7 @@ from api.config import settings
 from api.db import Conn
 from api.routers.csv_routes import HeaderRename
 from api.services import staged_import
+from api.services.type_confirmation import require_confirmed_types
 
 router = APIRouter(prefix="/api/csv/uploads", tags=["import"], dependencies=[Depends(tenant_scope), Depends(policy.mark_classification)])
 
@@ -22,7 +23,11 @@ class StageRequest(BaseModel):
     fileName: str = Field(min_length=1, max_length=255)
     content: str = Field(min_length=1)
     types: list[str] | None = None
-    typesConfirmed: bool = False  # a person confirmed `types` (#195); the import records it in the registry
+    typesConfirmed: bool = Field(
+        default=False,
+        description="A person confirmed `types` (#195); the import records it in the registry. "
+                    "A server started with API_REQUIRE_TYPE_CONFIRMATION=true answers 422 unless this is true "
+                    "and `types` is sent (#242).")
     headerMapping: list[HeaderRename] | None = Field(default=None, max_length=1000)
     contentBase64: str | None = None  # the file's bytes as uploaded, kept as the preserved original (#185)
 
@@ -65,6 +70,7 @@ def stage(req: StageRequest) -> dict:
             raise HTTPException(422, "contentBase64 is not valid base64") from None
     if req.typesConfirmed and not req.types:
         raise HTTPException(422, "typesConfirmed requires the confirmed types to be sent in 'types'")
+    require_confirmed_types(req.types, req.typesConfirmed)  # #242, when the server is set to require it
     mapping = [m.model_dump() for m in req.headerMapping] if req.headerMapping else None
     result = _run(staged_import.stage, req.fileName, req.content, req.types, mapping, original, req.typesConfirmed)
     if result["status"] == "duplicate_file":

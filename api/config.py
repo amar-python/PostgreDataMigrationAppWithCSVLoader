@@ -80,6 +80,13 @@ class Settings:
         "1", "true", "yes"
     )
 
+    # #242: refuse a dynamic-mode upload unless a person confirmed its column types (`types` sent with
+    # `typesConfirmed: true`), on POST /api/csv/upload and POST /api/csv/uploads. Off by default so existing
+    # callers keep working; switch it on for installs that need the guarantee. T&E mode is not affected.
+    REQUIRE_TYPE_CONFIRMATION: bool = os.environ.get("API_REQUIRE_TYPE_CONFIRMATION", "false").lower() in (
+        "1", "true", "yes"
+    )
+
     # Shared secret required on every request via the X-API-Key header.
     # Empty in local dev by default; set API_KEY before deploying anywhere reachable
     # beyond localhost.
