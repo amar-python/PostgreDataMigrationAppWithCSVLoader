@@ -38,6 +38,22 @@ _PERMANENT_CONN_ERROR = re.compile(
 )
 
 
+def _refused(exc: BaseException, user: str, creds: str, purpose: str = "") -> psycopg2.OperationalError:
+    """The error to raise when the server was reached and refused the login
+    (see _PERMANENT_CONN_ERROR). Names who was refused, where, and what to check.
+
+    ``exc`` may be psycopg2's error or SQLAlchemy's wrapper of it; the server's own
+    words are kept, and the password never appears.
+    """
+    detail = str(getattr(exc, "orig", None) or exc).strip()
+    return psycopg2.OperationalError(
+        f"Could not connect to PostgreSQL at {settings.PG_HOST}:{settings.PG_PORT} "
+        f"as {user}{purpose}: the server was reached but refused the connection, "
+        f"and retrying will not help.\n  {detail}\n"
+        f"Check {creds} (and PGDATABASE, PGHOST, PGPORT)."
+    )
+
+
 def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
     """Create the shared pool. Uses ThreadedConnectionPool so parallel FastAPI
     handlers can borrow/return connections without blocking each other's
@@ -69,12 +85,7 @@ def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
         except psycopg2.OperationalError as exc:
             if _PERMANENT_CONN_ERROR.search(str(exc)):
                 creds = "APP_DB_USER / APP_DB_PASSWORD" if settings.APP_DB_USER else "PGUSER / PGPASSWORD"
-                raise psycopg2.OperationalError(
-                    f"Could not connect to PostgreSQL at {settings.PG_HOST}:{settings.PG_PORT} "
-                    f"as {user}: the server was reached but refused the connection, "
-                    f"and retrying will not help.\n  {str(exc).strip()}\n"
-                    f"Check {creds} (and PGDATABASE, PGHOST, PGPORT)."
-                ) from exc
+                raise _refused(exc, user, creds) from exc
             last_err = exc
             delay = min(base_delay * (2 ** (attempt - 1)), 10.0)
             logger.warning(
@@ -186,6 +197,7 @@ def bootstrap() -> None:
     # which is only invoked by tests using TestClient as a context manager).
     from alembic import command
     from alembic.config import Config
+    from sqlalchemy.exc import OperationalError as SQLAlchemyOperationalError
 
     alembic_ini = alembic_ini_path()
 
@@ -203,7 +215,16 @@ def bootstrap() -> None:
     logger.info("Running alembic upgrade head against %s@%s:%s/%s",
                 settings.PG_USER, settings.PG_HOST, settings.PG_PORT,
                 settings.PG_DATABASE)
-    command.upgrade(cfg, "head")
+    try:
+        command.upgrade(cfg, "head")
+    except SQLAlchemyOperationalError as exc:
+        if not _PERMANENT_CONN_ERROR.search(str(exc)):
+            raise
+        # The migrations log in as the owner (PGUSER), not as the runtime role the pool
+        # uses, so a pool that connected fine can still stop here. Raise the short,
+        # named error instead of SQLAlchemy's chained traceback (~70 lines on Windows).
+        raise _refused(exc, settings.PG_USER, "PGUSER / PGPASSWORD",
+                       " to run the database migrations") from None
     with owner_connect() as conn, conn.cursor() as cur:
         for schema, create in ((settings.UPLOADS_SCHEMA, True), (settings.CONTROL_SCHEMA, False),
                                (settings.TE_SCHEMA, False)):
