@@ -37,6 +37,7 @@ class FakeApi:
 
     def __init__(self):
         self.calls: list[tuple] = []
+        self.params: list[tuple] = []  # (method, path, params) for every call
         self.down = False
         self.tokens: dict[str, tuple[str, str]] = {}
         self.dead: set[str] = set()
@@ -45,6 +46,7 @@ class FakeApi:
 
     def __call__(self, method, path, token=None, **kwargs):
         self.calls.append((method, path, token, kwargs.get("json")))
+        self.params.append((method, path, kwargs.get("params")))
         if self.down:
             raise api_client.Unreachable()
         if path == "/api/auth/login":

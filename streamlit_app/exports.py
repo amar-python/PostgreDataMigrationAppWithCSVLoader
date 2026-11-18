@@ -7,6 +7,7 @@ import io
 import re
 
 import openpyxl
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 
 FORMULA_START = re.compile(r"[=+\-@\t\r]")
 PLAIN_NUMBER = re.compile(r"[+-]?[0-9]+(\.[0-9]+)?")
@@ -34,13 +35,18 @@ def to_csv(headers: list[str], rows: list[dict]) -> bytes:
     return buf.getvalue().encode("utf-8")
 
 
+def _xlsx_cell(v: object) -> object:
+    v = safe_cell(v)
+    return ILLEGAL_CHARACTERS_RE.sub("", v) if isinstance(v, str) else v
+
+
 def to_xlsx(sheet: str, headers: list[str], rows: list[dict]) -> bytes:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = sheet[:31]
     ws.append(headers)
     for r in rows:
-        ws.append([safe_cell(r.get(h)) for h in headers])
+        ws.append([_xlsx_cell(r.get(h)) for h in headers])
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()

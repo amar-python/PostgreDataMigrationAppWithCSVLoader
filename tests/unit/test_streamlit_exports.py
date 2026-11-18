@@ -67,3 +67,8 @@ def test_history_rows_map_upload_items_and_fill_missing_keys():
          "total_rows": None, "imported_rows": None, "failed_rows": None, "failure_reason": None},
     ]
     assert HISTORY_HEADERS == ["file", "status", "uploaded_at", "uploader", "mode", "total_rows", "imported_rows", "failed_rows", "failure_reason"]
+
+
+def test_xlsx_drops_control_characters():
+    wb = openpyxl.load_workbook(io.BytesIO(to_xlsx("x", ["a"], [{"a": "a\x01b"}])))
+    assert wb.active["A2"].value == "ab"

@@ -174,5 +174,5 @@ def test_saving_clears_the_uploads_cache(served):
 
 
 def test_allowed_screens_follow_permissions():
-    assert allowed_screens("auditor") == ["review"]  # extended in Tasks 5 and 6
+    assert allowed_screens("auditor") == ["review", "history"]  # extended in Task 6
     assert review.PAGE == 100
