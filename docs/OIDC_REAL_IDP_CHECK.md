@@ -54,7 +54,7 @@ rm idtoken.txt
 
 A private CA: set `SSL_CERT_FILE=/path/to/ca-bundle.pem` for the script **and** in the API's own environment, or the key fetch fails closed. Passing means every stage printed `OK`. The last line says whether the sign-in itself was checked. The script never prints the token or the session token.
 
-Run the same sign-in once through the real front end too, because the front end builds the authorization request.
+There is no front-end step today: the React app has no OIDC sign-in (it signs in with tenant, username and password), so the script's sign-in stage, which calls `POST /api/auth/oidc`, is the whole check. If a UI sign-in is added later (the Streamlit plan leaves it out; `st.login()` would be the way in, #251), run one sign-in through it as well, because the UI builds the authorization request.
 
 ## 4. What to record on #113
 
