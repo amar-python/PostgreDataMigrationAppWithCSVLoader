@@ -177,6 +177,36 @@ class DeployAllPrereqs(unittest.TestCase):
         self.assertEqual(res.returncode, 1)
         self.assertRegex(res.stderr, r"(?i)install")
         self.assertNotIn("export PATH", res.stderr)
+        self.assertNotIn("WSL", res.stderr, "nothing about WSL when this is not WSL")
+
+    # -- bash from PowerShell is WSL: say so, instead of sending a Windows user to apt --------
+
+    def test_inside_wsl_a_missing_psql_points_at_git_bash_not_at_apt_alone(self):
+        res = self.run_script("dev", with_psql=False, WSL_DISTRO_NAME="Ubuntu-24.04",
+                              PROGRAMFILES=str(self.dir / "empty-pf"))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("psql was not found on PATH", res.stderr)
+        self.assertIn("inside WSL", res.stderr)
+        self.assertIn("Git Bash", res.stderr)
+        self.assertIn(r'"C:\Program Files\Git\bin\bash.exe" build/deploy_all.sh', res.stderr,
+                      "the exact PowerShell command to use instead")
+        self.assertIn("sudo apt install postgresql-client", res.stderr,
+                      "still offered, for a PostgreSQL that runs inside WSL")
+        self.assertNotIn("Install it with: apt install", res.stderr, "the generic Linux hint is replaced")
+        self.assertNotIn("Creating database", res.stdout)
+        self.assertEqual(self.calls, [])
+
+    def test_inside_wsl_with_psql_available_runs_normally(self):
+        # A Linux psql inside WSL is a legitimate setup: the message is only for a missing psql.
+        res = self.run_script("dev", WSL_DISTRO_NAME="Ubuntu-24.04", STUB_DB_EXISTS="0")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertNotIn("WSL", res.stderr)
+        self.assertIn("Succeeded : dev", res.stdout)
+
+    def test_inside_wsl_a_dry_run_still_needs_nothing(self):
+        res = self.run_script("--dry-run", "dev", with_psql=False, WSL_DISTRO_NAME="Ubuntu-24.04")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("Succeeded : dev", res.stdout)
 
     def test_a_dry_run_needs_neither_psql_nor_a_server(self):
         res = self.run_script("--dry-run", "dev", with_psql=False)

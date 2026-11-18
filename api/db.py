@@ -56,8 +56,10 @@ def _is_permanent(exc: Exception) -> bool:
 
 
 def _connect_error(exc: Exception, user: str, creds: str, *, attempts: int = 0,
-                   permanent: bool = False) -> DatabaseConnectError:
-    msg = f"Could not connect to PostgreSQL at {settings.PG_HOST}:{settings.PG_PORT} as {user}"
+                   permanent: bool = False, purpose: str = "") -> DatabaseConnectError:
+    """``purpose`` says what the login was for (e.g. " to run the database migrations"), where the
+    login differs from the one the person might expect."""
+    msg = f"Could not connect to PostgreSQL at {settings.PG_HOST}:{settings.PG_PORT} as {user}{purpose}"
     if permanent:
         msg += ": the server was reached, but retrying will not help."
     else:
@@ -211,6 +213,7 @@ def bootstrap() -> None:
     # which is only invoked by tests using TestClient as a context manager).
     from alembic import command
     from alembic.config import Config
+    from sqlalchemy.exc import OperationalError as SQLAlchemyOperationalError
 
     alembic_ini = alembic_ini_path()
 
@@ -228,7 +231,19 @@ def bootstrap() -> None:
     logger.info("Running alembic upgrade head against %s@%s:%s/%s",
                 settings.PG_USER, settings.PG_HOST, settings.PG_PORT,
                 settings.PG_DATABASE)
-    command.upgrade(cfg, "head")
+    try:
+        command.upgrade(cfg, "head")
+    except SQLAlchemyOperationalError as exc:
+        # SQLAlchemy wraps psycopg2's error; classify and show the original, so the server's
+        # own words are not buried in SQLAlchemy's "(Background on this error at ...)" text.
+        orig = getattr(exc, "orig", None) or exc
+        if not _is_permanent(orig):
+            raise
+        # The migrations log in as the owner (PGUSER), not as the runtime role the pool
+        # uses, so a pool that connected fine can still stop here. Raise the short, named
+        # error instead of SQLAlchemy's chained traceback (~70 lines on Windows).
+        raise _connect_error(orig, settings.PG_USER, "PGUSER / PGPASSWORD", permanent=True,
+                             purpose=" to run the database migrations") from None
     with owner_connect() as conn, conn.cursor() as cur:
         for schema, create in ((settings.UPLOADS_SCHEMA, True), (settings.CONTROL_SCHEMA, False),
                                (settings.TE_SCHEMA, False)):

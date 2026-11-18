@@ -5,6 +5,10 @@ fixed by waiting, so ``init_pool`` must raise on the first attempt instead of ba
 minutes. A server that is still starting (BUG-026) must still be retried. The scripts turn the
 resulting ``DatabaseConnectError`` into one message and exit status 1, not a traceback.
 
+The migrations that run at startup (``bootstrap``) log in as the owner (PGUSER), a different login
+from the pool's, so a wrong owner password must surface as the same short, named error, not
+SQLAlchemy's long chained traceback (tests at the end).
+
 No database needed. Most tests monkeypatch psycopg2's pool and ``time.sleep``; a few talk to a fake
 PostgreSQL on loopback so that real libpq produces the message text the classifier has to read.
 """
@@ -20,6 +24,8 @@ from pathlib import Path
 import psycopg2
 import psycopg2.pool
 import pytest
+from sqlalchemy.exc import OperationalError as SQLAlchemyOperationalError
+from sqlalchemy.exc import ProgrammingError
 
 from api import db
 from api.config import settings
@@ -357,3 +363,87 @@ def test_script_with_a_refused_login_exits_1_at_once_without_a_traceback(fake_po
     assert f"127.0.0.1:{server.port} as alice" in done.stderr
     assert "PGUSER / PGPASSWORD" in done.stderr
     assert _SECRET not in done.stderr and server.connections == 1
+
+
+# ── bootstrap(): the migrations' own login (the owner, PGUSER) ────────────────────────────
+
+def _alembic_fails_with(monkeypatch, exc: Exception):
+    """Make `alembic upgrade head` raise ``exc``, as env.py's engine.connect() would."""
+    def boom(*args, **kwargs):
+        raise exc
+    monkeypatch.setattr("alembic.command.upgrade", boom)
+
+
+def _wrapped(message: str) -> SQLAlchemyOperationalError:
+    """What SQLAlchemy raises around psycopg2's error (its str() adds a 'Background on this error' line)."""
+    return SQLAlchemyOperationalError("SELECT 1", {}, psycopg2.OperationalError(message))
+
+
+@pytest.mark.parametrize("message", PERMANENT)
+def test_bootstrap_login_refusal_raises_the_short_named_error(monkeypatch, message):
+    _alembic_fails_with(monkeypatch, _wrapped(message))
+
+    with pytest.raises(db.DatabaseConnectError) as info:
+        db.bootstrap()
+
+    assert not isinstance(info.value, SQLAlchemyOperationalError)
+    assert info.value.__cause__ is None and info.value.__suppress_context__, \
+        "the long SQLAlchemy chain must not be printed under it"
+    assert "Background on this error" not in str(info.value), "SQLAlchemy's own footer is not repeated"
+
+
+def test_bootstrap_login_refusal_names_the_owner_host_port_and_variables(monkeypatch):
+    monkeypatch.setattr(settings, "PG_USER", "alice")
+    monkeypatch.setattr(settings, "APP_DB_USER", "te_runtime")  # the pool's login, not the migrations'
+    monkeypatch.setattr(settings, "PG_HOST", "db.example.test")
+    monkeypatch.setattr(settings, "PG_PORT", 6543)
+    monkeypatch.setattr(settings, "PG_PASSWORD", _SECRET)
+    _alembic_fails_with(monkeypatch, _wrapped(PERMANENT[0]))
+
+    with pytest.raises(db.DatabaseConnectError) as info:
+        db.bootstrap()
+
+    msg = str(info.value)
+    assert "alice" in msg and "db.example.test" in msg and "6543" in msg
+    assert "te_runtime" not in msg, "the migrations do not use the runtime role"
+    assert "to run the database migrations" in msg, "it says why the owner is being used"
+    assert "PGUSER" in msg and "PGPASSWORD" in msg
+    assert "APP_DB_PASSWORD" not in msg
+    assert "password authentication failed" in msg, "the server's own reason is kept"
+    assert "not reachable" not in msg
+    assert _SECRET not in msg
+
+
+@pytest.mark.parametrize("message", TRANSIENT)
+def test_bootstrap_leaves_a_transient_failure_alone(monkeypatch, message):
+    err = _wrapped(message)
+    _alembic_fails_with(monkeypatch, err)
+
+    with pytest.raises(SQLAlchemyOperationalError) as info:
+        db.bootstrap()
+
+    assert info.value is err
+
+
+def test_bootstrap_leaves_other_database_errors_alone(monkeypatch):
+    err = ProgrammingError("CREATE TABLE x", {}, psycopg2.ProgrammingError("syntax error"))
+    _alembic_fails_with(monkeypatch, err)
+
+    with pytest.raises(ProgrammingError) as info:
+        db.bootstrap()
+
+    assert info.value is err
+
+
+def test_a_script_that_calls_bootstrap_prints_the_refusal_and_exits_1(monkeypatch, capsys):
+    """create_tenant_admin and the other scripts run db.bootstrap() under run_cli: the same short
+    message must reach them (and a person) as plain text, not as a traceback."""
+    monkeypatch.setattr(settings, "PG_USER", "alice")
+    _alembic_fails_with(monkeypatch, _wrapped(PERMANENT[0]))
+
+    assert db.run_cli(db.bootstrap) == 1
+
+    err = capsys.readouterr().err
+    assert "Could not connect to PostgreSQL" in err and "alice" in err
+    assert "to run the database migrations" in err
+    assert "Traceback" not in err

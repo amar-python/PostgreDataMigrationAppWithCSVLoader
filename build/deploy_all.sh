@@ -68,12 +68,35 @@ find_installed_psql() {
    ls -1d "${root}"/PostgreSQL/*/bin/psql.exe 2>/dev/null | sort -V | tail -n 1 || true
 }
 
+# True when this bash is running inside WSL. On a Windows machine, `bash` typed in
+# PowerShell is the WSL launcher: it runs the script in Linux, which cannot see the Windows
+# psql.exe on the PATH PowerShell has. WSL sets WSL_DISTRO_NAME; the kernel release names
+# Microsoft too. Only builtins are used, so it works with a minimal PATH.
+inside_wsl() {
+   [[ -n "${WSL_DISTRO_NAME:-}" ]] && return 0
+   local rel=""
+   { read -r rel < /proc/sys/kernel/osrelease; } 2>/dev/null || true
+   [[ "${rel}" == *[Mm]icrosoft* ]]
+}
+
 # A real run needs psql. Without this check a missing psql was read as "the database
 # does not exist": the script printed a green "Creating database" and only then failed.
 require_psql() {
    if command -v psql >/dev/null 2>&1; then return 0; fi
    error "psql was not found on PATH. This script needs the PostgreSQL client tools."
    local found
+   if inside_wsl; then
+      # The usual cause is running `bash build/deploy_all.sh` from PowerShell. The apt hint
+      # below would send a person with PostgreSQL on Windows to install a second client.
+      echo "      This is bash running inside WSL (Linux). It cannot see the Windows psql.exe, even" >&2
+      echo "      though PowerShell can. To use PostgreSQL installed on Windows, run this script with" >&2
+      echo "      Git Bash instead:" >&2
+      echo '          & "C:\Program Files\Git\bin\bash.exe" build/deploy_all.sh <same arguments>   (PowerShell)' >&2
+      echo "          bash build/deploy_all.sh <same arguments>                                    (a Git Bash window)" >&2
+      echo "      To use a PostgreSQL that runs inside WSL, install its client there:" >&2
+      echo "          sudo apt install postgresql-client" >&2
+      exit 1
+   fi
    found="$(find_installed_psql)"
    if [[ -n "${found}" ]]; then
       echo "      PostgreSQL is installed, but its bin folder is not on PATH. In Git Bash:" >&2
