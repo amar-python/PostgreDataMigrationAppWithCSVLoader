@@ -13,7 +13,7 @@ Last updated: 2026-11-02
 
 - main at ad79534 after PR #160 (initial project-status.md snapshot)
 - CI: Quality Gate (3 checks) green on all recent PRs
-- Branch protection: Live on main. Three required checks (python-validator-tests, free-tier, integration), strict up-to-date, enforce_admins true, no force-push, no deletion
+- Branch protection: **not live on main** (corrected 18 Nov; this snapshot said it was). `main` has no required checks; the settings are prepared and waiting for a repository admin to apply them. See `DECISIONS/2026-11-02-main-branch-protection.md` and #198
 - Open issues: 16
 - Open PRs: 6 (none from today's work â€” all merged)
 
@@ -91,7 +91,7 @@ Deferred-by-decision or risk-accepted; stay closed unless explicitly asked:
 
 ## Verification notes
 
-- Branch protection: verified live via gh api .../branches/main/protection response showing all 3 checks + enforce_admins true
+- Branch protection: the claim here that it was "verified live" was wrong (corrected 18 Nov). `GET /branches/main/protection` returned 404 on 9 Nov and `protected: false` on 9, 16 and 18 Nov (#198)
 - Last 8 merges all show all 3 Quality Gate checks SUCCESS (gh pr list --state merged --json statusCheckRollup)
 - Session's closures all have GitHub issue evidence or merged PR evidence
 - Tracker tidy-ups owed: not yet applied, Doc edits on Amar's side
