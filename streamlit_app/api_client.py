@@ -33,6 +33,14 @@ class Unreachable(ApiError):
         super().__init__(0, f"Can't reach the API at {API_URL}. Is it running?")
 
 
+class TimedOut(ApiError):
+    """The API did not answer in time. The work may still be going on there."""
+
+    def __init__(self, timeout: float):
+        super().__init__(0, f"The server didn't answer within {timeout:.0f} s. "
+                            "It may still be working: check Import history before trying again.")
+
+
 def _detail(response: requests.Response) -> str:
     try:
         detail = response.json().get("detail")
@@ -41,11 +49,13 @@ def _detail(response: requests.Response) -> str:
     return detail if isinstance(detail, str) and detail else (response.reason or f"HTTP {response.status_code}")
 
 
-def request(method: str, path: str, token: str | None = None, **kwargs):
-    """Call the API and return its JSON, or raise Unauthorized, Unreachable or ApiError."""
+def request(method: str, path: str, token: str | None = None, timeout: float = TIMEOUT_SECONDS, **kwargs):
+    """Call the API and return its JSON, or raise Unauthorized, TimedOut, Unreachable or ApiError."""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
-        response = requests.request(method, API_URL + path, headers=headers, timeout=TIMEOUT_SECONDS, **kwargs)
+        response = requests.request(method, API_URL + path, headers=headers, timeout=timeout, **kwargs)
+    except requests.Timeout:
+        raise TimedOut(timeout) from None
     except requests.RequestException:
         raise Unreachable() from None
     if response.ok:

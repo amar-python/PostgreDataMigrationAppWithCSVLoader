@@ -38,7 +38,6 @@ from api.tenancy import migrate_tenant, schema_for  # noqa: E402
 expect.set_options(timeout=10_000)
 
 API_PORT, WEB_PORT, SHELL_PORT = 8000, 8080, 8502
-SPIKE_PORT = 8503  # the #254 upload spike, started by e2e/test_streamlit_upload_spike.py itself
 PASSWORD = "e2e correct horse battery"
 
 
@@ -93,8 +92,6 @@ def prerequisites(request):
     """First of all, before the React build or any server: is everything the tests need there? Reports all
     that is missing at once (e2e/preflight.py), rather than the first error a missing piece happens to raise."""
     ports = [API_PORT, WEB_PORT, SHELL_PORT]
-    if any("test_streamlit_upload_spike" in item.nodeid for item in request.session.items):
-        ports.append(SPIKE_PORT)  # only when those tests are selected: a busy 8503 should not stop the rest
     found = preflight.problems(
         root=ROOT, env=os.environ, pg_host=settings.PG_HOST, pg_port=settings.PG_PORT,
         probe=pg_login.server_available, ports=ports, is_free=_port_is_free)

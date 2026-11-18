@@ -4,6 +4,7 @@ import auth
 
 # (action in auth.PERMISSIONS that lets a role see it, sidebar title, url path). Later issues add theirs.
 SCREENS: list[tuple[str, str, str]] = [
+    ("upload", "Upload", "upload"),
     ("read_rows", "Review", "review"),
     ("list_files", "Import history", "history"),
 ]

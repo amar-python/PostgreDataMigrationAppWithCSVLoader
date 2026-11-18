@@ -2,3 +2,8 @@
 [browser]
 # On by default. This app is for on-premises and air-gapped installs, so nothing is sent out.
 gatherUsageStats = false
+
+[server]
+# Streamlit counts a megabyte as 1,000,000 bytes, so no integer equals the API's 50 MiB. This is set above it
+# and the app enforces the real limit (MAX_UPLOAD_BYTES, views/upload.py).
+maxUploadSize = 53
