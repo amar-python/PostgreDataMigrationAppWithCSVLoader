@@ -84,11 +84,25 @@ def test_save_checks_the_login_then_writes_all_four_values(connects, monkeypatch
     assert "dev-env.ps1" in out.out, "it says how to load the login into a window"
 
 
-@pytest.mark.skipif(os.name == "nt", reason="file modes are not meaningful on Windows")
-def test_the_file_is_readable_by_the_current_user_only(connects, monkeypatch, tmp_path):
+def test_the_file_is_created_readable_by_the_current_user_only(connects, monkeypatch, tmp_path):
+    """Not skipped on Windows: the Windows CI job fails on any skip (--strict). The mode asked of
+    the OS is checked everywhere; the mode that results only where the OS has modes."""
+    asked = []
+    real_open = os.open
+
+    def spy(path, flags, mode=0o777, **kwargs):
+        if Path(path) == _saved(tmp_path):
+            asked.append(mode)
+        return real_open(path, flags, mode, **kwargs)
+
+    monkeypatch.setattr(os, "open", spy)
     monkeypatch.setenv("TE_PG_PASSWORD", SECRET)
+
     pg_login.main(["save"])
-    assert _saved(tmp_path).stat().st_mode & 0o777 == 0o600
+
+    assert asked == [0o600]
+    if os.name != "nt":
+        assert _saved(tmp_path).stat().st_mode & 0o777 == 0o600
 
 
 def test_a_refused_login_is_not_saved(monkeypatch, tmp_path, capsys):
