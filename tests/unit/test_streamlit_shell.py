@@ -13,83 +13,19 @@ import subprocess
 import sys
 import tomllib
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import pytest
 import streamlit as st
 from streamlit.proto.TextInput_pb2 import TextInput as TextInputProto
 from streamlit.testing.v1 import AppTest
 
-ROOT = Path(__file__).resolve().parents[2]
-APP_DIR = ROOT / "streamlit_app"
-sys.path.insert(0, str(APP_DIR))
-
-import api_client  # noqa: E402
-import auth  # noqa: E402
-from api.auth import PERMISSIONS as API_PERMISSIONS  # noqa: E402
-from views import home  # noqa: E402
+from tests.unit.streamlit_harness import APP_DIR, PASSWORD, ROOT, api, later, view  # noqa: F401 (api is a fixture)
+import api_client
+import auth
+from api.auth import PERMISSIONS as API_PERMISSIONS
+from views import home
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
-
-PASSWORD = "correct horse battery"
-USERS = {
-    ("acme", "alice"): "uploader",
-    ("acme", "rita"): "reviewer",
-    ("acme", "ada"): "tenant_admin",
-    ("acme", "audrey"): "auditor",
-    ("zed", "zoe"): "tenant_admin",
-}
-
-
-def _later(hours: float = 8) -> str:
-    return (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat()
-
-
-class FakeApi:
-    """Stands in for api_client.request: the endpoints the shell uses, with the API's own wording."""
-
-    def __init__(self):
-        self.calls: list[tuple] = []
-        self.down = False
-        self.tokens: dict[str, tuple[str, str]] = {}
-        self.dead: set[str] = set()
-        self.password_error: tuple[int, str] | None = None
-
-    def __call__(self, method, path, token=None, **kwargs):
-        self.calls.append((method, path, token, kwargs.get("json")))
-        if self.down:
-            raise api_client.Unreachable()
-        if path == "/api/auth/login":
-            body = kwargs["json"]
-            who = (body["tenant"], body["username"])
-            if who not in USERS or body["password"] != PASSWORD:
-                raise api_client.Unauthorized(401, "Invalid tenant, username or password")
-            tok = f"tok-{len(self.tokens) + 1}"
-            self.tokens[tok] = who
-            return {"token": tok, "expiresAt": _later(), "username": who[1], "tenant": who[0],
-                    "role": USERS[who]}
-        if token is None or token in self.dead or token not in self.tokens:
-            raise api_client.Unauthorized(401, "Not signed in")
-        if path == "/api/auth/logout":
-            self.dead.add(token)
-            return {"status": "ok"}
-        if path == "/api/auth/password":
-            if self.password_error:
-                raise api_client.ApiError(*self.password_error)
-            if kwargs["json"]["currentPassword"] != PASSWORD:
-                raise api_client.ApiError(400, "Current password is incorrect")
-            return {"status": "ok"}
-        raise AssertionError(f"unexpected call {method} {path}")
-
-    def calls_to(self, path):
-        return [c for c in self.calls if c[1] == path]
-
-
-@pytest.fixture
-def api(monkeypatch):
-    fake = FakeApi()
-    monkeypatch.setattr(api_client, "request", fake)
-    return fake
 
 
 def _open() -> AppTest:
@@ -175,7 +111,7 @@ def test_another_api_error_shows_the_servers_own_message(monkeypatch):
 
 def test_an_expired_session_is_signed_out_with_a_reason_and_nothing_left_over(api):
     at = _open()
-    at.session_state["session"] = {"token": "t", "expiresAt": _later(-1), "username": "alice",
+    at.session_state["session"] = {"token": "t", "expiresAt": later(-1), "username": "alice",
                                    "tenant": "acme", "role": "uploader"}
     at.session_state["leftover"] = "something acme's"
     at.run()
@@ -187,7 +123,7 @@ def test_an_expired_session_is_signed_out_with_a_reason_and_nothing_left_over(ap
 
 def test_the_reason_is_shown_once(api):
     at = _open()
-    at.session_state["session"] = {"token": "t", "expiresAt": _later(-1), "username": "a", "tenant": "b",
+    at.session_state["session"] = {"token": "t", "expiresAt": later(-1), "username": "a", "tenant": "b",
                                    "role": "uploader"}
     at.run()
     assert len(at.warning) == 1
@@ -220,26 +156,6 @@ def test_expiry_is_read_in_utc_and_the_boundary_is_expired():
 
 # ── a view's API call that gets a 401 ─────────────────────────────────────────────────────
 
-HARNESS = """
-import sys
-sys.path.insert(0, {app_dir!r})
-import streamlit as st
-import auth
-from views import {view}
-{view}.render()
-"""
-
-
-def _view(name: str, who=("acme", "alice"), api: FakeApi | None = None) -> AppTest:
-    """Render one view with a session already in place (AppTest cannot switch to st.navigation pages)."""
-    at = AppTest.from_string(HARNESS.format(app_dir=str(APP_DIR), view=name), default_timeout=30)
-    if api is not None:
-        api.tokens["tok-v"] = who
-        at.session_state["session"] = {"token": "tok-v", "expiresAt": _later(), "username": who[1],
-                                       "tenant": who[0], "role": USERS[who]}
-    return at.run()
-
-
 def _change(at: AppTest, current, new, confirm) -> AppTest:
     at.text_input[0].input(current)
     at.text_input[1].input(new)
@@ -249,7 +165,7 @@ def _change(at: AppTest, current, new, confirm) -> AppTest:
 
 
 def test_a_401_from_any_call_ends_the_session_and_says_why(api):
-    at = _view("change_password", api=api)
+    at = view("change_password", api=api)
     api.dead.add("tok-v")  # revoked on the server, for instance by a password change elsewhere
 
     _change(at, PASSWORD, "a brand new passphrase", "a brand new passphrase")
@@ -354,7 +270,7 @@ st.session_state["_can"] = {{a: auth.can(a) for a in auth.PERMISSIONS}}
     assert not any(out.session_state["_can"].values()), "signed out: nothing is allowed"
 
     at = AppTest.from_string(script)
-    at.session_state["session"] = {"token": "t", "expiresAt": _later(), "role": "auditor"}
+    at.session_state["session"] = {"token": "t", "expiresAt": later(), "role": "auditor"}
     can = at.run().session_state["_can"]
     assert can["read_audit"] and can["list_files"]
     assert not can["upload"] and not can["review_rows"] and not can["delete_file"]
@@ -371,7 +287,7 @@ def test_every_permission_has_a_plain_label():
 # ── change password ───────────────────────────────────────────────────────────────────────
 
 def test_change_password_success_keeps_this_session_and_says_so(api):
-    at = _view("change_password", api=api)
+    at = view("change_password", api=api)
 
     _change(at, PASSWORD, "a brand new passphrase", "a brand new passphrase")
 
@@ -386,7 +302,7 @@ def test_change_password_success_keeps_this_session_and_says_so(api):
 
 
 def test_a_wrong_current_password_shows_the_servers_message_and_keeps_the_session(api):
-    at = _view("change_password", api=api)
+    at = view("change_password", api=api)
 
     _change(at, "not my password", "a brand new passphrase", "a brand new passphrase")
 
@@ -395,7 +311,7 @@ def test_a_wrong_current_password_shows_the_servers_message_and_keeps_the_sessio
 
 
 def test_a_short_new_password_is_refused_before_the_api_is_asked(api):
-    at = _view("change_password", api=api)
+    at = view("change_password", api=api)
 
     _change(at, PASSWORD, "too short", "too short")
 
@@ -404,7 +320,7 @@ def test_a_short_new_password_is_refused_before_the_api_is_asked(api):
 
 
 def test_passwords_that_do_not_match_are_refused_before_the_api_is_asked(api):
-    at = _view("change_password", api=api)
+    at = view("change_password", api=api)
 
     _change(at, PASSWORD, "a brand new passphrase", "a different passphrase")
 
@@ -413,7 +329,7 @@ def test_passwords_that_do_not_match_are_refused_before_the_api_is_asked(api):
 
 
 def test_empty_fields_are_refused(api):
-    at = _view("change_password", api=api)
+    at = view("change_password", api=api)
 
     _change(at, "", "", "")
 
@@ -422,7 +338,7 @@ def test_empty_fields_are_refused(api):
 
 
 def test_a_422_from_the_api_is_explained_in_the_same_words(api):
-    at = _view("change_password", api=api)
+    at = view("change_password", api=api)
     api.password_error = (422, "String should have at least 12 characters")
 
     _change(at, PASSWORD, "a brand new passphrase", "a brand new passphrase")
