@@ -268,7 +268,7 @@ The offline test is: start from a machine with no images, with the containers cu
 | Windows, Docker Desktop or Podman | **Not yet run.** Needed for BR-38 |
 | macOS (Apple Silicon), Docker Desktop or Podman | **Not yet run.** Needed for BR-38 |
 
-BR-38 is done when the smoke test passes 7 of 7 with networking off on Windows, macOS and Linux. Attach, for each: the installer's output, how you proved the network was off, the OS and runtime versions, and the bundle's version.
+BR-38 is done when the smoke test passes 7 of 7 with networking off on Windows, macOS and Linux. Attach, for each: the installer's output, how you proved the network was off, the OS and runtime versions, and the bundle's version. The run sheet, with the commands and the evidence table, is `docs/BR38_EVIDENCE.md`.
 
 ### Known limits
 
