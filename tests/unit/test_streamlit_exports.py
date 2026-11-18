@@ -72,3 +72,8 @@ def test_history_rows_map_upload_items_and_fill_missing_keys():
 def test_xlsx_drops_control_characters():
     wb = openpyxl.load_workbook(io.BytesIO(to_xlsx("x", ["a"], [{"a": "a\x01b"}])))
     assert wb.active["A2"].value == "ab"
+
+
+def test_xlsx_strips_control_characters_before_the_formula_guard():
+    wb = openpyxl.load_workbook(io.BytesIO(to_xlsx("x", ["a"], [{"a": "\x01=cmd"}])))
+    assert wb.active["A2"].value == "'=cmd"

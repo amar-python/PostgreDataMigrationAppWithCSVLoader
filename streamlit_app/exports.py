@@ -36,8 +36,10 @@ def to_csv(headers: list[str], rows: list[dict]) -> bytes:
 
 
 def _xlsx_cell(v: object) -> object:
-    v = safe_cell(v)
-    return ILLEGAL_CHARACTERS_RE.sub("", v) if isinstance(v, str) else v
+    """Strip control characters BEFORE the formula guard: "\\x01=cmd" must become "'=cmd", not a live "=cmd"."""
+    if isinstance(v, str):
+        v = ILLEGAL_CHARACTERS_RE.sub("", v)
+    return safe_cell(v)
 
 
 def to_xlsx(sheet: str, headers: list[str], rows: list[dict]) -> bytes:
