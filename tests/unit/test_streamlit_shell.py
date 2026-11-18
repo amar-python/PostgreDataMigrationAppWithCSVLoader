@@ -19,7 +19,8 @@ import streamlit as st
 from streamlit.proto.TextInput_pb2 import TextInput as TextInputProto
 from streamlit.testing.v1 import AppTest
 
-from tests.unit.streamlit_harness import APP_DIR, PASSWORD, ROOT, api, later, view  # noqa: F401 (api is a fixture)
+# The harness import sets sys.path for the app, so it must come before the app imports below.
+from tests.unit.streamlit_harness import APP_DIR, PASSWORD, ROOT, later, view
 import api_client
 import auth
 from api.auth import PERMISSIONS as API_PERMISSIONS

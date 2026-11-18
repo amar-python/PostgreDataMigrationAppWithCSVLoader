@@ -1,12 +1,11 @@
 """Shared AppTest harness for the Streamlit screens: a faked API, the users it knows, and a way to render one view.
 
-Import what a test file needs; the `api` fixture is a pytest fixture, so import it by name too.
+Test files get the `api` fixture from tests/unit/conftest.py; do not import it here.
 """
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
 from streamlit.testing.v1 import AppTest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -75,13 +74,6 @@ class FakeApi:
 
     def calls_to(self, path):
         return [c for c in self.calls if c[1] == path]
-
-
-@pytest.fixture
-def api(monkeypatch):
-    fake = FakeApi()
-    monkeypatch.setattr(api_client, "request", fake)
-    return fake
 
 
 HARNESS = """
