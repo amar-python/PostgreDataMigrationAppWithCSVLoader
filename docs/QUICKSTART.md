@@ -63,6 +63,58 @@ To make `PGPORT=5433` permanent across all PowerShell sessions:
 Add-Content $PROFILE "`n`$env:PGPORT = `"5433`""
 ```
 
+### Save the PostgreSQL login once, so nothing asks for it every time
+
+`$env:PGPASSWORD` lives only in the window where you set it, so every new window starts
+without it (and without `PGPORT`). Save the login once instead:
+
+```powershell
+python scripts\pg_login.py save
+```
+
+It asks for the owner's password with the input hidden, **tests it against PostgreSQL
+first**, and writes it only if PostgreSQL accepts it, so a typo is never saved. The
+login (`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`) goes to
+`%USERPROFILE%\.te-migration\pg-dev.env`, next to the runtime role's `app-db-dev.env`.
+Windows' default permissions on your profile folder keep other ordinary accounts out of
+it (the owner-only `0600` mode is applied on Linux and macOS; Windows does not use it).
+It is plain text, like that file: fine for a development database that only this
+computer can reach, not for anything else. It never prints the password. Use `--env test` for another environment, and `--host`,
+`--port` and `--user` if yours differ from `localhost`, `5433` and `postgres`.
+
+After that:
+
+- **`.\scripts\start-api.ps1`** uses the saved login. It takes each value from, in this
+  order: the window's own `PG*` variables, the saved file, the defaults, then a prompt.
+  It also tests the login before it starts, so a wrong password costs one clear message
+  and a chance to type it again (three tries), not a failed start. If you typed a
+  password, it offers to save it.
+- **The other scripts** (`create_app_role.py`, `reset_password.py`,
+  `create_tenant_admin.py`, ...) read the `PG*` variables, so load the saved login into
+  the window first. Note the dot and the space; without them the values vanish when the
+  script ends:
+
+  ```powershell
+  . .\scripts\dev-env.ps1          # dev
+  . .\scripts\dev-env.ps1 test     # another environment
+  ```
+
+- **Check or find it:** `python scripts\pg_login.py check` tests whatever login the
+  window has, and `python scripts\pg_login.py where` shows the file and what it holds
+  (the password is not shown). To forget the login, delete that file.
+
+If the password changes later (a reset, a reinstall), `start-api.ps1` says the saved one
+was refused and asks again; save the new one with `python scripts\pg_login.py save`.
+
+**"... is not digitally signed" when running a `.ps1`.** Windows blocks unsigned scripts
+in a file downloaded or synced from elsewhere. For this window only:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+or unblock the files once: `Unblock-File .\scripts\*.ps1`.
+
 ---
 
 ## 4. Provision the dev database
@@ -151,7 +203,8 @@ python scripts\create_app_role.py --env dev
 ```
 
 It connects as the owner with the `PG*` values from step 3, so run it in a
-window where they're set (`PGPORT` 5433 and `PGPASSWORD` for PostgreSQL 18).
+window where they're set (`PGPORT` 5433 and `PGPASSWORD` for PostgreSQL 18): once you
+have saved the login, `. .\scripts\dev-env.ps1` sets them.
 It creates the role with a random password and writes the role's settings to
 `%USERPROFILE%\.te-migration\app-db-dev.env`. It never prints the password.
 `start-api.ps1` loads that file, choosing it from `API_ENV` (default `dev`).
@@ -296,7 +349,10 @@ Restart-Service postgresql-x64-18
 | `npm run dev` fails with "Missing script" | Wrong directory | Must run from `csv-table-hub-main\`, not repo root |
 | Deployment shows `[✗] failed for dev` with `syntax error at or near "ï»¿"` | `env_dev.sql` has a UTF-8 BOM (old template) | Recreate it from `env_dev.example.sql`, or set `PGCLIENTENCODING=UTF8` |
 | `psql was not found on PATH`, and the message says it is bash "inside WSL" (older versions hint at `apt install` even on Windows) | `bash` typed in PowerShell is the WSL launcher, which runs the script in Linux and cannot see the Windows `psql.exe` | Run it with Git's bash: `& "C:\Program Files\Git\bin\bash.exe" build/deploy_all.sh dev`, or from a Git Bash window |
-| The API stops at startup with `Could not connect to PostgreSQL at … as postgres to run the database migrations` | The owner login (`PGUSER` / `PGPASSWORD`) was refused. The API's runtime role connected, but the migrations use the owner. `start-api.ps1` only asks for `PGPASSWORD` when it is unset, so a stale value in a new window is used silently | In that window set the owner's password (`$env:PGPASSWORD = '<owner password>'`) and start the API again |
+| The API stops at startup with `Could not connect to PostgreSQL at … as postgres to run the database migrations` | The owner login (`PGUSER` / `PGPASSWORD`) was refused. The API's runtime role connected, but the migrations use the owner. A `PGPASSWORD` left in the window (or in your Windows user environment variables) wins over the saved login | `start-api.ps1` now tests the login first and asks again. To stop being asked, save a working one: `python scripts\pg_login.py save`. To see what a window holds without printing the password: `python scripts\pg_login.py check` |
+| `start-api.ps1` says `PostgreSQL refused the login for postgres@localhost:5433` | The password it picked up (named in the next line: this window, the saved login, or what you typed) is wrong for that server | Type it again at the prompt; to replace the saved one, `python scripts\pg_login.py save` |
+| `start-api.ps1` says `Could not reach PostgreSQL at localhost:5433` | The server is not running, or it is on another port (PostgreSQL 17 is 5432, 18 is 5433) | Start the service, or set `$env:PGPORT`. A different password will not help, so it does not ask |
+| `... is not digitally signed`, or `running scripts is disabled on this system` | Windows blocks unsigned `.ps1` files | `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` in that window, or `Unblock-File .\scripts\*.ps1` |
 
 ---
 
