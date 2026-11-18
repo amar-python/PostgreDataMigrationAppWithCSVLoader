@@ -1,0 +1,4 @@
+# Streamlit reads this from the folder it is started in, so run it from streamlit_app/ (see README.md).
+[browser]
+# On by default. This app is for on-premises and air-gapped installs, so nothing is sent out.
+gatherUsageStats = false

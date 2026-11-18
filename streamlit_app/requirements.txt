@@ -1,0 +1,4 @@
+# Pinned: Streamlit removes deprecated arguments on a schedule (the #154 spike's use_container_width
+# is past its removal date in 1.67), so a floating version would break the app without a code change.
+streamlit==1.67.0
+requests>=2.32
