@@ -41,7 +41,7 @@ DB_PASS="$(openssl rand -hex 24)"; API_KEY="$(openssl rand -hex 32)"
 # env_prod.sql creates te_mgmt_prod, schema te_prod and login role te_prod_user.
 sed "s/__INJECT_AT_DEPLOY__/$DB_PASS/" "$DEST/app/build/environments/env_prod.example.sql" \
   > "$DEST/app/build/environments/env_prod.sql"
-( cd "$DEST/app" && sudo -u postgres env PGHOST=/var/run/postgresql bash build/deploy_all.sh prod >/dev/null )
+( cd "$DEST/app" && sudo -u postgres env PGHOST=/var/run/postgresql bash build/deploy_all.sh --yes prod >/dev/null )
 rm "$DEST/app/build/environments/env_prod.sql"   # it holds the password
 # M3d (#107): a separate runtime role for requests; it can only read and insert the
 # audit and upload tables. te_prod_user stays the owner and runs migrations at startup.

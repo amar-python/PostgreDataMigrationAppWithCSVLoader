@@ -14,13 +14,21 @@ Needs bash, so it is marked `tooling` (the Windows job leaves it out).
 
 from __future__ import annotations
 
+import os
+import select
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 import pytest
+
+try:
+    import pty  # not available on Windows; the tests that need a terminal skip there
+except ImportError:  # pragma: no cover
+    pty = None
 
 pytestmark = pytest.mark.tooling
 
@@ -91,8 +99,45 @@ class DeployAllPrereqs(unittest.TestCase):
     def run_script(self, *args: str, with_psql: bool = True, **env: str) -> subprocess.CompletedProcess:
         full = {"PATH": str(self._bin(with_psql)), "STUB_LOG": str(self.log),
                 "HOME": str(self.dir), **env}
+        # stdin is closed: with no terminal the script must never wait for an answer, even
+        # when the person running pytest has one (stderr is captured, so it is not a terminal).
         return subprocess.run([BASH, str(self.dir / "build" / "deploy_all.sh"), *args],
-                              capture_output=True, text=True, env=full, timeout=60)
+                              capture_output=True, text=True, env=full, timeout=60,
+                              stdin=subprocess.DEVNULL)
+
+    def run_interactive(self, *args: str, answer: str, **env: str) -> tuple[int, str]:
+        """Run the script with a real terminal (a pseudo-terminal) and type ``answer`` at it.
+
+        Returns (exit code, everything the script printed). stdin, stdout and stderr are all
+        the terminal, which is what a person at a console gives it.
+        """
+        full = {"PATH": str(self._bin(True)), "STUB_LOG": str(self.log), "HOME": str(self.dir), **env}
+        master, slave = pty.openpty()
+        proc = subprocess.Popen([BASH, str(self.dir / "build" / "deploy_all.sh"), *args],
+                                stdin=slave, stdout=slave, stderr=slave, env=full, close_fds=True)
+        os.close(slave)
+        out = b""
+        try:
+            os.write(master, answer.encode())
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.5)
+                if ready:
+                    try:
+                        chunk = os.read(master, 4096)
+                    except OSError:  # the terminal closed: the script has finished
+                        break
+                    if not chunk:
+                        break
+                    out += chunk
+                elif proc.poll() is not None:
+                    break
+            proc.wait(timeout=10)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+            os.close(master)
+        return proc.returncode, out.decode("utf-8", errors="replace")
 
     @property
     def calls(self) -> list[str]:
@@ -189,6 +234,84 @@ class DeployAllPrereqs(unittest.TestCase):
         self.assertEqual(self.create_calls(), [])
         self.assertIn("already exists", res.stdout)
         self.assertIn("Succeeded : dev", res.stdout)
+        self.assertNotIn("[y/N]", res.stdout + res.stderr, "no terminal, so no question")
+
+    # -- an existing database: ask a person, never stop a script ----------------------
+
+    def schema_applied(self) -> bool:
+        return any("--file=" in c and "env_dev.sql" in c for c in self.calls)
+
+    def test_yes_uses_an_existing_database_without_asking(self):
+        res = self.run_script("--yes", "dev", STUB_DB_EXISTS="1")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertTrue(self.schema_applied(), self.calls)
+        self.assertEqual(self.create_calls(), [])
+        self.assertIn("Succeeded : dev", res.stdout)
+
+    def test_the_short_yes_flag_is_the_same(self):
+        res = self.run_script("-y", "dev", STUB_DB_EXISTS="1")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertTrue(self.schema_applied(), self.calls)
+
+    @unittest.skipIf(pty is None, "needs a pseudo-terminal")
+    def test_a_person_is_asked_and_y_uses_the_existing_database(self):
+        code, out = self.run_interactive("dev", answer="y\n", STUB_DB_EXISTS="1")
+        self.assertEqual(code, 0, out)
+        self.assertIn("te_mgmt_dev already exists", out)
+        self.assertIn("[y/N]", out, "the question was asked")
+        self.assertTrue(self.schema_applied(), self.calls)
+        self.assertEqual(self.create_calls(), [])
+        self.assertIn("Succeeded : dev", out)
+
+    @unittest.skipIf(pty is None, "needs a pseudo-terminal")
+    def test_n_skips_the_environment_and_changes_nothing(self):
+        code, out = self.run_interactive("dev", answer="n\n", STUB_DB_EXISTS="1")
+        self.assertEqual(code, 0, "declining is a choice, not a failure: " + out)
+        self.assertIn("[y/N]", out)
+        self.assertFalse(self.schema_applied(), "the schema must not be applied after a no")
+        self.assertEqual(self.create_calls(), [])
+        self.assertIn("Skipped", out)
+        self.assertNotIn("Succeeded", out, "a skipped environment is not reported as deployed")
+        self.assertNotIn("Failed", out)
+
+    @unittest.skipIf(pty is None, "needs a pseudo-terminal")
+    def test_pressing_enter_alone_means_no(self):
+        code, out = self.run_interactive("dev", answer="\n", STUB_DB_EXISTS="1")
+        self.assertEqual(code, 0, out)
+        self.assertFalse(self.schema_applied(), self.calls)
+        self.assertIn("Skipped", out)
+
+    @unittest.skipIf(pty is None, "needs a pseudo-terminal")
+    def test_yes_flag_skips_the_question_even_at_a_terminal(self):
+        code, out = self.run_interactive("--yes", "dev", answer="", STUB_DB_EXISTS="1")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("[y/N]", out)
+        self.assertTrue(self.schema_applied(), self.calls)
+
+    @unittest.skipIf(pty is None, "needs a pseudo-terminal")
+    def test_a_missing_database_is_created_without_a_question(self):
+        code, out = self.run_interactive("dev", answer="", STUB_DB_EXISTS="0")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("[y/N]", out)
+        self.assertEqual(len(self.create_calls()), 1)
+        self.assertIn("Succeeded : dev", out)
+
+    @unittest.skipIf(pty is None, "needs a pseudo-terminal")
+    def test_a_dry_run_never_asks(self):
+        code, out = self.run_interactive("--dry-run", "dev", answer="", STUB_DB_EXISTS="1")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("[y/N]", out)
+        self.assertEqual(self.calls, [], "a dry run touches nothing, not even psql")
+
+    @unittest.skipIf(pty is None, "needs a pseudo-terminal")
+    def test_each_environment_is_asked_about_separately(self):
+        # `dev` is accepted and `test` declined: the answers apply one environment at a time.
+        code, out = self.run_interactive("dev", "test", answer="y\nn\n", STUB_DB_EXISTS="1")
+        self.assertEqual(code, 0, out)
+        self.assertTrue(self.schema_applied(), self.calls)
+        self.assertFalse(any("--file=" in c and "env_test.sql" in c for c in self.calls), self.calls)
+        self.assertIn("Succeeded : dev", out)
+        self.assertRegex(out, r"Skipped\s+: test")
 
 
 if __name__ == "__main__":

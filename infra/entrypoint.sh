@@ -80,7 +80,9 @@ run_deploy() {
     ensure_launcher
     echo "--- Deploying schema for env: ${TARGET_ENV} ---"
     cd "$MIGRATION_HOME"
-    bash build/deploy_all.sh "${TARGET_ENV}"
+    # --yes: the job's database is created by Terraform, so it always exists, and nothing
+    # here may wait for an answer (an operator can still attach a terminal with -it).
+    bash build/deploy_all.sh --yes "${TARGET_ENV}"
 }
 
 run_render() {

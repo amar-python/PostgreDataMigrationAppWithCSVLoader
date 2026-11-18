@@ -120,6 +120,23 @@ It prompts for a password of at least 12 characters, or reads it from
 `TE_ADMIN_PASSWORD`. Sign in with tenant `dev`, username `admin` and that
 password.
 
+**If the tenant already exists** (you, or an earlier setup, ran this before), it does
+not fail. It says what exists and asks whether to use it:
+
+- `admin` is already a member: `Use the existing tenant 'dev' as it is?` Answer `y`
+  and nothing is created and the password is not changed. If you have forgotten that
+  password, use `scripts\reset_password.py` (below).
+- The tenant exists but `admin` does not: `Use the existing tenant 'dev' and add 'admin'
+  as a tenant admin?` Answer `y` and it asks for the new account's password.
+
+Anything other than `y` changes nothing. With no terminal, or to skip the question, add
+`--use-existing`. A username that already belongs to an account outside that tenant is
+never reused; choose another `--username`.
+
+> **When you re-run the database deploy** (`build/deploy_all.sh`) against a database that
+> already exists, it likewise asks `Use it and apply the T&E schema to it? [y/N]`.
+> Add `--yes` to skip the question.
+
 ### Set up the runtime database role (once per environment, M3d)
 
 The API answers requests as a separate database role, `te_app_<env>` — so

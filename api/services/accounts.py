@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+from typing import NamedTuple
 
 from psycopg2 import sql
 
@@ -46,6 +47,35 @@ def _token_hash(token: str) -> str:
 
 def _q(query: str) -> sql.Composed:
     return sql.SQL(query).format(c=sql.Identifier(settings.CONTROL_SCHEMA))
+
+
+class Existing(NamedTuple):
+    tenant: bool  # a tenant with this slug exists
+    user: bool    # a user with this username exists; usernames are unique across all tenants
+    member: bool  # that user is already a member of that tenant
+
+
+def existing(cur, slug: str, username: str) -> Existing:
+    """What already exists for a tenant slug and a username.
+
+    Lets a caller refuse to create a duplicate with a clear message, instead of failing on
+    the database's unique key after the person has already typed a password.
+    """
+    cur.execute(_q(
+        "SELECT EXISTS (SELECT 1 FROM {c}.tenants WHERE slug = %s), "
+        "EXISTS (SELECT 1 FROM {c}.users WHERE username = %s), "
+        "EXISTS (SELECT 1 FROM {c}.users u "
+        "JOIN {c}.memberships m ON m.user_id = u.id "
+        "JOIN {c}.tenants t ON t.id = m.tenant_id "
+        "WHERE t.slug = %s AND u.username = %s)"), (slug, username, slug, username))
+    return Existing(*cur.fetchone())
+
+
+def tenant_id(cur, slug: str) -> int | None:
+    """The id of the tenant with this slug, or None if there is none."""
+    cur.execute(_q("SELECT id FROM {c}.tenants WHERE slug = %s"), (slug,))
+    row = cur.fetchone()
+    return row[0] if row else None
 
 
 def create_tenant(cur, slug: str, name: str) -> int:
