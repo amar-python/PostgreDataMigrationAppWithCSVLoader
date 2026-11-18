@@ -2,6 +2,7 @@
 
 import logging
 import re
+import sys
 import time
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
@@ -22,20 +23,48 @@ _pool: psycopg2.pool.ThreadedConnectionPool | None = None
 _getconn_executor: ThreadPoolExecutor | None = None
 _MAXCONN = 8
 
-# Connection failures that waiting cannot fix: the server was reached and said no.
-# psycopg2 leaves exc.pgcode / exc.diag.sqlstate as None for connection-time errors
-# (checked on 2.9.13: libpq returns a message, not a result), so SQLSTATEs 28P01 /
-# 3D000 are unavailable and we match libpq's message text instead.
-# ponytail: denylist, not an allowlist of transient messages - a localised or
-# unrecognised message falls through to the old retry-everything behaviour
-# (slow, but never fails fast on a server that is just starting). Add the
-# message here if a new permanent failure shows up.
-_PERMANENT_CONN_ERROR = re.compile(
-    r"password authentication failed"
-    r"|no pg_hba\.conf entry"
-    r'|(database|role) ".*" does not exist'
-    r"|is not permitted to log in"
-)
+
+class DatabaseConnectError(psycopg2.OperationalError):
+    """The database could not be reached. The message already says why and what to check, so the
+    scripts print it as it is (see run_cli) instead of showing a traceback."""
+
+
+# Which connection failures can waiting fix? psycopg2 leaves exc.pgcode / exc.diag.sqlstate as None
+# for connection-time errors (checked on 2.9.13: libpq returns a message, not a result), so SQLSTATEs
+# such as 28P01 or 3D000 are not available and the classification reads libpq's message instead.
+#
+# libpq renders an error the server sent as "<SEVERITY>:  <message>" (two spaces; the words are the
+# server's own language) and a client-side one (refused, timeout, DNS, dropped) without it. A server
+# that answered with an error is up and has said no: a wrong or unknown login, no pg_hba.conf entry,
+# a missing database, no CONNECT privilege and so on. That needs no list of texts, so a rejection
+# nobody has listed, or one in another language, still fails fast.
+_SERVER_SENT = re.compile(r"(?:^|failed: )[^\s:]+:  ")
+# The exceptions: the server is up but cannot take the connection yet (SQLSTATE 57P03 and 53300).
+_SERVER_BUSY = re.compile(r"the database system is|sorry, too many clients|remaining connection slots"
+                          r"|too many connections for|could not fork new process")
+# Client-side, but waiting cannot supply a password or add SSL to the server.
+_CLIENT_CONFIG = re.compile(r"no password supplied|does not support SSL")
+# ponytail: a server whose lc_messages is not English words "starting up" in its own language, so it
+# looks like a rejection and fails fast instead of being retried. Ask the server for the SQLSTATE
+# (a raw startup packet, as pg_isready does) if such a server is ever started by a container race.
+
+
+def _is_permanent(exc: Exception) -> bool:
+    msg = str(exc)
+    return bool(_CLIENT_CONFIG.search(msg)) or (
+        bool(_SERVER_SENT.search(msg)) and not _SERVER_BUSY.search(msg))
+
+
+def _connect_error(exc: Exception, user: str, creds: str, *, attempts: int = 0,
+                   permanent: bool = False) -> DatabaseConnectError:
+    msg = f"Could not connect to PostgreSQL at {settings.PG_HOST}:{settings.PG_PORT} as {user}"
+    if permanent:
+        msg += ": the server was reached, but retrying will not help."
+    else:
+        msg += f" after {attempts} attempts." if attempts else "."
+    check = f"Check {creds} (and PGDATABASE, PGHOST, PGPORT)"
+    return DatabaseConnectError(
+        f"{msg}\n  {str(exc).strip()}\n{check}{'.' if permanent else ' and that the server is running.'}")
 
 
 def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
@@ -46,12 +75,14 @@ def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
     BUG-026: on containerised infra Postgres may not accept connections when
     the API starts. Retry with exponential backoff (capped at 10s per attempt)
     instead of dying at boot. Total wait bounded by ``max_attempts`` × cap.
-    Failures retrying cannot fix (wrong password, no such database/role, no
-    pg_hba.conf entry) raise on the first attempt.
+    Failures retrying cannot fix (wrong or missing password, no such
+    database/role, no pg_hba.conf entry, ...) raise DatabaseConnectError on
+    the first attempt; so does running out of attempts.
     """
     global _pool, _getconn_executor
     last_err: Exception | None = None
     user = settings.APP_DB_USER or settings.PG_USER
+    creds = "APP_DB_USER / APP_DB_PASSWORD" if settings.APP_DB_USER else "PGUSER / PGPASSWORD"
     for attempt in range(1, max_attempts + 1):
         try:
             _pool = psycopg2.pool.ThreadedConnectionPool(
@@ -67,14 +98,8 @@ def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
                 logger.info("Connected to Postgres on attempt %d", attempt)
             break
         except psycopg2.OperationalError as exc:
-            if _PERMANENT_CONN_ERROR.search(str(exc)):
-                creds = "APP_DB_USER / APP_DB_PASSWORD" if settings.APP_DB_USER else "PGUSER / PGPASSWORD"
-                raise psycopg2.OperationalError(
-                    f"Could not connect to PostgreSQL at {settings.PG_HOST}:{settings.PG_PORT} "
-                    f"as {user}: the server was reached but refused the connection, "
-                    f"and retrying will not help.\n  {str(exc).strip()}\n"
-                    f"Check {creds} (and PGDATABASE, PGHOST, PGPORT)."
-                ) from exc
+            if _is_permanent(exc):
+                raise _connect_error(exc, user, creds, permanent=True) from exc
             last_err = exc
             delay = min(base_delay * (2 ** (attempt - 1)), 10.0)
             logger.warning(
@@ -84,7 +109,7 @@ def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
             time.sleep(delay)
     else:
         assert last_err is not None
-        raise last_err
+        raise _connect_error(last_err, user, creds, attempts=max_attempts) from last_err
 
     # BUG-030: worker count = maxconn + a few, so a burst of concurrent
     # requests can all queue their getconn() calls without the executor
@@ -220,12 +245,24 @@ def bootstrap() -> None:
 def owner_connect():
     """A connection as the owner (PG_USER): for migrations, provisioning and grants, never requests.
     Closed on exit; the caller commits."""
-    conn = psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                            password=settings.PG_PASSWORD, dbname=settings.PG_DATABASE)
+    try:
+        conn = psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
+                                password=settings.PG_PASSWORD, dbname=settings.PG_DATABASE)
+    except psycopg2.OperationalError as exc:
+        raise _connect_error(exc, settings.PG_USER, "PGUSER / PGPASSWORD", permanent=_is_permanent(exc)) from exc
     try:
         yield conn
     finally:
         conn.close()
+
+
+def run_cli(main) -> int:
+    """Run a script's main(). A connection failure prints its message and returns 1, not a traceback."""
+    try:
+        return main()
+    except DatabaseConnectError as exc:
+        print(exc, file=sys.stderr)
+        return 1
 
 
 # Tables the runtime role may only read and insert (M3, #107). Triggers also stop the owner.

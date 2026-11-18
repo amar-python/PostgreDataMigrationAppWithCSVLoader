@@ -953,6 +953,8 @@ raise last_err
 
 **Follow-up 2026-11-18:** the retry applied to every `OperationalError`, so a wrong password, missing database or role, or no `pg_hba.conf` entry also looped for up to ~4.5 minutes and was logged as "not reachable". Those now raise on the first attempt with a message naming the user, host and port and the variables to check (`tests/unit/test_db_init_pool.py`). Transient failures (refused, starting up, DNS, timeout) keep the retry above.
 
+**Follow-up 2 2026-11-18:** that first fix recognised five English messages and missed `no password supplied`, `pg_hba.conf rejects connection`, `permission denied for database`, peer authentication, SSL required and more, which still retried for ~4.5 minutes. `init_pool` now reads the shape of libpq's message instead of a list: an error the server sent (`SEVERITY:  message`, in any language) is permanent unless it is a "cannot take you yet" state (starting up, shutting down, recovery, too many clients); `no password supplied` and `does not support SSL` are permanent; anything else (refused, timeout, DNS, dropped) is retried. Giving up, and `owner_connect()`, raise `DatabaseConnectError` (still an `OperationalError`), and `reset_password.py`, `create_tenant_admin.py` and `create_app_role.py` print its message and exit 1 through `db.run_cli` instead of a traceback. Known limit: a server whose `lc_messages` is not English words "starting up" in its own language, so it is not retried.
+
 ---
 
 ## BUG-027 — No upload row-count cap
