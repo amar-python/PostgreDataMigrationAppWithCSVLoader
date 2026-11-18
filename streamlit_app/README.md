@@ -4,8 +4,8 @@ Part of the plan in `DECISIONS/2026-11-16-streamlit-migration-plan.md` (#212). *
 `csv-table-hub-main/` is still the live front end.** This app is not wired into CI, the Docker image
 or the offline bundle yet; that is step 5 (#256).
 
-What exists so far: sign-in, session expiry, sign-out, change password, and a home page that says
-what the signed-in role can do. The screens (review, import history, upload) come with #252 to #255.
+What exists so far: sign-in, session expiry, sign-out, change password, the Review screen (#252), and a home page that says
+what the signed-in role can do. The other screens (import history, upload) come with #253 to #255.
 
 ## Run it
 
