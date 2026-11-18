@@ -22,7 +22,11 @@ UP = lambda host, port: (True, "")  # noqa: E731
 FREE = lambda port: True  # noqa: E731
 
 
-def _all_fine(tmp_path, **overrides):
+def _all_fine(tmp_path, monkeypatch, **overrides):
+    """Everything present, whatever this machine has: CI does not install Playwright, so the real package
+    check cannot be left to the environment."""
+    monkeypatch.setattr(preflight.importlib.metadata, "version", lambda name: "1.0")
+    monkeypatch.setattr(preflight.importlib.util, "find_spec", lambda name: object())
     (tmp_path / "csv-table-hub-main" / "node_modules").mkdir(parents=True)
     args = dict(root=tmp_path, env={}, pg_host="localhost", pg_port=5433, probe=UP, ports=(8000, 8080),
                 is_free=FREE)
@@ -113,8 +117,8 @@ def test_a_missing_streamlit_says_how_to_install_it(monkeypatch):
 
 # ── all together ──────────────────────────────────────────────────────────────────────────
 
-def test_nothing_is_reported_when_everything_is_there(tmp_path):
-    assert _all_fine(tmp_path) == []
+def test_nothing_is_reported_when_everything_is_there(tmp_path, monkeypatch):
+    assert _all_fine(tmp_path, monkeypatch) == []
 
 
 def test_every_problem_is_reported_at_once_in_a_stable_order(tmp_path, monkeypatch):
