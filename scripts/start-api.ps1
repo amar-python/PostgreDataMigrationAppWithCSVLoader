@@ -8,16 +8,39 @@
 $ErrorActionPreference = "Stop"
 $apiDir = Join-Path $PSScriptRoot "..\api"
 
-# Postgres connection (local PG 18 dev instance)
+# Postgres owner login (local PG 18 dev instance). Each value comes from, in this order:
+# this window's own PG* variables, then the login saved by `python scripts\pg_login.py save`
+# (~\.te-migration\pg-<env>.env), then the defaults below, then asking.
+# API_ENV names the environment, matching api\config.py's own default of "dev".
+if (-not $env:API_ENV) { $env:API_ENV = "dev" }
+$pgLoginFile = Join-Path $env:USERPROFILE (".te-migration\pg-{0}.env" -f $env:API_ENV)
+$pgPasswordFrom = $null
+if ($env:PGPASSWORD) { $pgPasswordFrom = "this window" }
+if (Test-Path $pgLoginFile) {
+    foreach ($line in Get-Content $pgLoginFile) {
+        $k, $v = $line -split "=", 2
+        if (($k -like "PG*") -and (-not (Test-Path "env:$k"))) { Set-Item -Path "env:$k" -Value $v }
+    }
+    if ((-not $pgPasswordFrom) -and $env:PGPASSWORD) { $pgPasswordFrom = "the saved login ($pgLoginFile)" }
+}
 if (-not $env:PGHOST)     { $env:PGHOST     = "localhost" }
 if (-not $env:PGPORT)     { $env:PGPORT     = "5433" }
 if (-not $env:PGUSER)     { $env:PGUSER     = "postgres" }
 if (-not $env:PGDATABASE) { $env:PGDATABASE = "te_mgmt_dev" }
+
+# First, is PostgreSQL there at all? Ask before asking for a password: with the server down or on
+# another port, no password can work, so there is nothing to type. `pg_login.py check --server-only`
+# uses no password and exits 0 when the server accepts connections, 3 when it does not.
+$pgLogin = Join-Path $PSScriptRoot "pg_login.py"
+python $pgLogin check --server-only
+if ($LASTEXITCODE -ne 0) { exit 1 }
+
 if (-not $env:PGPASSWORD) {
     Write-Host "PGPASSWORD not set - enter it now (input hidden):" -ForegroundColor Yellow
     $sec = Read-Host -AsSecureString
     $env:PGPASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
         [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+    $pgPasswordFrom = "what you typed"
 }
 
 # M3d (#107): requests use the runtime role made by scripts\create_app_role.py,
@@ -26,8 +49,6 @@ if (-not $env:PGPASSWORD) {
 # RV-S3 (#173): the role and its credential file are per environment
 # (te_app_<env>, app-db-<env>.env), so two environments sharing one PostgreSQL
 # cluster - the usual dev-PC setup - no longer rotate each other's password.
-# API_ENV names the environment, matching api\config.py's own default of "dev".
-if (-not $env:API_ENV) { $env:API_ENV = "dev" }
 $appDbEnv = Join-Path $env:USERPROFILE (".te-migration\app-db-{0}.env" -f $env:API_ENV)
 $legacyAppDbEnv = Join-Path $env:USERPROFILE ".te-migration\app-db.env"
 if ((-not $env:APP_DB_USER) -and (Test-Path $appDbEnv)) {
@@ -52,6 +73,32 @@ if (-not $env:APP_DB_USER) {
 
 if (-not $env:API_KEY) {
     Write-Host "API_KEY not set - every endpoint is unauthenticated (fine for local dev)." -ForegroundColor Yellow
+}
+
+# The server is there (checked above); now test the owner login before starting. A wrong password
+# then costs one clear message here and a chance to type it again, not a failed start.
+# `pg_login.py check` exits 0 when the login works, 2 when PostgreSQL refused it (waiting will not
+# help), 3 when the server went away in the meantime.
+$pgTries = 0
+while ($true) {
+    python $pgLogin check
+    $pgCode = $LASTEXITCODE
+    if ($pgCode -eq 0) { break }
+    if ($pgCode -ne 2) { exit 1 }
+    $pgTries++
+    if ($pgTries -ge 3) {
+        Write-Host "Giving up after 3 refused passwords. To store a working login: python scripts\pg_login.py save" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host ("The password from {0} was refused. Enter the PostgreSQL password again (input hidden), or press Ctrl+C to stop:" -f $pgPasswordFrom) -ForegroundColor Yellow
+    $sec = Read-Host -AsSecureString
+    $env:PGPASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+    $pgPasswordFrom = "what you typed"
+}
+if ($pgPasswordFrom -eq "what you typed") {
+    $pgSave = Read-Host "Save this login so you are not asked again? (y/N)"
+    if ($pgSave -match "^[Yy]") { python $pgLogin save --env $env:API_ENV --from-env }
 }
 
 # #118: refuse to start a second API. Uvicorn can print "running" even when an
