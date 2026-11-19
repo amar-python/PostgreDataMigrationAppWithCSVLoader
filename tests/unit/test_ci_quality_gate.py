@@ -207,13 +207,17 @@ class TestPipedPytestKeepsItsExitStatus(unittest.TestCase):
 
 
 class TestCoverageIsMeasuredOneWay(unittest.TestCase):
-    """#274, #278: CI, the Makefile and the floors name the same scope, so they cannot drift apart again.
+    """#274, #278: CI, the Makefile and .coveragerc name the same scope, so they cannot drift apart again.
 
-    CI measured `api/services`, the Makefile measured `build/csv` and `evals`, and nothing measured the rest of the
-    API or the Streamlit app. Now all three say `api` and `streamlit_app`.
+    CI measured `api/services`, the Makefile measured `build/csv` and `evals`, and nothing measured or gated the rest
+    of the API or the Streamlit app. Now all three say the same four packages, with branch coverage; only `api` and
+    `streamlit_app` have floors.
     """
 
+    SCOPE = {"api", "streamlit_app", "build/csv", "evals"}
+    GATED = {"api", "streamlit_app"}
     MAKEFILE = ROOT / "Makefile"
+    COVERAGERC = ROOT / ".coveragerc"
 
     @staticmethod
     def cov_scope(text: str) -> set[str]:
@@ -225,25 +229,36 @@ class TestCoverageIsMeasuredOneWay(unittest.TestCase):
         self.assertEqual(len(found), 1, "expected exactly one coverage step in the integration job")
         return found[0]
 
-    def test_ci_measures_the_api_and_the_streamlit_app(self):
-        self.assertEqual(self.cov_scope(self._ci_coverage_step()["run"]), {"api", "streamlit_app"})
+    def test_ci_measures_the_whole_scope_with_branch_coverage(self):
+        run = self._ci_coverage_step()["run"]
+        self.assertEqual(self.cov_scope(run), self.SCOPE)
+        self.assertIn("--cov-branch", run)
 
     def test_the_makefile_measures_the_same_scope(self):
         text = self.MAKEFILE.read_text(encoding="utf-8")
         scope = re.search(r"^COVERAGE_SCOPE\s*:?=\s*(.*)$", text, re.M)
         self.assertIsNotNone(scope, "the Makefile has no COVERAGE_SCOPE")
-        self.assertEqual(self.cov_scope(scope.group(1)), {"api", "streamlit_app"})
-        for line in text.splitlines():
-            self.assertNotIn("--cov=build/csv", line)
-            self.assertNotIn("--cov=evals", line)
+        self.assertEqual(self.cov_scope(scope.group(1)), self.SCOPE)
+        self.assertIn("--cov-branch", scope.group(1))
+        self.assertEqual(self.cov_scope(text), self.SCOPE, "a --cov= outside COVERAGE_SCOPE would be a second scope")
 
-    def test_the_package_floors_are_for_exactly_that_scope(self):
+    def test_coveragerc_names_the_same_scope(self):
+        import configparser
+
+        parser = configparser.ConfigParser()
+        parser.read(self.COVERAGERC, encoding="utf-8")
+        self.assertEqual({line.strip() for line in parser["run"]["source"].splitlines() if line.strip()}, self.SCOPE)
+        self.assertEqual(parser["run"]["branch"].lower(), "true")
+
+    def test_only_the_gated_packages_have_floors_and_they_are_in_the_scope(self):
         sys.path.insert(0, str(ROOT / "scripts"))
         try:
             import check_coverage_floors as gate
         finally:
             sys.path.pop(0)
-        self.assertEqual({k.rstrip("/") for k in gate.PACKAGE_FLOORS}, {"api", "streamlit_app"})
+        floors = {k.rstrip("/") for k in gate.PACKAGE_FLOORS}
+        self.assertEqual(floors, self.GATED)
+        self.assertLessEqual(floors, self.SCOPE)
 
     def test_ci_runs_the_floors_on_the_report_it_just_wrote(self):
         run = self._ci_coverage_step()["run"]

@@ -11,17 +11,19 @@
 test-free:
 	pytest -m "unit or regression or security or snapshot" tests/ -v
 
-# One coverage scope everywhere (#274, #278): the API and the Streamlit app, as CI measures them. build/csv is
-# shell loaders, which coverage.py cannot measure, and the evals runner is exercised through subprocesses.
-# tests/unit/test_ci_quality_gate.py fails if this and the CI step drift apart. See tests/README.md ("Coverage").
-COVERAGE_SCOPE := --cov=api --cov=streamlit_app
+# One coverage scope everywhere (#274, #278), the same in .coveragerc, here and in the CI step: the API, the Streamlit
+# app, build/csv (the validator) and evals (the runner), with branch coverage. Only api/ and streamlit_app/ are gated
+# (scripts/check_coverage_floors.py). build/csv's loaders are shell, which coverage.py cannot see, and the evals runner
+# is exercised through subprocesses, so those two read low (0 % and 39 % on the full suite, 19 Nov) and have no floor.
+# tests/unit/test_ci_quality_gate.py fails if the three places stop naming the same scope. See tests/README.md.
+COVERAGE_SCOPE := --cov=api --cov=streamlit_app --cov=build/csv --cov=evals --cov-branch
 
 # Gate: everything in test-free + a coverage report (no floors: the free tier has no database, so the API figure
 # is partial). `make coverage` is the real gate.
 # Mirrors: bun run test:gate
 test-gate:
 	pytest -m "unit or regression or security or snapshot" tests/ \
-	    $(COVERAGE_SCOPE) --cov-report=term-missing
+	    $(COVERAGE_SCOPE) --cov-report=term-missing --cov-report=xml:coverage.xml
 
 # Coverage as CI gates it: the whole suite (needs PostgreSQL; PGDATABASE=te_mgmt_dev), then the floors.
 # The same commands as the coverage step of the integration job in quality-gate.yml.
@@ -29,7 +31,10 @@ coverage:
 	pytest tests/ -m "not accessibility" $(COVERAGE_SCOPE) --cov-report=json:coverage.json --cov-report=term-missing -q
 	python3 scripts/check_coverage_floors.py coverage.json
 
-# Evals: Tier P (offline) + Tier I/S (skip cleanly if no PostgreSQL).
+# Evals: Tier P (offline) + Tiers I/S/E (need PostgreSQL; set PG* first).
+# CI policy is fail-not-skip: an unmet prerequisite must FAIL. The integration
+# job provides PostgreSQL so these tiers run there. evals/runner.py fails a tier
+# whose prerequisite is unreachable and exits 1 if any scenario failed or skipped.
 # Mirrors: bun run test:evals
 test-evals:
 	python3 evals/runner.py --tiers p,i,s,e --verbose

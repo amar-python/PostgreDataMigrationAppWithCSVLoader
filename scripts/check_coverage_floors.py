@@ -5,8 +5,9 @@ Streamlit app (#274, #278).
 Usage:
     python3 scripts/check_coverage_floors.py coverage.json
 
-Reads the JSON coverage report produced by pytest-cov (`--cov=api --cov=streamlit_app`) and verifies that each
-loader file, and each package as a whole, meets its minimum coverage percentage. A package's figure is covered
+Reads the JSON coverage report produced by pytest-cov (the scope in .coveragerc: api, streamlit_app, build/csv and
+evals) and verifies that each loader file, and the api/ and streamlit_app/ packages as a whole, meet their minimum
+coverage percentage. build/csv and evals are measured but have no floor (they read low: see tests/README.md). A package's figure is covered
 statements over all statements in it (not an average of file percentages). A file or package missing from the
 report fails, so dropping a `--cov=` option cannot quietly stop it being measured. Exits non-zero if anything
 drops below its floor.

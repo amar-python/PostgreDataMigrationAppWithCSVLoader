@@ -1,8 +1,9 @@
 # Reconciled Gap Register — O-01 to O-12
 
-> **Snapshot, 2026-09-10.** Statuses are as of baseline `269ffe2` and have not been updated since. For the current
-> status of each requirement see `docs/VCRM.md`. `docs/reconciled_gaps.csv` carries the same O-01 to O-12 rows, plus
-> F-01 to F-06 and D-01, which are only in the CSV.
+> **Superseded (2026-11-19):** this document is kept for history only. The master traceability record is [`docs/VCRM.md`](VCRM.md); where they differ, `docs/VCRM.md` wins.
+>
+> Baseline `269ffe2`, 2026-09-10. `docs/reconciled_gaps.csv` carries the same O-01 to O-12 rows, plus F-01 to F-06 and
+> D-01, which are only in the CSV.
 
 **Baseline:** `C:\Users\User\OneDrive\Desktop\Migration using ai\PostgreDataMigrationAppWithCSVLoader`, branch `main` @ `269ffe2`
 **Date:** 2026-09-10
