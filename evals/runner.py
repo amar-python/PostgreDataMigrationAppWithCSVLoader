@@ -3,7 +3,10 @@
 
 Tier P (Python CSV validator) is fully implemented and runs offline.
 Tier I (idempotency) and Tier S (SQL suite) require a reachable PostgreSQL
-via psql; they SKIP cleanly when unavailable.
+via psql; they FAIL when it is unavailable (fail-not-skip policy).
+
+Exit status: 0 only when every scenario passed. Any failed OR skipped
+scenario exits 1, so a green run always means every scenario executed.
 
 Usage
 -----
@@ -1127,7 +1130,11 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         print("  gap report skipped: " + type(exc).__name__ + ": " + str(exc))
 
-    return 0 if failed == 0 else 1
+    # Fail-not-skip: a skipped scenario did not execute, so it cannot count
+    # towards a green run.
+    if skipped:
+        print(_fail(str(skipped) + " scenario(s) skipped; skips fail the run (fail-not-skip policy)"))
+    return 0 if failed == 0 and skipped == 0 else 1
 
 
 if __name__ == "__main__":
