@@ -1,5 +1,7 @@
 # VCRM Gap Analysis — uncovered & partially-covered requirements
 
+> **Superseded (2026-11-19):** this document is kept for history only. The master traceability record is [`docs/VCRM.md`](VCRM.md); where they differ, `docs/VCRM.md` wins.
+
 Companion to `docs/VCRM.md`. Lists only the 5 business requirements that are **not fully verified** by an automated test condition, with risk assessment, recommended remediation, and effort/priority. The remaining 17 of 22 requirements are fully covered and not repeated here.
 
 > **Verification methods** (from MIL-STD / IEEE 1012): **T**est, **A**nalysis, **I**nspection, **D**emonstration. The recommendations below pick the cheapest method that gives a real signal.

@@ -37,6 +37,11 @@ build/environments/env_test.sql
 build/environments/env_staging.sql
 build/environments/env_prod.sql
 !build/environments/*.example.sql
+# Terraform variable files and libpq password files can hold credentials.
+# `**/` also matches the context root; *.tfvars.example templates stay included.
+**/*.tfvars
+**/*.tfvars.json
+**/*.pgpass
 
 # Python virtualenvs, bytecode and test caches
 __pycache__/
@@ -45,6 +50,8 @@ __pycache__/
 venv/
 .pytest_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 
 # Node and frontend build artifacts
