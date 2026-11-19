@@ -128,7 +128,9 @@ def test_a_reviewer_edits_with_a_required_reason_by_pressing_enter_and_it_shows_
     _select_row(page, 6)  # row 7: amount "x"
     _choose_option(page, "Column", re.compile(r"^amount"))
     expect(page.get_by_text(re.compile(r"Original value: x\b"))).to_be_visible()
-    _idle(page)  # until the run ends, the previous column's "New value" box is still on the page beside the new one
+    # Until the run ends, the previous column's "New value" box is still on the page beside the new one.
+    _idle(page)
+    expect(page.get_by_label("New value")).to_have_count(1)
 
     page.get_by_label("New value").fill("70")
     reason = page.get_by_label("Reason for the change (required)")
@@ -210,18 +212,25 @@ def test_a_row_chosen_on_one_page_does_not_break_the_next(page, stack):
 
 def test_the_list_offers_every_attempt_and_can_be_cut_to_the_failed_and_partial_ones(page, stack, upload):
     clean = _unique("clean")
-    assert stack.upload("admin", clean, "id,name\n1,a\n2,b\n", types=["int8", "text"])["status"] == "ok"
+    assert stack.upload("admin", clean, f"id,name\n1,{clean}\n2,b\n", types=["int8", "text"])["status"] == "ok"  # (identical bytes are a duplicate)
     _open_review(page, stack, "admin")
 
-    page.get_by_role("combobox", name="Upload").click()
-    expect(page.get_by_role("option", name=re.compile(re.escape(clean) + " · Imported"))).to_be_visible()
-    expect(page.get_by_role("option", name=re.compile(re.escape(upload) + r" · Partly imported · 4 of 30 rows failed"))).to_be_visible()
+    # The tenant's other tests upload files too, so the list is long: type to narrow it, as a person would.
+    def offered(fragment: str, option: "re.Pattern | str"):
+        box = page.get_by_role("combobox", name="Upload")
+        box.click()
+        box.fill(fragment)
+        return page.get_by_role("option", name=option)
+
+    expect(offered(clean[:14], re.compile(re.escape(clean) + " · Imported"))).to_be_visible()
+    expect(offered(upload[:14], re.compile(re.escape(upload) + r" · Partly imported · 4 of 30 rows failed"))).to_be_visible()
     page.keyboard.press("Escape")
 
     page.get_by_text("Only failed or partly failed uploads").click()
-    page.get_by_role("combobox", name="Upload").click()
-    expect(page.get_by_role("option", name=re.compile(re.escape(upload)))).to_be_visible()
-    expect(page.get_by_role("option", name=re.compile(re.escape(clean)))).to_have_count(0)
+    idle_ = page.locator('[data-testid="stStatusWidget"]')
+    expect(idle_).to_have_count(0)
+    expect(offered(upload[:14], re.compile(re.escape(upload)))).to_be_visible()
+    expect(offered(clean[:14], re.compile(re.escape(clean)))).to_have_count(0)
 
 
 def test_a_cell_that_looks_like_a_link_is_shown_as_text_and_is_not_a_link(page, stack):

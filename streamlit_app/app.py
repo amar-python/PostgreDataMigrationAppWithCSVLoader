@@ -10,7 +10,7 @@ API_URL (default http://localhost:8000) says where the API is.
 import streamlit as st
 
 import auth
-from views import change_password, home, review, sign_in
+from views import change_password, history, home, review, sign_in
 
 st.set_page_config(page_title="CSV Table Hub", layout="wide")
 
@@ -23,6 +23,8 @@ else:
     pages = [st.Page(home.render, title="Home", url_path="home", default=True)]
     if auth.can("list_files") and auth.can("read_rows"):
         pages.append(st.Page(review.render, title="Review", url_path="review"))  # #252
+    if auth.can("list_files"):
+        pages.append(st.Page(history.render, title="Import history", url_path="history"))  # #253
     pages.append(st.Page(change_password.render, title="Change password", url_path="change-password"))
     page = st.navigation(pages)
     s = auth.session()
