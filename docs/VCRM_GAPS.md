@@ -1,5 +1,12 @@
 # VCRM Gap Analysis — uncovered & partially-covered requirements
 
+> **Superseded (19 Nov 2026).** This analysis was written on 2026-09-10 for five requirements. Since then
+> BR-01 and BR-15 are **verified**, and BR-02, BR-21 and BR-22 are **deferred by decision** (see `docs/VCRM.md`).
+> The nine requirements that are open now (BR-24, BR-29, BR-31, BR-32, BR-33, BR-34, BR-36, BR-37, BR-38) are not
+> analysed here. Their status and notes are in `docs/VCRM.md`, and every eval run writes a current gap report to
+> `evals/reports/<run>/VCRM_GAPS_<run>.md`. The text below is kept for its risk assessment of the three deferred
+> items. `tests/unit/test_gap_registers_agree.py` fails if this file stops matching `docs/VCRM.md` and loses this banner.
+
 Companion to `docs/VCRM.md`. Lists only the 5 business requirements that are **not fully verified** by an automated test condition, with risk assessment, recommended remediation, and effort/priority. The remaining 17 of 22 requirements are fully covered and not repeated here.
 
 > **Verification methods** (from MIL-STD / IEEE 1012): **T**est, **A**nalysis, **I**nspection, **D**emonstration. The recommendations below pick the cheapest method that gives a real signal.
