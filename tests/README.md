@@ -44,6 +44,24 @@ Database-backed tests **fail, never skip**, when PostgreSQL isn't reachable; sta
 first (`scripts/provision_full_test_env.sh`). A category with no tests yet (`make
 test-performance`, `make test-uat`) reports that and succeeds.
 
+## Coverage
+
+One scope, measured one way (#274, #278), the same in `.coveragerc`, the Makefile (`COVERAGE_SCOPE`) and the coverage
+step of `quality-gate.yml`, with branch coverage.
+
+| | |
+|---|---|
+| Measured | `api/` (routers, auth, tenancy, services), `streamlit_app/`, `build/csv` (the validator) and `evals/` (the runner) |
+| Gated | the three loaders in `api/services/` per file, and `api/` and `streamlit_app/` each as a whole (`scripts/check_coverage_floors.py`) |
+| Measured, not gated | `build/csv` and `evals/`: the loaders are shell, which coverage.py cannot see, and the runner is exercised through subprocesses, so they read low (0 % and 39 % on the full suite, 19 Nov) and a floor would mean nothing |
+| Not measured | `scripts/`, and the React app (`csv-table-hub-main/`, which has its own vitest suite) |
+
+`make coverage` runs what CI runs: the whole suite (it needs PostgreSQL, `PGDATABASE=te_mgmt_dev`), then the floors.
+`make test-gate` prints the same scope for the free-tier tests, without floors, because the API figure is partial
+without a database. The floors are statements, not branches, and sit a few points under the numbers measured on
+19 Nov 2026 (api 94.4 %, `streamlit_app` 97.5 %); raise them as the numbers rise.
+`tests/unit/test_ci_quality_gate.py` fails if the three places stop naming the same scope.
+
 ## Shared fixtures (`conftest.py`)
 
 For tests that drive the live API. `unittest.TestCase` classes can't take fixture

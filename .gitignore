@@ -63,6 +63,11 @@ terraform-provider-*.log
 # Coverage reports
 .coverage
 .coverage.*
+coverage.json
+coverage-services.json
 coverage.xml
 htmlcov/
 dist/
+
+# Screenshots of failed browser tests (e2e/conftest.py, #273)
+e2e-artifacts/

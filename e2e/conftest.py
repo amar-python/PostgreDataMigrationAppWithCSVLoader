@@ -7,6 +7,7 @@ browser and three local servers. See e2e/README.md.
 from __future__ import annotations
 
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -211,3 +212,19 @@ def shell_sign_in_as(page: Page, stack: Stack, tenant: str, username: str, passw
     page.get_by_label("Username").fill(username)
     page.get_by_role("textbox", name="Password").fill(password)
     page.get_by_role("button", name="Sign in").click()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """A screenshot of the page for each failed test, in e2e-artifacts/ (#273). CI uploads that folder, since a red run
+    on a runner cannot be looked at. It must never break a run: any error taking the picture is ignored."""
+    outcome = yield
+    report = outcome.get_result()
+    page = item.funcargs.get("page") if hasattr(item, "funcargs") else None
+    if report.when == "call" and report.failed and page is not None:
+        try:
+            folder = Path(os.environ.get("E2E_ARTIFACT_DIR", ROOT / "e2e-artifacts"))
+            folder.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(folder / (re.sub(r"[^\w.-]+", "_", item.name) + ".png")), full_page=True)
+        except Exception:  # noqa: BLE001 - diagnostics only
+            pass

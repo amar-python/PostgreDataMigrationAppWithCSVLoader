@@ -1,4 +1,4 @@
-.PHONY: test-free test-gate test-evals test-e2e test-all \
+.PHONY: test-free test-gate test-evals test-e2e test-all coverage \
         test-unit test-system test-egress-blocked check-bundle security-evidence test-sit test-performance test-accessibility test-uat \
         lint lint-diff health \
         eval-list eval-compare eval-summary select-tests \
@@ -11,16 +11,25 @@
 test-free:
 	pytest -m "unit or regression or security or snapshot" tests/ -v
 
-# Gate: everything in test-free + coverage report. CI default, blocks merge.
-# Coverage scope: api/ (api/services holds the CSV loader path: dynamic_loader,
-# te_loader, csv_parse, staged_import), build/csv (validator) and evals (runner),
-# with branch coverage. Reports only; no --cov-fail-under floor is set here
-# (per-loader floors for api/services run in CI via scripts/check_coverage_floors.py).
+# One coverage scope everywhere (#274, #278), the same in .coveragerc, here and in the CI step: the API, the Streamlit
+# app, build/csv (the validator) and evals (the runner), with branch coverage. Only api/ and streamlit_app/ are gated
+# (scripts/check_coverage_floors.py). build/csv's loaders are shell, which coverage.py cannot see, and the evals runner
+# is exercised through subprocesses, so those two read low (0 % and 39 % on the full suite, 19 Nov) and have no floor.
+# tests/unit/test_ci_quality_gate.py fails if the three places stop naming the same scope. See tests/README.md.
+COVERAGE_SCOPE := --cov=api --cov=streamlit_app --cov=build/csv --cov=evals --cov-branch
+
+# Gate: everything in test-free + a coverage report (no floors: the free tier has no database, so the API figure
+# is partial). `make coverage` is the real gate.
 # Mirrors: bun run test:gate
 test-gate:
 	pytest -m "unit or regression or security or snapshot" tests/ \
-	    --cov=api --cov=build/csv --cov=evals --cov-branch \
-	    --cov-report=term-missing --cov-report=xml:coverage.xml
+	    $(COVERAGE_SCOPE) --cov-report=term-missing --cov-report=xml:coverage.xml
+
+# Coverage as CI gates it: the whole suite (needs PostgreSQL; PGDATABASE=te_mgmt_dev), then the floors.
+# The same commands as the coverage step of the integration job in quality-gate.yml.
+coverage:
+	pytest tests/ -m "not accessibility" $(COVERAGE_SCOPE) --cov-report=json:coverage.json --cov-report=term-missing -q
+	python3 scripts/check_coverage_floors.py coverage.json
 
 # Evals: Tier P (offline) + Tiers I/S/E (need PostgreSQL; set PG* first).
 # CI policy is fail-not-skip: an unmet prerequisite must FAIL. The integration
@@ -39,7 +48,7 @@ test-e2e:
 # frontend, so they run on their own: `make test-accessibility` (tests/accessibility/README.md).
 # Mirrors: bun run test:evals:all
 test-all:
-	pytest tests/ -m "not accessibility" --cov=api --cov=build/csv --cov=evals --cov-branch --cov-report=term-missing
+	pytest tests/ -m "not accessibility" $(COVERAGE_SCOPE) --cov-report=term-missing
 	python3 evals/runner.py --tiers p,i,s,e --verbose
 
 # ── One category at a time (#167) ─────────────────────────────────────────────
@@ -47,10 +56,13 @@ test-all:
 # PostgreSQL), system_integration (whole pipeline, all environments), then
 # performance, accessibility and uat. See tests/README.md.
 
-# pytest exits 5 when a folder holds no tests yet; that is not a failure for a
-# category that has none so far.
+# pytest exits 5 when it collects nothing. That is fine for a category named in EMPTY_CATEGORIES (none written
+# yet), and a failure for any other: a renamed folder, a wrong path or a changed marker would otherwise pass
+# without running a test (#276). tests/unit/test_makefile_categories.py keeps this list honest.
+EMPTY_CATEGORIES := tests/uat
+
 define run_category
-	python3 -m pytest $(1) -v; rc=$$?; if [ $$rc -eq 5 ]; then echo "No tests in $(1) yet."; exit 0; fi; exit $$rc
+	python3 -m pytest $(1) -v; rc=$$?; if [ $$rc -eq 5 ]; then case " $(EMPTY_CATEGORIES) " in *" $(1) "*) echo "No tests in $(1) yet (declared empty in EMPTY_CATEGORIES)."; exit 0;; esac; echo "No tests were collected in $(1). Fix the path or marker, or add it to EMPTY_CATEGORIES if it is empty on purpose."; exit 5; fi; exit $$rc
 endef
 
 test-unit:

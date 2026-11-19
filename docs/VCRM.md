@@ -199,6 +199,8 @@ BR-39 to BR-44 stay reserved for the proposals awaiting disposition (accessibili
 | ❌ Not started | 0 | none |
 | ⏸ Deferred by decision | 3 | BR-02, BR-21, BR-22 |
 
+**Headline (2026-11-19):** BR-45 to BR-49 were added (#272): BR-46 is verified, BR-47, BR-48 and BR-49 are partial, and BR-45 is not started. So **27 of 43 (63 %)** are verified, 3 are deferred by decision, and the other 13 are partial or not started.
+
 **Headline (2026-11-10):** M7 (#111) verifies BR-35, so **26 of 38 (68 %)** are verified, 3 are deferred by decision, and the other 9 are partial or not started; BR-37 stays partial until the offline install dry run (#60). Before that, with BR-28 and BR-30 verified by M5 (#109; full suite 418 passed, 0 failed, 0 skipped), **25 of 38 (66 %)** are verified, 3 are deferred by decision, and the other 10 are partial or not started. M6 (#110) moved BR-32 from not started to partial; BR-32, BR-33 and BR-34 stay partial until the direct upload path and T&E mode go through the approval flow.
 
 **Headline (2026-10-28):** with BR-23 verified by M3b (#107) and BR-25, BR-26 and BR-27 by M4 (#108), **23 of 38 (61 %)** are verified, 3 are deferred by decision, and the other 12 are partial or not started.
