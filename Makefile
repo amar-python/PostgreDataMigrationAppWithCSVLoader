@@ -39,10 +39,13 @@ test-all:
 # PostgreSQL), system_integration (whole pipeline, all environments), then
 # performance, accessibility and uat. See tests/README.md.
 
-# pytest exits 5 when a folder holds no tests yet; that is not a failure for a
-# category that has none so far.
+# pytest exits 5 when it collects nothing. That is fine for a category named in EMPTY_CATEGORIES (none written
+# yet), and a failure for any other: a renamed folder, a wrong path or a changed marker would otherwise pass
+# without running a test (#276). tests/unit/test_makefile_categories.py keeps this list honest.
+EMPTY_CATEGORIES := tests/uat
+
 define run_category
-	python3 -m pytest $(1) -v; rc=$$?; if [ $$rc -eq 5 ]; then echo "No tests in $(1) yet."; exit 0; fi; exit $$rc
+	python3 -m pytest $(1) -v; rc=$$?; if [ $$rc -eq 5 ]; then case " $(EMPTY_CATEGORIES) " in *" $(1) "*) echo "No tests in $(1) yet (declared empty in EMPTY_CATEGORIES)."; exit 0;; esac; echo "No tests were collected in $(1). Fix the path or marker, or add it to EMPTY_CATEGORIES if it is empty on purpose."; exit 5; fi; exit $$rc
 endef
 
 test-unit:
