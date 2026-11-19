@@ -1,4 +1,4 @@
-.PHONY: test-free test-gate test-evals test-e2e test-all \
+.PHONY: test-free test-gate test-evals test-e2e test-all coverage \
         test-unit test-system test-egress-blocked check-bundle security-evidence test-sit test-performance test-accessibility test-uat \
         lint lint-diff health \
         eval-list eval-compare eval-summary select-tests \
@@ -11,11 +11,23 @@
 test-free:
 	pytest -m "unit or regression or security or snapshot" tests/ -v
 
-# Gate: everything in test-free + coverage report. CI default, blocks merge.
+# One coverage scope everywhere (#274, #278): the API and the Streamlit app, as CI measures them. build/csv is
+# shell loaders, which coverage.py cannot measure, and the evals runner is exercised through subprocesses.
+# tests/unit/test_ci_quality_gate.py fails if this and the CI step drift apart. See tests/README.md ("Coverage").
+COVERAGE_SCOPE := --cov=api --cov=streamlit_app
+
+# Gate: everything in test-free + a coverage report (no floors: the free tier has no database, so the API figure
+# is partial). `make coverage` is the real gate.
 # Mirrors: bun run test:gate
 test-gate:
 	pytest -m "unit or regression or security or snapshot" tests/ \
-	    --cov=build/csv --cov=evals --cov-report=term-missing
+	    $(COVERAGE_SCOPE) --cov-report=term-missing
+
+# Coverage as CI gates it: the whole suite (needs PostgreSQL; PGDATABASE=te_mgmt_dev), then the floors.
+# The same commands as the coverage step of the integration job in quality-gate.yml.
+coverage:
+	pytest tests/ -m "not accessibility" $(COVERAGE_SCOPE) --cov-report=json:coverage.json --cov-report=term-missing -q
+	python3 scripts/check_coverage_floors.py coverage.json
 
 # Evals: Tier P (offline) + Tier I/S (skip cleanly if no PostgreSQL).
 # Mirrors: bun run test:evals
@@ -31,7 +43,7 @@ test-e2e:
 # frontend, so they run on their own: `make test-accessibility` (tests/accessibility/README.md).
 # Mirrors: bun run test:evals:all
 test-all:
-	pytest tests/ -m "not accessibility" --cov=build/csv --cov=evals --cov-report=term-missing
+	pytest tests/ -m "not accessibility" $(COVERAGE_SCOPE) --cov-report=term-missing
 	python3 evals/runner.py --tiers p,i,s,e --verbose
 
 # ── One category at a time (#167) ─────────────────────────────────────────────
