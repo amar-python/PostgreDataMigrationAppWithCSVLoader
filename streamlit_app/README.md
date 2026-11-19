@@ -1,11 +1,11 @@
-# Streamlit front end (migration steps 1 and 2: the app shell, #251, and the review screen, #252)
+# Streamlit front end (migration steps 1 to 3: the app shell #251, review #252, import history #253)
 
 Part of the plan in `DECISIONS/2026-11-16-streamlit-migration-plan.md` (#212). **The React app in
 `csv-table-hub-main/` is still the live front end.** This app is not wired into CI, the Docker image
 or the offline bundle yet; that is step 5 (#256).
 
 What exists so far: sign-in, session expiry, sign-out, change password, a home page that says what the
-signed-in role can do, and the **Review** screen. The other screens (import history, upload) come with #253 to #255.
+signed-in role can do, the **Review** screen and the **Import history** screen. The upload screen comes with #255.
 
 ## Run it
 
@@ -56,10 +56,36 @@ there is nothing to review), then a row, by selecting it in the table **or** typ
   reviewer. (Escaping the punctuation was tried first and was not enough: Streamlit still links a bare URL.)
 - Not carried over from the React screen: a link straight to one upload's review (`/review/<id>`).
 
+## The Import history screen (#253)
+
+Replaces the React "Import history" page. **Behaviour change for users: the history is no longer per browser.** The
+React page was the browser's own record, kept in `localStorage`; this one reads the server's
+(`GET /api/csv/uploads`, `GET /api/csv/uploads/{id}`), so it is the tenant's, shows imports from any browser or
+device, and nothing about it is kept in the browser (a browser test checks the browser's storage).
+
+- **List:** every upload attempt, newest first, 25 to a page, filtered by file name, status, uploader and a date
+  range (the whole "to" day is included). Times are UTC.
+- **One import:** choose it to see why rows failed (the server keeps the reasons for the first 200 only, and the
+  screen says so), the server's step log, and the **error report** as CSV or XLSX.
+- **A report of all matching imports** (CSV and XLSX, up to 5,000; a longer one says it was cut short).
+- **Server audit events** (`GET /api/audit/events`, BR-35), for roles that may read the audit log: filter by actor,
+  action, file and date, page by 100, and download the server's own CSV.
+- **Reports** carry the formula-injection guard from #193: a cell that starts with `=`, `+`, `-` or `@` (and is not a
+  plain number) gets a leading quote, in CSV and in XLSX (which stores it as text, never as a formula). The XLSX also
+  survives a control character in a value (openpyxl refuses one) and cuts a value to the 32,767 characters Excel
+  keeps. The visible apostrophe in XLSX is the #193 decision, still to be checked in Excel (#244).
+- **Not carried over from React:** bulk selection and "Retry" (an import is retried from the upload screen),
+  "Print / save as PDF" (print the page), the in-app "App changelog" (release notes do that job), and the header
+  mapping and cancellation columns of the report (the server does not store them).
+- **Tables are `st.table`**, which is real HTML (a screen reader and the accessibility scan can read it, and a
+  browser test can assert on it). `st.table` reads a cell as **Markdown**: a cell holding `[x](https://...)` became
+  a link in a browser test. So every text from a file goes through `review_model.literal`. `st.dataframe` is safe
+  from that (it draws on a canvas) but a canvas is invisible to a screen reader and an accessibility scan.
+
 ## Tests
 
-- `tests/unit/test_streamlit_shell.py` and `tests/unit/test_streamlit_review.py`: fast, headless
+- `tests/unit/test_streamlit_{shell,review,history,exports,api_client}.py`: fast, headless
   (Streamlit's `AppTest`, a faked API). Run with the unit tests.
-- `e2e/test_streamlit_shell.py` and `e2e/test_streamlit_review.py`: in a real browser, against the real API
+- `e2e/test_streamlit_{shell,review,history}.py`: in a real browser, against the real API
   (what `AppTest` cannot do: click the table, a session the server ends, how a browser shows a cell's text).
   Run like the other end-to-end tests (`e2e/README.md`); not part of CI.

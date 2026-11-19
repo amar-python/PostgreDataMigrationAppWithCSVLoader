@@ -23,6 +23,7 @@ ATTEMPT_LABEL = {
     "failed": "Failed",
     "rejected": "Rejected",
     "duplicate": "Duplicate",
+    "staged": "Staged",
 }
 NEEDS_ATTENTION = frozenset({"failed", "partly_imported", "rejected"})
 
