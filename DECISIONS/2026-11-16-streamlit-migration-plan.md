@@ -17,7 +17,7 @@ Review:  Before step 5 (packaging) starts. It is the next step that needs the ow
 | 6 Cutover and deletion | #257 | Not started. Needs steps 1 to 5 and the accessibility decision |
 | Tests | #258 | Done as each screen landed: 364 unit tests (`AppTest` and plain functions) and 49 browser tests in four files. Not done: the browser tests are not in CI |
 
-The three screen PRs were stacked and merged in that order on 19 Nov (#267, #269, #270), as merge commits, once each had passed CI. The issues #252, #253 and #255 stay open: their "done when" lists include owner decisions (the audit-log screen and the changelog, the mapping templates) that are still unanswered, and no issue is closed without evidence attached. #268 was one PR carrying all three screens; it was closed in favour of the stack, and its branch `claude/streamlit-migration-plan` is kept for reference only. Nothing in this plan is accepted until the owner says so.
+The three screen PRs were stacked and merged in that order on 19 Nov (#267, #269, #270), as merge commits, once each had passed CI. The issues #252, #253 and #255 were closed on 19 Nov on the owner's instruction, each with its evidence in a comment. #253 and #255 were closed with their owner decisions (the audit-log screen and the changelog, the mapping templates) still on the defaults listed under "Defaults applied", unconfirmed; they can be reopened if the owner decides otherwise. #268 was one PR carrying all three screens; it was closed in favour of the stack, and its branch `claude/streamlit-migration-plan` is kept for reference only. Nothing in this plan is accepted until the owner says so.
 
 ## Choice
 
