@@ -4,6 +4,7 @@ Validates that quality-gate.yml has the expected jobs, steps, and
 configuration. Catches accidental removals or misconfigurations before
 they reach CI. No database or network required.
 """
+import re
 import unittest
 from pathlib import Path
 
@@ -156,6 +157,51 @@ class TestGapAnalysisG2Accepted(unittest.TestCase):
             "G2 — Windows CI cannot host PostgreSQL (Closed)",
             self.content,
             "G2 should not say Closed — it is Accepted"
+        )
+
+
+class TestPipedPytestKeepsItsExitStatus(unittest.TestCase):
+    """#275: `pytest ... | tail` takes `tail`'s exit status, so a failing run can pass the step.
+
+    GitHub runs a `run:` block with `bash -e {0}`, which has no pipefail. A step that pipes pytest into
+    anything has to set it (`set -o pipefail`), or choose `shell: bash`, which GitHub starts with `-eo pipefail`.
+    """
+
+    WORKFLOWS = ROOT / ".github" / "workflows"
+
+    @staticmethod
+    def pipes_pytest(run: str) -> bool:
+        """True if a command line runs pytest and pipes it (a `||` is not a pipe; a `\\` continuation is one line)."""
+        joined = re.sub(r"\\\n\s*", " ", run)
+        return any("pytest" in line and re.search(r"(?<!\|)\|(?!\|)", line) for line in joined.splitlines())
+
+    @staticmethod
+    def keeps_status(run: str, step: dict, job: dict) -> bool:
+        shell = step.get("shell") or (job.get("defaults", {}).get("run", {}).get("shell")) or ""
+        return "pipefail" in run or shell == "bash"
+
+    def test_the_detector_reads_continuations_and_ignores_or(self):
+        piped = 'python -m pytest tests/ \\\n  --cov=x \\\n  -q 2>&1 | tail -20\npython3 check.py'
+        self.assertTrue(self.pipes_pytest(piped))
+        self.assertFalse(self.pipes_pytest("python -m pytest tests/ -q || true"))
+        self.assertFalse(self.pipes_pytest("python3 scripts/test_report.py --markers x --strict"))
+        self.assertFalse(self.pipes_pytest("docker compose logs | tail -60"))
+
+    def test_every_workflow_step_that_pipes_pytest_sets_pipefail(self):
+        files = sorted(self.WORKFLOWS.glob("*.yml"))
+        self.assertTrue(files, "no workflow files were found")
+        offenders = []
+        for path in files:
+            for job_id, job in (yaml.safe_load(path.read_text(encoding="utf-8")).get("jobs") or {}).items():
+                for step in job.get("steps", []):
+                    run = step.get("run", "")
+                    if self.pipes_pytest(run) and not self.keeps_status(run, step, job):
+                        offenders.append(f"{path.name} / {job_id} / {step.get('name', '(unnamed)')}")
+        self.assertEqual(
+            offenders,
+            [],
+            "these steps pipe pytest without pipefail, so a failing run exits with the pipe's status and the "
+            f"step goes green (#275): {offenders}",
         )
 
 

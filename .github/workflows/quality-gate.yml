@@ -190,10 +190,13 @@ jobs:
         run: python3 -m pytest tests/system --block-egress -q
 
       # #194: measure api/services coverage with per-loader floors.
+      # #275: pipefail, so a failing pytest fails this step. Without it the pipe into tail returns tail's
+      # status (0), the step goes green, and the floors are read from a failed run.
       - name: api/services coverage gate
         env:
           PGDATABASE: te_mgmt_dev
         run: |
+          set -o pipefail
           python -m pytest tests/ -m "not accessibility" \
             --cov=api/services \
             --cov-report=json:coverage-services.json \
