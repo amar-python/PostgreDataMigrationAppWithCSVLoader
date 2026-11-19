@@ -10,14 +10,14 @@ Review:  Before step 5 (packaging) starts. It is the next step that needs the ow
 |---|---|---|
 | 1 App shell | #251 | Merged (#264) |
 | 4 Upload spike | #254 | Merged (#265). Outcome "limiting, with workarounds": nothing found made Streamlit wrong for the screen, so the whole-app cutover stands |
-| 2 Review screen | #252 | PR #267, draft, CI green |
-| 3 Import history | #253 | PR #269, draft, CI green. Stacked on #267 |
-| 4 Upload and imported files | #255 | PR #270, draft. Stacked on #269 |
+| 2 Review screen | #252 | Merged (#267) |
+| 3 Import history | #253 | Merged (#269) |
+| 4 Upload and imported files | #255 | Merged (#270, with this update) |
 | 5 Packaging | #256 | Not started. Waits for the #60 dry run and the owner's Azure answer |
 | 6 Cutover and deletion | #257 | Not started. Needs steps 1 to 5 and the accessibility decision |
 | Tests | #258 | Done as each screen landed: 364 unit tests (`AppTest` and plain functions) and 49 browser tests in four files. Not done: the browser tests are not in CI |
 
-The three screen PRs are stacked and should merge in that order (#267, #269, #270); GitHub retargets each to `main` when its base branch is deleted. #268 was one PR carrying all three screens; it was closed in favour of the stack, and its branch `claude/streamlit-migration-plan` is kept for reference only. Nothing has been marked ready, and nothing in this plan is accepted until the owner says so.
+The three screen PRs were stacked and merged in that order on 19 Nov (#267, #269, #270), as merge commits, once each had passed CI. The issues #252, #253 and #255 stay open: their "done when" lists include owner decisions (the audit-log screen and the changelog, the mapping templates) that are still unanswered, and no issue is closed without evidence attached. #268 was one PR carrying all three screens; it was closed in favour of the stack, and its branch `claude/streamlit-migration-plan` is kept for reference only. Nothing in this plan is accepted until the owner says so.
 
 ## Choice
 
