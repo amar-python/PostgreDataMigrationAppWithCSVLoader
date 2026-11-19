@@ -59,7 +59,7 @@
 - **Rate limiting:** in-process only, so it suits a single API instance.
 - **Frontend audit page:** shows this browser's local import history, not the
   server audit log (see the naming note under Frontend Features).
-- **Offline install:** procedure in `docs/offline-install.md`, rehearsed with networking off. The clean-VM dry run (#60) is still to do. It targets Ubuntu 24.04 only; an offline container bundle for Windows, macOS and Linux is tracked as #128 (BR-38).
+- **Offline install:** procedure in `docs/offline-install.md`, rehearsed with networking off. The clean-VM dry run (#60) is still to do. It targets Ubuntu 24.04 only. The container bundle for Windows, macOS and Linux (`container/`, #245, BR-38) passes the 7-check smoke test with the containers cut off from the internet in CI on Linux (amd64 and arm64 with Docker, amd64 with Podman). The Windows and macOS runs are still open (#128, `docs/BR38_EVIDENCE.md`).
 
 ## For Reviewers
 
