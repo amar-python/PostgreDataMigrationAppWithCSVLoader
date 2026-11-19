@@ -189,20 +189,22 @@ jobs:
           PGDATABASE: te_mgmt_dev
         run: python3 -m pytest tests/system --block-egress -q
 
-      # #194: measure api/services coverage with per-loader floors.
+      # #194, #274, #278: coverage of the API and the Streamlit app, with per-loader floors and per-package floors
+      # (scripts/check_coverage_floors.py). The scope is written down in tests/README.md ("Coverage").
       # #275: pipefail, so a failing pytest fails this step. Without it the pipe into tail returns tail's
       # status (0), the step goes green, and the floors are read from a failed run.
-      - name: api/services coverage gate
+      - name: coverage gate (api, streamlit_app)
         env:
           PGDATABASE: te_mgmt_dev
         run: |
           set -o pipefail
           python -m pytest tests/ -m "not accessibility" \
-            --cov=api/services \
-            --cov-report=json:coverage-services.json \
+            --cov=api \
+            --cov=streamlit_app \
+            --cov-report=json:coverage.json \
             --cov-report=term-missing \
             -q --no-header 2>&1 | tail -20
-          python3 scripts/check_coverage_floors.py coverage-services.json
+          python3 scripts/check_coverage_floors.py coverage.json
 
       - name: Upload eval reports
         if: always()

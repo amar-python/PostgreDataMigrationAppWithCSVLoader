@@ -208,8 +208,17 @@ class TestCatalogueGenerator(unittest.TestCase):
 class CoverageFloorGate(unittest.TestCase):
     FILES = ("api/services/csv_parse.py", "api/services/dynamic_loader.py", "api/services/te_loader.py")
 
-    def _gate(self, pct: dict[str, float], drop: str | None = None) -> int:
-        report = {"files": {f: {"summary": {"percent_covered": pct[f]}} for f in self.FILES if f != drop}}
+    # Package floors (#274, #278): the report must also hold files from these packages, with statement counts.
+    PACKAGE_FILES = {"api/main.py": 100, "streamlit_app/app.py": 100}
+
+    @staticmethod
+    def _summary(pct: float, statements: int = 100) -> dict:
+        return {"percent_covered": pct, "num_statements": statements, "covered_lines": round(statements * pct / 100)}
+
+    def _gate(self, pct: dict[str, float], drop: str | None = None, packages: dict | None = None) -> int:
+        report = {"files": {f: {"summary": self._summary(pct[f])} for f in self.FILES if f != drop}}
+        for name, value in (self.PACKAGE_FILES if packages is None else packages).items():
+            report["files"][name] = {"summary": value if isinstance(value, dict) else self._summary(value)}
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             json.dump(report, f)
         try:
@@ -236,6 +245,38 @@ class CoverageFloorGate(unittest.TestCase):
 
     def test_fails_when_a_loader_is_missing_from_the_report(self):
         self.assertEqual(self._gate({f: 100.0 for f in self.FILES}, drop="api/services/dynamic_loader.py"), 1)
+
+    # ── package floors (#274, #278) ──
+
+    def test_the_package_floors_name_the_api_and_the_streamlit_app(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            import check_coverage_floors as gate
+        finally:
+            sys.path.pop(0)
+        self.assertEqual(set(gate.PACKAGE_FLOORS), {"api/", "streamlit_app/"})
+
+    def test_fails_when_the_streamlit_app_drops_below_its_package_floor(self):
+        full = {f: 100.0 for f in self.FILES}
+        self.assertEqual(self._gate(full, packages={"api/main.py": 100, "streamlit_app/app.py": 50}), 1)
+
+    def test_fails_when_the_api_drops_below_its_package_floor(self):
+        full = {f: 100.0 for f in self.FILES}
+        self.assertEqual(self._gate(full, packages={"api/main.py": 50, "streamlit_app/app.py": 100}), 1)
+
+    def test_fails_when_the_streamlit_app_is_not_in_the_report_at_all(self):
+        """Taking --cov=streamlit_app out of CI must fail the gate, not quietly stop measuring it."""
+        full = {f: 100.0 for f in self.FILES}
+        self.assertEqual(self._gate(full, packages={"api/main.py": 100}), 1)
+
+    def test_a_package_floor_is_weighted_by_statements_not_an_average_of_files(self):
+        full = {f: 100.0 for f in self.FILES}
+        big_and_good = {"api/main.py": 100, "streamlit_app/app.py": 100,
+                        "streamlit_app/views/a.py": self._summary(100, 1000), "streamlit_app/views/b.py": self._summary(0, 10)}
+        self.assertEqual(self._gate(full, packages=big_and_good), 0, "1000 of 1110 statements is above the floor")
+        small_and_good = {"api/main.py": 100, "streamlit_app/app.py": self._summary(100, 10),
+                          "streamlit_app/views/a.py": self._summary(0, 1000)}
+        self.assertEqual(self._gate(full, packages=small_and_good), 1, "10 of 1010 statements is far below it")
 
 
 # ── #207 ─────────────────────────────────────────────────────────────────────

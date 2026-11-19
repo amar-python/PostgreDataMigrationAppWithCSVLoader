@@ -5,6 +5,7 @@ configuration. Catches accidental removals or misconfigurations before
 they reach CI. No database or network required.
 """
 import re
+import sys
 import unittest
 from pathlib import Path
 
@@ -203,6 +204,51 @@ class TestPipedPytestKeepsItsExitStatus(unittest.TestCase):
             "these steps pipe pytest without pipefail, so a failing run exits with the pipe's status and the "
             f"step goes green (#275): {offenders}",
         )
+
+
+class TestCoverageIsMeasuredOneWay(unittest.TestCase):
+    """#274, #278: CI, the Makefile and the floors name the same scope, so they cannot drift apart again.
+
+    CI measured `api/services`, the Makefile measured `build/csv` and `evals`, and nothing measured the rest of the
+    API or the Streamlit app. Now all three say `api` and `streamlit_app`.
+    """
+
+    MAKEFILE = ROOT / "Makefile"
+
+    @staticmethod
+    def cov_scope(text: str) -> set[str]:
+        return set(re.findall(r"--cov=([\w/.-]+)", text))
+
+    def _ci_coverage_step(self) -> dict:
+        steps = _load_workflow()["jobs"]["integration-postgres"]["steps"]
+        found = [s for s in steps if "--cov" in s.get("run", "")]
+        self.assertEqual(len(found), 1, "expected exactly one coverage step in the integration job")
+        return found[0]
+
+    def test_ci_measures_the_api_and_the_streamlit_app(self):
+        self.assertEqual(self.cov_scope(self._ci_coverage_step()["run"]), {"api", "streamlit_app"})
+
+    def test_the_makefile_measures_the_same_scope(self):
+        text = self.MAKEFILE.read_text(encoding="utf-8")
+        scope = re.search(r"^COVERAGE_SCOPE\s*:?=\s*(.*)$", text, re.M)
+        self.assertIsNotNone(scope, "the Makefile has no COVERAGE_SCOPE")
+        self.assertEqual(self.cov_scope(scope.group(1)), {"api", "streamlit_app"})
+        for line in text.splitlines():
+            self.assertNotIn("--cov=build/csv", line)
+            self.assertNotIn("--cov=evals", line)
+
+    def test_the_package_floors_are_for_exactly_that_scope(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            import check_coverage_floors as gate
+        finally:
+            sys.path.pop(0)
+        self.assertEqual({k.rstrip("/") for k in gate.PACKAGE_FLOORS}, {"api", "streamlit_app"})
+
+    def test_ci_runs_the_floors_on_the_report_it_just_wrote(self):
+        run = self._ci_coverage_step()["run"]
+        report = re.search(r"--cov-report=json:(\S+)", run).group(1)
+        self.assertIn(f"check_coverage_floors.py {report}", run)
 
 
 if __name__ == "__main__":
