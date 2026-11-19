@@ -1,5 +1,9 @@
 # Reconciled Gap Register — O-01 to O-12
 
+> **Snapshot, 2026-09-10.** Statuses are as of baseline `269ffe2` and have not been updated since. For the current
+> status of each requirement see `docs/VCRM.md`. `docs/reconciled_gaps.csv` carries the same O-01 to O-12 rows, plus
+> F-01 to F-06 and D-01, which are only in the CSV.
+
 **Baseline:** `C:\Users\User\OneDrive\Desktop\Migration using ai\PostgreDataMigrationAppWithCSVLoader`, branch `main` @ `269ffe2`
 **Date:** 2026-09-10
 **Method:** every status below was verified by reading the code or executing it in this repo. No status is carried over from a document claim alone.
