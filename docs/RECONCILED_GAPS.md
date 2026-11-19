@@ -1,5 +1,7 @@
 # Reconciled Gap Register — O-01 to O-12
 
+> **Superseded (2026-11-19):** this document is kept for history only. The master traceability record is [`docs/VCRM.md`](VCRM.md); where they differ, `docs/VCRM.md` wins.
+
 **Baseline:** `C:\Users\User\OneDrive\Desktop\Migration using ai\PostgreDataMigrationAppWithCSVLoader`, branch `main` @ `269ffe2`
 **Date:** 2026-09-10
 **Method:** every status below was verified by reading the code or executing it in this repo. No status is carried over from a document claim alone.

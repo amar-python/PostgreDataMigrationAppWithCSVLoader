@@ -1,15 +1,17 @@
 # PostgreDataMigrationAppWithCSVLoader
 
-> A production-grade **CSV-to-PostgreSQL data migration platform** for
+> A **CSV-to-PostgreSQL data migration platform** for
 > **Test & Evaluation (T&E)** programme management — with a FastAPI backend,
-> React frontend, and a 142-assertion SQL test suite.
+> React frontend, and a 159-assertion SQL test suite. Not yet production-ready:
+> requirement-by-requirement status, including partial and deferred items, is in
+> [`docs/VCRM.md`](docs/VCRM.md).
 
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%2B-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.140%E2%80%930.141-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.162-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-139%20vitest%20%7C%20142%20SQL%20assertions-brightgreen)](#test-suite)
+[![Tests](https://img.shields.io/badge/Tests-196%20vitest%20%7C%20159%20SQL%20assertions-brightgreen)](#test-suite)
 
 ---
 
@@ -36,6 +38,10 @@
   together, so a failure leaves none of them. The older `POST /api/csv/upload` still
   loads first and writes the audit row afterwards: a crash in that window leaves a loaded
   table with no audit row. T&E loads use that older path, and so skip approval.
+  This window is F11 in [`docs/HANDOFF-20261104.md`](docs/HANDOFF-20261104.md); it is
+  related to, but distinct from, F1 (registry race) of the M0 assessment at baseline
+  `032b522` ([`docs/art/milestone-0-assessment.md`](docs/art/milestone-0-assessment.md)),
+  which M1 fixed with UNIQUE constraints. Traced as BR-45 in [`docs/VCRM.md`](docs/VCRM.md).
 - **Authentication:** people sign in per user: local accounts with lockout,
   OIDC, four roles (`docs/ROLES.md`) and a schema per tenant. The shared
   `API_KEY` is for scripts and services only; the browser never holds it. The
@@ -44,9 +50,12 @@
   Users change their own password from the header; a tenant admin can reset
   members of their own tenant only. A user who belongs to more than one tenant
   can be reset only by an operator with `scripts/reset_password.py` (#117).
-- **Upload failure reasons:** the per-row reasons and step log for an upload
-  are kept in the uploading browser's Import history, not on the server; the
-  server keeps only the counts. Server-side storage is planned for M3 (#107).
+- **Upload failure reasons:** since M3b/M3c (#107, closed) the server stores each
+  upload attempt's per-row reasons (capped at `API_MAX_ROW_ERRORS`, default 200) and
+  step log in `uploads` (migration 0007), and the Migrated files Preview reads them
+  from the server. The Import history and `/audit` page still show this browser's
+  local history only. Any further independent server-side display is deferred to M7;
+  traced as BR-47 in [`docs/VCRM.md`](docs/VCRM.md).
 - **Rate limiting:** in-process only, so it suits a single API instance.
 - **Frontend audit page:** shows this browser's local import history, not the
   server audit log (see the naming note under Frontend Features).
@@ -98,12 +107,13 @@ PostgreDataMigrationAppWithCSVLoader/
 │   ├── config.py                     ← env-var settings, TE_TABLES list
 │   ├── db.py                         ← psycopg2 connection pool
 │   ├── auth.py                       ← optional X-API-Key guard
-│   ├── routers/
+│   ├── routers/                      ← csv, te, auth, audit, import, policy, review routes
 │   │   ├── csv_routes.py             ← /api/csv/* (upload, preview, files, rows)
 │   │   └── te_routes.py              ← /api/te/tables (T&E table row counts)
-│   ├── services/
+│   ├── services/                     ← loader path and supporting services
 │   │   ├── csv_parse.py              ← CSV parser + type inference
-│   │   ├── dynamic_loader.py         ← creates csv_<hash> tables from any CSV
+│   │   ├── dynamic_loader.py         ← creates csv_<slug>_v<n> tables from any CSV
+│   │   ├── staged_import.py          ← approval-flow staged import (ADR-0002)
 │   │   └── te_loader.py              ← loads CSV into fixed T&E tables
 │   └── requirements.txt
 │
@@ -115,7 +125,7 @@ PostgreDataMigrationAppWithCSVLoader/
 │   │   ├── export.ts                 ← CSV / XLSX / PDF export
 │   │   ├── mapping-templates.ts      ← saved column mapping templates
 │   │   └── csv-preview.ts            ← CSV parsing utilities
-│   ├── src/__tests__/                ← 139 vitest tests
+│   ├── src/__tests__/                ← 196 vitest tests (20 files)
 │   ├── .env.local                    ← VITE_API_BASE (not committed)
 │   └── package.json
 │
@@ -128,20 +138,27 @@ PostgreDataMigrationAppWithCSVLoader/
 │
 ├── evals/                            ← data-driven black-box eval suite
 │   ├── runner.py                     ← scenario runner + JSON reports
-│   └── datasets/tier_p/             ← 23 CSV validator scenarios
+│   ├── datasets/                     ← tier_p (23), tier_i (1), tier_s (1), tier_e (2), tier_x (1)
+│   └── expected/                     ← expected outcome per scenario
 │
 ├── infra/                            ← Azure Container Apps + Terraform
+├── container/                        ← offline container bundle (BR-38)
+├── alembic/, alembic_te/             ← schema migrations (control, tenant T&E)
 │
 ├── scripts/
 │   ├── start-api.ps1                 ← Terminal 1: FastAPI on :8000
 │   ├── start-frontend.ps1            ← Terminal 2: Vite on :8080
 │   └── provision_full_test_env.sh    ← one-command DB setup
 │
+├── streamlit_app/                    ← Streamlit UI (migration in progress)
+│
 ├── tests/
-│   ├── test_api_unit.py              ← 12 unit tests (no DB required)
-│   ├── test_api_integration.py       ← 19 integration tests
-│   ├── test_te_loader_integration.py ← 11 T&E mode integration tests
-│   ├── environments/                 ← 4 per-environment contract tests
+│   ├── unit/                         ← 38 test files, no DB (incl. test_api_unit.py: 12 tests)
+│   ├── system/                       ← 34 test files, API + PostgreSQL
+│   │   ├── test_api_integration.py   ← 27 integration tests
+│   │   └── test_te_loader_integration.py ← 12 T&E mode integration tests
+│   ├── system_integration/           ← whole pipeline; environments/ has 4 contract files (20 tests)
+│   ├── suites/                       ← 6 SQL assertion suites (159 assertions)
 │   └── snapshots/                    ← committed CSV test fixtures
 │
 ├── env.dev.example                   ← dev environment template
@@ -174,10 +191,10 @@ Get-Content env.dev.example | ForEach-Object {
 
 # 4. Provision dev database. Needs bash on PATH; on Windows make sure it is
 #    Git Bash, not the WSL bash.exe in System32.
-#    Replace REPLACE_ME with your local postgres password. If 5432 is taken
-#    by another PostgreSQL instance, use the port your target instance uses.
-#    See env.dev.example for the configuration template.
-bash -c "PGUSER=postgres PGHOST=localhost PGPORT=5432 PGPASSWORD=REPLACE_ME bash scripts/provision_full_test_env.sh"
+#    env.dev.example is the single source of truth for PGHOST/PGPORT/PGUSER/
+#    PGDATABASE (PGPORT=5433 there). Edit PGPASSWORD (and PGPORT, if your
+#    instance listens elsewhere) in env.dev.example or a local copy first.
+bash -c "set -a; . ./env.dev.example; set +a; bash scripts/provision_full_test_env.sh"
 
 # 5. Terminal 1 — start the API
 .\scripts\start-api.ps1
@@ -223,7 +240,7 @@ Interactive docs: `http://localhost:8000/docs`
 | Feature | Description |
 |---|---|
 | Audit log filters | Filter by date, status, file name |
-| Invalid row export | Download rejected rows as CSV / XLSX / PDF |
+| Invalid row export | Download rejected rows as CSV / XLSX / PDF. CSV and XLSX cells starting with `=` `+` `-` `@`, tab or CR are prefixed with `'` (formula neutralisation, `src/lib/export.ts`; F3, BR-35/BR-46) |
 | Header rename / mapping confirmation | Review column mappings before import |
 | Retry from audit log | Re-run a previous import with one click |
 | Mapping templates | Save and reuse column mapping configurations |
@@ -243,7 +260,7 @@ Interactive docs: `http://localhost:8000/docs`
 ### Python tests
 
 ```powershell
-# Unit tests — no database needed (~5 seconds)
+# Unit tests — no database needed (about 30 seconds; 819 tests on 2026-11-19)
 python -m pytest tests\ -m "unit or regression or security or snapshot" -q
 
 # Integration tests — requires running API + provisioned database
@@ -251,17 +268,17 @@ python -m pytest tests\system\test_api_integration.py -v
 python -m pytest tests\system\test_te_loader_integration.py -v
 
 # Per-environment contract tests
-python -m pytest tests\environments\ -v
+python -m pytest tests\system_integration\environments\ -v
 ```
 
-### Frontend tests (139 vitest)
+### Frontend tests (196 vitest)
 
 ```powershell
 cd csv-table-hub-main
 npm test
 ```
 
-### SQL assertion suite (142 assertions)
+### SQL assertion suite (159 assertions)
 
 ```powershell
 bash tests/run_tests.sh dev
@@ -278,7 +295,7 @@ python evals\runner.py --tiers p,i,s,e   # 27 scenarios: Tier P 23, I 1, S 1, E 
 | Workflow | Runner | Scope |
 |---|---|---|
 | `quality-gate.yml` — `free-tier` | ubuntu | unit, regression, security, snapshot |
-| `quality-gate.yml` — `integration-postgres` | ubuntu + PG | full suite, all 4 environments |
+| `quality-gate.yml` — `integration-postgres` | ubuntu + PG | full suite, all 4 environments; `--strict` fails the job on any skipped test (fail-not-skip) |
 | `python-validator-tests.yml` | windows | database-free markers |
 
 ---
@@ -290,12 +307,13 @@ See **`docs/ENV_VARIABLES.md`** for the full reference. Key variables:
 | Variable | Default | Description |
 |---|---|---|
 | `PGHOST` | `localhost` | PostgreSQL host |
-| `PGPORT` | `5432` | PostgreSQL port. Set it to your instance's port if 5432 is taken |
+| `PGPORT` | `5433` (`env.dev.example`) | PostgreSQL port. The template is authoritative; `api/config.py` falls back to `5432` only if `PGPORT` is unset |
 | `PGPASSWORD` | _(empty)_ | PostgreSQL password |
 | `PGDATABASE` | `te_mgmt_dev` | Target database |
 | `API_KEY` | _(empty)_ | Shared secret for `X-API-Key` header (empty = unauthenticated) |
 | `CORS_ORIGINS` | `http://localhost:8080,...` | Allowed frontend origins |
 | `TE_SCHEMA` | `te_dev` | Schema for the 12 T&E tables |
+| `CSV_UPLOADS_SCHEMA` | `csv_uploads` | Schema for dynamic CSV tables and the upload registry (`api/config.py`) |
 | `API_ALLOW_DESTRUCTIVE` | `false` | Enable `DELETE /api/csv/files/{id}` |
 
 ---
@@ -338,8 +356,13 @@ organisations ──< personnel
 | Database | `te_mgmt_dev` | `te_mgmt_test` | `te_mgmt_staging` | `te_mgmt_prod` |
 | Schema | `te_dev` | `te_test` | `te_staging` | `te_prod` |
 | App User | `te_dev_user` | `te_test_user` | `te_stg_user` | `te_prod_user` |
-| Connection Limit | 10 | 15 | 25 | 50 |
+| Connection Limit¹ | 10 | 15 | 25 | 50 |
 | Seed Data | ✅ | ✅ | ❌ | ❌ |
+
+¹ Local PostgreSQL role limits from `\set conn_limit` in
+`build/environments/env_<env>.example.sql` (asserted by SQL suite 05, S10).
+`build/setup.sh` can write other values (`build/config.env.example` shows staging
+20). The Azure Terraform in `infra/` sets no per-role connection limit.
 
 Staging and Prod are **never seeded**. The `tests/system_integration/environments/` contract tests
 verify this automatically.
