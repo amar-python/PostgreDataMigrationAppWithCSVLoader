@@ -205,6 +205,46 @@ class TestPipedPytestKeepsItsExitStatus(unittest.TestCase):
         )
 
 
+class TestBrowserJob(unittest.TestCase):
+    """#273: the browser tests (e2e/) run in CI, and are accounted for like every other test.
+
+    They were run by hand: pytest.ini's testpaths is tests/, and scripts/test_report.py could only see that.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.jobs = _load_workflow().get("jobs", {})
+
+    def _run_text(self, job_id: str) -> str:
+        return "\n".join(s.get("run", "") for s in self.jobs[job_id].get("steps", []))
+
+    def test_there_is_a_browser_job(self):
+        self.assertIn("browser", self.jobs)
+
+    def test_it_runs_e2e_through_the_accounting_script_and_fails_on_a_skip(self):
+        self.assertIn("scripts/test_report.py --paths e2e --strict", self._run_text("browser"))
+
+    def test_it_has_what_the_tests_need(self):
+        job = self.jobs["browser"]
+        text = self._run_text("browser")
+        self.assertIn("postgres", job.get("services", {}), "the tests need PostgreSQL")
+        self.assertIn("deploy_all.sh dev", text, "the dev environment must be deployed before the tests start")
+        self.assertIn("playwright install", text, "a browser")
+        self.assertIn("npm ci", text, "the React app is built and served by the tests")
+        self.assertEqual(job.get("env", {}).get("PGDATABASE"), "te_mgmt_dev")
+
+    def test_no_other_job_runs_the_browser_tests(self):
+        for job_id in self.jobs:
+            if job_id != "browser":
+                self.assertNotIn("e2e", self._run_text(job_id).replace("e2e/", "").replace("Tier E", ""),
+                                 f"job {job_id!r} runs the browser tests")
+
+    def test_a_failure_leaves_screenshots_to_look_at(self):
+        uploads = [s for s in self.jobs["browser"]["steps"] if "upload-artifact" in s.get("uses", "")]
+        self.assertTrue(uploads)
+        self.assertEqual(uploads[0].get("if"), "failure()")
+
+
 if __name__ == "__main__":
     unittest.main()
 

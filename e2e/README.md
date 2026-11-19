@@ -3,8 +3,10 @@
 Playwright (Python) against the real API, the React app and the Streamlit app (the shell, review, import history, upload and imported files screens), in Chromium.
 They cover what the vitest and pytest suites cannot: #176, #187 and #188 in a real browser, the Streamlit screens, and the shell's sign-in, sign-out and change-password.
 
-Not part of the default `pytest` run (`testpaths = tests`) and not wired into CI: they need three
-local servers and a browser. (The accessibility scans have their own CI job, #168.)
+Not part of the default `pytest` run (`testpaths = tests`): they need a database, three local servers and a browser.
+They run in CI in the `browser` job (#273), as `python scripts/test_report.py --paths e2e --strict`, which accounts for
+every test and fails on a skip; a failed test leaves a screenshot in `e2e-artifacts/`, which that job uploads. The job is
+not yet a required check. (The accessibility scans have their own CI job, #168.)
 
 ## Run
 
