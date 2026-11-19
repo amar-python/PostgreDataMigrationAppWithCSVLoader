@@ -63,5 +63,6 @@ terraform-provider-*.log
 # Coverage reports
 .coverage
 .coverage.*
+coverage.xml
 htmlcov/
 dist/

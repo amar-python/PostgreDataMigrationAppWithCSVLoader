@@ -1,0 +1,15 @@
+# Coverage scope for `make test-gate` / `make test-all`. api/services holds the
+# CSV loader path, so api/ is measured alongside build/csv (validator) and evals.
+[run]
+source =
+    api
+    build/csv
+    evals
+branch = True
+omit =
+    */__pycache__/*
+    tests/*
+
+[report]
+show_missing = True
+skip_empty = False

@@ -12,12 +12,21 @@ test-free:
 	pytest -m "unit or regression or security or snapshot" tests/ -v
 
 # Gate: everything in test-free + coverage report. CI default, blocks merge.
+# Coverage scope: api/ (api/services holds the CSV loader path: dynamic_loader,
+# te_loader, csv_parse, staged_import), build/csv (validator) and evals (runner),
+# with branch coverage. Reports only; no --cov-fail-under floor is set here
+# (per-loader floors for api/services run in CI via scripts/check_coverage_floors.py).
 # Mirrors: bun run test:gate
 test-gate:
 	pytest -m "unit or regression or security or snapshot" tests/ \
-	    --cov=build/csv --cov=evals --cov-report=term-missing
+	    --cov=api --cov=build/csv --cov=evals --cov-branch \
+	    --cov-report=term-missing --cov-report=xml:coverage.xml
 
-# Evals: Tier P (offline) + Tier I/S (skip cleanly if no PostgreSQL).
+# Evals: Tier P (offline) + Tiers I/S/E (need PostgreSQL; set PG* first).
+# CI policy is fail-not-skip: an unmet prerequisite must FAIL. The integration
+# job provides PostgreSQL so these tiers run there. Note: evals/runner.py itself
+# prints SKIP and still exits 0 when PostgreSQL is unreachable; the zero-skip rule
+# is enforced for pytest by `scripts/test_report.py --strict`, not by this runner.
 # Mirrors: bun run test:evals
 test-evals:
 	python3 evals/runner.py --tiers p,i,s,e --verbose
@@ -31,7 +40,7 @@ test-e2e:
 # frontend, so they run on their own: `make test-accessibility` (tests/accessibility/README.md).
 # Mirrors: bun run test:evals:all
 test-all:
-	pytest tests/ -m "not accessibility" --cov=build/csv --cov=evals --cov-report=term-missing
+	pytest tests/ -m "not accessibility" --cov=api --cov=build/csv --cov=evals --cov-branch --cov-report=term-missing
 	python3 evals/runner.py --tiers p,i,s,e --verbose
 
 # ── One category at a time (#167) ─────────────────────────────────────────────
