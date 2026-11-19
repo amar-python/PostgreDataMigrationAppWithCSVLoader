@@ -65,8 +65,18 @@ def test_paths_and_markers_combine(report, tmp_path):
 
 def test_the_command_line_option_is_passed_through(report, monkeypatch, tmp_path):
     seen: dict = {}
-    monkeypatch.setattr(report, "_collect_all_ids", lambda paths=None: seen.setdefault("collect", paths) or set())
-    monkeypatch.setattr(report, "_run", lambda markers, xml, paths=None: seen.setdefault("run", paths) or 0)
+
+    def fake_collect(paths=None):
+        seen["collect"] = paths
+        return {"e2e/test_x.py::test_a"}
+
+    def fake_run(markers, xml, paths=None):
+        seen["run"] = paths
+        return 0
+
+    monkeypatch.setattr(report, "_collect_all_ids", fake_collect)
+    monkeypatch.setattr(report, "_run", fake_run)
+    monkeypatch.setattr(report, "_parse", lambda xml: (["e2e.test_x::test_a"], [], [], []))
     monkeypatch.setattr(sys, "argv", ["test_report.py", "--paths", "e2e", "--strict"])
 
     assert report.main() == 0

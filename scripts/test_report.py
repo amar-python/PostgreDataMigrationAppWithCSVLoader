@@ -122,8 +122,12 @@ def main() -> int:
         exit_code = _run(args.markers, xml_path, args.paths)
         passed, failed, errored, skipped = _parse(xml_path)
 
-    # pytest's own exit code 2 == interrupted, e.g. a collection error.
-    interrupted = exit_code == 2
+    # pytest's exit codes: 0 all passed, 1 some failed, 2 interrupted (e.g. a collection error), 3 internal error,
+    # 4 usage error (a conftest that cannot be imported lands here), 5 nothing collected. Only 0 and 1 mean tests
+    # ran; any other code means they did not, whatever the results hold (#273: 4 and 5 used to read as a pass).
+    meanings = {2: "interrupted, e.g. a collection error", 3: "internal error",
+                4: "usage error, e.g. a conftest that cannot be imported", 5: "no tests were collected"}
+    interrupted = exit_code not in (0, 1)
 
     executed = {_norm(t) for t in passed} \
         | {_norm(t) for t, _ in failed} \
@@ -138,6 +142,7 @@ def main() -> int:
         print(f"  marker filter : -m \"{args.markers}\"")
     if args.paths:
         print(f"  paths         : {' '.join(args.paths)}")
+    print(f"  pytest exit   : {exit_code}" + (f"  ({meanings.get(exit_code, 'unexpected')})" if interrupted else ""))
     print(f"  collected     : {len(all_ids)}")
     print(f"  executed      : {total}")
     print(f"  {GREEN}PASSED{NC}        : {len(passed)}")
@@ -178,8 +183,15 @@ def main() -> int:
     else:
         print(f"    {GREEN}none — every collected test was executed{NC}")
 
-    ok = (not failed and not errored and not interrupted
+    # A run that executed nothing proves nothing, so it cannot pass.
+    ok = (not failed and not errored and not interrupted and total > 0
           and not (args.strict and skipped))
+    if not ok:
+        if interrupted:
+            print(f"\n  {RED}pytest exited with code {exit_code} "
+                  f"({meanings.get(exit_code, 'unexpected')}): the tests did not run.{NC}")
+        elif total == 0:
+            print(f"\n  {RED}No test was executed, so there is nothing to pass.{NC}")
     print(f"\n{bar}")
     print(f"  {(GREEN + 'RESULT: PASS') if ok else (RED + 'RESULT: FAIL')}{NC}")
     print(f"{bar}\n")
