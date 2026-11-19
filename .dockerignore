@@ -10,6 +10,11 @@
 **/*.tfstate.*
 .terraform.tfstate.lock.info
 
+# Terraform variable files hold real values. .gitignore ignores them, which does not filter the build context
+# (see RV-S4 below). infra/Dockerfile names no Terraform directory, so none is copied today; this keeps it that
+# way if a later COPY is broader (#280). The committed *.tfvars.example files are not matched.
+**/*.tfvars
+
 # Secrets and environment configuration
 .env
 .env.*
