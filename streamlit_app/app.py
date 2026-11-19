@@ -10,7 +10,7 @@ API_URL (default http://localhost:8000) says where the API is.
 import streamlit as st
 
 import auth
-from views import change_password, history, home, review, sign_in
+from views import change_password, files, history, home, review, sign_in, upload
 
 st.set_page_config(page_title="CSV Table Hub", layout="wide")
 
@@ -21,6 +21,10 @@ if not auth.signed_in():
 else:
     # Later screens are added here, each behind auth.can("<action>"), by their own issues.
     pages = [st.Page(home.render, title="Home", url_path="home", default=True)]
+    if auth.can("upload"):
+        pages.append(st.Page(upload.render, title="Upload", url_path="upload"))  # #255
+    if auth.can("list_files"):
+        pages.append(st.Page(files.render, title="Imported files", url_path="files"))  # #255
     if auth.can("list_files") and auth.can("read_rows"):
         pages.append(st.Page(review.render, title="Review", url_path="review"))  # #252
     if auth.can("list_files"):

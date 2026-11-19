@@ -2,3 +2,10 @@
 [browser]
 # On by default. This app is for on-premises and air-gapped installs, so nothing is sent out.
 gatherUsageStats = false
+
+[server]
+# The API refuses a file over MAX_UPLOAD_BYTES (50 MiB = 52,428,800 bytes by default). Streamlit counts a megabyte as
+# 1,000,000 bytes and takes whole megabytes only, so no number makes the two equal. This one is just above the API's,
+# so Streamlit never refuses a file the API would take; the app checks the real limit itself (upload_model.prepare),
+# from the same MAX_UPLOAD_BYTES variable, and says so in its own words. Raise this if you raise that.
+maxUploadSize = 53
