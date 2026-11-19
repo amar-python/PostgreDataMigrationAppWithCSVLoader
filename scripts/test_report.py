@@ -47,13 +47,13 @@ DIM = "\033[2m"
 NC = "\033[0m"
 
 
-def _collect_all_ids() -> set[str]:
-    """Every test pytest can see, ignoring marker filters."""
+def _collect_all_ids(paths: list[str] | None = None) -> set[str]:
+    """Every test pytest can see, ignoring marker filters. `paths` replaces pytest.ini's testpaths."""
     r = subprocess.run(
         # -o addopts="" neutralises pytest.ini's -q, which would otherwise collapse
         # the listing to per-file counts instead of individual test ids.
         [sys.executable, "-m", "pytest", "--collect-only", "-q", "--no-header",
-         "-o", "addopts="],
+         "-o", "addopts=", *(paths or [])],
         cwd=ROOT, capture_output=True, text=True,
     )
     ids = set()
@@ -64,7 +64,7 @@ def _collect_all_ids() -> set[str]:
     return ids
 
 
-def _run(markers: str | None, xml_path: Path) -> int:
+def _run(markers: str | None, xml_path: Path, paths: list[str] | None = None) -> int:
     """Run pytest and return its exit code.
 
     Exit code 2 means the run was INTERRUPTED (typically a collection error),
@@ -75,6 +75,7 @@ def _run(markers: str | None, xml_path: Path) -> int:
     cmd = [sys.executable, "-m", "pytest", f"--junitxml={xml_path}", "-q", "--no-header"]
     if markers:
         cmd += ["-m", markers]
+    cmd += paths or []
     return subprocess.run(cmd, cwd=ROOT).returncode
 
 
@@ -111,12 +112,14 @@ def main() -> int:
                     help='pytest -m expression, e.g. "unit or security"')
     ap.add_argument("--strict", action="store_true",
                     help="exit non-zero if any test was skipped")
+    ap.add_argument("--paths", nargs="+", default=None,
+                    help="test paths to run instead of pytest.ini's testpaths (tests/), e.g. e2e for the browser tests")
     args = ap.parse_args()
 
     with tempfile.TemporaryDirectory() as td:
         xml_path = Path(td) / "results.xml"
-        all_ids = _collect_all_ids()
-        exit_code = _run(args.markers, xml_path)
+        all_ids = _collect_all_ids(args.paths)
+        exit_code = _run(args.markers, xml_path, args.paths)
         passed, failed, errored, skipped = _parse(xml_path)
 
     # pytest's own exit code 2 == interrupted, e.g. a collection error.
@@ -133,6 +136,8 @@ def main() -> int:
     print(f"\n{CYAN}{bar}\n  FINAL RESULT — every test accounted for\n{bar}{NC}")
     if args.markers:
         print(f"  marker filter : -m \"{args.markers}\"")
+    if args.paths:
+        print(f"  paths         : {' '.join(args.paths)}")
     print(f"  collected     : {len(all_ids)}")
     print(f"  executed      : {total}")
     print(f"  {GREEN}PASSED{NC}        : {len(passed)}")

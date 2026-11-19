@@ -15,7 +15,7 @@ Review:  Before step 5 (packaging) starts. It is the next step that needs the ow
 | 4 Upload and imported files | #255 | Merged (#270, with this update) |
 | 5 Packaging | #256 | Not started. Waits for the #60 dry run and the owner's Azure answer |
 | 6 Cutover and deletion | #257 | Not started. Needs steps 1 to 5 and the accessibility decision |
-| Tests | #258 | Done as each screen landed: 364 unit tests (`AppTest` and plain functions) and 49 browser tests in four files. Not done: the browser tests are not in CI |
+| Tests | #258 | Done as each screen landed: 364 unit tests (`AppTest` and plain functions) and 49 browser tests in four files. The browser tests run in CI in their own `browser` job (#273), not yet as a required check |
 
 The three screen PRs were stacked and merged in that order on 19 Nov (#267, #269, #270), as merge commits, once each had passed CI. The issues #252, #253 and #255 were closed on 19 Nov on the owner's instruction, each with its evidence in a comment. #253 and #255 were closed with their owner decisions (the audit-log screen and the changelog, the mapping templates) still on the defaults listed under "Defaults applied", unconfirmed; they can be reopened if the owner decides otherwise. #268 was one PR carrying all three screens; it was closed in favour of the stack, and its branch `claude/streamlit-migration-plan` is kept for reference only. Nothing in this plan is accepted until the owner says so.
 
@@ -77,7 +77,7 @@ Only 10 packages overlap with the API's set, and they are small (0.9 MB), so the
 | Limited styling | Accept | Accepted |
 | Deprecated arguments | Use `width="stretch"` and pin the Streamlit version | Done: `streamlit==1.67.0`, pinned in two files that a test keeps in step |
 
-**8. Tests: both.** Checked on the spikes: `AppTest` runs a screen headless with a faked API and tells an uploader ("read-only for your role") from a reviewer, so role gating, captions, error text, filters and the outcome rules are fast tests. It has **no way to select a dataframe row, drive dialogs, or use `st.file_uploader`**, so each screen keeps its logic in a function a test can call (the upload screen's `show(files)`), and the browser tests (Playwright) cover the dialogs, the grid and the uploader itself. Where they run: the `AppTest` tests run in the free-tier job, with Streamlit and `openpyxl` in `requirements-dev.txt`; that job took about 36 s before Streamlit and 61 s to 69 s in the runs since. The browser tests need Chromium and a Postgres and **do not run in CI** (decision 8 below). The 186 vitest tests go away screen by screen as the React code is deleted.
+**8. Tests: both.** Checked on the spikes: `AppTest` runs a screen headless with a faked API and tells an uploader ("read-only for your role") from a reviewer, so role gating, captions, error text, filters and the outcome rules are fast tests. It has **no way to select a dataframe row, drive dialogs, or use `st.file_uploader`**, so each screen keeps its logic in a function a test can call (the upload screen's `show(files)`), and the browser tests (Playwright) cover the dialogs, the grid and the uploader itself. Where they run: the `AppTest` tests run in the free-tier job, with Streamlit and `openpyxl` in `requirements-dev.txt`; that job took about 36 s before Streamlit and 61 s to 69 s in the runs since. The browser tests need Chromium and a Postgres, and run in their own `browser` job (#273) through `scripts/test_report.py --paths e2e --strict`, so every test is accounted for and a skip fails; it is not yet a required check (decision 8 below). The 186 vitest tests go away screen by screen as the React code is deleted.
 
 **9. Parked issues.** #176 (fixed in #235) and #179 disappear with the React code. #186: the rename UI is on the upload screen, and the error report carries the renames that were sent. #187: the review screen's upload picker lists every attempt, failed ones included. #188: no Cancel button; the screen says "sent to the server, can't be stopped", as React does. #242: the upload screen sends `typesConfirmed` for the types the person confirmed, and not in T&E mode, where the API refuses it.
 
@@ -128,7 +128,7 @@ The owner has not answered the questions below, so the build used these. Each is
 5. Build a screen for the server's audit log and its verification (the events view exists; correction 4)? Drop the "App changelog" for release notes (done on the default)?
 6. What happens to saved mapping templates: drop (done on the default), session-only, or server-side (correction 3)?
 7. Replace or retire the accessibility job when React goes (correction 2 and 7)?
-8. Should the Streamlit browser tests run in CI? They need Chromium and a Postgres, like the accessibility job, and today they run only by hand.
+8. Should the `browser` job (#273) be a required check? The browser tests now run in CI; whether a failure blocks a merge is a branch-protection setting, and the same question applies to the accessibility job (decision 7).
 
 ## Not verified
 
@@ -136,7 +136,7 @@ The owner has not answered the questions below, so the build used these. Each is
 - Upload size: the limits were tested at their edges (a file between Streamlit's limit and the API's is refused by the app, and the API itself refuses just over its limit). A successful import of a file near 50 MiB, its memory (a file is held as bytes, text and base64 before it is sent) and its time were not measured; the 600 s upload timeout is tested with a fake, not by waiting.
 - XLSX reports were read back with `openpyxl`, not opened in Excel (#244).
 - Streamlit's behaviour at the larger row counts of #210.
-- The browser tests ran against a throwaway Postgres, three times in a row without a failure; they are not in CI, so a regression there would not be caught by a pull request.
+- The browser tests ran against a throwaway Postgres, three times in a row without a failure; the `browser` job (#273) now runs them in CI, so a regression is reported on the pull request, but it blocks a merge only if that job is made a required check.
 
 ## Issues filed (18 Nov), on this plan's defaults
 

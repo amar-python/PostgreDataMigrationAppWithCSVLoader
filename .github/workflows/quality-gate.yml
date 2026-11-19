@@ -279,3 +279,102 @@ jobs:
           path: accessibility-report/
           if-no-files-found: ignore
           retention-days: 30
+
+  # #273: the browser tests (e2e/): Playwright in Chromium against the real API, the React app and the Streamlit
+  # app. The tests start the three servers themselves; they need PostgreSQL with the dev environment deployed, a
+  # browser and the frontend's dependencies, so they have a job of their own. test_report.py --paths e2e --strict
+  # prints the same final block as the other jobs and fails on any skip. Not yet a required check: make it one
+  # after a few green runs (decision 8 in DECISIONS/2026-11-16-streamlit-migration-plan.md).
+  browser:
+    name: browser (Playwright, e2e/)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: te_mgmt_dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements-dev.txt
+            requirements-a11y.txt
+            api/requirements.txt
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: csv-table-hub-main/package-lock.json
+
+      # Playwright comes from requirements-a11y.txt (one place pins it); streamlit is in requirements-dev.txt.
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt -r api/requirements.txt -r requirements-a11y.txt
+
+      - name: Install frontend dependencies
+        working-directory: csv-table-hub-main
+        run: npm ci
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Write CI database config
+        run: |
+          cat > build/config.local.env <<'EOF'
+          DB_ENGINE="postgresql"
+          PG_HOST="localhost"
+          PG_PORT="5432"
+          PG_SUPERUSER="postgres"
+          PG_SUPERUSER_PASSWORD="postgres"
+          PG_DB_DEV="te_mgmt_dev"
+          PG_SCHEMA_DEV="te_dev"
+          EOF
+
+      # Only *.example.sql are committed; deploy_all.sh reads the concrete env_dev.sql.
+      - name: Materialise the dev environment launcher
+        run: cp build/environments/env_dev.example.sql build/environments/env_dev.sql
+
+      - name: Create the dev database
+        run: |
+          psql -v ON_ERROR_STOP=1 -d postgres -c \
+            "CREATE DATABASE te_mgmt_dev WITH OWNER = postgres ENCODING = 'UTF8' TEMPLATE = template0 CONNECTION LIMIT = -1"
+
+      - name: Deploy the dev environment
+        run: bash build/deploy_all.sh dev
+
+      - name: Install Chromium for Playwright
+        run: python -m playwright install --with-deps chromium
+
+      # --strict fails on any skip: a missing prerequisite must fail the job, not skip the tests.
+      - name: Browser tests — final result with skip accounting
+        run: python3 scripts/test_report.py --paths e2e --strict
+
+      # A screenshot of the page for each failed test (e2e/conftest.py), since a red run cannot be looked at.
+      - name: Upload browser-test screenshots
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-test-screenshots
+          path: e2e-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14

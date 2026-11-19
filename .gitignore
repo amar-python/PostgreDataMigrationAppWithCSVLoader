@@ -67,3 +67,6 @@ coverage.json
 coverage-services.json
 htmlcov/
 dist/
+
+# Screenshots of failed browser tests (e2e/conftest.py, #273)
+e2e-artifacts/

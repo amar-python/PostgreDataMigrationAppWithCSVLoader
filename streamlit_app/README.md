@@ -1,7 +1,7 @@
 # Streamlit front end (migration steps 1 to 4: the app shell #251, review #252, import history #253, upload #255)
 
 Part of the plan in `DECISIONS/2026-11-16-streamlit-migration-plan.md` (#212). **The React app in
-`csv-table-hub-main/` is still the live front end.** This app is not wired into CI, the Docker image
+`csv-table-hub-main/` is still the live front end.** This app's tests run in CI, but it is not in the Docker image
 or the offline bundle yet; that is step 5 (#256).
 
 What exists so far: sign-in, session expiry, sign-out, change password, a home page that says what the
