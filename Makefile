@@ -24,9 +24,8 @@ test-gate:
 
 # Evals: Tier P (offline) + Tiers I/S/E (need PostgreSQL; set PG* first).
 # CI policy is fail-not-skip: an unmet prerequisite must FAIL. The integration
-# job provides PostgreSQL so these tiers run there. Note: evals/runner.py itself
-# prints SKIP and still exits 0 when PostgreSQL is unreachable; the zero-skip rule
-# is enforced for pytest by `scripts/test_report.py --strict`, not by this runner.
+# job provides PostgreSQL so these tiers run there. evals/runner.py fails a tier
+# whose prerequisite is unreachable and exits 1 if any scenario failed or skipped.
 # Mirrors: bun run test:evals
 test-evals:
 	python3 evals/runner.py --tiers p,i,s,e --verbose

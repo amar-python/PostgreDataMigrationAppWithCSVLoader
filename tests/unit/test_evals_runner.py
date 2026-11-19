@@ -2,7 +2,8 @@
 
 Imports the runner module directly via importlib. Covers scenario discovery,
 expected-file loading, tier_p/tier_i execution, row counting, and psql
-availability. Most tests need no database; tier_i skip behaviour is verified
+availability, and the fail-not-skip exit status. Most tests need no database;
+tier_i fail-on-unreachable behaviour is verified
 by mocking _can_connect_pg.
 """
 import importlib.util
@@ -87,6 +88,33 @@ class EvalsRunnerTests(unittest.TestCase):
 
         self.assertEqual(set(counts), set(runner._DEV_SEED_TABLES))
         self.assertTrue(all(value is None for value in counts.values()))
+
+    def _run_main_with_result(self, *, passed, skipped):
+        """Run runner.main() over one tier_p scenario whose result is faked."""
+        def fake_runner(scenario):
+            result = runner.ScenarioResult("p", scenario.name)
+            result.passed = passed
+            result.skipped = skipped
+            if skipped:
+                result.errors = ["prerequisite missing"]
+            return result
+
+        reports = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, reports, True)
+        scenario = sorted((PROJECT_ROOT / "evals" / "datasets" / "tier_p").iterdir())[0]
+        with mock.patch.object(runner, "REPORTS_DIR", reports), \
+             mock.patch.dict(runner.TIER_RUNNERS, {"p": fake_runner}), \
+             mock.patch.object(runner.sys, "argv",
+                               ["runner.py", "--tiers", "p", "--only", scenario.name]):
+            return runner.main()
+
+    def test_main_exits_nonzero_when_a_scenario_is_skipped(self):
+        """Fail-not-skip: a skipped scenario never executed, so main() must exit 1."""
+        self.assertEqual(self._run_main_with_result(passed=False, skipped=True), 1)
+
+    def test_main_exits_zero_when_all_scenarios_pass(self):
+        """Control case: an all-pass run still exits 0."""
+        self.assertEqual(self._run_main_with_result(passed=True, skipped=False), 0)
 
     def test_have_psql_uses_path_lookup(self):
         """When shutil.which returns None, _have_psql should return False."""
