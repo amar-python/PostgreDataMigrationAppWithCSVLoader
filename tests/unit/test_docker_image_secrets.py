@@ -46,6 +46,12 @@ SENSITIVE = (
     "build/environments/env_test.sql",
     "build/environments/env_staging.sql",
     "build/environments/env_prod.sql",
+    # Terraform variable files carry real values (#280). .gitignore ignores them (lines 9 and 20), which does not
+    # reach the build context; infra/Dockerfile names no Terraform directory, so none is copied today.
+    "infra/terraform/terraform.tfvars",
+    "infra/terraform-prod/terraform.tfvars",
+    "infra/terraform-prod/prod.auto.tfvars",
+    "build/terraform-github-repos/terraform.tfvars",
 )
 
 # The committed templates carry no secrets and the image needs them, so a
@@ -206,6 +212,15 @@ class TestDockerignoreExcludesSecrets(unittest.TestCase):
             [],
             f".dockerignore excludes the committed templates {kept}, which the image needs.",
         )
+
+    def test_tfvars_examples_are_not_swept_up(self):
+        """The committed *.tfvars.example files hold no values, and the pattern must not reach them."""
+        for rel in (
+            "infra/terraform/terraform.tfvars.example",
+            "infra/terraform-prod/terraform.tfvars.example",
+            "build/terraform-github-repos/terraform.tfvars.example",
+        ):
+            self.assertFalse(is_ignored(rel), f".dockerignore now excludes the committed template {rel}")
 
 
 if __name__ == "__main__":
