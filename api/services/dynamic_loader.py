@@ -16,6 +16,7 @@ import json
 import logging
 import re
 import time
+from collections.abc import Callable
 
 import psycopg2.errors
 from psycopg2 import sql
@@ -125,7 +126,14 @@ def upload_dynamic(
     session: dict | None = None,
     header_mapping: list[dict] | None = None,
     types_confirmed: bool = False,
+    on_commit: Callable[[object, dict], None] | None = None,
 ) -> dict:
+    """Load ``content`` as a new version of its dynamic dataset.
+
+    ``on_commit(cur, result)`` runs on the load's cursor just before the commit, given the "ok" result
+    this call will return. Whatever it writes commits with the load. If it raises, the load rolls back
+    and the exception propagates; only ``psycopg2`` errors from the load itself become an error dict (#288).
+    """
     logs: list[dict] = []
     _log(logs, "receive", f'Received "{file_name}" ({len(content)} chars)')
 
@@ -193,7 +201,7 @@ def upload_dynamic(
 
     try:
         return _do_upload(file_name, types, overwrite, logs, schema, rows, file_hash,
-                          session=session, types_provenance=provenance)
+                          session=session, types_provenance=provenance, on_commit=on_commit)
     except psycopg2.errors.UniqueViolation:
         # #81: an identical concurrent upload won a race that _do_upload could
         # not settle itself (e.g. both creating csv_<hash> at once). Nothing
@@ -231,6 +239,7 @@ def _do_upload(
     *,
     session: dict | None = None,
     types_provenance: str = "inferred_unconfirmed",
+    on_commit: Callable[[object, dict], None] | None = None,
 ) -> dict:
     with Conn() as conn:
         with conn.cursor() as cur:
@@ -467,30 +476,32 @@ def _do_upload(
                     "logs": logs,
                 }
 
+            _log(logs, "done", f"Import complete for {file_name}")
+            result = {
+                "status": "ok",
+                "fileId": str(file_id),
+                "tableName": table_name,
+                "totalRows": len(data_rows),
+                "insertedRows": inserted,
+                "duplicateRowsSkipped": duplicates,
+                "failedRows": failed_row_count,
+                "columns": columns,
+                "types": col_types,
+                "typesProvenance": types_provenance,
+                "rowErrors": row_errors,
+                "logs": logs,
+                "dataset": dataset,
+                "version": version,
+                "schemaCheck": schema_check,
+                "duplicateRowsAcrossUploads": len(flags),
+                "crossUploadDuplicates": flags[:settings.MAX_ROW_ERRORS_REPORTED],
+                # Full list for store_upload, which stores it; the route removes it before replying.
+                "_duplicateFlags": flags,
+                # Never overwritten (decision 2). Kept so older clients reading these fields still work.
+                "overwritten": False,
+                "replacedFileName": None,
+            }
+            if on_commit is not None:
+                on_commit(cur, result)
         conn.commit()
-
-    _log(logs, "done", f"Import complete for {file_name}")
-    return {
-        "status": "ok",
-        "fileId": str(file_id),
-        "tableName": table_name,
-        "totalRows": len(data_rows),
-        "insertedRows": inserted,
-        "duplicateRowsSkipped": duplicates,
-        "failedRows": failed_row_count,
-        "columns": columns,
-        "types": col_types,
-        "typesProvenance": types_provenance,
-        "rowErrors": row_errors,
-        "logs": logs,
-        "dataset": dataset,
-        "version": version,
-        "schemaCheck": schema_check,
-        "duplicateRowsAcrossUploads": len(flags),
-        "crossUploadDuplicates": flags[:settings.MAX_ROW_ERRORS_REPORTED],
-        # Full list for record_upload, which stores it; the route removes it before replying.
-        "_duplicateFlags": flags,
-        # Never overwritten (decision 2). Kept so older clients reading these fields still work.
-        "overwritten": False,
-        "replacedFileName": None,
-    }
+    return result
