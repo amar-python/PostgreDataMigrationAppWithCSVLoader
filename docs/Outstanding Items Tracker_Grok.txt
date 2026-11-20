@@ -1,0 +1,606 @@
+OUTSTANDING ITEMS TRACKER - PostgreDataMigrationAppWithCSVLoader
+==================================================================
+
+File name note : The name "Outstanding Items Tracker_Grok.txt" was requested by the
+                 user. "Grok" is part of the file name only. It is NOT an attribution:
+                 this tracker was not produced by Grok or by xAI.
+Reviewer       : Claude, a model made by Anthropic, running as the Abacus.AI agent.
+                 The exact model name/version string is not available to the reviewer,
+                 so none is stated here rather than inventing one.
+Prepared for   : Amarnath Rasineni (owner of every item below until reassigned)
+Date           : 2026-11-20 (Australia/Sydney)
+Repository     : amar-python/PostgreDataMigrationAppWithCSVLoader
+Baseline       : main @ 68399af365d6c076b0fc43ce5c91f3165e44844d (merge of PR #284)
+Review branch  : docs/te-audit-review-20261120 (documentation only)
+Repo snapshot  : This file is the repository snapshot of the Outstanding Items Tracker
+                 called for by DECISIONS/2026-11-02-tracker-long-term-home.md. The
+                 Claude Artifact tracker was not accessible to this reviewer, so items
+                 there that are not listed here were not reconciled.
+
+Evidence key
+------------
+CI     = GitHub Actions at the baseline: Quality Gate run 44560865716 (integration
+         135689468879, browser 135689469331, free-tier 135689469365, accessibility
+         135689469505: all success); Python Validator Tests run 44560865884 (Windows,
+         875 passed, 467 deselected).
+LOCAL  = Replay on the review VM, PostgreSQL 16.16, Python 3.11.17, Linux: free tier
+         870/870; lint, health exit 0; evals P,I,S,E 27/27 (Tier S 159/159 SQL
+         assertions); deploy_all dev/test/staging/prod exit 0; full suite 1324 passed,
+         0 failed, 0 skipped, 13 accessibility not run; egress-blocked exit 0; coverage
+         gate passed (api 94.4 %, streamlit_app 97.5 %); vitest 196/196.
+R1     = Reproduction: two concurrent `alembic upgrade head` on a fresh database,
+         5 trials. One of the two failed in 5 of 5 trials (UniqueViolation on
+         pg_type_typname_nsp_index for alembic_version, or on pg_namespace for
+         csv_uploads).
+R2     = Reproduction: TestClient, no session, API_ALLOW_DESTRUCTIVE off. Dynamic
+         upload, then T&E upload of byte-identical content: HTTP 200 and the dynamic
+         table csv_repro_dyn_<tag>_v1 was dropped.
+VCRM   = docs/VCRM.md section 6 (re-verification, errata E-01..E-08, PROPOSED BR-50..60)
+RECON  = docs/AUDIT_RECONCILIATION_2026-11-20.md
+
+Status values
+-------------
+CONFIRMED   = defect shown by reproduction or by direct code/test evidence.
+UNVERIFIED  = plausible risk not reproduced, or it needs an environment the reviewer
+              could not reach.
+OPEN        = known gap already recorded in the repo; still present at the baseline.
+All items are open (not fixed). Nothing here is marked closed by this review.
+
+Severity: High = data loss, silent loss of audit/integrity evidence, or a deployment
+that fails to start. Medium = security or verification weakness with a workaround or
+limited reach. Low = hygiene, documentation, or low-impact hardening.
+
+Summary
+-------
+High   : OIT-001, OIT-002, OIT-003
+Medium : OIT-004, OIT-005, OIT-008, OIT-012, OIT-013, OIT-014, OIT-016, OIT-017,
+         OIT-019, OIT-020, OIT-021, OIT-023, OIT-024, OIT-025
+Low    : OIT-006, OIT-007, OIT-009, OIT-010, OIT-011, OIT-015, OIT-018, OIT-022,
+         OIT-026, OIT-027, OIT-028, OIT-029, OIT-030, OIT-031, OIT-032
+
+==================================================================
+ITEMS
+==================================================================
+
+------------------------------------------------------------------
+OIT-001  Concurrent start-up migrations fail
+------------------------------------------------------------------
+Severity            : High
+Status              : CONFIRMED (R1, at the `alembic upgrade head` level; two full API
+                      processes were not started)
+Area                : Concurrency / migration atomicity / operational readiness
+Evidence location   : alembic/env.py:33-40 (CREATE SCHEMA IF NOT EXISTS, commit, then
+                      migrations in one transaction; no advisory lock);
+                      api/db.py:192-246 (bootstrap runs `alembic upgrade head` on every
+                      start; only OperationalError is handled, so IntegrityError aborts
+                      start-up); api/main.py:73 (bootstrap in lifespan);
+                      api/tenancy.py:22,155 (control migrations use a process-local
+                      threading.Lock only). Log: review_work/logs/repro_concurrent_migrate.
+Affected requirement: PROPOSED BR-50; HANDOFF F5; BR-37/BR-38 deployment
+Impact              : Two replicas or workers starting against a new database: one
+                      fails to start. With an orchestrator restart it usually recovers,
+                      but first deployments and scale-out are unreliable; the same race
+                      on a pending migration at upgrade time is untested.
+Remediation         : Take pg_advisory_lock (session level) in alembic/env.py around
+                      schema creation and migration, or run migrations as a single
+                      pre-start job and stop running them in every API process.
+Acceptance criteria : 10 of 10 trials of two concurrent bootstrap() calls (fresh DB and
+                      DB one revision behind) both succeed; alembic_version = head; no
+                      UniqueViolation. The test fails with the lock removed.
+Verification method : Test (concurrency, negative control) + Inspection
+Dependencies        : None. Note: tenant T&E migrations already use an advisory lock
+                      (api/tenancy.py:132-167) - reuse the pattern.
+
+------------------------------------------------------------------
+OIT-002  T&E upload drops a dynamic dataset table without the destructive flag
+------------------------------------------------------------------
+Severity            : High
+Status              : CONFIRMED (R2)
+Area                : Data integrity / security (authorisation)
+Evidence location   : api/services/te_loader.py:88-118 (_cleanup_prior_registry_entries
+                      drops csv_* tables whose file_hash matches), called at 321;
+                      te_loader.py:226-234 (only _require_delete is checked);
+                      api/services/destructive_ops.py:48-51 (_require_delete returns at
+                      once when session is None); api/routers/csv_routes.py:308
+                      (API_ALLOW_DESTRUCTIVE is checked only on the DELETE route).
+Affected requirement: BR-31 (open item, #175), BR-24, BR-30 (decision 2), PROPOSED BR-51;
+                      SECURITY_REVIEW_PACK F8
+Impact              : A shared-key caller (or a signed-in role with delete permission)
+                      can destroy a versioned dataset's table by uploading the same bytes
+                      in T&E mode, with API_ALLOW_DESTRUCTIVE off and no warning. The
+                      registry row is deleted too. The original bytes survive in
+                      upload_blobs, but the imported table and its edits/lineage do not.
+Remediation         : Never drop a dynamic dataset from the T&E path (match T&E entries
+                      only), or refuse with 409. If replacement is kept, require both
+                      delete permission and API_ALLOW_DESTRUCTIVE, including for the
+                      shared key.
+Acceptance criteria : With the flag off, R2 leaves the dynamic table and its registry row
+                      in place (or returns 403/409), with and without a session. The
+                      regression test fails on the current code.
+Verification method : Test
+Dependencies        : OIT-013 (shared-key scope)
+
+------------------------------------------------------------------
+OIT-003  Direct upload path: registry, original and audit written after commit, errors swallowed
+------------------------------------------------------------------
+Severity            : High
+Status              : CONFIRMED by code and coverage (the crash window itself was not
+                      reproduced)
+Area                : Audit durability / data integrity / failure recovery
+Evidence location   : api/routers/csv_routes.py:120-147 (upload_te / upload_dynamic
+                      commit; record_upload at 133; record_audit at 141, only for "ok");
+                      api/services/originals.py:84-95 (except: log, return None);
+                      api/services/audit.py:103-122 (except: log, return False).
+                      LOCAL coverage: audit.py lines 117,118,122 and originals.py lines
+                      93-95 are never executed by any test.
+Affected requirement: BR-45 (not verified), BR-23 (VCRM erratum E-06), BR-24, BR-35,
+                      PROPOSED BR-52; HANDOFF F11
+Impact              : A failure or crash after the load commits leaves imported data with
+                      no uploads row, no preserved original and no audit event, and the
+                      API still reports success. The staged flow is not affected.
+Remediation         : Write registry, original and audit in the load's transaction (as
+                      the staged flow does), or move the UI and scripts to the staged
+                      flow and retire the direct path; otherwise add a reconciliation
+                      check that lists committed loads with no uploads/audit row.
+Acceptance criteria : Fault injection in record_upload and in record_audit: either
+                      nothing is committed, or the reconciliation lists the orphan.
+                      Tests execute the except branches.
+Verification method : Test (fault injection, must fail not skip) + Analysis
+Dependencies        : BR-32/BR-33 direction (staged flow for all uploads)
+
+------------------------------------------------------------------
+OIT-004  T&E direct path commits partial imports
+------------------------------------------------------------------
+Severity            : Medium
+Status              : OPEN (recorded in VCRM BR-33 partial; re-confirmed by code)
+Area                : Data integrity
+Evidence location   : api/services/te_loader.py:278-343 (per-chunk and per-row
+                      savepoints; commits if at least one row inserted)
+Affected requirement: BR-33, BR-34, M0 decision 4 ("partial imports are not permitted")
+Impact              : A T&E file with bad rows is partly imported without review; the
+                      registry records the partial count.
+Remediation         : Route T&E mode through the staged import, or reject the whole
+                      file when any row fails unless the user explicitly excludes rows.
+Acceptance criteria : A T&E file with one bad row imports nothing (or only after an
+                      explicit, audited exclusion).
+Verification method : Test
+Dependencies        : OIT-003
+
+------------------------------------------------------------------
+OIT-005  No request-body limit before parsing
+------------------------------------------------------------------
+Severity            : Medium
+Status              : CONFIRMED by code (load test not run)
+Area                : Security (authenticated denial of service)
+Evidence location   : api/routers/csv_routes.py:71,98,108; api/routers/import_routes.py:61,65
+                      (checks run after Pydantic has parsed the full body)
+Affected requirement: PROPOSED BR-53; SECURITY_REVIEW_PACK F1
+Impact              : An authenticated caller can make the API buffer an arbitrarily
+                      large body.
+Remediation         : Middleware that rejects on Content-Length and caps streamed bodies;
+                      also set the reverse proxy limit.
+Acceptance criteria : A body of 2 x MAX_UPLOAD_BYTES is refused with 413, with and
+                      without Content-Length, without full buffering.
+Verification method : Test
+Dependencies        : Deployment proxy configuration
+
+------------------------------------------------------------------
+OIT-006  Unauthenticated health and docs endpoints disclose internals
+------------------------------------------------------------------
+Severity            : Low
+Status              : CONFIRMED by code
+Evidence location   : api/main.py:116-138 (database, host:port, PostgreSQL version,
+                      uploads schema); no docs_url/openapi_url override in api/
+Affected requirement: PROPOSED BR-54; SECURITY_REVIEW_PACK F2
+Impact              : Reconnaissance aid.
+Remediation         : Return status only outside dev; disable or protect /docs,
+                      /redoc, /openapi.json outside dev.
+Acceptance criteria : With API_ENV=prod the health body has only "status"; docs routes
+                      return 401/404.
+Verification method : Test
+Dependencies        : None
+
+------------------------------------------------------------------
+OIT-007  Start-up log prints the first four characters of API_KEY
+------------------------------------------------------------------
+Severity            : Low
+Status              : CONFIRMED by code
+Evidence location   : api/main.py:61
+Affected requirement: PROPOSED BR-55; SECURITY_REVIEW_PACK F10
+Impact              : Partial secret in logs.
+Remediation         : Log a short hash prefix instead.
+Acceptance criteria : No substring of API_KEY appears in start-up logs (test with a
+                      known key).
+Verification method : Test + Inspection
+Dependencies        : None
+
+------------------------------------------------------------------
+OIT-008  Rate limiting keyed on peer IP, per instance
+------------------------------------------------------------------
+Severity            : Medium
+Status              : CONFIRMED by code
+Evidence location   : api/ratelimit.py:90-101
+Affected requirement: BR-36; SECURITY_REVIEW_PACK F3
+Impact              : Behind a proxy all clients share one budget; limits not shared
+                      across replicas.
+Remediation         : Trust X-Forwarded-For only from a configured proxy, or limit at the
+                      proxy; document which.
+Acceptance criteria : Documented decision; test that two clients behind a trusted proxy
+                      have separate budgets.
+Verification method : Test + Inspection
+Dependencies        : Deployment architecture decision
+
+------------------------------------------------------------------
+OIT-009  scrypt cost below current guidance; no rehash on sign-in
+------------------------------------------------------------------
+Severity            : Low
+Status              : CONFIRMED by code
+Evidence location   : api/services/accounts.py:20 (_N, _R, _P = 2**14, 8, 1)
+Affected requirement: BR-36; SECURITY_REVIEW_PACK F4
+Impact              : Weaker offline resistance if hashes leak.
+Remediation         : Raise N; rehash on successful sign-in when parameters are weaker.
+Acceptance criteria : New hashes use the new N; an old hash is upgraded after sign-in.
+Verification method : Test
+Dependencies        : Performance check of sign-in latency
+
+------------------------------------------------------------------
+OIT-010  Lockout per username (targeted lockout possible)
+------------------------------------------------------------------
+Severity            : Low
+Status              : CONFIRMED by code (product decision pending)
+Evidence location   : api/services/accounts.py:161-171
+Affected requirement: BR-36; SECURITY_REVIEW_PACK F5
+Impact              : Anyone knowing a username can keep it locked.
+Remediation         : Decide: keep, or lock per username + client address.
+Acceptance criteria : Decision recorded in SECURITY_REVIEW_PACK section 10.
+Verification method : Inspection
+Dependencies        : OIT-031
+
+------------------------------------------------------------------
+OIT-011  Sessions: no idle timeout; expired/revoked rows never purged
+------------------------------------------------------------------
+Severity            : Low
+Status              : CONFIRMED by code
+Evidence location   : api/services/accounts.py:153 (fixed expiry); no DELETE of sessions
+                      in api/ or scripts/ (grep)
+Affected requirement: BR-36; SECURITY_REVIEW_PACK F6
+Impact              : Long-lived stolen tokens; unbounded table growth.
+Remediation         : Idle timeout; scheduled purge of expired sessions.
+Acceptance criteria : Idle session refused after the configured time; purge removes
+                      expired rows only.
+Verification method : Test
+Dependencies        : None
+
+------------------------------------------------------------------
+OIT-012  One runtime role can reach every tenant schema
+------------------------------------------------------------------
+Severity            : Medium
+Status              : CONFIRMED by code (design decision pending)
+Evidence location   : api/db.py:288 grant_runtime; no SET ROLE / per-tenant roles in api/;
+                      M0 design section 5 described per-tenant roles
+Affected requirement: BR-36; SECURITY_REVIEW_PACK F7; #173
+Impact              : A missed schema qualification would leak across tenants rather
+                      than error.
+Remediation         : Decide on per-tenant roles or RLS before the first external tenant.
+Acceptance criteria : Decision recorded; if adopted, a cross-tenant query as tenant A's
+                      role fails at the database.
+Verification method : Inspection + Test
+Dependencies        : OIT-031
+
+------------------------------------------------------------------
+OIT-013  Shared API key bypasses tenants, roles and delete checks
+------------------------------------------------------------------
+Severity            : Medium
+Status              : CONFIRMED by code; one consequence reproduced (OIT-002)
+Evidence location   : api/services/destructive_ops.py:48-51; api/auth.py tenant_scope;
+                      docs/ROLES.md
+Affected requirement: BR-36 open item; SECURITY_REVIEW_PACK F8
+Impact              : One shared secret with full rights and no per-key identity in audit.
+Remediation         : Per-service scoped keys with rotation, or retire for scripts that
+                      can use a session.
+Acceptance criteria : Key-authenticated requests are scoped and audited per key; a
+                      destructive action by key requires the destructive flag.
+Verification method : Test
+Dependencies        : None
+
+------------------------------------------------------------------
+OIT-014  Azure Key Vault and ACR public access "temporarily enabled"
+------------------------------------------------------------------
+Severity            : Medium
+Status              : CONFIRMED in code; live state UNVERIFIED
+Evidence location   : infra/terraform-prod/main.tf:183,329
+Affected requirement: SECURITY_REVIEW_PACK F9; BR-37
+Impact              : Secrets store and registry may be internet-reachable if the manual
+                      flip was missed.
+Remediation         : Check live settings; make the flip part of the pipeline; restrict
+                      the state storage account.
+Acceptance criteria : az CLI output showing public access disabled; Terraform sets false
+                      after bootstrap.
+Verification method : Inspection (live) + Demonstration
+Dependencies        : Azure access (paused, #31/#32/#34)
+
+------------------------------------------------------------------
+OIT-015  SECURITY.md names a personal Gmail as the vulnerability contact
+------------------------------------------------------------------
+Severity            : Low
+Status              : OPEN (#57)
+Evidence location   : SECURITY.md:21-22
+Affected requirement: SECURITY_REVIEW_PACK F11
+Impact              : No monitored channel for external reporters.
+Remediation         : Replace with a monitored security@ address.
+Acceptance criteria : SECURITY.md shows the new address; test mail received.
+Verification method : Inspection + Demonstration
+Dependencies        : Organisation mailbox
+
+------------------------------------------------------------------
+OIT-016  Branch protection not applied on main
+------------------------------------------------------------------
+Severity            : Medium
+Status              : CONFIRMED (GitHub API: protected false, no required checks)
+Evidence location   : GET /repos/amar-python/PostgreDataMigrationAppWithCSVLoader/branches/main;
+                      DECISIONS/2026-11-02-main-branch-protection.md ("Decided, but NOT
+                      applied"); #198; claude/project-status.md lines 34 and 49 still say
+                      it was applied
+Affected requirement: PROPOSED BR-60; BR-16 (CI-gateable outcome)
+Impact              : Merges can bypass the Quality Gate (it has happened before, per the
+                      decision record).
+Remediation         : An admin applies the recorded settings; correct project-status.md.
+Acceptance criteria : API shows protected true with the Quality Gate checks required and
+                      enforce_admins true.
+Verification method : Inspection + Demonstration (a red PR cannot merge)
+Dependencies        : Repository admin action
+
+------------------------------------------------------------------
+OIT-017  VCRM internal inconsistencies
+------------------------------------------------------------------
+Severity            : Medium
+Status              : CONFIRMED (inspection)
+Evidence location   : docs/VCRM.md section 3 status table (lines 195-200), line 212,
+                      section 4 (line 232), section 5 (line 270), BR-35 note (line 159),
+                      BR-48 evidence (line 173), LV legend (line 32); errata E-01..E-08
+                      in VCRM section 6.2
+Affected requirement: Master traceability record (all BRs)
+Impact              : Headline figures and gap statements in the master record do not
+                      match its own rows; a TRR reader would be misled.
+Remediation         : Owner applies or rejects errata E-01..E-08 and refreshes section 3.
+Acceptance criteria : Section 3 counts match section 2 rows; no stale "none outstanding"
+                      statement; each erratum dispositioned.
+Verification method : Inspection
+Dependencies        : None
+
+------------------------------------------------------------------
+OIT-018  BR-20 and Tier S still use 142; suite has 159 assertions
+------------------------------------------------------------------
+Severity            : Low
+Status              : CONFIRMED (LOCAL Tier S: 159/159; inspection)
+Evidence location   : evals/expected/tier_s/01_fresh_deploy_then_all_tests_pass.json:10
+                      (min_total_assertions 142); docs/VCRM.md:66,125; README.md:5 (159);
+                      docs/GAP_ANALYSIS.md G5
+Affected requirement: BR-20; HANDOFF C3
+Impact              : Up to 17 assertions could disappear without failing the gate.
+Remediation         : Set the threshold to the current count (or exact equality) and
+                      update BR-20 wording via a recorded change.
+Acceptance criteria : Removing one assertion from a suite fails Tier S.
+Verification method : Test (negative control)
+Dependencies        : Owner approval of BR-20 wording change
+
+------------------------------------------------------------------
+OIT-019  No coverage floor for build/csv and evals
+------------------------------------------------------------------
+Severity            : Medium
+Status              : OPEN (BR-48 partial; re-measured)
+Evidence location   : Makefile COVERAGE_SCOPE and comment (lines 15-19);
+                      scripts/check_coverage_floors.py; LOCAL: build/csv 0 %, evals 63.5 %
+Affected requirement: BR-48; HANDOFF A3
+Impact              : The validator's in-process coverage is unknown; regressions in the
+                      evals runner are not gated.
+Remediation         : Measure subprocess coverage (coverage.py subprocess support) or
+                      record the exemption as a decision.
+Acceptance criteria : Either a floor exists and is enforced in CI, or a DECISIONS record
+                      states the exemption and its revisit trigger.
+Verification method : Inspection + Test
+Dependencies        : None
+
+------------------------------------------------------------------
+OIT-020  No backup/restore procedure or test for the container/on-prem bundle
+------------------------------------------------------------------
+Severity            : Medium
+Status              : CONFIRMED absence (inspection); impact UNVERIFIED
+Evidence location   : container/ (no backup, pg_dump or restore content, grep);
+                      docs/PROD_DEPLOY.md (Azure PITR only); VCRM BR-39..44 reserved
+                      (HANDOFF next step 28)
+Affected requirement: PROPOSED BR-56; reserved BR-39..44
+Impact              : On-prem customers have no tested recovery path for data, preserved
+                      originals or the audit chain.
+Remediation         : Document backup/restore for the bundle; add a restore drill that
+                      runs GET /api/audit/verify after restore.
+Acceptance criteria : Restore drill passes; RPO/RTO recorded.
+Verification method : Demonstration + Test
+Dependencies        : Disposition of BR-39..44
+
+------------------------------------------------------------------
+OIT-021  Audit retention and raw-upload purge have no procedure
+------------------------------------------------------------------
+Severity            : Medium
+Status              : CONFIRMED absence (inspection)
+Evidence location   : api/config.py:28-29; api/policy.py:4-10,22-31 (value only validated;
+                      "any purge is an operator action outside the app"); append-only
+                      triggers reject DELETE (migration 0006)
+Affected requirement: PROPOSED BR-57; M0 decision 7; BR-35
+Impact              : Retention cannot be honoured or evidenced; a purge would need
+                      triggers disabled, which is itself unaudited.
+Remediation         : Define an audited purge procedure compatible with the hash chain.
+Acceptance criteria : Demonstrated purge on a test DB removes only rows older than the
+                      retention, records itself, and the chain still verifies.
+Verification method : Inspection + Demonstration
+Dependencies        : Records-authority confirmation of retention
+
+------------------------------------------------------------------
+OIT-022  No concurrent-import limit per instance
+------------------------------------------------------------------
+Severity            : Low
+Status              : CONFIRMED absence (grep: no semaphore/limit in api/)
+Evidence location   : api/ (no limit); api/db.py:24 (_MAXCONN = 8)
+Affected requirement: PROPOSED BR-58; M0 decision 1
+Impact              : Many concurrent large imports can exhaust the 8-connection pool.
+Remediation         : Bound imports per instance (4, per decision 1).
+Acceptance criteria : A 5th concurrent import waits or is refused with a clear message.
+Verification method : Test + Analysis
+Dependencies        : None
+
+------------------------------------------------------------------
+OIT-023  Decision-8 performance targets not measured on the reference instance
+------------------------------------------------------------------
+Severity            : Medium
+Status              : UNVERIFIED (indicative only)
+Evidence location   : tests/performance/test_import_scale.py:4-7 (targets asserted only
+                      with PERF_ENFORCE=1); LOCAL scripts/perf_import.py --rows 100000:
+                      stage-to-imported 9.96 s, preview 0.18 s on a 32 vCPU VM
+Affected requirement: PROPOSED BR-59; M0 decision 8; M7
+Impact              : No evidence the targets hold on 2 vCPU / 4 GB.
+Remediation         : Run PERF_ENFORCE=1 PERF_ROWS=100000 on the reference instance and
+                      record the timings per release.
+Acceptance criteria : Import < 60 s and first page < 2 s on the reference instance.
+Verification method : Test
+Dependencies        : Access to reference hardware
+
+------------------------------------------------------------------
+OIT-024  BR-38 not run on Windows or macOS hosts; install.ps1 on PS 5.1 not run
+------------------------------------------------------------------
+Severity            : Medium
+Status              : OPEN / UNVERIFIED (outside reviewer reach)
+Evidence location   : docs/VCRM.md BR-38; docs/BR38_EVIDENCE.md; container bundle run
+                      44231529683 (Linux only)
+Affected requirement: BR-38
+Impact              : Portability claim unproven for two of three host OSes.
+Remediation         : Execute the BR38_EVIDENCE run sheet on Windows and macOS.
+Acceptance criteria : 7/7 smoke checks offline on each host; evidence attached.
+Verification method : Demonstration
+Dependencies        : Windows and macOS hosts with a container runtime
+
+------------------------------------------------------------------
+OIT-025  Real-IdP OIDC check (#113) and clean-VM offline install (#60) not done
+------------------------------------------------------------------
+Severity            : Medium
+Status              : OPEN / UNVERIFIED (outside reviewer reach)
+Evidence location   : docs/OIDC_REAL_IDP_CHECK.md; scripts/check_oidc.py; VCRM BR-36, BR-37
+Affected requirement: BR-36, BR-37
+Impact              : Authentication and offline-install claims rest on stubs and CI only.
+Remediation         : Run scripts/check_oidc.py against the real IdP; run the offline
+                      dry run on a clean VM.
+Acceptance criteria : All check_oidc stages pass; offline install completes with egress
+                      blocked.
+Verification method : Demonstration
+Dependencies        : Real IdP; clean VM
+
+------------------------------------------------------------------
+OIT-026  React /audit page: local jobs from browser storage; no component test for server events
+------------------------------------------------------------------
+Severity            : Low
+Status              : CONFIRMED by code
+Evidence location   : csv-table-hub-main/src/routes/audit.tsx:7,49 (useLocalStorageState);
+                      ServerAuditEvents.tsx used at audit.tsx:21,247; only
+                      src/__tests__/audit-events.test.ts (query builder) covers it
+Affected requirement: BR-47 (partial); BR-35 note stale (E-04)
+Impact              : Audit history differs per browser; server panel untested in UI.
+Remediation         : Read history from the server; add a component test for
+                      ServerAuditEvents.
+Acceptance criteria : /audit shows the same history in two browsers; component test
+                      passes and fails with the fetch removed.
+Verification method : Test + Demonstration
+Dependencies        : None
+
+------------------------------------------------------------------
+OIT-027  preflight.sh uses `timeout`, absent on macOS
+------------------------------------------------------------------
+Severity            : Low
+Status              : OPEN (HANDOFF F8, re-confirmed)
+Evidence location   : preflight.sh:108
+Affected requirement: BR-38 (portability)
+Impact              : Port check misreports on stock macOS.
+Remediation         : Fall back when `timeout` is missing (gtimeout or a bash-only check).
+Acceptance criteria : Test with `timeout` absent from PATH gives a correct result.
+Verification method : Test
+Dependencies        : None
+
+------------------------------------------------------------------
+OIT-028  Fallback bootstrap creates a non-append-only audit_log
+------------------------------------------------------------------
+Severity            : Low
+Status              : UNVERIFIED risk (only if alembic.ini is missing from a deployment)
+Evidence location   : api/db.py:220-228, 341-389
+Affected requirement: BR-35
+Impact              : A packaging mistake would silently run without the audit triggers.
+Remediation         : Refuse to start outside dev when alembic.ini is missing.
+Acceptance criteria : With alembic.ini absent and API_ENV=prod, start-up fails.
+Verification method : Test
+Dependencies        : None
+
+------------------------------------------------------------------
+OIT-029  Egress guard covers in-process Python only
+------------------------------------------------------------------
+Severity            : Low
+Status              : OPEN (recorded in VCRM BR-37)
+Evidence location   : docs/VCRM.md BR-37; tests/egress_guard.py
+Affected requirement: BR-37
+Impact              : libpq or child-process egress would not be caught.
+Remediation         : Run the egress-blocked job in a network-isolated container.
+Acceptance criteria : A deliberate outbound call from a child process fails the job.
+Verification method : Test (negative control)
+Dependencies        : None
+
+------------------------------------------------------------------
+OIT-030  Unmerged branches; dangling link on fix/gap-register-reconciliation-279
+------------------------------------------------------------------
+Severity            : Low
+Status              : CONFIRMED (git compare)
+Evidence location   : branch fix/gap-register-reconciliation-279 (274d3bd) links to
+                      docs/GAP_REGISTER_RECONCILIATION.md, which does not exist there;
+                      six other stale branches (RECON section 1)
+Affected requirement: Configuration management
+Impact              : Unreviewed docs change; confusion about what is delivered.
+Remediation         : Add the missing file or drop the link, then open a PR; delete or
+                      archive superseded branches.
+Acceptance criteria : No branch ahead of main without an open PR or a parking note.
+Verification method : Inspection
+Dependencies        : None
+
+------------------------------------------------------------------
+OIT-031  Security review record empty; no disposition for F1-F11
+------------------------------------------------------------------
+Severity            : Low (process; blocks closure of OIT-005..015)
+Status              : OPEN (#112)
+Evidence location   : docs/SECURITY_REVIEW_PACK.md section 10 (lines 134-145)
+Affected requirement: BR-36
+Impact              : Security findings cannot be accepted or closed formally.
+Remediation         : Independent reviewer records fix/accept/defer per finding.
+Acceptance criteria : Section 10 completed with owner, reviewer, date and decisions.
+Verification method : Inspection
+Dependencies        : Independent reviewer
+
+------------------------------------------------------------------
+OIT-032  claude/project-status.md stale and partly contradictory
+------------------------------------------------------------------
+Severity            : Low
+Status              : CONFIRMED (inspection)
+Evidence location   : claude/project-status.md lines 34, 49 (protection "applied") vs
+                      line 16 and 94 (not live); mojibake in DECISIONS/2026-11-02-main-
+                      branch-protection.md ("â€"")
+Affected requirement: Configuration management
+Impact              : Conflicting status for reviewers.
+Remediation         : Mark lines 34 and 49 superseded; fix encoding.
+Acceptance criteria : One consistent statement of protection status.
+Verification method : Inspection
+Dependencies        : OIT-016
+
+==================================================================
+CHECKS NOT POSSIBLE IN THIS REVIEW
+==================================================================
+- Live Azure state (Key Vault, ACR, state storage): no access.
+- Real IdP OIDC (#113), clean-VM offline install (#60), Windows/macOS container runs.
+- Penetration test, git-history secret scan.
+- Accessibility tests and browser e2e were not re-run locally; CI jobs 135689469505
+  and 135689469331 passed at the baseline.
+- R1 exercised `alembic upgrade head` (what bootstrap() calls), not two full API
+  processes.
+- The Claude Artifact version of this tracker.
