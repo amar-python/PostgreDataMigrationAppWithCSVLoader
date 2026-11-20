@@ -7,10 +7,14 @@ pass. Fixed items are in `docs/FIXES_APPLIED.md`; evidence is in `test-artifacts
 **Method:** clean-clone execution on Ubuntu 24.04 with PostgreSQL 16.14 — every
 claim below was reproduced, not inferred from reading code.
 
-> **Relationship to `docs/VCRM_GAPS.md`:** that file traces the 22 business
-> requirements to eval evidence and is regenerated per run. This document covers
-> engineering gaps that sit outside the BR set — configuration, coverage and
-> process. The two are complementary.
+> **Traceability and scope (reconciled 2026-11-20):** `docs/VCRM.md` is the
+> authoritative source for business-requirement (BR) status. This file tracks
+> engineering gaps G1–G5, not a second BR register. G2 is an accepted Windows CI
+> constraint with no BR counterpart. G3 is closed as a tooling gap: Tier E
+> verifies BR-01 (Verified), while Tier X contributes evidence to BR-02 (Deferred
+> by decision under ADR-0001). Detailed engine measurements are in
+> `docs/ENGINE_PARITY_TODO.md`. See `docs/GAP_REGISTER_RECONCILIATION.md` for
+> the comparison.
 
 ---
 
@@ -180,6 +184,6 @@ the figure stands. This doc previously listed G5 as open pending confirmation
 | Python unit / regression / security / snapshot | 54 tests, 0 skipped | `05_test_report_full.log` |
 | SQL assertions | 142 / 142, 100% | `03_sql_test_suite.log` |
 | Eval tiers P, I, S | 25 / 25, 0 skipped | `04_evals_p_i_s.log` |
-| Eval tiers X, E | Not implemented | G3 |
+| Eval tiers X, E | Scenarios implemented; Tier E runs in CI, Tier X runs on demand per ADR-0001 | G3 (tooling gap closed; engine parity deferred) |
 | PostgreSQL engine | Fully exercised | above |
 | Other five engines | Code review only | G3 |
