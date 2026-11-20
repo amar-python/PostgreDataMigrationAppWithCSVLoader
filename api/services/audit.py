@@ -5,24 +5,12 @@ Before this module the audit table had exactly one writer — ``delete_file`` in
 creations. An auditor reading it could see that a table had been deleted and
 never see who loaded it. Every mutating action now writes a row through here.
 
-Known limitation (deliberate, documented)
------------------------------------------
-This applies to ``POST /api/csv/upload`` only. The approval flow (M6, api/services/staged_import.py)
-writes its audit rows in the same transaction as the import, using ``write_audit``.
-
-The loaders in ``api/services/{dynamic,te}_loader.py`` own and commit their own
-transactions, so the audit row for an upload is written *after* the load has
-already committed rather than inside the same transaction. A crash in the narrow
-window between the two leaves a load with no audit row.
-
-Because of that ordering, a failure to write the audit row must NOT fail the
-request: the data is already in the database, and reporting failure for a load
-that actually succeeded would be worse than a missing log line. The failure is
-logged at ERROR so it is alertable.
-
-Closing that window properly means threading the caller's connection into the
-loaders so the audit INSERT joins their transaction — worth doing, but it changes
-the loader signatures and is tracked separately rather than smuggled in here.
+Every writer uses the caller's cursor (``write_audit``), so the audit row commits in the same
+transaction as the change it describes. ``POST /api/csv/upload`` passes a hook to the loaders that
+writes the upload audit row on the load's cursor just before the load commits (#288, BR-45, BR-52);
+the approval flow (M6, api/services/staged_import.py) does the same in its own transaction. The
+former ``record_audit``, which wrote after the load had committed and swallowed its own errors, is
+retired (ADR-0002).
 """
 
 from __future__ import annotations
@@ -35,7 +23,6 @@ from contextvars import ContextVar
 from psycopg2 import sql
 
 from api.tenancy import uploads_schema
-from api.db import Conn
 
 logger = logging.getLogger(__name__)
 
@@ -98,28 +85,6 @@ def verify_chain(cur) -> dict:
     ).format(s=schema))
     rows, first_bad = cur.fetchone()
     return {"rows": rows, "intact": first_bad is None, "firstBadId": first_bad}
-
-
-def record_audit(action: str, file_id: int | None, file_name: str | None,
-                 table_name: str | None, mode: str | None) -> bool:
-    """Insert one audit row in its own transaction. Never raises.
-
-    Returns True when the row was written. Used on the upload path, where the
-    load has already committed — see the module docstring for why a failure here
-    is logged rather than propagated.
-    """
-    try:
-        with Conn() as conn:
-            with conn.cursor() as cur:
-                write_audit(cur, action, file_id, file_name, table_name, mode)
-            conn.commit()
-        return True
-    except Exception as exc:  # noqa: BLE001 — audit must not break a committed load
-        logger.error(
-            "Failed to write audit row (action=%s file_id=%s file_name=%r): %s",
-            action, file_id, file_name, exc,
-        )
-        return False
 
 
 def coerce_file_id(raw: object) -> int | None:

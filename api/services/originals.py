@@ -5,10 +5,11 @@ and parsed rows go to ``upload_blobs`` and ``source_rows``. All three tables are
 insert-only (migration 0007), so overwriting or deleting a migrated file never
 loses its original.
 
-Known limitation of ``record_upload``, the same as record_audit: the loaders commit their own
-transaction, so it runs after the load. A failure there is logged at ERROR and doesn't fail
-the upload. The approval flow (M6, ADR-0002) uses ``store_upload`` instead, inside its own
-transaction, and doesn't have this limitation; the direct upload path keeps it.
+A successful load stores its original with ``store_upload`` on the load's own cursor, so the load,
+its registry row, the original and its audit row commit together or not at all (#288, BR-45, BR-52);
+the approval flow (M6, ADR-0002) does the same. ``record_upload`` is only for attempts that loaded
+nothing (rejected, duplicate, failed): it uses its own transaction and, since no data depends on it,
+logs a failure at ERROR instead of failing the request.
 """
 
 from __future__ import annotations
@@ -83,13 +84,13 @@ def store_upload(cur, file_name: str, content: str, mode: str, result: dict, *,
 
 def record_upload(file_name: str, content: str, mode: str, result: dict, *,
                   original: bytes | None = None, flags: list[dict] | None = None) -> int | None:
-    """Store the original and its outcome after a load. Returns the upload id, or None if it couldn't be stored."""
+    """Record an attempt that loaded nothing, in its own transaction. Returns the upload id, or None on failure."""
     try:
         with Conn() as conn:
             with conn.cursor() as cur:
                 upload_id = store_upload(cur, file_name, content, mode, result, original=original, flags=flags)
             conn.commit()
         return upload_id
-    except Exception as exc:  # noqa: BLE001 — the load has already committed; see the module docstring
+    except Exception as exc:  # noqa: BLE001 — nothing was loaded; see the module docstring
         logger.error("Failed to store the original of %r: %s", file_name, exc)
         return None
