@@ -83,6 +83,12 @@ Or, with an admin token, save the prepared settings as `protection.json` and run
 
 **To check it took:** `gh api repos/amar-python/PostgreDataMigrationAppWithCSVLoader/branches/main --jq '.protected, .protection.required_status_checks.contexts'` should print `true` and the four names. A session without admin rights can still read `protected` from the branch listing.
 
+## Disposition, 20 Nov 2026: tracked here, not as a requirement
+
+The T&E audit review of 20 Nov proposed this as requirement BR-60. The product owner decided on 20 Nov to track it as an action on this decision instead (`docs/VCRM.md` §6.4), because it controls the process rather than product behaviour. The action is still open: `main` reported `protected: false` at review time, and the setting needs a repository admin (the owner) to apply one of the two columns above. Close the action when the check under "To check it took" prints `true` and the required check names, and record which column was chosen.
+
+`claude/project-status.md` (session of 2 Nov, "D8" and "Live policy change") still says protection was applied; both places now carry a correction note pointing here.
+
 ## Related
 
 - #51 (closed with this decision)
