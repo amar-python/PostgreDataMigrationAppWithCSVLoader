@@ -143,3 +143,10 @@ No penetration test; no live-environment check (Key Vault and registry network s
 | Finding | Decision (fix, accept, defer) | Owner | Issue |
 |---|---|---|---|
 | F1 to F11 | | | |
+
+
+## 11. Reconciliation 2026-11-20 (appended)
+
+All eleven findings in §8 were re-checked at `main` `68399af365d6c076b0fc43ce5c91f3165e44844d`. **All eleven are still open**; for F9 the Terraform code is unchanged and the live Azure state was not checked. The review record in §10 is still empty. Evidence per finding: `docs/AUDIT_RECONCILIATION_2026-11-20.md` §3.
+
+A concrete consequence of F8 was reproduced: with no session and `API_ALLOW_DESTRUCTIVE` off, a T&E upload whose content matches a dynamic dataset dropped that dataset's table (OIT-002 in `docs/Outstanding Items Tracker_Grok.txt`; proposed BR-51 in `docs/VCRM.md` §6.3). This reconciliation does not replace the independent security review (#112).

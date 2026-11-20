@@ -285,3 +285,94 @@ This VCRM was derived as follows:
 - `docs/TEST_CONDITIONS.md` — every test condition catalogued in full detail
 - `evals/FAILURE_MODES.md` — failure-mode catalogue at the eval layer
 - `evals/PLAN.md` — eval suite design rationale
+
+
+---
+
+## 6. Independent T&E audit review, 2026-11-20 (appended; nothing above was changed)
+
+This section is an append-only addendum. No requirement above was deleted, renumbered or reworded. Where something above is now wrong, it is recorded as an erratum here (6.2) for the owner to apply or reject.
+
+**Baseline.** `main` at `68399af365d6c076b0fc43ce5c91f3165e44844d` (merge of PR #284, 2026-11-19T15:58:43Z). Open PRs at review time: none. Unmerged branches are listed in `docs/AUDIT_RECONCILIATION_2026-11-20.md` §1; nothing on them is counted below.
+
+**Reviewer (Detector).** Claude, an Anthropic model, running as the Abacus.AI agent. The exact model version string is not available to the reviewer, so none is given. Shown below as "Review 2026-11-20".
+
+**Evidence used.**
+
+- CI at the baseline: Quality Gate run [44560865716](https://github.com/amar-python/PostgreDataMigrationAppWithCSVLoader/actions/runs/44560865716) (integration, browser, free-tier and accessibility jobs: all success) and Python Validator Tests run [44560865884](https://github.com/amar-python/PostgreDataMigrationAppWithCSVLoader/actions/runs/44560865884) (Windows, 875 passed, 467 deselected).
+- Local replay of the Quality Gate free-tier and integration steps on the review VM: PostgreSQL 16.16, Python 3.11.17, Linux. This is reviewer evidence, not a CI result.
+
+| Step | Command (as in `quality-gate.yml`) | Result |
+|---|---|---|
+| Free tier | `scripts/test_report.py --markers "unit or regression or security or snapshot" --strict` | 870 passed, 0 failed, 0 skipped, 467 not run (marker filter) |
+| Lint, health | `make lint`, `make health` | exit 0, exit 0 |
+| Evals | `evals/runner.py --tiers p,i,s,e` | 27 of 27 passed; Tier S observed **159 of 159** SQL assertions, pass rate 100.0 % |
+| Deploy | `build/deploy_all.sh` dev, test, staging, prod | exit 0 for all four |
+| Full suite | `scripts/test_report.py --markers "not accessibility" --strict` | 1337 collected, 1324 passed, 0 failed, 0 skipped, 13 not run (accessibility, run in the CI accessibility job) |
+| Egress blocked | `pytest tests/system --block-egress` | exit 0 |
+| Coverage gate | `pytest --cov=api --cov=streamlit_app --cov=build/csv --cov=evals --cov-branch` + `scripts/check_coverage_floors.py` | api 94.4 % (floor 90), streamlit_app 97.5 % (floor 92), csv_parse 92.8 %, dynamic_loader 86.1 %, te_loader 97.4 %; build/csv 0 %, evals 63.5 % (no floor); gate passed |
+| Frontend | `npm ci && npx vitest run` in `csv-table-hub-main` | 20 files, 196 of 196 passed |
+| Perf (indicative only) | `scripts/perf_import.py --rows 100000` | stage→imported 9.96 s, preview 0.18 s; 32 vCPU / 248 GB VM, **not** the 2 vCPU / 4 GB reference instance |
+| Reproduction R1 | two concurrent `alembic upgrade head` on a fresh database, 5 trials | **one of the two failed in 5 of 5 trials** (`UniqueViolation` on `pg_type_typname_nsp_index` for `alembic_version`, or on `pg_namespace` for `csv_uploads`) |
+| Reproduction R2 | TestClient, no session, `API_ALLOW_DESTRUCTIVE` off: dynamic upload, then T&E upload of byte-identical content | **T&E upload returned 200 and the dynamic table `csv_repro_dyn_…_v1` was dropped** |
+
+The two reproduction scripts were kept outside the repository (`review_work/`); R2 was copied into `tests/system/` only for the run and deleted afterwards. No application code was changed.
+
+### 6.1 Re-verification of approved requirements at 68399af
+
+"Re-run" means the named tests are present at the baseline and passed in both the local full suite and CI run 44560865716. "Inspected" means the reviewer also read the test and confirmed it exercises the requirement. Where only "Re-run" is shown, the test content was not independently re-inspected in this review, and the earlier assessment stands on its own evidence.
+
+| ID | Status above | Re-verification 2026-11-20 | Result | Owner | Date | Detector |
+|---|---|---|---|---|---|---|
+| BR-01, BR-03 to BR-09, BR-12 to BR-15 | ✅ | Re-run: Tier S 159/159, Tier I, Tier E 2/2, deploy of all four environments | ✅ confirmed | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-10, BR-11, BR-16 to BR-19 | ✅ | Re-run: Tier P and unit tests in the free tier (870/870) | ✅ confirmed | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-20 | ✅ | Re-run: 159 of 159 pass. The requirement text says 142, and Tier S only asserts `min_total_assertions: 142`, so losing up to 17 assertions would not fail the gate | ✅ pass rate confirmed; count wording stale (E-05, OIT-018) | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-23 | ✅ | Re-run `test_preserved_uploads.py`. On the direct `POST /api/csv/upload` path, `record_upload` runs after the load commits and swallows errors (`api/services/originals.py:84-95`); its except branch (lines 93-95) is never executed by any test (coverage). A committed load can exist with no `uploads` row | ⚠️ should be Partial for the direct path (E-06, OIT-003) | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-24 | ⚠️ | Same window as BR-23: blob and source rows are stored by `record_upload` after commit | ⚠️ unchanged, extra gap (OIT-003) | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-25 to BR-27, BR-29, BR-30 | ✅ / ⚠️ | Re-run `test_review.py`, `test_versioned_datasets.py`, `test_registry_race.py` (inspected: `threading.Barrier` + thread pool, concurrent identical uploads register once) | unchanged | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-28 | ✅ | Inspected `test_registry_race.py` (above) | ✅ confirmed | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-31 | ⚠️ | Reproduction R2: a T&E upload with content identical to a dynamic dataset drops that dataset's table (`api/services/te_loader.py:88-118`, called at 321). With no session the role check returns early (`api/services/destructive_ops.py:48-51`) and `API_ALLOW_DESTRUCTIVE` is not consulted (checked only at `api/routers/csv_routes.py:308`) | ⚠️ unchanged; open item is now a **confirmed defect** (OIT-002) | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-32 to BR-34 | ⚠️ | Inspected `test_staged_import.py` `AllOrNothing` (failure injected at every step, retry succeeds). Direct path and T&E mode still bypass staging; T&E commits partial loads by design (`te_loader.py:278-343`), contrary to decision 4 | unchanged | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-35 | ✅ | Inspected `test_audit_append_only.py` (UPDATE, DELETE, TRUNCATE rejected; chain breaks detected; concurrent writers). The note "frontend audit page doesn't call them yet" is stale: `ServerAuditEvents.tsx` is used by `routes/audit.tsx:21,247` (commit f99c7c1). That component has no component test; only `auditEventsQuery` is unit-tested (`audit-events.test.ts`) | ✅ confirmed; note stale (E-04) | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-36 | ⚠️ | Re-run tenant, role and OIDC tests. Real IdP (#113) not checkable from the review VM | unchanged | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-37 | ⚠️ | Egress-blocked run exit 0 locally and in CI. Clean-VM offline install (#60) not checkable here | unchanged | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-38 | ⚠️ | Container bundle workflow last ran 44231529683 on 8fba708 (success); `git diff 8fba708 68399af -- container/ api/ csv-table-hub-main/src` is empty, so that run still represents those paths. Windows and macOS hosts, and `install.ps1` on PowerShell 5.1, not run anywhere | unchanged | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-45 | ❌ | No test covers the window. Coverage shows `record_audit`'s except branch (`api/services/audit.py:117-118,122`) is never executed | ❌ unchanged (OIT-003) | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-46 | ✅ | vitest 196/196 locally and in CI; `test_streamlit_exports.py` and `test_reports_and_policy.py` passed | ✅ confirmed | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-47 | ⚠️ | `/audit` still reads local jobs from browser storage (`routes/audit.tsx:7,49`); the server events are behind a collapsible panel | ⚠️ unchanged | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-48 | ⚠️ | The evidence text is stale: CI now measures `api`, `streamlit_app`, `build/csv`, `evals` with branch coverage and gates `api/` (90 %) and `streamlit_app/` (92 %). Still no floor for `build/csv` (0 %) or `evals` (63.5 %) | ⚠️ remains Partial; note stale (E-07) | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-49 | ⚠️ | Windows job log of run 44560865884 shows `test_preflight_ps1.py` with 16 passing tests; 11 are collected on Linux, so by count the 5 Windows execution tests (parse under `powershell`, run with `-SkipPg`, port label, optional PG checks) ran and passed on `windows-latest`, where `powershell` is Windows PowerShell 5.1. The quiet-mode log does not name them individually. PowerShell 7 execution was not separately evidenced | Recommend ✅ for 5.1; owner to decide whether 7 needs its own run | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+| BR-D1 to BR-D5 | ✅ | The evidence path `input_data/load_input_data.sql` does not exist in the repository | Unverifiable (E-08) | Amarnath Rasineni | 2026-11-20 | Review 2026-11-20 |
+
+### 6.2 Errata to the sections above (for the owner to apply)
+
+| Erratum | Where | What is wrong | Evidence |
+|---|---|---|---|
+| E-01 | §3 status table | Counts 26 verified, 9 partial, "❌ Not started 0"; BR-45 is ❌ and BR-46 to BR-49 are missing from it | §2 BR-45 row; headline 2026-11-19 |
+| E-02 | §3, "There are no longer any unverified requirements…" | False since 2026-11-19: BR-45 is unverified and not a recorded decision | BR-45 row |
+| E-03 | §4 "None outstanding as at 2026-09-10"; §5 "A and D aren't used" | Both stale: §2 now uses I, A and D, and genuine gaps exist (BR-45, OIT list) | §2 table 2026-11-19 |
+| E-04 | BR-35 note | "The frontend audit page doesn't call them yet" is no longer true | `routes/audit.tsx:21,247`; f99c7c1 |
+| E-05 | BR-20 wording and Tier S threshold | Suite has 159 assertions (README line 5 says 159); requirement and Tier S say 142 | Tier S report 2026-11-20; `evals/expected/tier_s/01_fresh_deploy_then_all_tests_pass.json:10` |
+| E-06 | BR-23 ✅ | Holds for the staged flow, not for the direct upload path (post-commit, error-swallowing registry write) | `api/routers/csv_routes.py:120-133`; `api/services/originals.py:84-95` |
+| E-07 | BR-48 evidence | Says CI integration job measures `api/services` only; now measures four packages with two package floors | `Makefile` `COVERAGE_SCOPE`; coverage gate output |
+| E-08 | Layer legend LV and BR-D1 to BR-D5 | `input_data/load_input_data.sql` is not in the repository | `git ls-files` |
+
+### 6.3 PROPOSED requirements (not approved; for product-owner disposition)
+
+BR-39 to BR-44 remain reserved for the proposals already awaiting disposition. These new proposals start at BR-50. Status for all of them is **PROPOSED**; none counts in the headline until approved.
+
+| ID | Proposed requirement | Approval | Method | Acceptance criteria | Verification evidence today | Result | Owner | Date | Detector |
+|---|---|---|---|---|---|---|---|---|---|
+| BR-50 | Schema migrations run at API start shall be safe when two or more API processes start together against the same database. | PROPOSED | T (concurrent start, fresh and at-head DB) + I | 10 of 10 trials of two concurrent `bootstrap()` (or two API processes) on a fresh DB both start; `alembic_version` = head; no `UniqueViolation`. Test must fail with the fix removed | Reproduction R1: 5 of 5 trials, one process failed (`alembic/env.py:33-40`, no advisory lock; `api/db.py:234-246` only handles `OperationalError`, so `IntegrityError` aborts start-up) | ❌ Fails | Amarnath Rasineni (proposed; to confirm) | 2026-11-20 | Review 2026-11-20 (HANDOFF F5) |
+| BR-51 | No upload shall drop or replace another dataset's table unless the caller has delete permission **and** `API_ALLOW_DESTRUCTIVE` is enabled; the shared-key path shall not bypass this. | PROPOSED | T | With the flag off: T&E upload of content identical to a dynamic dataset leaves the dynamic table and registry row in place (or is refused with 403/409), with and without a session | Reproduction R2: table dropped, HTTP 200 | ❌ Fails | Amarnath Rasineni (proposed; to confirm) | 2026-11-20 | Review 2026-11-20 (related #175, BR-31) |
+| BR-52 | On the direct upload path, the registry row, preserved original and audit row shall commit in the load's transaction, or a reconciliation job shall detect and report any committed load without them. | PROPOSED | T (fault injection) + A | Injected failure in `record_upload` and `record_audit` after the load: either nothing is committed, or a check lists the orphan load. Tests exercise `originals.py:93-95` and `audit.py:117-122` | Not covered (coverage report) | ❌ Not verified | Amarnath Rasineni (proposed; to confirm) | 2026-11-20 | Review 2026-11-20 (refines BR-45, extends to BR-23/24) |
+| BR-53 | The API shall reject a request body larger than the configured limit before parsing it. | PROPOSED | T | A body of `MAX_UPLOAD_BYTES` × 2 with an honest and with a missing `Content-Length` is refused with 413 without being fully buffered | Size checked after Pydantic parse (`api/routers/csv_routes.py:71,108`; `import_routes.py:61`) | ❌ Not met | Amarnath Rasineni (proposed; to confirm) | 2026-11-20 | Review 2026-11-20 (SEC F1) |
+| BR-54 | Unauthenticated endpoints shall not disclose database name, host, port, server version or schema outside `dev`. | PROPOSED | T + I | With `API_ENV=prod`, `/api/health` returns status only; `/docs`, `/redoc`, `/openapi.json` need auth or are off | `api/main.py:116-138` returns those fields | ❌ Not met | Amarnath Rasineni (proposed; to confirm) | 2026-11-20 | Review 2026-11-20 (SEC F2) |
+| BR-55 | Secrets shall never be logged, in whole or in part. | PROPOSED | I + T | Start-up log contains no substring of `API_KEY` (a hash prefix is acceptable) | `api/main.py:61` logs the first four characters | ❌ Not met | Amarnath Rasineni (proposed; to confirm) | 2026-11-20 | Review 2026-11-20 (SEC F10) |
+| BR-56 | The on-premises/container deployment shall have a documented backup and restore procedure, with a restore test that proves the audit chain verifies after restore. | PROPOSED | D + T | Restore drill on the container bundle: data, uploads and `audit_log` restored; `GET /api/audit/verify` passes; RPO/RTO recorded | Only Azure PITR documented (`docs/PROD_DEPLOY.md`); no backup content in `container/` | ❌ Not met | Amarnath Rasineni (proposed; to confirm) | 2026-11-20 | Review 2026-11-20 (may fold into reserved BR-39..44) |
+| BR-57 | Audit retention (decision 7) and raw-upload purge shall have a defined, tested operator procedure compatible with the append-only triggers. | PROPOSED | I + D | Written procedure; a demonstration on a test DB that purges only rows older than `AUDIT_RETENTION_YEARS` and records the purge | `AUDIT_RETENTION_YEARS` is only validated (`api/policy.py:22-31`); triggers reject DELETE; no procedure found | ❌ Not met | Amarnath Rasineni (proposed; to confirm) | 2026-11-20 | Review 2026-11-20 |
+| BR-58 | Import concurrency shall be bounded per API instance (decision 1: 4 concurrent imports). | PROPOSED | T + A | A 5th concurrent import waits or is refused; pool exhaustion behaviour documented | No semaphore or limit in `api/` (grep); pool fixed at 8 (`api/db.py:24`) | ❌ Not met | Amarnath Rasineni (proposed; to confirm) | 2026-11-20 | Review 2026-11-20 (M0 decision 1) |
+| BR-59 | The decision-8 performance targets shall be measured on the reference instance and recorded per release. | PROPOSED | T (on reference HW) | `PERF_ENFORCE=1 PERF_ROWS=100000` passes on 2 vCPU / 4 GB; timings recorded in this VCRM | Not enforced in CI (`tests/performance/test_import_scale.py:4-7`); indicative 9.96 s on non-reference VM | ⚠️ Not verified | Amarnath Rasineni (proposed; to confirm) | 2026-11-20 | Review 2026-11-20 (M0 decision 8, M7) |
+| BR-60 | Changes to `main` shall pass the required CI checks before merge (branch protection enforced). | PROPOSED | I (GitHub settings) + D | `GET /repos/.../branches/main` shows `protected: true` with the Quality Gate jobs required | API at review time: `protected: false`, no required checks. Already recorded as "Decided, but NOT applied" in `DECISIONS/2026-11-02-main-branch-protection.md` and #198; `claude/project-status.md` lines 34 and 49 still say it was applied | ❌ Not met | Amarnath Rasineni (proposed; to confirm) | 2026-11-20 | Review 2026-11-20 |
+
+Full issue detail, remediation and dependencies: `docs/Outstanding Items Tracker_Grok.txt`. Reconciliation of earlier audit findings: `docs/AUDIT_RECONCILIATION_2026-11-20.md`.
