@@ -31,7 +31,7 @@ Nine items closed. Four new issues filed. Six decision records committed. One li
 | D6 | End Lovable platform dependency | #69, DECISIONS/2026-11-02-end-lovable-dependency.md, PR #153 |
 | #152 | Frontend direction: spike-then-decide in Streamlit | #152, DECISIONS/2026-11-02-frontend-spike-plan.md, PR #155 |
 | D7 | Tracker long-term home: Doc as master, GitHub issues for work | #156, DECISIONS/2026-11-02-tracker-long-term-home.md, PR #157 |
-| D8 | Main branch protection applied with enforce_admins true | #51, DECISIONS/2026-11-02-main-branch-protection.md, PR #158, live via gh api PUT |
+| D8 | Main branch protection applied with enforce_admins true (**correction 2026-11-20: never live; `main` is unprotected. Open action, see the decision record's "Correction, 18 Nov" and "Disposition, 20 Nov"**) | #51, DECISIONS/2026-11-02-main-branch-protection.md, PR #158, live via gh api PUT |
 | #56 | 4 of 5 README claims verified; 5th split to #159 | #56 closed with evidence table in the thread |
 | #66 | Tier E/X eval status â€” already recorded in ADR-0001 | #66 closed as not planned |
 
@@ -47,6 +47,8 @@ Nine items closed. Four new issues filed. Six decision records committed. One li
 ### Live policy change
 
 Branch protection on main applied 2026-11-02 via gh api PUT. Required checks: python-validator-tests, free-tier (unit, lint, health, evals-p), integration (postgres service). strict true, enforce_admins true, no force-push, no deletion. Escape hatch recorded in DECISIONS/2026-11-02-main-branch-protection.md.
+
+> **Correction (2026-11-20):** the paragraph above is wrong. Protection was never live: `main` reports `protected: false` (checked 9, 16, 18 and 20 Nov). Applying it is an open owner action recorded in DECISIONS/2026-11-02-main-branch-protection.md ("Correction, 18 Nov" and "Disposition, 20 Nov"); see also #198 and `docs/VCRM.md` §6.4 (proposal BR-60).
 
 ## Open items (snapshot â€” tracker is master)
 

@@ -3,8 +3,9 @@
 > **Superseded (2026-11-19):** this document is kept for history only. The master traceability record is [`docs/VCRM.md`](VCRM.md); where they differ, `docs/VCRM.md` wins.
 >
 > It was written on 2026-09-10 for five requirements. Since then BR-01 and BR-15 are **verified**, and BR-02, BR-21 and
-> BR-22 are **deferred by decision**. The thirteen requirements that are open now (BR-24, BR-29, BR-31, BR-32, BR-33,
-> BR-34, BR-36, BR-37, BR-38, BR-45, BR-47, BR-48, BR-49) are not analysed here: their status and notes are in
+> BR-22 are **deferred by decision**. The nineteen requirements that are open now (BR-24, BR-29, BR-31, BR-32, BR-33,
+> BR-34, BR-36, BR-37, BR-38, BR-45, BR-47, BR-48, BR-49, and BR-50, BR-51, BR-53, BR-54, BR-55, BR-58 approved
+> 2026-11-20) are not analysed here: their status and notes are in
 > `docs/VCRM.md`, and every eval run writes a current gap report to `evals/reports/<run>/VCRM_GAPS_<run>.md`. The text
 > below is kept for its risk assessment of the three deferred items. `tests/unit/test_gap_registers_agree.py` fails if
 > this file stops matching `docs/VCRM.md` and loses its superseded banner.
