@@ -86,33 +86,17 @@ def match_te_table(columns: list[str]) -> str | None:
 
 
 def _cleanup_prior_registry_entries(cur, file_name, file_hash):
-    """Remove prior csv_files entries. Uses sql.Identifier, no f-strings.
+    """Remove prior T&E registry entries for this file. Uses sql.Identifier, no f-strings.
 
-    A file name matches only non-dynamic entries: dynamic uploads of the same name are
-    versions of a dataset and are never replaced (M5, decision 2). Identical content
-    (file_hash) still matches any mode.
+    Only non-dynamic entries are ever removed, and no table is dropped: a T&E entry
+    points at a shared T&E table whose rows stay. Dynamic uploads are versions of a
+    dataset (M5, decision 2) and are never replaced from the T&E path, whether they
+    match by name or by identical content (#287, BR-51); ``upload_te`` refuses an
+    upload whose content is already a dynamic dataset before reaching here.
     """
     cur.execute(
         sql.SQL(
-            "SELECT table_name, mode FROM {s}.csv_files"
-            " WHERE (file_name = %s AND mode <> 'dynamic') OR file_hash = %s"
-        ).format(s=sql.Identifier(uploads_schema())),
-        (file_name, file_hash),
-    )
-    for table_name, mode in cur.fetchall():
-        if mode == "dynamic" and table_name.startswith("csv_"):
-            # Schema-qualify: the connection's search_path is never set to
-            # UPLOADS_SCHEMA, so an unqualified DROP TABLE would silently
-            # miss the table (it lives in csv_uploads, not public/default).
-            cur.execute(
-                sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
-                    sql.Identifier(uploads_schema()),
-                    sql.Identifier(table_name),
-                )
-            )
-    cur.execute(
-        sql.SQL(
-            "DELETE FROM {s}.csv_files WHERE (file_name = %s AND mode <> 'dynamic') OR file_hash = %s"
+            "DELETE FROM {s}.csv_files WHERE mode <> 'dynamic' AND (file_name = %s OR file_hash = %s)"
         ).format(s=sql.Identifier(uploads_schema())),
         (file_name, file_hash),
     )
@@ -226,11 +210,31 @@ def upload_te(file_name: str, content: str, target_table: str, *, session: dict 
             file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
             cur.execute(
                 sql.SQL(
-                    "SELECT 1 FROM {s}.csv_files WHERE (file_name = %s AND mode <> 'dynamic') OR file_hash = %s"
+                    "SELECT mode, file_name, table_name, row_count FROM {s}.csv_files"
+                    " WHERE (file_name = %s AND mode <> 'dynamic') OR file_hash = %s"
                 ).format(s=sql.Identifier(uploads_schema())),
                 (file_name, file_hash),
             )
-            if cur.fetchone() is not None:
+            prior = cur.fetchall()
+            # #287 (BR-51): identical content already stored as a dynamic dataset. Replacing
+            # it would drop that dataset's table, so refuse, whoever the caller is and
+            # whatever API_ALLOW_DESTRUCTIVE says. Nothing has been written yet.
+            dataset = next((p for p in prior if p[0] == "dynamic"), None)
+            if dataset is not None:
+                _log(logs, "duplicate_check",
+                     f'Identical content is already the dataset "{dataset[1]}"; nothing was imported', "warn")
+                return {
+                    "status": "duplicate_file",
+                    "reason": "content",
+                    "existingMode": "dynamic",
+                    "existingFileName": dataset[1],
+                    "tableName": dataset[2],
+                    "existingRowCount": dataset[3],
+                    "message": (f'This file\'s content is already stored as the dataset "{dataset[1]}". '
+                                "A T&E upload cannot replace a dataset, so nothing was imported."),
+                    "logs": logs,
+                }
+            if prior:
                 _require_delete(session)
 
             # Pre-validate every row client-side; drop failures into row_errors.
