@@ -6,5 +6,5 @@
 #   python -m playwright install chromium
 #   (cd csv-table-hub-main && npm ci)
 #   python -m pytest tests/accessibility -v
-playwright>=1.64.1
+playwright>=1.65.2
 axe-playwright-python>=0.1.8
