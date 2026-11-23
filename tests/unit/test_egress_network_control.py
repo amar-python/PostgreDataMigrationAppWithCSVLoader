@@ -7,10 +7,11 @@ asserted by running pytest's collection and by reading the workflow. Asserted:
 
   * the control is left out of collection unless ``EGRESS_NETWORK_BLOCKED=1`` (so the strict full-suite run, the
     coverage run and a developer's ``pytest`` never run it), and is collected when it is set; its marker is registered;
-  * in the integration job: the full suite runs on the open network first; then a dedicated user is created, the block is
-    installed for that user, the control runs as that user and must have been counted (so the counter is proved to work),
+  * in the egress job (its own job, in parallel with the test shards and the coverage gate): a dedicated user is created,
+    the block is installed for that user, the control runs as that user and must have been counted (so the counter is proved to work),
     the count is zeroed, the egress-blocked tests run as that user, the count must be zero, and the block is removed
-    in a step that runs even when an earlier step failed; the block is never installed for the runner's own user;
+    in a step that runs even when an earlier step failed; the block is never installed for the runner's own user; the
+    suite on the open network runs in the shards, never in this job;
   * the docs say the child-process and libpq gap is closed in CI, and how.
 """
 from __future__ import annotations
@@ -83,21 +84,24 @@ def test_the_block_is_installed_for_a_dedicated_user_never_the_runners():
 
 def test_the_steps_run_in_an_order_that_makes_the_check_mean_something():
     steps = job_steps()
-    full = index_of(steps, "Full test suite")
     create = index_of(steps, "useradd")
     install = index_of(steps, "egress_firewall.sh install")
     control = index_of(steps, CONTROL)
     blocked_tests = index_of(steps, "--block-egress")
     check = index_of(steps, "egress_firewall.sh check")
     remove = index_of(steps, "egress_firewall.sh remove")
-    assert full < create < install < control < blocked_tests < check < remove, (
-        full, create, install, control, blocked_tests, check, remove)
+    assert create < install < control < blocked_tests < check < remove, (
+        create, install, control, blocked_tests, check, remove)
 
 
-def test_the_full_suite_runs_on_the_open_network():
-    steps = job_steps()
-    full = steps[index_of(steps, "Full test suite")]
-    assert "EGRESS_NETWORK_BLOCKED" not in str(full.get("env") or {}) + (full.get("run") or "")
+def test_the_suite_on_the_open_network_runs_in_the_shards_never_with_the_control_enabled():
+    jobs = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+    shard_steps = jobs["integration-shards"]["steps"]
+    text = "\n".join(str(s.get("env") or {}) + (s.get("run") or "") for s in shard_steps)
+    assert "EGRESS_NETWORK_BLOCKED" not in text, "on an open network the control would connect"
+    assert "test_report.py" in text, "the suite on the open network runs in the shards"
+    assert "test_report.py" not in "\n".join(s.get("run") or "" for s in job_steps()), (
+        "the egress job does not run the whole suite a second time")
 
 
 def test_the_control_runs_as_the_blocked_user_and_must_have_been_counted_then_the_count_is_zeroed():

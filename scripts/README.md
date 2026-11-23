@@ -95,7 +95,7 @@ sensible), click the green button.
 
 | Workflow | Owner / scope |
 | --- | --- |
-| `quality-gate.yml` | Lint, health check, pytest (unit/regression/security/snapshot), Tier P evals. Runs on push. |
+| `quality-gate.yml` | Lint, health check, pytest (unit/regression/security/snapshot), Tier P evals, and the database jobs (the suite in parallel shards, the egress-blocked pass, the coverage gate). Runs on push and on pull requests. The CI helpers: `ci_shards.py` (splits the test files), `ci_changes.py` (documentation-only changes skip the database jobs), `ci_gate.py` (one verdict from the parallel jobs). See `tests/README.md`. |
 | `python-validator-tests.yml` | Windows `unittest discover` run for the CSV validator. Runs on push. |
 
 These are the only two workflows in `.github/workflows/`. The `build.*` and
