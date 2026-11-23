@@ -22,6 +22,7 @@ from api.config import settings
 from api.ratelimit import rate_limit_middleware
 from api.routers import (audit_routes, auth_routes, csv_routes, import_routes, policy_routes, review_routes,
                          te_routes)
+from api.services import accounts
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,20 @@ def docs_urls(api_env: str) -> dict:
     return {"docs_url": None, "redoc_url": None, "openapi_url": None}
 
 
+def _purge_old_sessions() -> None:
+    """Delete session rows that ended long ago (#296). Housekeeping: a failure is logged and never stops the API."""
+    try:
+        with db.Conn() as conn:
+            with conn.cursor() as cur:
+                removed = accounts.purge_sessions(cur)
+            conn.commit()
+        if removed:
+            logger.info("Purged %d ended session row(s).", removed)
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not purge old sessions at start-up; scripts/purge_sessions.py can do it later.",
+                       exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # O-03: fail closed. A warning was not enough — an unset key left every
@@ -93,6 +108,7 @@ async def lifespan(app: FastAPI):
         )
     db.init_pool()
     db.bootstrap()
+    _purge_old_sessions()
     yield
     db.close_pool()
 

@@ -217,20 +217,56 @@ def _record_failure(cur, user_id: int) -> None:
 
 
 def session_for(cur, token: str) -> dict | None:
-    """The live session for a token, with its user, tenant and role, else None."""
+    """The live session for a token, with its user, tenant and role, else None.
+
+    Live means not revoked, not past its expiry, and (when ``SESSION_IDLE_MINUTES`` is above 0) used within that many
+    minutes (#296). A hit records the use; the caller commits, or the record is lost.
+    """
+    idle = settings.SESSION_IDLE_MINUTES
     cur.execute(_q(
         "SELECT u.id, u.username, t.id, t.slug, m.role, s.expires_at "
         "FROM {c}.sessions s "
         "JOIN {c}.users u ON u.id = s.user_id AND u.is_active "
         "JOIN {c}.tenants t ON t.id = s.tenant_id "
         "JOIN {c}.memberships m ON m.user_id = u.id AND m.tenant_id = t.id "
-        "WHERE s.token_hash = %s AND s.revoked_at IS NULL AND s.expires_at > now()"),
-        (_token_hash(token),))
+        "WHERE s.token_hash = %s AND s.revoked_at IS NULL AND s.expires_at > now() "
+        "AND (%s <= 0 OR s.last_seen_at > now() - make_interval(mins => %s))"),
+        (_token_hash(token), idle, idle))
     row = cur.fetchone()
     if not row:
         return None
+    _touch(cur, _token_hash(token))
     return {"userId": row[0], "username": row[1], "tenantId": row[2], "tenant": row[3],
             "role": row[4], "expiresAt": row[5].isoformat()}
+
+
+def _touch(cur, token_hash: str) -> None:
+    """Record that a session was just used, writing at most about once a minute (#296).
+
+    Every request would otherwise write. The gap stays well inside the idle limit, so an active session never
+    looks idle because the write was skipped.
+    """
+    idle = settings.SESSION_IDLE_MINUTES
+    gap = max(1, min(60, idle * 15)) if idle > 0 else 60   # seconds: a quarter of the idle limit, at most a minute
+    cur.execute(_q("UPDATE {c}.sessions SET last_seen_at = now() "
+                   "WHERE token_hash = %s AND last_seen_at < now() - make_interval(secs => %s)"),
+                (token_hash, gap))
+
+
+def purge_sessions(cur) -> int:
+    """Delete the rows of sessions that ended more than ``SESSION_PURGE_GRACE_DAYS`` ago; return how many (#296).
+
+    Ended means expired, revoked, or (when the idle limit is on) idle for longer than the limit. A live session, one
+    that ended recently, and every user and membership are left alone. The caller commits.
+    """
+    cur.execute(_q(
+        "DELETE FROM {c}.sessions WHERE "
+        "expires_at < now() - make_interval(days => %(grace)s) "
+        "OR revoked_at < now() - make_interval(days => %(grace)s) "
+        "OR (%(idle)s > 0 AND last_seen_at < now() - make_interval(days => %(grace)s) "
+        "                                       - make_interval(mins => %(idle)s))"),
+        {"grace": settings.SESSION_PURGE_GRACE_DAYS, "idle": settings.SESSION_IDLE_MINUTES})
+    return cur.rowcount
 
 
 def revoke(cur, token: str) -> None:
