@@ -21,7 +21,10 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.unit, pytest.mark.regression, pytest.mark.tooling]
+# `tooling` only, as for every test that runs the repo's shell scripts: the Windows job selects "unit or regression or
+# security or snapshot", and on its runner `bash` is WSL's, which has no distribution installed. These run in the Linux
+# integration job (everything except accessibility).
+pytestmark = pytest.mark.tooling
 
 ROOT = Path(__file__).resolve().parents[2]
 LINT = ROOT / "scripts" / "lint.sh"
