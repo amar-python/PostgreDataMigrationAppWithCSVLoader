@@ -18,8 +18,12 @@ upgrade to the latest release before reporting.
 If you believe you've found a security vulnerability in this
 project, please report it privately. Do not open a public issue.
 
-<!-- TODO 2026-11-03: this is a Gmail placeholder; replace with security@<org> once the dedicated address exists. Tracked in #57. -->
-**Email:** singhofoz@gmail.com
+**Use GitHub's private vulnerability reporting.** Open the repository's
+[Security tab](https://github.com/amar-python/PostgreDataMigrationAppWithCSVLoader/security), choose **Report a vulnerability**,
+and fill in the form, or go straight to
+<https://github.com/amar-python/PostgreDataMigrationAppWithCSVLoader/security/advisories/new>.
+Only the maintainers can see what you send, and you can discuss a fix with
+them there before anything is made public.
 
 Please include, where possible:
 
@@ -28,9 +32,9 @@ Please include, where possible:
 - The commit SHA or release tag you tested against
 - Any suggested remediation
 
-PGP encryption is not currently offered. If you need to send
-sensitive details, let me know in your first email and we'll
-agree a secure channel.
+PGP encryption is not currently offered. A GitHub private report is
+visible only to the maintainers. If you need a different channel for
+something sensitive, say so in your report and we'll agree one.
 
 ## Response Commitment
 
@@ -91,5 +95,5 @@ in release notes (unless they prefer to remain anonymous).
 ---
 
 *This policy is adapted from standard open-source security
-conventions. Last updated: 2026-10-26. Last audited: 2026-10-26
+conventions. Last updated: 2026-11-23. Last audited: 2026-10-26
 (reviewed quarterly, even when nothing changes).*
