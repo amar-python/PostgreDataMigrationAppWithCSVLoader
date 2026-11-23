@@ -1,16 +1,25 @@
 # Gap Analysis
 
 Open gaps in the repository after the documentation audit and no-skip hardening
-pass. Fixed items are in `docs/FIXES_APPLIED.md`; evidence is in `test-artifacts/`.
+pass. Fixed items were recorded in `FIXES_APPLIED.md` and the evidence logs named
+below (`01_provision.log` and so on) in `test-artifacts/`. Both were removed on
+2026-08-16 (commit 6bcb215, "remove stale artifacts and docs") and are not in the
+tree today. `git show 6bcb215^:docs/FIXES_APPLIED.md` recovers the first, and
+`git ls-tree -r 6bcb215^ test-artifacts/` lists the second.
 
 **Assessed at:** `main` @ `b255262` + audit changes
 **Method:** clean-clone execution on Ubuntu 24.04 with PostgreSQL 16.14 — every
 claim below was reproduced, not inferred from reading code.
 
-> **Relationship to `docs/VCRM_GAPS.md`:** that file traces the 22 business
-> requirements to eval evidence and is regenerated per run. This document covers
-> engineering gaps that sit outside the BR set — configuration, coverage and
-> process. The two are complementary.
+> **Traceability and scope (reconciled 2026-11-20):** `docs/VCRM.md` is the
+> authoritative source for business-requirement (BR) status. This file tracks
+> engineering gaps G1–G5, not a second BR register. G2 is an accepted Windows CI
+> constraint with no BR counterpart. G3 is closed as a tooling gap: Tier E
+> verifies BR-01 (Verified), while Tier X contributes evidence to BR-02 (Deferred
+> by decision under ADR-0001). Detailed engine measurements are in
+> `docs/ENGINE_PARITY_TODO.md`. The item-by-item comparison of this file with the
+> code is §5 of `docs/AUDIT_RECONCILIATION_2026-11-20.md`; two points in it have
+> moved since (G5 and the G3 Teradata count, noted where they appear below).
 
 ---
 
@@ -100,8 +109,12 @@ structure back from `sqlite_master` / `PRAGMA table_info`. No `sqlite3` binary i
 required, so unlike every other database-backed check this one also runs on the
 Windows CI job (see G2). Partially addresses VCRM BR-02.
 
-**What Tier X revealed.** Only PostgreSQL defines all 12 T&E tables. SQLite and
-MariaDB define 7, Teradata 1; InfluxDB and Redis ship seed data with no DDL. The
+**What Tier X revealed.** PostgreSQL defines all 12 T&E tables. SQLite and
+MariaDB define 7; InfluxDB and Redis ship seed data with no DDL. (This paragraph
+said "Only PostgreSQL" and "Teradata 1" until 2026-11-23. That count came from a
+search for `CREATE TABLE`, which matched one comment line; the Teradata file
+writes `CREATE SET TABLE` and defines all 12. It has never been run against a
+Teradata server. See `docs/ENGINE_PARITY_TODO.md`.) The
 five tables absent from SQLite and MariaDB — `temp_documents`, `test_phases`,
 `test_events`, `test_results`, `evidence_artifacts` — are the execution and
 evidence half of the model, so those engines can hold a test plan but not a
@@ -155,6 +168,11 @@ suite output (142/142, 100%). No contractual reason to revert was raised, so
 the figure stands. This doc previously listed G5 as open pending confirmation
 — confirming it here closes it.
 
+**Superseded 2026-11-20:** the figure no longer stands. The suite records 159
+assertions, while `docs/VCRM.md` BR-20 and the Tier S threshold still say 142, so
+up to 17 assertions could disappear without failing the gate (OIT-018, VCRM §6
+erratum E-05). See `docs/AUDIT_RECONCILIATION_2026-11-20.md` §5.
+
 ---
 
 ## Closed by this pass
@@ -175,11 +193,16 @@ the figure stands. This doc previously listed G5 as open pending confirmation
 
 ## Coverage position
 
+A snapshot from the September audit pass, kept as the record of that pass. The
+counts are not current (`tests/` now collects about 1,350 tests, not 54); the
+current run is the Quality Gate job log, and the coverage scope is in
+`tests/README.md`.
+
 | Layer | Status | Evidence |
 |---|---|---|
 | Python unit / regression / security / snapshot | 54 tests, 0 skipped | `05_test_report_full.log` |
 | SQL assertions | 142 / 142, 100% | `03_sql_test_suite.log` |
 | Eval tiers P, I, S | 25 / 25, 0 skipped | `04_evals_p_i_s.log` |
-| Eval tiers X, E | Not implemented | G3 |
+| Eval tiers X, E | Scenarios implemented; Tier E runs in CI, Tier X runs on demand per ADR-0001 | G3 (tooling gap closed; engine parity deferred) |
 | PostgreSQL engine | Fully exercised | above |
 | Other five engines | Code review only | G3 |
