@@ -37,7 +37,14 @@ class ServiceLoaderUnitTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertIn("column types", result["message"].lower())
 
-    def test_te_cleanup_prior_registry_entries_drops_dynamic_table(self):
+    def test_te_cleanup_prior_registry_entries_never_drops_a_table(self):
+        """#287, BR-51: a T&E upload never drops a dynamic dataset.
+
+        This test used to assert the opposite (that the cleanup DROPs the dynamic table, schema-qualified). That
+        was the defect: uploading the same bytes in T&E mode destroyed a versioned dataset with the destructive
+        flag off. The cleanup now only deletes T&E registry rows and drops nothing. The fixture still holds a
+        dynamic row, so the old behaviour (drop it) fails here rather than passing vacuously.
+        """
         fake_cursor = MagicMock()
         fake_cursor.fetchall.return_value = [
             ("csv_0123456789abcdef", "dynamic"),
@@ -47,15 +54,12 @@ class ServiceLoaderUnitTests(unittest.TestCase):
         _cleanup_prior_registry_entries(fake_cursor, "file.csv", "hash")
 
         executed_sql = [str(call.args[0]) for call in fake_cursor.execute.call_args_list]
-        drop_stmts = [s for s in executed_sql if "DROP TABLE IF EXISTS" in s]
-        self.assertTrue(drop_stmts)
-        # Regression guard: the connection's search_path is never set to
-        # UPLOADS_SCHEMA, so an unqualified DROP silently misses the table.
-        # Must be schema.table, not just table.
-        self.assertTrue(
-            any("csv_uploads" in s and "csv_0123456789abcdef" in s for s in drop_stmts),
-            f"DROP TABLE must be schema-qualified with UPLOADS_SCHEMA; got: {drop_stmts}",
+        self.assertFalse(
+            any("DROP" in s.upper() for s in executed_sql),
+            f"the T&E cleanup must not drop any table; got: {executed_sql}",
         )
-        # Only the dynamic-mode row should be dropped, never the te-mode one.
-        self.assertFalse(any("organisations" in s for s in drop_stmts))
-        self.assertTrue(any("DELETE FROM" in sql_text for sql_text in executed_sql))
+        deletes = [s for s in executed_sql if "DELETE FROM" in s]
+        self.assertEqual(len(deletes), 1, f"expected one registry DELETE; got: {executed_sql}")
+        # The only rows it may remove are T&E ones: the DELETE excludes dynamic mode.
+        self.assertIn("mode <>", deletes[0])
+        self.assertIn("dynamic", deletes[0])
