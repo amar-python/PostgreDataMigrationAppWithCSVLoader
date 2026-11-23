@@ -51,6 +51,17 @@ def key_fingerprint(key: str) -> str:
     return hashlib.sha256(key.encode("utf-8")).hexdigest()[:8]
 
 
+def docs_urls(api_env: str) -> dict:
+    """FastAPI arguments that serve the interactive docs and the OpenAPI schema only in dev (#291, BR-54).
+
+    ``/docs``, ``/redoc`` and ``/openapi.json`` list every route to anyone who can reach the port, with no key
+    needed. Outside dev they are switched off (404). They are fixed when the app is created, so this runs at import.
+    """
+    if api_env == "dev":
+        return {}
+    return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # O-03: fail closed. A warning was not enough — an unset key left every
@@ -93,6 +104,7 @@ app = FastAPI(
     # BUG-035: API-key auth is applied per-router (see csv_routes.py and
     # te_routes.py). It is deliberately NOT applied at app level so external
     # uptime probes can hit /api/health without needing the shared secret.
+    **docs_urls(settings.API_ENV),  # #291: no interactive docs or schema outside dev
 )
 
 app.add_middleware(
@@ -139,16 +151,23 @@ def health() -> dict:
                         _sql.Identifier(settings.UPLOADS_SCHEMA)
                     )
                 )
-        return {
-            "status": "ok",
-            "database": settings.PG_DATABASE,
-            "host": f"{settings.PG_HOST}:{settings.PG_PORT}",
-            "postgres": pg_version.split(" on ")[0],
-            "uploads_schema": settings.UPLOADS_SCHEMA,
-        }
+        body: dict = {"status": "ok"}
+        # #291 (BR-54): /api/health is open to anyone who can reach the port, so outside dev it says
+        # only whether the API is up. The database name, host, version and schema are dev details.
+        if settings.API_ENV == "dev":
+            body.update(
+                database=settings.PG_DATABASE,
+                host=f"{settings.PG_HOST}:{settings.PG_PORT}",
+                postgres=pg_version.split(" on ")[0],
+                uploads_schema=settings.UPLOADS_SCHEMA,
+            )
+        return body
     except Exception as exc:  # noqa: BLE001 — surface DB reachability to the UI
         # Log the real exception server-side, but don't return it: /api/health
         # is deliberately unauthenticated (see BUG-035 comment above), and
         # psycopg2's OperationalError text can include host/port/user details.
         logger.warning("Health check failed: %s", exc)
-        return {"status": "degraded", "error": "Database is unreachable or not fully bootstrapped."}
+        degraded: dict = {"status": "degraded"}
+        if settings.API_ENV == "dev":
+            degraded["error"] = "Database is unreachable or not fully bootstrapped."
+        return degraded
