@@ -39,6 +39,30 @@ else
     R=''; G=''; Y=''; C=''; X=''
 fi
 
+# with_timeout SECONDS COMMAND [ARG...]: run COMMAND and stop it after SECONDS (#309).
+# `timeout` is GNU coreutils: stock macOS has none (Homebrew installs it as `gtimeout`), so use whichever exists
+# and otherwise a bash-only watchdog. It keeps the command's exit status; a command stopped for taking too long
+# fails. Bash 3.2 safe (macOS's bash), and exported below so the `bash -c` that `check` runs can call it.
+with_timeout() {
+    local secs="$1"; shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$secs" "$@"; return $?
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "$secs" "$@"; return $?
+    fi
+    "$@" &
+    local pid=$!
+    # Output to /dev/null so a leftover `sleep` can never hold a caller's pipe open after we return.
+    ( sleep "$secs"; kill "$pid" 2>/dev/null ) >/dev/null 2>&1 &
+    local watchdog=$!
+    wait "$pid" 2>/dev/null
+    local status=$?
+    kill "$watchdog" 2>/dev/null
+    wait "$watchdog" 2>/dev/null
+    return "$status"
+}
+export -f with_timeout
+
 # check NAME REQUIRED COMMAND -- COMMAND-TO-EVAL
 # Pass status is determined by the eval's exit code (0 = pass, non-zero = fail).
 # REQUIRED is "req" or "opt"; opt failures count as warnings.
@@ -105,7 +129,7 @@ if [ "$SKIP_PG" -eq 0 ]; then
     HOST="${PGHOST:-localhost}"
     PORT="${PGPORT:-5432}"
     check "port $PORT reachable on $HOST" opt 'PG not listening. Check service is running and listen_addresses.' \
-          bash -c "(timeout 3 bash -c '</dev/tcp/$HOST/$PORT') 2>/dev/null"
+          bash -c "(with_timeout 3 bash -c '</dev/tcp/$HOST/$PORT') 2>/dev/null"
 
     if command -v psql >/dev/null 2>&1 && [ -n "${PGPASSWORD:-}" ]; then
         check 'PG accepts the configured credentials' opt 'psql `SELECT 1` failed. Recheck PGUSER/PGPASSWORD/PGDATABASE.' \
