@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from api import policy
 from api.auth import allow, tenant_scope
+from api.concurrency import import_slot
 from api.config import settings
 from api.db import Conn
 from api.routers.csv_routes import HeaderRename
@@ -55,7 +56,7 @@ def _run(fn, *args, commit: bool = True):
     return result
 
 
-@router.post("", dependencies=[Depends(allow("upload"))])
+@router.post("", dependencies=[Depends(allow("upload")), Depends(import_slot)])
 def stage(req: StageRequest) -> dict:
     """Store an upload for review; nothing is imported. Answers 409 for an exact duplicate, 422 for a bad file."""
     if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
@@ -101,7 +102,7 @@ def approval(upload_id: int, req: ApprovalRequest, session: dict | None = Depend
     return _run(staged_import.decide_approval, upload_id, req.decision, req.reason, session)
 
 
-@router.post("/{upload_id}/import", dependencies=[Depends(allow("run_import"))])
+@router.post("/{upload_id}/import", dependencies=[Depends(allow("run_import")), Depends(import_slot)])
 def run_import(upload_id: int, idempotency_key: str = Header(default="", alias="Idempotency-Key"),
                session: dict | None = Depends(tenant_scope)) -> dict:
     """Import an approved upload in one transaction. Send an Idempotency-Key and reuse it to retry."""

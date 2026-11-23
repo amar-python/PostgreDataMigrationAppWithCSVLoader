@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from api import policy
 from api.auth import allow, tenant_scope
+from api.concurrency import import_slot
 from api.config import settings
 from api.tenancy import uploads_schema
 from api.db import Conn
@@ -107,7 +108,7 @@ class RecordFailed(Exception):
     """The load's registry, original or audit record couldn't be written, so the load rolled back (#288)."""
 
 
-@router.post("/upload", dependencies=[Depends(allow("upload"))])
+@router.post("/upload", dependencies=[Depends(allow("upload")), Depends(import_slot)])
 def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> dict:
     if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
