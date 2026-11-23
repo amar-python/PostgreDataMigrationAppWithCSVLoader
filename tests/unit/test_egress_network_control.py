@@ -119,6 +119,26 @@ def test_the_egress_blocked_tests_run_as_the_blocked_user_without_the_control():
         "the deliberate attempts of the control must not run in the step whose count must stay zero")
 
 
+def test_no_step_relies_on_sudo_preserving_the_environment():
+    """sudo-rs (the default sudo on newer Ubuntu) ignores -E, so the variables never reached the blocked user (first CI run)."""
+    for step in job_steps():
+        run = step.get("run") or ""
+        assert not re.search(r"sudo\s+(-\w*E\b|--preserve-env)", run), f"{step.get('name')}: pass the variables with `sudo env VAR=...`"
+
+
+def test_the_variables_the_tests_need_are_passed_to_the_blocked_user_by_name():
+    steps = job_steps()
+    control = steps[index_of(steps, CONTROL)]["run"]
+    blocked = steps[index_of(steps, "--block-egress")]["run"]
+    for name, run in (("control", control), ("egress tests", blocked)):
+        for needed in ('"PATH=$PATH"', '"PGHOST=$PGHOST"', '"PGPORT=$PGPORT"', '"PGUSER=$PGUSER"', '"PGPASSWORD=$PGPASSWORD"',
+                       '"PGDATABASE=$PGDATABASE"'):
+            assert needed in run, f"the {name} step must pass {needed} to the blocked user"
+    assert '"EGRESS_NETWORK_BLOCKED=$EGRESS_NETWORK_BLOCKED"' in control, (
+        "without it the control is deselected and pytest exits 5 (the first CI run)")
+    assert '"EGRESS_NETWORK_BLOCKED=' not in blocked, "the control's variable must not reach the counted step"
+
+
 def test_the_block_is_removed_even_when_an_earlier_step_failed():
     steps = job_steps()
     step = steps[index_of(steps, "egress_firewall.sh remove")]

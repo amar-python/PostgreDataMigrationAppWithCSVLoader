@@ -203,8 +203,14 @@ jobs:
           PGDATABASE: te_mgmt_dev
           EGRESS_NETWORK_BLOCKED: "1"
         run: |
-          sudo -E env "PATH=$PATH" bash scripts/egress_firewall.sh run egresstest -- \
-            python3 -m pytest tests/system/test_egress_network_blocked.py -q -p no:cacheprovider
+          # Name every variable to pass on: sudo-rs, the default sudo on newer Ubuntu runners, ignores the option that
+          # preserves the whole environment (the first run of this step lost EGRESS_NETWORK_BLOCKED that way).
+          as_blocked() {
+            sudo env "PATH=$PATH" "PGHOST=$PGHOST" "PGPORT=$PGPORT" "PGUSER=$PGUSER" "PGPASSWORD=$PGPASSWORD" \
+              "PGDATABASE=$PGDATABASE" "EGRESS_NETWORK_BLOCKED=$EGRESS_NETWORK_BLOCKED" \
+              bash scripts/egress_firewall.sh run egresstest -- "$@"
+          }
+          as_blocked python3 -m pytest tests/system/test_egress_network_blocked.py -q -p no:cacheprovider
           refused="$(sudo bash scripts/egress_firewall.sh count)"
           echo "the control's deliberate attempts refused by the firewall: $refused packet(s)"
           test "$refused" -ge 1 || { echo "the firewall counted none of the control's attempts, so a zero count below would prove nothing"; exit 1; }
@@ -214,7 +220,10 @@ jobs:
         env:
           PGDATABASE: te_mgmt_dev
         run: |
-          sudo -E env "PATH=$PATH" bash scripts/egress_firewall.sh run egresstest -- \
+          # The control's EGRESS_NETWORK_BLOCKED is deliberately not passed on: its attempts must not run here.
+          sudo env "PATH=$PATH" "PGHOST=$PGHOST" "PGPORT=$PGPORT" "PGUSER=$PGUSER" "PGPASSWORD=$PGPASSWORD" \
+            "PGDATABASE=$PGDATABASE" \
+            bash scripts/egress_firewall.sh run egresstest -- \
             python3 -m pytest tests/system --block-egress -q -p no:cacheprovider
 
       - name: Fail if anything tried to leave the machine (#310)
