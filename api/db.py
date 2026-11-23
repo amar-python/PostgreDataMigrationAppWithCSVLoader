@@ -218,10 +218,20 @@ def bootstrap() -> None:
     alembic_ini = alembic_ini_path()
 
     if not alembic_ini.exists():
-        logger.warning(
-            "alembic.ini not found at %s — falling back to hand-written "
-            "CREATE TABLE IF NOT EXISTS bootstrap. Add alembic.ini + an "
-            "alembic/ versions directory to get real schema-evolution support.",
+        # #317 (BR-35): the hand-written fallback schema has no hash chain and no append-only triggers,
+        # so a deployment with a packaging mistake would run without the audit protections, silently.
+        # Only dev may use it; anywhere else the API refuses to start.
+        if settings.API_ENV != "dev":
+            raise RuntimeError(
+                f"alembic.ini not found at {alembic_ini}; refusing to start without migrations "
+                f"(API_ENV is '{settings.API_ENV}', and the audit triggers would be missing). "
+                "Check that alembic.ini, alembic/ and alembic_te/ are in the deployment, "
+                "or set API_ENV=dev for local development."
+            )
+        logger.error(
+            "alembic.ini not found at %s: falling back to the hand-written schema, which has NO audit "
+            "hash chain and NO append-only triggers. Tolerated only because API_ENV=dev. Add alembic.ini "
+            "and the alembic/ versions directory to get the real schema.",
             alembic_ini,
         )
         _bootstrap_fallback_schema()
