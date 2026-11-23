@@ -117,7 +117,7 @@ Severities are the author's estimate, for the reviewer to confirm or overrule. "
 | F2 | Deployment | **The unauthenticated health check discloses internals**: database name, `host:port`, the exact PostgreSQL version and the schema name. `/docs`, `/redoc` and `/openapi.json` are open too (the full route map). | Low | Called the API with no credentials: all four returned 200 with those details | `/api/health` returns only `{"status": ...}`; disable the docs or require auth outside `dev` |
 | F3 | Authentication | **Rate limiting keys on the peer IP and ignores `X-Forwarded-For`** (deliberately, so it can't be spoofed). Behind a reverse proxy every caller shares the proxy's address, so one client can exhaust the budget for everyone, and the brute-force limit isn't per attacker. Counters are per instance. | Medium (availability) unless the proxy limits per client | Code: `api/ratelimit.py` `_client_id` | Trust `X-Forwarded-For` only from a configured proxy address, or limit at the proxy; say which in the deployment guide |
 | F4 | Authentication | **scrypt cost is below current guidance** (N=2^14; OWASP currently suggests N=2^17 with r=8, p=1) and hashes aren't upgraded when a user signs in. | Low to medium | Code: `accounts._N, _R, _P`. The hash string stores its parameters, so an upgrade is possible | Raise N, and re-hash on a successful sign-in when the stored parameters are weaker |
-| F5 | Authentication | **Lockout is per username**, so anyone who knows a username can keep it locked (10 bad attempts every 15 minutes). OIDC sign-in ignores the lockout (it never uses the password). | Low | Code: `accounts.login`, `login_trusted` | A product decision: keep, or lock per username and client address |
+| F5 | Authentication | **Lockout is per username**, so anyone who knows a username can keep it locked (10 bad attempts every 15 minutes). OIDC sign-in ignores the lockout (it never uses the password). | Low | Code: `accounts.login`, `login_trusted` | A product decision: keep, or lock per username and client address. **Decided in §10 (#295): keep** |
 | F6 | Authentication | **Sessions have a fixed 12-hour life, no idle timeout, and expired or revoked rows are never deleted.** | Low | Code: `accounts._new_session`, `session_for`; no `DELETE FROM ...sessions` anywhere in `api/` or `scripts/` | Add an idle timeout, and purge expired sessions |
 | F7 | Tenant isolation | **One runtime role can reach every tenant's schema.** Isolation is application-level (schema-qualified queries, tested), not database-level as the Milestone 0 design described; and the role is cluster-wide (#173, open). A missed schema qualification in future code would be a cross-tenant leak, not a database error. | Medium (design) | Code: no `SET ROLE` or per-tenant grants anywhere; `api/db.py` `grant_runtime` grants on all tenant schemas | Decide whether per-tenant roles (or row-level security) are required before the first external tenant |
 | F8 | Role matrix | **The shared API key bypasses tenants and roles**: it reaches the default schemas with full rights, has no per-key identity (every action audits as `api_key`) and one value for everyone. The open item in the VCRM for BR-36. | Medium until it is retired or scoped | Code: `api/auth.py` `tenant_scope`; `docs/ROLES.md` | Per-service keys with scopes and rotation, or retire it for scripts that can use a session |
@@ -142,8 +142,24 @@ No penetration test; no live-environment check (Key Vault and registry network s
 
 | Finding | Decision (fix, accept, defer) | Owner | Issue |
 |---|---|---|---|
-| F1 to F11 | | | |
+| F1 to F4, F6 to F11 | | | |
+| F5 | accept: keep the lockout per username | Project owner (decided 2026-11-23) | #295 |
 
+
+### Decision on F5: account lockout stays per username (#295, 2026-11-23)
+
+**Decision: accept.** Ten wrong passwords in 15 minutes lock the account for 15 minutes (`LOGIN_MAX_FAILURES`, `LOGIN_LOCKOUT_MINUTES`), keyed on the username alone. Nothing is changed in the code.
+
+Why:
+
+- The lock ends by itself after `LOGIN_LOCKOUT_MINUTES`, and a person with database access can end it at once: `scripts/reset_password.py` clears any lockout.
+- By design the API is internal-only (`api/ratelimit.py` describes it as behind an environment boundary with `external_enabled = false`, and the production environment uses an internal load balancer), so the people who can reach it are already inside the network. The repository does not yet define the API's own deployment (F9c), so this is the intent, not something the infrastructure code proves.
+- OIDC (#95) is the intended sign-in path for a real deployment, and it ignores the lockout, so a locked password does not stop an OIDC user.
+- Locking per username and client address would not help yet: behind a proxy every caller shares the proxy's address (F3, #293), so the key would be the same as today's.
+
+Residual risk accepted: someone who knows a username and can reach the API can keep that account's password sign-in locked by sending ten wrong passwords every fifteen minutes. They learn nothing from it, and the account's data is not exposed.
+
+Revisit when the API becomes reachable beyond the internal network, or when a trustworthy client address is available (see #293); then lock per username and client address, or use a progressive delay.
 
 ## 11. Reconciliation 2026-11-20 (appended)
 
