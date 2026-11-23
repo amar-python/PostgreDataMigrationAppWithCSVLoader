@@ -1,0 +1,12 @@
+# gitleaks configuration (#326). Used by .github/workflows/security-scan.yml.
+#
+# Keep the default rules: without this block gitleaks uses ONLY the rules written in this file, which would be none.
+# tests/unit/test_security_scan_workflow.py fails if it is removed.
+title = "PostgreDataMigrationApp"
+
+[extend]
+useDefault = true
+
+# Accepted findings go below, each as its own block with a description that says why it is safe (a throwaway test
+# value, a documented placeholder). Prefer fixing: a real secret in history means rotating it, not allow-listing it.
+# There are none today.

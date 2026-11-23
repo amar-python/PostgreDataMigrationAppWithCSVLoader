@@ -1,0 +1,83 @@
+name: Security scan
+
+# #326 (SE-05): nothing in CI looked for a known-vulnerable dependency or a committed secret. Two jobs, on every pull
+# request, every push to main, once a week (new advisories appear without a code change) and on demand:
+#
+#   dependency-audit  scripts/security_audit.py: pip-audit on every tracked requirements file and npm audit on the
+#                     frontend's production dependencies. A finding fails the job; an accepted exception goes in
+#                     security/audit-allowlist.txt, with a reason and an expiry date. If the audit cannot run, it fails.
+#   secret-scan       gitleaks over the whole git history, with the default rules plus .gitleaks.toml. A secret
+#                     found fails the job and is redacted in the log.
+#
+# Not a required check yet: that is branch protection (#301). Image scanning and the SBOM for the container bundle
+# are the next part of #326 and live in container-bundle.yml.
+# tests/unit/test_security_scan_workflow.py keeps both jobs honest (full-history checkout, pinned tools, no `|| true`).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 19 * * 0'   # Sundays 19:17 UTC, which is Monday 06:17 in Canberra
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-audit:
+    name: dependency audit (pip-audit, npm audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Install pip-audit
+        run: pip install pip-audit==2.10.1
+
+      - name: Audit the dependencies
+        run: python3 scripts/security_audit.py
+
+  secret-scan:
+    name: secret scan (gitleaks, full history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout (the whole history)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Scan every commit
+        # The git safe.directory variables stop git refusing a checkout owned by another user inside the container.
+        run: |
+          docker run --rm \
+            -v "$PWD:/repo" \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git /repo --config /repo/.gitleaks.toml --redact --verbose --exit-code 1
+
+      - name: Canary (the scanner must still detect a secret)
+        # "no leaks found" is also what a scanner with broken rules says. This writes a known fake AWS key to a temp
+        # folder and passes only if gitleaks FLAGS it. The key is built from two pieces, so it never appears whole in
+        # this file or in the history this job scans.
+        run: |
+          mkdir canary
+          printf 'aws_access_key_id = %s%s\n' "AKIA" "QYLPMN5HHHFPZAM2" > canary/leak.txt
+          if docker run --rm -v "$PWD/canary:/canary" ghcr.io/gitleaks/gitleaks:v8.30.1 \
+              dir /canary --redact --exit-code 1; then
+            echo "::error::gitleaks did not flag a known fake secret, so its rules are not working"
+            exit 1
+          fi
+          echo "the canary was flagged, as it should be"

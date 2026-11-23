@@ -1,0 +1,14 @@
+# Accepted exceptions for scripts/security_audit.py (#326). One entry per line:
+#
+#     <advisory id>  <valid through YYYY-MM-DD>  <reason, and who accepted it>
+#
+# How this works
+#   * An entry covers the advisory by any of its names (PYSEC-..., CVE-..., GHSA-...).
+#   * It applies through the date shown. After that the audit fails on the expired entry by itself, so an
+#     exception cannot be forgotten: renew it with a new reason, or remove it (and upgrade the package).
+#   * Prefer upgrading. Use this only when there is no fixed version, or the vulnerable code cannot be reached,
+#     and say which in the reason.
+#   * Python vulnerabilities all block (pip-audit gives no severity); npm blocks at High and Critical.
+#
+# There are no accepted exceptions today (checked 23 Nov 2026: 0 known vulnerabilities in the four requirements files
+# or in the frontend's production dependencies).
