@@ -30,11 +30,26 @@ url = URL.create(
 )
 schema = settings.UPLOADS_SCHEMA
 
+# #286 (OIT-001, BR-50): every API process runs these migrations at start-up. Two processes starting
+# together raced on CREATE SCHEMA and on each migration, and the loser's start-up failed. A session-level
+# advisory lock serialises them across processes: the second waits, then finds the schema at head and
+# does nothing. One key for every run of this env (all uploads schemas and the control schema its
+# migrations create), so tenant upgrades and start-up upgrades cannot interleave either. Advisory locks
+# are per database; the lock is released explicitly and, failing that, when the connection closes.
+LOCK_KEY = "alembic:uploads-env"
+
 engine = create_engine(url, poolclass=NullPool)
 with engine.connect() as connection:
-    quoted = connection.dialect.identifier_preparer.quote(schema)
-    connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {quoted}"))
+    connection.execute(text("SELECT pg_advisory_lock(hashtextextended(:k, 0))"), {"k": LOCK_KEY})
     connection.commit()
-    context.configure(connection=connection, version_table_schema=schema)
-    with context.begin_transaction():
-        context.run_migrations()
+    try:
+        quoted = connection.dialect.identifier_preparer.quote(schema)
+        connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {quoted}"))
+        connection.commit()
+        context.configure(connection=connection, version_table_schema=schema)
+        with context.begin_transaction():
+            context.run_migrations()
+    finally:
+        connection.rollback()
+        connection.execute(text("SELECT pg_advisory_unlock(hashtextextended(:k, 0))"), {"k": LOCK_KEY})
+        connection.commit()
