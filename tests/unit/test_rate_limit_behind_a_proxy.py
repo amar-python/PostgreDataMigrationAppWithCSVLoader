@@ -28,7 +28,6 @@ import uvicorn
 from fastapi.testclient import TestClient
 
 from api.config import settings
-from api.main import app
 from api.ratelimit import _client_id, limiter
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression, pytest.mark.security]
