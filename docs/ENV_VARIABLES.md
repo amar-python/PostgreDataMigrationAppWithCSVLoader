@@ -51,7 +51,7 @@ Read by `api/config.py`. Set these in the shell before running
 | `OIDC_JWKS_URL` | _(empty)_ | If OIDC is on | The IdP's signing keys: `https://…` (fetched, and refreshed when keys rotate: at most every 30 s; a private CA needs `SSL_CERT_FILE`, see `docs/OIDC_REAL_IDP_CHECK.md`) or `file:///…` (a JWKS file published inside an enclave). `http://` is refused. |
 | `OIDC_USERNAME_CLAIM` | `preferred_username` | No | Token claim that names the local user. The user must already exist and be a member of the tenant; nobody is created from claims. |
 | `TE_SCHEMA` | `te_dev` | No | Schema holding the 12 fixed T&E tables. Switch to `te_test`, `te_staging`, or `te_prod` per environment. |
-| `MAX_UPLOAD_BYTES` | `52428800` (50 MB) | No | Maximum file size accepted by the upload endpoint. |
+| `MAX_UPLOAD_BYTES` | `52428800` (50 MB) | No | Maximum file size accepted by the upload endpoint. It also sets the cap on any request body, just under twice this value (a body of 2 x the limit is refused with 413 before it is parsed, #290), because JSON escaping and base64 make a body larger than the file in it. |
 
 ---
 

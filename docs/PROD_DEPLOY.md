@@ -173,6 +173,16 @@ psql "host=<pg_fqdn> port=5432 user=pgadmin dbname=te_prod sslmode=require"
 \dt te_prod.*
 ```
 
+## Request size limits (#290)
+
+The API refuses an oversize request body itself, before it parses it: a body of
+`2 x MAX_UPLOAD_BYTES` or more (100 MB with the default 50 MB file limit) gets `413`,
+whether or not the request declares a `Content-Length`. Set the same limit in whatever
+sits in front of the API (a reverse proxy, a load balancer or the container ingress), so
+that an over-large body is refused there and never reaches the API. For nginx that is
+`client_max_body_size 100m;` in the server or location that proxies `/api/`. Keep the two
+in step if you change `MAX_UPLOAD_BYTES`.
+
 ## Connecting to private resources
 
 PG, ACR, and KV are all private-endpoint-only. To reach them from your
