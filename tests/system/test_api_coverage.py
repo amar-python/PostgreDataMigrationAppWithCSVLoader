@@ -479,10 +479,11 @@ class TeUploadPipeline(_IntegrationBase):
         )
         r = self._upload_te(csv, target_table="organisations")
         body = r.json()
-        self.assertEqual(body["status"], "ok", body)
+        # #289: a T&E load is all or nothing, so the valid row does not land either.
+        self.assertEqual(body["status"], "error", body)
         self.assertEqual(body["failedRows"], 1)
-        self.assertEqual(body["insertedRows"], 1,
-                         "The valid row should still land while the bad row is skipped.")
+        self.assertEqual(body["insertedRows"], 0,
+                         "A file with a failing row imports nothing (#289).")
         self.assertTrue(body["rowErrors"], "rowErrors must be populated")
         err = body["rowErrors"][0]
         # These two fields are the fingerprint of the client-side path.

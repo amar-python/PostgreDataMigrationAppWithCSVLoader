@@ -14,6 +14,11 @@ per-row inserts guarded by a SAVEPOINT — the old behaviour — so a bad enum
 value or FK violation still shows up as a row error instead of aborting the
 batch.
 
+#289 (M0 decision 4, "partial imports are not permitted"): the load is all or nothing. If any row fails,
+whether at the client-side check or in the database, the whole load is rolled back and the response is an
+``error`` listing every failing row (``rowErrors``, capped) with ``insertedRows`` 0. The savepoints are kept
+only so that one upload can report all the bad rows at once.
+
 BUG-027: Also enforces ``settings.MAX_ROWS`` (previously dynamic mode only).
 """
 
@@ -315,11 +320,18 @@ def upload_te(file_name: str, content: str, target_table: str, *, session: dict 
                         finally:
                             cur.execute("RELEASE SAVEPOINT row_sp")
 
-            # #170: if every row failed, nothing was migrated. Roll back and
-            # preserve any prior dataset rather than cleaning it up.
-            if data_rows and inserted == 0:
+            # #170, #289: all or nothing (M0 decision 4: partial imports are not permitted). If any row
+            # failed, at the client-side type check or in the database, nothing is migrated: roll back and
+            # preserve any prior load rather than cleaning it up. The per-row savepoints above stay, because
+            # they are what lets one upload report every bad row instead of only the first.
+            if data_rows and (inserted == 0 or failed_row_count > 0):
                 conn.rollback()
-                msg = f"None of the {len(data_rows)} rows could be imported into {target_table}, so nothing was saved."
+                if failed_row_count >= len(data_rows):
+                    msg = (f"None of the {len(data_rows)} rows could be imported into {target_table}, "
+                           "so nothing was saved.")
+                else:
+                    msg = (f"{failed_row_count} of the {len(data_rows)} rows could not be imported into "
+                           f"{target_table}, so nothing was saved. Fix them and upload the file again.")
                 if row_errors:
                     e = row_errors[0]
                     msg += f' First problem: row {e["rowNumber"]}, {e.get("column", "")}: {e.get("reason", "")}'
