@@ -1,43 +1,67 @@
 #!/usr/bin/env bash
-# scripts/lint.sh — full flake8 + bandit scan over all Python source.
+# scripts/lint.sh — flake8 + bandit over every tracked Python file.
 # Mirrors: bun run slop (full slop-scan report in gstack)
+#
+# Scope is discovered from git, not listed by hand (#322). A hand-kept list had fallen behind twice: it named 14 of
+# the 38 test files (#167) and then 19 of the 74 source files, so the routers, most services, the Streamlit app,
+# e2e/ and the later migrations were never checked and "lint clean" said nothing about the code that changes most.
+#
+#   flake8  every tracked .py file
+#   bandit  every tracked .py file except test code (tests/, e2e/), where its findings are about fixtures and asserts
+#
+# LINT_EXCLUDE below skips exact paths from BOTH tools. Give each entry a reason. It is empty today, and
+# tests/unit/test_lint_scope.py fails if a tracked file is outside the scope and not named here.
+#
+#   scripts/lint.sh                        run the lint
+#   scripts/lint.sh --list-files           print the files flake8 checks, one per line, and stop
+#   scripts/lint.sh --list-security-files  print the files bandit scans
+#   scripts/lint.sh --list-excluded        print the excluded files
 set -euo pipefail
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
-PY_SRC=(
-    build/csv/validator.py
-    evals/runner.py
-    evals/gap_report.py
-    api/main.py
-    api/ratelimit.py
-    api/services/audit.py
-    api/db.py
-    alembic/env.py
-    alembic/versions/0001_baseline.py
-    alembic/versions/0002_registry_unique.py
-    alembic/versions/0003_import_counts.py
-    alembic/versions/0004_control_schema.py
-    alembic/versions/0005_login_lockout.py
-    api/auth.py
-    api/services/accounts.py
-    api/routers/auth_routes.py
-    api/tenancy.py
-    api/oidc.py
-    scripts/create_tenant_admin.py
-)
+LINT_EXCLUDE=()
 
-# Every Python file under tests/ (all categories, conftest, helpers). A hand-kept list had
-# fallen behind: it named 14 of the 38 test files (#167).
-mapfile -t PY_TESTS < <(find tests -name '*.py' -not -path '*/__pycache__/*' | sort)
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "lint.sh finds its files with 'git ls-files', so it must run inside a git checkout." >&2
+    exit 2
+fi
 
-# Collect scripts/*.py dynamically
-mapfile -t PY_SCRIPTS < <(ls scripts/*.py 2>/dev/null || true)
+is_excluded() {
+    local path="$1" skip
+    for skip in ${LINT_EXCLUDE[@]+"${LINT_EXCLUDE[@]}"}; do
+        [[ "$path" == "$skip" ]] && return 0
+    done
+    return 1
+}
 
-ALL_PY=("${PY_SRC[@]}" "${PY_TESTS[@]}" "${PY_SCRIPTS[@]}")
+LINT_FILES=()
+SECURITY_FILES=()
+while IFS= read -r path; do
+    [[ -f "$path" ]] || continue            # tracked, but deleted in the working tree
+    is_excluded "$path" && continue
+    LINT_FILES+=("$path")
+    case "$path" in
+        tests/*|e2e/*) ;;
+        *) SECURITY_FILES+=("$path") ;;
+    esac
+done < <(git ls-files '*.py' | LC_ALL=C sort)
 
-echo -e "\n${YELLOW}=== flake8 (style + logic) ===${NC}"
-if python3 -m flake8 "${ALL_PY[@]}" \
+case "${1:-}" in
+    --list-files)          [ "${#LINT_FILES[@]}" -eq 0 ] || printf '%s\n' "${LINT_FILES[@]}"; exit 0 ;;
+    --list-security-files) [ "${#SECURITY_FILES[@]}" -eq 0 ] || printf '%s\n' "${SECURITY_FILES[@]}"; exit 0 ;;
+    --list-excluded)       [ "${#LINT_EXCLUDE[@]}" -eq 0 ] || printf '%s\n' "${LINT_EXCLUDE[@]}"; exit 0 ;;
+    "") ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
+esac
+
+if [ "${#LINT_FILES[@]}" -eq 0 ]; then
+    echo -e "${RED}✗ no tracked Python files found; refusing to report a clean lint over nothing${NC}"
+    exit 1
+fi
+
+echo -e "\n${YELLOW}=== flake8 (style + logic): ${#LINT_FILES[@]} files ===${NC}"
+if python3 -m flake8 "${LINT_FILES[@]}" \
         --max-line-length=120 \
         --extend-ignore=E501,E221,E272; then
     echo -e "${GREEN}✓ flake8 clean${NC}"
@@ -46,8 +70,10 @@ else
     exit 1
 fi
 
-echo -e "\n${YELLOW}=== bandit (security) ===${NC}"
-if python3 -m bandit "${PY_SRC[@]}" -ll -q 2>&1; then
+echo -e "\n${YELLOW}=== bandit (security): ${#SECURITY_FILES[@]} files ===${NC}"
+if [ "${#SECURITY_FILES[@]}" -eq 0 ]; then
+    echo -e "${GREEN}✓ bandit: no non-test Python files to scan${NC}"
+elif python3 -m bandit "${SECURITY_FILES[@]}" -ll -q 2>&1; then
     echo -e "${GREEN}✓ bandit clean${NC}"
 else
     echo -e "${RED}✗ bandit found security issues${NC}"

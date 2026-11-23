@@ -47,7 +47,7 @@ class Result:
 def _open(request):
     """Open a request with a fresh opener. urlopen() keeps one process-wide opener whose TLS trust is fixed the first
     time it is used, so it can't see SSL_CERT_FILE change in the same process."""
-    return urllib.request.build_opener().open(request, timeout=TIMEOUT)  # nosec B310 — URLs from the operator's own config
+    return urllib.request.build_opener().open(request, timeout=TIMEOUT)  # nosec B310 # URLs from the operator's own config
 
 
 def _get_json(url: str) -> dict:

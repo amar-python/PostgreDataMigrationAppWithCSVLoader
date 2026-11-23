@@ -10,7 +10,6 @@ from __future__ import annotations
 import re
 import uuid
 
-import pytest
 from playwright.sync_api import expect
 from psycopg2 import sql
 

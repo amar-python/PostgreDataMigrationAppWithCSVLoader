@@ -34,6 +34,17 @@ def _schema() -> str:
     return op.get_bind().dialect.identifier_preparer.quote(settings.UPLOADS_SCHEMA)
 
 
+def _literal(value: str) -> str:
+    """A value as an SQL string literal, with any single quote doubled (#322).
+
+    The schema name is used twice in this migration: as an identifier, quoted by the dialect's identifier
+    preparer (see _schema), and as a string value inside a DO block, where it was wrapped in quotes without
+    escaping. The name comes from operator configuration, not from a user, but a name containing a quote would
+    have broken the statement.
+    """
+    return "'" + value.replace("'", "''") + "'"
+
+
 def upgrade() -> None:
     s = _schema()
     t = f"{s}.audit_log"
@@ -66,7 +77,7 @@ def upgrade() -> None:
             SELECT {s}.audit_row_hash(prev, a) INTO prev FROM {t} a WHERE a.id = r.id;
             UPDATE {t} SET row_hash = prev WHERE id = r.id;
           END LOOP;
-        END $$""".replace("TG_SCHEMA_PLACEHOLDER", f"'{settings.UPLOADS_SCHEMA}'"))
+        END $$""".replace("TG_SCHEMA_PLACEHOLDER", _literal(settings.UPLOADS_SCHEMA)))  # nosec B608 # {s}, {t} are quoted identifiers; the value is escaped by _literal
     op.execute(f"""
         CREATE FUNCTION {s}.audit_chain() RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN
@@ -77,7 +88,7 @@ def upgrade() -> None:
             INTO NEW.prev_hash;
           NEW.row_hash := {s}.audit_row_hash(NEW.prev_hash, NEW);
           RETURN NEW;
-        END $$""")
+        END $$""")  # nosec B608 # {s} is a quoted identifier (see _schema); nothing else is interpolated
     op.execute(f"""
         CREATE FUNCTION {s}.audit_reject_change() RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN

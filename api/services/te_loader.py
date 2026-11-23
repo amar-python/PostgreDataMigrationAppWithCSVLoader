@@ -281,7 +281,7 @@ def upload_te(file_name: str, content: str, target_table: str, *, session: dict 
             # to per-row to identify the bad row(s).
             chunk_size = 500
             for start in range(0, len(to_insert), chunk_size):
-                chunk = to_insert[start : start + chunk_size]
+                chunk = to_insert[start:start + chunk_size]
                 chunk_values = [v for _, v in chunk]
                 cur.execute("SAVEPOINT chunk_sp")
                 try:

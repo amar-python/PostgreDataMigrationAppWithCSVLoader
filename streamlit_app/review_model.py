@@ -31,6 +31,7 @@ EDITED_TINT = "background-color: rgba(59,130,246,.18)"
 ERROR_TINT = "background-color: rgba(239,68,68,.22)"
 EXCLUDED_TEXT = ";color:#9ca3af"  # st.dataframe ignores opacity, so a grey text colour says "excluded"
 
+
 def literal(text: object) -> str:
     """Text from a file or a person, as an inline code span, which Markdown shows exactly as written.
 

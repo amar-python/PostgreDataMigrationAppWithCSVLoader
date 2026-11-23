@@ -53,6 +53,8 @@ class NotFresh(Exception):
 
 class Api:
     def __init__(self, base: str):
+        if not base.lower().startswith(("http://", "https://")):
+            raise ValueError(f"the API address must be an http(s) URL, got {base!r}")
         self.base, self.token = base.rstrip("/"), None
 
     def call(self, method: str, path: str, body: dict | None = None) -> tuple[int, object]:
@@ -64,7 +66,7 @@ class Api:
             data=json.dumps(body).encode() if body is not None else None,
         )
         try:
-            with urllib.request.urlopen(req) as r:
+            with urllib.request.urlopen(req) as r:  # nosec B310 # scheme checked in Api.__init__
                 return r.status, json.loads(r.read() or b"null")
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read() or b"null")
@@ -117,9 +119,9 @@ def collect(api: Api, conn) -> dict:
     a = upload(api, "orgs_sample.csv", orgs, "te", "organisations")
     resp = a["response"]
     schema, table = loaded_table(a, "orgs_sample.csv (Test and Evaluation)").split(".")
-    cur.execute(f'SELECT name, org_type, country FROM "{schema}"."{table}" ORDER BY name')
+    cur.execute(f'SELECT name, org_type, country FROM "{schema}"."{table}" ORDER BY name')  # nosec B608 # schema and table are double-quoted names from this deployment's own API response (operator tool)
     db_rows = [list(r) for r in cur.fetchall()]
-    cur.execute(f'SELECT file_hash, row_count, total_rows, failed_rows, id FROM "{schema}".csv_files WHERE file_name=%s',
+    cur.execute(f'SELECT file_hash, row_count, total_rows, failed_rows, id FROM "{schema}".csv_files WHERE file_name=%s',  # nosec B608 # schema and table are double-quoted names from this deployment's own API response (operator tool)
                 ("orgs_sample.csv",))
     reg = cur.fetchone()
     expected_loaded = sorted(r for i, r in enumerate(src_rows, 1) if i not in EXPECTED_REJECTS)
@@ -139,12 +141,12 @@ def collect(api: Api, conn) -> dict:
     b = upload(api, "equipment_register.csv", eq, "dynamic")
     bt = loaded_table(b, "equipment_register.csv (dynamic)")
     bs = ev["te"]["target"].split(".")[0]  # dynamic tables live in the same tenant schema
-    cur.execute(f'SELECT count(*) FROM "{bs}"."{bt}"')
+    cur.execute(f'SELECT count(*) FROM "{bs}"."{bt}"')  # nosec B608 # schema and table are double-quoted names from this deployment's own API response (operator tool)
     b_count = cur.fetchone()[0]
     cur.execute("SELECT column_name, data_type FROM information_schema.columns "
                 "WHERE table_schema=%s AND table_name=%s ORDER BY ordinal_position", (bs, bt))
     cols = [list(r) for r in cur.fetchall() if not r[0].startswith("_")]
-    cur.execute(f'SELECT file_hash FROM "{bs}".csv_files WHERE file_name=%s', ("equipment_register.csv",))
+    cur.execute(f'SELECT file_hash FROM "{bs}".csv_files WHERE file_name=%s', ("equipment_register.csv",))  # nosec B608 # schema and table are double-quoted names from this deployment's own API response (operator tool)
     ev["dynamic"] = {
         "file": "equipment_register.csv", "bytes": len(eq_bytes), "sha256": hashlib.sha256(eq_bytes).hexdigest(),
         "source_rows": len(eq.splitlines()) - 1, "api": b, "table": bt, "db_row_count": b_count,
@@ -155,16 +157,16 @@ def collect(api: Api, conn) -> dict:
 
     # --- Re-upload of the T&E file (#215): every row now collides, so nothing may change --
     again = upload(api, "orgs_sample.csv", orgs, "te", "organisations")["response"]
-    cur.execute(f'SELECT id, row_count, failed_rows FROM "{schema}".csv_files WHERE file_name=%s', ("orgs_sample.csv",))
+    cur.execute(f'SELECT id, row_count, failed_rows FROM "{schema}".csv_files WHERE file_name=%s', ("orgs_sample.csv",))  # nosec B608 # schema and table are double-quoted names from this deployment's own API response (operator tool)
     after = cur.fetchall()
-    cur.execute(f'SELECT count(*) FROM "{schema}"."{table}"')
+    cur.execute(f'SELECT count(*) FROM "{schema}"."{table}"')  # nosec B608 # schema and table are double-quoted names from this deployment's own API response (operator tool)
     ev["te_reupload"] = {"status": again.get("status"), "inserted": again.get("insertedRows"),
                          "registry_after": [list(r) for r in after], "db_row_count_after": cur.fetchone()[0]}
 
     # --- Observed deployment posture (read from the running system, not from our env) --
     unauth = urllib.request.Request(api.base + "/api/csv/files")
     try:
-        with urllib.request.urlopen(unauth) as r:
+        with urllib.request.urlopen(unauth) as r:  # nosec B310 # scheme checked in Api.__init__
             unauth_status = r.status
     except urllib.error.HTTPError as e:
         unauth_status = e.code

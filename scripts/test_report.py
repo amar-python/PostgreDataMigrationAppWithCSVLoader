@@ -84,7 +84,7 @@ def _parse(xml_path: Path):
     passed, failed, errored, skipped = [], [], [], []
     if not xml_path.exists():
         return passed, failed, errored, skipped
-    for case in ET.parse(xml_path).getroot().iter("testcase"):
+    for case in ET.parse(xml_path).getroot().iter("testcase"):  # nosec B314 # the JUnit file this script made pytest write
         cls, name = case.get("classname", ""), case.get("name", "")
         tid = f"{cls}::{name}" if cls else name
         if (n := case.find("skipped")) is not None:
