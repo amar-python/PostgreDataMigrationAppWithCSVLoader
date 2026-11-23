@@ -7,6 +7,7 @@ Run (from the repo root):
     Interactive docs: http://localhost:8000/docs
 """
 
+import hashlib
 import logging
 from contextlib import asynccontextmanager
 
@@ -41,6 +42,15 @@ def assert_auth_configured(api_env: str, api_key: str) -> None:
         )
 
 
+def key_fingerprint(key: str) -> str:
+    """A short one-way tag of ``key``: the first 8 hex digits of its SHA-256 (#292, BR-55).
+
+    Enough to tell in a log whether two keys are the same, and it contains no part of the key. The key itself,
+    in whole or in part, is never logged.
+    """
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:8]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # O-03: fail closed. A warning was not enough — an unset key left every
@@ -55,14 +65,14 @@ async def lifespan(app: FastAPI):
             "variable before deploying anywhere reachable beyond localhost."
         )
     else:
-        # Fingerprint (first 4 chars + length) so a script's key mismatch is
-        # diagnosable without leaking the secret to the log (BUG-006). Browsers
-        # no longer hold this key; they sign in per user (#96).
-        fp = settings.API_KEY[:4] + "..." if len(settings.API_KEY) >= 4 else "***"
+        # A one-way fingerprint plus the length, so a script's key mismatch is diagnosable (BUG-006; a stray
+        # space or newline shows as a wrong length) without any part of the secret reaching the log (#292,
+        # BR-55: the first four characters used to be logged). Browsers no longer hold this key; they sign in
+        # per user (#96).
         logger.info(
-            "API_KEY is set (fingerprint: %s, length: %d). "
+            "API_KEY is set (fingerprint: sha256:%s, length: %d). "
             "Scripts and services send it in the X-API-Key header; browsers sign in.",
-            fp, len(settings.API_KEY),
+            key_fingerprint(settings.API_KEY), len(settings.API_KEY),
         )
     if not settings.PG_PASSWORD:
         logger.warning(
