@@ -123,7 +123,7 @@ class TestAccessibilityJob(unittest.TestCase):
     def test_integration_jobs_exclude_accessibility_everywhere_they_run_the_tree(self):
         # The suite runs in the shards (through the accounting script) and the coverage run in its own job.
         self.assertIn('--markers "not accessibility"', self._run_text("integration-shards"))
-        self.assertIn('pytest tests/ -m "not accessibility"', self._run_text("coverage"))
+        self.assertNotIn("pytest", self._run_text("coverage"), "the coverage job combines data; it runs no tests")
 
     def test_free_tier_markers_cannot_select_accessibility_tests(self):
         text = self._run_text("free-tier")
@@ -229,15 +229,15 @@ class TestCoverageIsMeasuredOneWay(unittest.TestCase):
         return set(re.findall(r"--cov=([\w/.-]+)", text))
 
     def _ci_coverage_step(self) -> dict:
-        steps = _load_workflow()["jobs"]["coverage"]["steps"]
-        found = [s for s in steps if "--cov" in s.get("run", "")]
-        self.assertEqual(len(found), 1, "expected exactly one coverage step in the coverage job")
+        steps = _load_workflow()["jobs"]["integration-shards"]["steps"]
+        found = [s for s in steps if "--cov" in str((s.get("env") or {}).get("PYTEST_ADDOPTS", ""))]
+        self.assertEqual(len(found), 1, "expected exactly one step that measures coverage in the shard job")
         return found[0]
 
     def test_ci_measures_the_whole_scope_with_branch_coverage(self):
-        run = self._ci_coverage_step()["run"]
-        self.assertEqual(self.cov_scope(run), self.SCOPE)
-        self.assertIn("--cov-branch", run)
+        opts = self._ci_coverage_step()["env"]["PYTEST_ADDOPTS"]
+        self.assertEqual(self.cov_scope(opts), self.SCOPE)
+        self.assertIn("--cov-branch", opts)
 
     def test_the_makefile_measures_the_same_scope(self):
         text = self.MAKEFILE.read_text(encoding="utf-8")
@@ -266,8 +266,9 @@ class TestCoverageIsMeasuredOneWay(unittest.TestCase):
         self.assertLessEqual(floors, self.SCOPE)
 
     def test_ci_runs_the_floors_on_the_report_it_just_wrote(self):
-        run = self._ci_coverage_step()["run"]
-        report = re.search(r"--cov-report=json:(\S+)", run).group(1)
+        steps = _load_workflow()["jobs"]["coverage"]["steps"]
+        run = "\n".join(s.get("run", "") for s in steps)
+        report = re.search(r"coverage json -o (\S+)", run).group(1)
         self.assertIn(f"check_coverage_floors.py {report}", run)
 
 

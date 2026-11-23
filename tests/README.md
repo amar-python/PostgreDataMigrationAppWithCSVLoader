@@ -98,14 +98,19 @@ whole suite a third time for coverage): 25 to 40 minutes. Now `quality-gate.yml`
 | Job | Runs |
 |---|---|
 | `integration-shards` (1 to 3) | the test files of its shard, through `scripts/test_report.py --strict --paths ...` (so every test it holds is accounted for) |
-| `integration-egress` | the firewall steps and `pytest tests/system --block-egress` |
-| `coverage` | the coverage gate and its floors |
+| `integration-egress` (1 to 3) | the firewall steps and `pytest <its share of tests/system> --block-egress` |
+| `coverage` | no tests: combines the coverage each shard recorded as it ran and applies the floors |
 | `integration-postgres` | the check named **integration (postgres service)**: succeeds only if the three above did |
 
 - **The split** is by test file (`scripts/ci_shards.py`), heaviest first into the lightest shard, from the durations in
   `ci/shard_weights.json`. Each shard has its own PostgreSQL service, because the system tests share databases and assume a
   fresh one. A file with no recorded duration still lands in a shard, and `tests/unit/test_ci_shards.py` checks that every
   file pytest collects is in exactly one shard, so a test cannot silently stop running.
+- **Egress shards:** the egress-blocked pass splits `tests/system/` the same way (`ci_shards.py files --shard K --of 3 --only
+  tests/system/`), each shard in its own job with its own firewall block; `EGRESS_SHARDS` in `scripts/ci_shards.py` and the
+  `shard:` matrix of `integration-egress` are kept in step by a test.
+- **Coverage** is recorded inside the shards (`PYTEST_ADDOPTS` carries the `--cov` scope into `scripts/test_report.py`), each
+  shard uploads `coverage-shard-N.dat`, and the `coverage` job runs `coverage combine`, `coverage json` and the floors.
 - **Change the number of shards** in two places that a test keeps in step: `SHARDS` in `scripts/ci_shards.py` and the `shard:`
   matrix in the workflow (and the `--of` in its run step).
 - **Refresh the durations** after the suite changes a lot (a full run against a fresh database, then record it):

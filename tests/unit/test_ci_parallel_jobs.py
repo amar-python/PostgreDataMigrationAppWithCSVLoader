@@ -256,8 +256,8 @@ def test_the_shards_cover_every_file_and_cannot_drift_from_the_script():
     assert '--markers "not accessibility"' in text
 
 
-def test_every_shard_has_its_own_postgres_and_the_same_setup_as_before():
-    for job_id in HEAVY:
+def test_every_database_job_has_its_own_postgres_and_the_same_setup_as_before():
+    for job_id in ("integration-shards", "integration-egress"):
         job = jobs()[job_id]
         service = job["services"]["postgres"]
         assert service["image"].startswith("postgres:16"), job_id
@@ -266,25 +266,65 @@ def test_every_shard_has_its_own_postgres_and_the_same_setup_as_before():
             assert needed in text, f"{job_id} lost the setup step that runs {needed!r}"
 
 
-def test_the_coverage_gate_is_its_own_job_with_one_coverage_step_and_the_floors():
+def _shard_step(job_id: str = "integration-shards") -> dict:
+    return next(s for s in jobs()[job_id]["steps"] if "test_report.py" in (s.get("run") or ""))
+
+
+def test_each_shard_measures_coverage_and_hands_its_data_to_the_coverage_job():
+    """Coverage is no longer a third run of the whole suite: every shard records it as it runs, the coverage job combines."""
+    job = jobs()["integration-shards"]
+    step = _shard_step()
+    opts = (step.get("env") or {}).get("PYTEST_ADDOPTS", "")
+    for scope in ("api", "streamlit_app", "build/csv", "evals"):
+        assert f"--cov={scope}" in opts, scope
+    assert "--cov-branch" in opts and "--cov-report=" in opts
+    assert "coverage-shard-${{ matrix.shard }}.dat" in step["run"] or any(
+        "coverage-shard-${{ matrix.shard }}.dat" in (s.get("run") or "") for s in job["steps"])
+    uploads = [s for s in job["steps"] if "upload-artifact" in (s.get("uses") or "") and
+               "coverage-shard-${{ matrix.shard }}" in str((s.get("with") or {}).get("name", ""))]
+    assert len(uploads) == 1, "each shard uploads its own coverage data under a name that is unique per shard"
+    assert "coverage-shard-${{ matrix.shard }}.dat" in str(uploads[0]["with"]["path"])
+
+
+def test_the_coverage_job_combines_the_shards_and_applies_the_floors_and_needs_no_database():
     job = jobs()["coverage"]
-    steps = [s for s in job["steps"] if "--cov" in (s.get("run") or "")]
-    assert len(steps) == 1
-    run = steps[0]["run"]
-    assert "set -o pipefail" in run
-    assert "check_coverage_floors.py" in run
-    assert 'pytest tests/ -m "not accessibility"' in run
-    assert not any("--cov" in (s.get("run") or "") for k in ("integration-shards", "integration-egress")
-                   for s in jobs()[k]["steps"]), "coverage is measured in one place"
+    assert "services" not in job, "combining data files needs no database"
+    needs = job["needs"]
+    assert {"changes", "integration-shards"} <= set(needs)
+    assert "needs.changes.outputs.code == 'true'" in str(job.get("if"))
+    assert "needs.integration-shards.result == 'success'" in str(job.get("if")), (
+        "no coverage verdict from a run in which a shard failed")
+    download = next(s for s in job["steps"] if "download-artifact" in (s.get("uses") or ""))
+    assert "coverage-shard-*" in str(download["with"].get("pattern"))
+    assert download["with"].get("merge-multiple") in (True, "true")
+    run = run_text(job)
+    assert "coverage combine" in run and "coverage json" in run
+    assert "check_coverage_floors.py coverage.json" in run
+    assert "set -o pipefail" in run or "set -e" in run or "check_coverage_floors.py" in run
+    assert not any("pytest" in (s.get("run") or "") for s in job["steps"]), "the coverage job runs no tests"
 
 
-def test_the_egress_pass_is_its_own_job_and_keeps_its_firewall_steps():
+def test_the_egress_pass_is_sharded_and_keeps_its_firewall_steps():
     job = jobs()["integration-egress"]
+    assert job["strategy"]["matrix"]["shard"] == list(range(1, ci_shards.EGRESS_SHARDS + 1))
+    assert job["strategy"].get("fail-fast") is False
     text = run_text(job)
     for needed in ("egress_firewall.sh install egresstest", "egress_firewall.sh check", "--block-egress",
                    "egress_firewall.sh remove"):
         assert needed in text, needed
     assert "test_report.py" not in text, "the egress job does not re-run the whole suite on the open network"
+    assert "ci_shards.py files --shard ${{ matrix.shard }}" in text
+    assert f"--of {ci_shards.EGRESS_SHARDS}" in text and "--only tests/system/" in text
+    uploads = [s for s in job["steps"] if "upload-artifact" in (s.get("uses") or "")]
+    assert uploads and all("${{ matrix.shard }}" in str(s["with"]["name"]) for s in uploads), (
+        "artifact names must be unique per shard or the uploads collide")
+
+
+def test_the_egress_shards_hold_every_system_test_file_once():
+    files = ci_shards.test_files(only="tests/system/")
+    shards = ci_shards.assign(files, ci_shards.load_weights(), ci_shards.EGRESS_SHARDS)
+    flat = [f for sh in shards for f in sh]
+    assert sorted(flat) == sorted(files) and all(shards)
 
 
 def test_the_gate_job_runs_always_and_asks_the_script():
