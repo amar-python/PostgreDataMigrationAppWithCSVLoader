@@ -46,8 +46,8 @@ test-performance`, `make test-uat`) reports that and succeeds.
 
 ## Coverage
 
-One scope, measured one way (#274, #278), the same in `.coveragerc`, the Makefile (`COVERAGE_SCOPE`) and the coverage
-step of `quality-gate.yml`, with branch coverage.
+One scope, measured one way (#274, #278), the same in `.coveragerc`, the Makefile (`COVERAGE_SCOPE`) and the `coverage`
+job of `quality-gate.yml`, with branch coverage.
 
 | | |
 |---|---|
@@ -89,3 +89,34 @@ A test file reaches the repository root with `Path(__file__).resolve().parents[2
 `python3 scripts/test_catalogue.py` for a local copy, or download the `test-catalogue`
 artifact from a CI run. It used to be committed, and every PR that added or moved a test
 conflicted on it whenever `main` regenerated it.
+
+## How CI runs the tests in parallel
+
+The database jobs used to run one after another (the suite, the system tests again with the network blocked, then the
+whole suite a third time for coverage): 25 to 40 minutes. Now `quality-gate.yml` runs them side by side:
+
+| Job | Runs |
+|---|---|
+| `integration-shards` (1 to 3) | the test files of its shard, through `scripts/test_report.py --strict --paths ...` (so every test it holds is accounted for) |
+| `integration-egress` | the firewall steps and `pytest tests/system --block-egress` |
+| `coverage` | the coverage gate and its floors |
+| `integration-postgres` | the check named **integration (postgres service)**: succeeds only if the three above did |
+
+- **The split** is by test file (`scripts/ci_shards.py`), heaviest first into the lightest shard, from the durations in
+  `ci/shard_weights.json`. Each shard has its own PostgreSQL service, because the system tests share databases and assume a
+  fresh one. A file with no recorded duration still lands in a shard, and `tests/unit/test_ci_shards.py` checks that every
+  file pytest collects is in exactly one shard, so a test cannot silently stop running.
+- **Change the number of shards** in two places that a test keeps in step: `SHARDS` in `scripts/ci_shards.py` and the `shard:`
+  matrix in the workflow (and the `--of` in its run step).
+- **Refresh the durations** after the suite changes a lot (a full run against a fresh database, then record it):
+  ```
+  python3 -m pytest tests -m "not accessibility" --junitxml=junit.xml
+  python3 scripts/ci_shards.py update-weights junit.xml     # rewrites ci/shard_weights.json
+  python3 scripts/ci_shards.py plan --of 3                  # shows the split and the estimate
+  ```
+- **Documentation-only changes skip the database jobs** (`scripts/ci_changes.py`). A document counts as documentation only if
+  no test, eval, script, source file or workflow names it by file name (several tests read documents, and only the database
+  jobs run some of them); on any doubt, and on every push to `main`, everything runs. The fast jobs (free tier, browser,
+  accessibility) always run. `scripts/ci_gate.py` turns the jobs' results into the one check, and treats a skipped job as
+  a failure for a code change.
+- **A newer push to a pull request cancels its older run**; runs on `main` are never cancelled.

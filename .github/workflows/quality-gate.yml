@@ -7,7 +7,35 @@ on:
       - master
   pull_request:
 
+# A newer push to a pull request makes the older run pointless: cancel it (it was minutes of runner time and, for the
+# database jobs, tens of minutes). Pushes to main are never cancelled: every merge keeps its own full run.
+concurrency:
+  group: quality-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Does this change need the slow database jobs? Only documentation that nothing reads can skip them (scripts/ci_changes.py
+  # says why, and runs everything when in doubt). Decided in a job, not by a workflow-level `paths-ignore`, because that
+  # would leave the required check pending forever on a documentation-only pull request.
+  changes:
+    name: changes (does this need the database jobs?)
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.decide.outputs.code }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the diff against the base needs its history
+
+      - name: Decide
+        id: decide
+        run: |
+          python3 scripts/ci_changes.py \
+            --event "${{ github.event_name }}" \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
+
   # Fast, deterministic checks — no database, no network beyond pip.
   free-tier:
     name: free-tier (unit, lint, health, evals-p)
@@ -73,11 +101,21 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-  # Full integration surface: Tier I deploys env_dev.sql twice (idempotency),
-  # Tier S runs the 142-assertion SQL suite, then the PG-gated pytest tiers run.
-  integration-postgres:
-    name: integration (postgres service)
+  # The whole suite, split by test file (scripts/ci_shards.py) into parallel jobs, each with its own PostgreSQL: the
+  # system tests share databases and assume a fresh one, so they cannot share a server. Each shard prints the same final
+  # block as before (PASSED / FAILED / ERROR / SKIPPED with reasons / NOT RUN) and --strict fails it on any skip.
+  # Full integration surface: Tier I deploys env_dev.sql twice (idempotency), Tier S runs the 142-assertion SQL suite,
+  # then the PG-gated pytest tiers run. Every shard repeats that cheap setup (a few seconds): the cross-environment
+  # parity tests rely on it.
+  integration-shards:
+    name: integration shard ${{ matrix.shard }} (postgres service)
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    strategy:
+      fail-fast: false   # one red shard must not hide what the others found
+      matrix:
+        shard: [1, 2, 3]   # keep in step with SHARDS in scripts/ci_shards.py (a test checks it)
     services:
       postgres:
         image: postgres:16-alpine
@@ -169,18 +207,123 @@ jobs:
             bash build/deploy_all.sh "$env"
           done
 
-      # Prints a final block accounting for every test: PASSED / FAILED /
-      # ERROR / SKIPPED (with reasons) / NOT RUN (deselected). --strict fails
-      # the build on any skip.
-      # The API reads PGDATABASE (api/config.py). The schema lives in
-      # te_mgmt_dev, not the job-level default "postgres" (issue #45).
-      # Accessibility scans need a browser and the frontend, not this database;
-      # they run in the `accessibility` job below (#168) and are reported here as
-      # NOT RUN, not as skipped.
-      - name: Full test suite — final result with skip accounting
+      # The API reads PGDATABASE (api/config.py). The schema lives in te_mgmt_dev, not the job-level default
+      # "postgres" (issue #45). Accessibility scans need a browser and the frontend, not this database; they run in the
+      # `accessibility` job (#168) and are reported here as NOT RUN, not as skipped.
+      - name: Test shard ${{ matrix.shard }} — final result with skip accounting
         env:
           PGDATABASE: te_mgmt_dev
-        run: python3 scripts/test_report.py --markers "not accessibility" --strict
+        run: |
+          files="$(python3 scripts/ci_shards.py files --shard ${{ matrix.shard }} --of 3)"
+          echo "$files"
+          python3 scripts/test_report.py --markers "not accessibility" --strict --paths $files
+
+      - name: Upload eval reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: eval-reports-integration-shard-${{ matrix.shard }}
+          path: evals/reports/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # M7 (#111, BR-37) and #310: the API tests with every connection that isn't to this machine refused and recorded.
+  # Its own job, in parallel with the shards and the coverage gate (it used to run after the whole suite).
+  integration-egress:
+    name: egress-blocked tests (postgres service)
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements-dev.txt
+            api/requirements.txt
+
+      - name: Install dev dependencies
+        # api/requirements.txt is needed too: tests/test_api.py imports FastAPI
+        # at module level, so without it pytest collection fails.
+        run: pip install -r requirements-dev.txt -r api/requirements.txt
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Write CI database config
+        run: |
+          cat > build/config.local.env <<'EOF'
+          DB_ENGINE="postgresql"
+          PG_HOST="localhost"
+          PG_PORT="5432"
+          PG_SUPERUSER="postgres"
+          PG_SUPERUSER_PASSWORD="postgres"
+          PG_DB_DEV="te_mgmt_dev"
+          PG_SCHEMA_DEV="te_dev"
+          PG_DB_TEST="te_mgmt_test"
+          PG_SCHEMA_TEST="te_test"
+          PG_DB_STAGING="te_mgmt_staging"
+          PG_SCHEMA_STAGING="te_staging"
+          PG_DB_PROD="te_mgmt_prod"
+          PG_SCHEMA_PROD="te_prod"
+          EOF
+
+      # env_*.sql scripts do not create their databases — deploy_all.sh does that
+      # before invoking them (see build/te_core_schema.sql:41). Mirror it here.
+      # Only *.example.sql are committed (concrete env_<env>.sql are gitignored),
+      # so materialise them before anything that deploys an environment.
+      - name: Materialise environment launchers from templates
+        run: |
+          for env in dev test staging prod; do
+            cp "build/environments/env_${env}.example.sql" \
+               "build/environments/env_${env}.sql"
+          done
+          ls -1 build/environments/
+
+      - name: Create environment databases
+        run: |
+          for db in te_mgmt_dev te_mgmt_test te_mgmt_staging te_mgmt_prod; do
+            if [ -z "$(psql -d postgres -tA -c "SELECT 1 FROM pg_database WHERE datname = '$db'")" ]; then
+              psql -v ON_ERROR_STOP=1 -d postgres -c \
+                "CREATE DATABASE \"$db\" WITH OWNER = postgres ENCODING = 'UTF8' TEMPLATE = template0 CONNECTION LIMIT = -1"
+            fi
+          done
+
+      # Tier E deploys all four environments and compares their schemas, so it
+      # runs here where the postgres service exists. Order matters: E deploys
+      # every environment, which the cross-env parity pytest markers then rely on.
+      # Tier X is excluded per ADR-0001 — see the free-tier job's note.
+      - name: Evals — Tiers P, I, S, E
+        run: python3 evals/runner.py --tiers p,i,s,e --verbose
+
+      - name: Deploy all environments (for cross-env parity)
+        run: |
+          for env in dev test staging prod; do
+            bash build/deploy_all.sh "$env"
+          done
 
       # M7 (#111, BR-37) and #310: the API tests again, with every connection that isn't to this machine refused and
       # recorded. Two layers. Inside Python, tests/egress_guard.py refuses and records the attempt, even when the code
@@ -233,6 +376,112 @@ jobs:
         if: always()
         run: sudo bash scripts/egress_firewall.sh remove
 
+      - name: Upload eval reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: eval-reports-integration-egress
+          path: evals/reports/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # The coverage gate, in its own job, in parallel with the shards (it used to run after the whole suite).
+  coverage:
+    name: coverage gate (api, streamlit_app)
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements-dev.txt
+            api/requirements.txt
+
+      - name: Install dev dependencies
+        # api/requirements.txt is needed too: tests/test_api.py imports FastAPI
+        # at module level, so without it pytest collection fails.
+        run: pip install -r requirements-dev.txt -r api/requirements.txt
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Write CI database config
+        run: |
+          cat > build/config.local.env <<'EOF'
+          DB_ENGINE="postgresql"
+          PG_HOST="localhost"
+          PG_PORT="5432"
+          PG_SUPERUSER="postgres"
+          PG_SUPERUSER_PASSWORD="postgres"
+          PG_DB_DEV="te_mgmt_dev"
+          PG_SCHEMA_DEV="te_dev"
+          PG_DB_TEST="te_mgmt_test"
+          PG_SCHEMA_TEST="te_test"
+          PG_DB_STAGING="te_mgmt_staging"
+          PG_SCHEMA_STAGING="te_staging"
+          PG_DB_PROD="te_mgmt_prod"
+          PG_SCHEMA_PROD="te_prod"
+          EOF
+
+      # env_*.sql scripts do not create their databases — deploy_all.sh does that
+      # before invoking them (see build/te_core_schema.sql:41). Mirror it here.
+      # Only *.example.sql are committed (concrete env_<env>.sql are gitignored),
+      # so materialise them before anything that deploys an environment.
+      - name: Materialise environment launchers from templates
+        run: |
+          for env in dev test staging prod; do
+            cp "build/environments/env_${env}.example.sql" \
+               "build/environments/env_${env}.sql"
+          done
+          ls -1 build/environments/
+
+      - name: Create environment databases
+        run: |
+          for db in te_mgmt_dev te_mgmt_test te_mgmt_staging te_mgmt_prod; do
+            if [ -z "$(psql -d postgres -tA -c "SELECT 1 FROM pg_database WHERE datname = '$db'")" ]; then
+              psql -v ON_ERROR_STOP=1 -d postgres -c \
+                "CREATE DATABASE \"$db\" WITH OWNER = postgres ENCODING = 'UTF8' TEMPLATE = template0 CONNECTION LIMIT = -1"
+            fi
+          done
+
+      # Tier E deploys all four environments and compares their schemas, so it
+      # runs here where the postgres service exists. Order matters: E deploys
+      # every environment, which the cross-env parity pytest markers then rely on.
+      # Tier X is excluded per ADR-0001 — see the free-tier job's note.
+      - name: Evals — Tiers P, I, S, E
+        run: python3 evals/runner.py --tiers p,i,s,e --verbose
+
+      - name: Deploy all environments (for cross-env parity)
+        run: |
+          for env in dev test staging prod; do
+            bash build/deploy_all.sh "$env"
+          done
+
       # #194, #274, #278: coverage with per-loader floors and per-package floors for api/ and streamlit_app/
       # (scripts/check_coverage_floors.py). One scope, the same in .coveragerc and the Makefile; see tests/README.md.
       # #275: pipefail, so a failing pytest fails this step. Without it the pipe into tail returns tail's
@@ -257,10 +506,29 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: eval-reports-integration
+          name: eval-reports-integration-coverage
           path: evals/reports/
           if-no-files-found: ignore
           retention-days: 30
+
+  # The check that has always been called "integration (postgres service)": it passes only if the shards, the egress job
+  # and the coverage gate all succeeded, or were all skipped for a documentation-only change (scripts/ci_gate.py).
+  # `always()` so that a failed or skipped job still produces a verdict instead of leaving this check pending.
+  integration-postgres:
+    name: integration (postgres service)
+    needs: [changes, integration-shards, integration-egress, coverage]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Verdict
+        run: |
+          python3 scripts/ci_gate.py "${{ needs.changes.outputs.code }}" \
+            "shards=${{ needs.integration-shards.result }}" \
+            "egress=${{ needs.integration-egress.result }}" \
+            "coverage=${{ needs.coverage.result }}"
 
   # #168: WCAG 2.1 A and AA scans of the frontend (csv-table-hub-main) with
   # Playwright + axe-core in Chromium, against the Vite dev server. The API is

@@ -22,9 +22,11 @@
   adapters in `build/adapters/` are kept but not maintained
   ([ADR-0001](docs/adr/0001-postgresql-first.md)).
 - CI (`.github/workflows/quality-gate.yml`) runs on every push to `main` and on pull requests:
-  unit tests, lint and Tier P evals, plus an integration job that deploys all
-  four environments to PostgreSQL 16 and runs eval Tiers P, I, S and E and the
-  full pytest suite.
+  unit tests, lint and Tier P evals, plus the database jobs, which deploy all
+  four environments to PostgreSQL 16 and run eval Tiers P, I, S and E and the
+  full pytest suite. The database jobs run in parallel (the suite is split into
+  shards, and the egress-blocked pass and the coverage gate have their own jobs),
+  and are skipped for a change that is only documentation nothing reads.
 - Requirement-by-requirement verification status is in [`docs/VCRM.md`](docs/VCRM.md).
 
 ## Known Limitations
@@ -295,7 +297,11 @@ python evals\runner.py --tiers p,i,s,e   # 27 scenarios: Tier P 23, I 1, S 1, E 
 | Workflow | Runner | Scope |
 |---|---|---|
 | `quality-gate.yml` — `free-tier` | ubuntu | unit, regression, security, snapshot |
-| `quality-gate.yml` — `integration-postgres` | ubuntu + PG | full suite, all 4 environments; `--strict` fails the job on any skipped test (fail-not-skip) |
+| `quality-gate.yml` — `changes` | ubuntu | decides whether the database jobs can be skipped (documentation only that nothing reads); runs everything on any doubt and on every push to `main` |
+| `quality-gate.yml` — `integration-shards` (3 in parallel) | ubuntu + PG each | the full suite split by test file, all 4 environments deployed in each; `--strict` fails a shard on any skipped test (fail-not-skip) |
+| `quality-gate.yml` — `integration-egress` | ubuntu + PG | the system tests with the network blocked for a throwaway user (#310) |
+| `quality-gate.yml` — `coverage` | ubuntu + PG | the coverage gate with per-package floors |
+| `quality-gate.yml` — `integration-postgres` | ubuntu | the check named **integration (postgres service)**: passes only if the shards, the egress job and the coverage gate all passed (or were all skipped for a documentation-only change) |
 | `python-validator-tests.yml` | windows | database-free markers |
 
 ---

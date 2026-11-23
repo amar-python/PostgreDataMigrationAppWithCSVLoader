@@ -50,8 +50,13 @@ class TestQualityGateStructure(unittest.TestCase):
         self.assertIn("main", push_branches)
 
 
+# Jobs that only decide or gate (scripts/ci_changes.py, scripts/ci_gate.py): no Python setup, no installs, no artifacts.
+# tests/unit/test_ci_parallel_jobs.py asserts they run nothing else.
+PLUMBING_JOBS = {"changes", "integration-postgres"}
+
+
 class TestAllJobsHaveConsistentStructure(unittest.TestCase):
-    """All jobs must have checkout, python setup, and artifact upload."""
+    """All jobs must have checkout; every job that runs code also python setup, dependencies and an artifact upload."""
 
     @classmethod
     def setUpClass(cls):
@@ -71,7 +76,7 @@ class TestAllJobsHaveConsistentStructure(unittest.TestCase):
             )
 
     def test_all_jobs_have_python_setup(self):
-        for job_id in self.jobs:
+        for job_id in set(self.jobs) - PLUMBING_JOBS:
             names = self._step_names(job_id)
             self.assertTrue(
                 any("Setup Python" in n or "Python" in n for n in names),
@@ -79,7 +84,7 @@ class TestAllJobsHaveConsistentStructure(unittest.TestCase):
             )
 
     def test_all_jobs_have_artifact_upload(self):
-        for job_id in self.jobs:
+        for job_id in set(self.jobs) - PLUMBING_JOBS:
             names = self._step_names(job_id)
             self.assertTrue(
                 any("Upload" in n for n in names),
@@ -87,7 +92,7 @@ class TestAllJobsHaveConsistentStructure(unittest.TestCase):
             )
 
     def test_all_jobs_install_dev_deps(self):
-        for job_id in self.jobs:
+        for job_id in set(self.jobs) - PLUMBING_JOBS:
             names = self._step_names(job_id)
             self.assertTrue(
                 any("Install" in n and "dep" in n.lower() for n in names),
@@ -115,10 +120,10 @@ class TestAccessibilityJob(unittest.TestCase):
         self.assertIn("npm ci", text)
         self.assertIn("requirements-a11y.txt", text)
 
-    def test_integration_job_excludes_accessibility_everywhere_it_runs_the_whole_tree(self):
-        text = self._run_text("integration-postgres")
-        self.assertIn('--markers "not accessibility"', text)
-        self.assertIn('pytest tests/ -m "not accessibility"', text)
+    def test_integration_jobs_exclude_accessibility_everywhere_they_run_the_tree(self):
+        # The suite runs in the shards (through the accounting script) and the coverage run in its own job.
+        self.assertIn('--markers "not accessibility"', self._run_text("integration-shards"))
+        self.assertIn('pytest tests/ -m "not accessibility"', self._run_text("coverage"))
 
     def test_free_tier_markers_cannot_select_accessibility_tests(self):
         text = self._run_text("free-tier")
@@ -224,9 +229,9 @@ class TestCoverageIsMeasuredOneWay(unittest.TestCase):
         return set(re.findall(r"--cov=([\w/.-]+)", text))
 
     def _ci_coverage_step(self) -> dict:
-        steps = _load_workflow()["jobs"]["integration-postgres"]["steps"]
+        steps = _load_workflow()["jobs"]["coverage"]["steps"]
         found = [s for s in steps if "--cov" in s.get("run", "")]
-        self.assertEqual(len(found), 1, "expected exactly one coverage step in the integration job")
+        self.assertEqual(len(found), 1, "expected exactly one coverage step in the coverage job")
         return found[0]
 
     def test_ci_measures_the_whole_scope_with_branch_coverage(self):
