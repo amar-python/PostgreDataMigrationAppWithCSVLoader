@@ -21,6 +21,7 @@ on:
       - 'build/environments/env_prod.example.sql'
       - 'scripts/create_tenant_admin.py'
       - '.github/workflows/container-bundle.yml'
+      - '.trivyignore.yaml'
   push:
     branches: [main]
     paths:
@@ -35,6 +36,7 @@ on:
       - 'build/environments/env_prod.example.sql'
       - 'scripts/create_tenant_admin.py'
       - '.github/workflows/container-bundle.yml'
+      - '.trivyignore.yaml'
   workflow_dispatch:
 
 permissions:
@@ -130,9 +132,68 @@ jobs:
           retention-days: 7
           compression-level: 0
 
+  # #326 (SE-05): what the bundle ships is checked for known vulnerabilities and described by an SBOM. Each CPU's images
+  # are built on that CPU, as in the job above, in a separate job so a finding does not hide the install test's result.
+  # A fixable HIGH or CRITICAL vulnerability fails this job, and the bundle below needs it, so no bundle is assembled.
+  # Accepted exceptions go in .trivyignore.yaml, each with a reason and an expiry date.
+  scan:
+    name: ${{ matrix.arch }} image scan and SBOM
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-latest }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build the three images
+        run: bash container/build_bundle.sh images
+
+      - name: Write a CycloneDX SBOM for each image
+        run: |
+          set -euo pipefail
+          VERSION="$(git rev-parse --short HEAD)"
+          mkdir -p dist/sbom .trivy-cache
+          for img in api frontend db; do
+            docker run --rm \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$PWD:/repo" -v "$PWD/.trivy-cache:/cache" -w /repo \
+              ghcr.io/aquasecurity/trivy:0.76.2 \
+              image --cache-dir /cache --format cyclonedx \
+              --output "/repo/dist/sbom/te-$img-${{ matrix.arch }}.cdx.json" "te-$img:$VERSION"
+          done
+          ls -la dist/sbom
+
+      - name: Scan the images for known vulnerabilities
+        run: |
+          set -euo pipefail
+          VERSION="$(git rev-parse --short HEAD)"
+          rc=0   # scan all three, so one finding does not hide the others
+          for img in api frontend db; do
+            docker run --rm \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$PWD:/repo" -v "$PWD/.trivy-cache:/cache" -w /repo \
+              ghcr.io/aquasecurity/trivy:0.76.2 \
+              image --cache-dir /cache --ignorefile /repo/.trivyignore.yaml \
+              --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "te-$img:$VERSION" || rc=1
+          done
+          exit $rc
+
+      - name: Upload the SBOMs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: te-sbom-${{ matrix.arch }}
+          path: dist/sbom/*.cdx.json
+          retention-days: 14
+
   bundle:
     name: assemble the bundle (amd64 + arm64)
-    needs: images
+    needs: [images, scan]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -145,10 +206,25 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Download both CPUs' SBOMs
+        uses: actions/download-artifact@v7
+        with:
+          pattern: te-sbom-*
+          path: dist/sbom
+          merge-multiple: true
+
       - name: Assemble one bundle for both CPUs
+        env:
+          TE_REQUIRE_SBOM: "1"   # a bundle without an SBOM for every image is an error
         run: |
-          ls -la dist
+          ls -la dist dist/sbom
           bash container/build_bundle.sh assemble dist/te-images-*-amd64.tar dist/te-images-*-arm64.tar
+
+      - name: Check that the bundle holds all six SBOMs
+        run: |
+          N="$(tar -tzf dist/te-container-bundle-*.tar.gz | grep -c '/sbom/te-.*\.cdx\.json$' || true)"
+          [ "$N" -eq 6 ] || { echo "::error::expected 6 SBOMs (3 images x 2 CPUs) in the bundle, found $N"; exit 1; }
+          echo "the bundle holds $N SBOMs"
 
       - name: Upload the bundle
         uses: actions/upload-artifact@v7

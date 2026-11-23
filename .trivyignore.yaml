@@ -1,0 +1,12 @@
+# Accepted vulnerabilities in the container images, for the `scan` job of .github/workflows/container-bundle.yml (#326).
+# trivy reads this file. Each entry is:
+#
+#   - id: CVE-2026-0000
+#     statement: why it is accepted, and who accepted it (at least a sentence)
+#     expired_at: 2026-12-31      # trivy stops ignoring it after this date, so the finding comes back
+#
+# Prefer fixing: a newer base image, or a package upgrade in the Dockerfile. Use this only when there is no fix yet,
+# or the vulnerable code cannot be reached, and say which. The job already ignores vulnerabilities that have no fixed
+# version (--ignore-unfixed); only HIGH and CRITICAL fail it.
+# tests/unit/test_image_scan_workflow.py rejects an entry with no reason or no expiry date, or one that has expired.
+vulnerabilities: []

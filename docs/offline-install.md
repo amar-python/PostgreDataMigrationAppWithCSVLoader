@@ -182,6 +182,8 @@ bash container/build_bundle.sh assemble dist/te-images-*.tar  # one or more tarb
 
 `TE_RUNTIME=podman` builds with Podman. The `.tar.gz` has a `.sha256` file next to it.
 
+**Software bill of materials (#326).** The bundle CI builds holds a CycloneDX SBOM for each image of each CPU, six files in `sbom/` (`te-api-amd64.cdx.json` and so on), listed in `SHA256SUMS` and checked by the installer with everything else. They list every operating-system package and every Python and Node.js package in the image, so a customer can assess or accredit the components. CI writes them with [trivy](https://trivy.dev), and the **Container bundle** workflow also scans each image for known vulnerabilities: a fixable HIGH or CRITICAL finding fails the job, and no bundle is assembled. Accepted exceptions are in `.trivyignore.yaml`, each with a reason and an expiry date. A bundle you assemble yourself has an `sbom/` folder only if you put the SBOMs in `dist/sbom/` first (`TE_REQUIRE_SBOM=1` makes a missing one an error).
+
 ### 2. Move it to the offline machine
 
 Copy the `.tar.gz` and its `.sha256`, check the checksum, and extract:

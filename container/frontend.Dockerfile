@@ -22,6 +22,11 @@ ENV NODE_ENV=production \
 COPY --from=build /src/.output /opt/te-frontend
 COPY container/frontend-entrypoint.sh /usr/local/bin/frontend-entrypoint.sh
 RUN chmod 0755 /usr/local/bin/frontend-entrypoint.sh
+# The server starts with `node` alone. npm ships in the node image for building, with its own
+# bundled copies of packages (brace-expansion, picomatch, ...) that the image scan flags (#326).
+# This stage never runs it, so it is removed rather than carried.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+ && rm -f /usr/local/bin/npm /usr/local/bin/npx
 USER node
 EXPOSE 8080
 ENTRYPOINT ["frontend-entrypoint.sh"]
