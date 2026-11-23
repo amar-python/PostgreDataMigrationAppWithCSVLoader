@@ -248,6 +248,31 @@ sed -i 's/te_dev/te_prod/g' full_dev.sql
 psql "host=<prod_pg> ..." -f full_dev.sql
 ```
 
+## Running behind a reverse proxy (#293)
+
+The API limits requests per client (`API_RATE_LIMIT_READS` and `API_RATE_LIMIT_WRITES`, see
+`docs/ENV_VARIABLES.md`) and takes the client from the address of the connection. Behind a reverse
+proxy, a load balancer or the container ingress that address is the proxy's, so every caller shares
+one budget and one noisy client can use it up for everybody.
+
+To give each caller its own budget:
+
+1. Have the proxy add the caller's address to `X-Forwarded-For` (nginx:
+   `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`).
+2. Set `FORWARDED_ALLOW_IPS` on the API container to the proxy's address or range, for example
+   `FORWARDED_ALLOW_IPS=10.0.0.0/24`. uvicorn reads it. For a connection from a listed address it
+   takes the right-most address in `X-Forwarded-For` that is not itself a listed proxy as the
+   client; for any other address it ignores the header, so a caller cannot choose its own identity.
+   Only loopback is trusted by default. **Never set it to `*`.**
+
+Two limits to know about. The counters are kept per instance (per API process): a second instance
+doubles the budget, and a deployment that scales out needs a shared limiter or a limit at the proxy.
+And the best place to stop an abusive client is the proxy itself (nginx `limit_req_zone`), before
+a request reaches the API; the API's rate limit is the second line.
+
+This repository does not yet define the API's own deployment (no proxy and no API container in
+`infra/`, see F9 in `docs/SECURITY_REVIEW_PACK.md`), so none of this is applied for you.
+
 ## Backup and restore
 
 PG Flex backups run automatically (PITR). To restore:

@@ -88,15 +88,16 @@ _EXEMPT_PATHS = frozenset({"/api/health", "/openapi.json", "/docs", "/redoc"})
 
 
 def _client_id(request: Request) -> str:
-    """Identify the caller by a trusted attribute.
+    """Identify the caller by a trusted attribute: the client address of the connection.
 
-    Uses the peer IP as the rate-limit identity. The API key is NOT used here
-    because it is checked before authentication: an attacker could rotate
-    arbitrary X-API-Key values to get a fresh rate-limit bucket each time,
-    bypassing brute-force protection (#183).
+    The API key is NOT used here because it is checked before authentication: an attacker could rotate
+    arbitrary X-API-Key values to get a fresh rate-limit bucket each time, bypassing brute-force protection (#183).
 
-    ``X-Forwarded-For`` is deliberately ignored: it is client-controlled, so
-    trusting it would let anyone bypass the limit by varying the header.
+    ``X-Forwarded-For`` is not read here, because a client controls it. uvicorn does read it, in its
+    ``ProxyHeadersMiddleware``, and only for connections from an address listed in ``FORWARDED_ALLOW_IPS`` (default:
+    loopback only). For those it replaces ``request.client`` with the right-most address in the header that is not
+    itself a trusted proxy. So behind a reverse proxy, set ``FORWARDED_ALLOW_IPS`` to the proxy's address and every
+    caller gets its own bucket (#293); from any other address the header is ignored, so varying it gains nothing.
     """
     client = request.client
     return f"ip:{client.host}" if client and client.host else "ip:unknown"
