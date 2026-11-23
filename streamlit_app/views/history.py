@@ -136,8 +136,8 @@ def _history_report(filters: dict) -> None:
         st.session_state[PREPARED] = prepared
     if prepared and prepared["key"] == key:
         n = prepared["count"]
-        st.caption(f"Report of {n} import{'' if n == 1 else 's'}" + (f", cut short at {h.EXPORT_LIMIT}: narrow the "
-                                                                      "filters for the rest." if prepared["capped"] else "."))
+        cut_short = f", cut short at {h.EXPORT_LIMIT}: narrow the filters for the rest." if prepared["capped"] else "."
+        st.caption(f"Report of {n} import{'' if n == 1 else 's'}" + cut_short)
         one, two, _ = st.columns([1, 1, 4])
         one.download_button("Download CSV", prepared["csv"], exports.report_name("history", "csv"), exports.CSV_TYPE)
         two.download_button("Download XLSX", prepared["xlsx"], exports.report_name("history", "xlsx"), exports.XLSX_TYPE)

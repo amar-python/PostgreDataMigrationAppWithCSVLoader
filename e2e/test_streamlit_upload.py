@@ -14,7 +14,6 @@ import io
 import re
 import uuid
 
-import pytest
 import requests
 from openpyxl import load_workbook
 from playwright.sync_api import expect

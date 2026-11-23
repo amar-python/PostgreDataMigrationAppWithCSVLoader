@@ -59,6 +59,7 @@ def pg_type_to_allowed_type(pg_data_type: str) -> Optional[str]:
     """
     return _PG_TYPE_MAP.get((pg_data_type or "").strip().lower())
 
+
 _RESERVED = {"_id", "_row_hash", "_created_at"}
 
 _INT_RE = re.compile(r"^-?\d+$")

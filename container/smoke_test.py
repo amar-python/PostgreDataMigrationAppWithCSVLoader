@@ -33,13 +33,15 @@ TOTAL = 7
 def call(url: str, *, method: str = "GET", headers: dict | None = None, body: dict | None = None,
          timeout: float = 15.0) -> tuple[int, str]:
     """Return (status, text). An HTTP error is a status, not an exception."""
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"the smoke test only calls http(s) URLs, got {url!r}")  # urlopen would follow file:
     data = None if body is None else json.dumps(body).encode()
     hdrs = dict(headers or {})
     if data is not None:
         hdrs["content-type"] = "application/json"
     req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310 # scheme checked at the top
             return resp.status, resp.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read().decode("utf-8", "replace")

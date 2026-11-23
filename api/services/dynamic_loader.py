@@ -424,7 +424,7 @@ def _do_upload(
                     "ON CONFLICT (_row_hash) DO NOTHING RETURNING 1"
                 ).format(sql.Identifier(schema), sql.Identifier(table_name), insert_cols)
                 for i in range(0, len(to_insert), 500):
-                    chunk = to_insert[i : i + 500]
+                    chunk = to_insert[i:i + 500]
                     returned = execute_values(
                         cur, stmt.as_string(cur), chunk, fetch=True)
                     inserted += len(returned)
