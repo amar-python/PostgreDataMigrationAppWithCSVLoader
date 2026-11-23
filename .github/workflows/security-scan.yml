@@ -67,3 +67,17 @@ jobs:
             -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo \
             ghcr.io/gitleaks/gitleaks:v8.30.1 \
             git /repo --config /repo/.gitleaks.toml --redact --verbose --exit-code 1
+
+      - name: Canary (the scanner must still detect a secret)
+        # "no leaks found" is also what a scanner with broken rules says. This writes a known fake AWS key to a temp
+        # folder and passes only if gitleaks FLAGS it. The key is built from two pieces, so it never appears whole in
+        # this file or in the history this job scans.
+        run: |
+          mkdir canary
+          printf 'aws_access_key_id = %s%s\n' "AKIA" "QYLPMN5HHHFPZAM2" > canary/leak.txt
+          if docker run --rm -v "$PWD/canary:/canary" ghcr.io/gitleaks/gitleaks:v8.30.1 \
+              dir /canary --redact --exit-code 1; then
+            echo "::error::gitleaks did not flag a known fake secret, so its rules are not working"
+            exit 1
+          fi
+          echo "the canary was flagged, as it should be"

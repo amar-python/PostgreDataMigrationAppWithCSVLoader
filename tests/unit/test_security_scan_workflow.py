@@ -81,6 +81,23 @@ def test_the_secret_scan_runs_a_pinned_gitleaks_that_fails_on_a_leak(workflow):
     assert "--redact" in text, "a finding must not print the secret into a public log"
 
 
+def test_the_secret_scan_proves_it_can_still_detect_a_secret(workflow):
+    """'no leaks found' is also what a scanner with broken rules says. A canary, a known fake secret written at run
+    time, must be flagged on every run, or the job fails."""
+    canary = [s for s in steps(workflow, "secret-scan") if "canary" in s.get("name", "").lower()]
+    assert canary, "the secret-scan job has no canary step"
+    run = canary[0]["run"]
+    assert "gitleaks" in run and " dir " in run, "the canary must run gitleaks on the fake secret"
+    assert re.search(r"if\s+docker run", run), "the canary must pass only when gitleaks FAILS (found the secret)"
+    assert "exit 1" in run
+
+
+def test_the_canary_token_is_never_written_out_whole_in_the_repository():
+    """Written whole, the fake key would be a finding in the history of the repository it is meant to protect."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert not re.search(r"AKIA[A-Z2-7]{16}", text), "the canary AWS key appears whole in the workflow file"
+
+
 def test_the_gitleaks_config_keeps_the_default_rules():
     assert GITLEAKS.exists(), ".gitleaks.toml is missing"
     text = GITLEAKS.read_text(encoding="utf-8")
