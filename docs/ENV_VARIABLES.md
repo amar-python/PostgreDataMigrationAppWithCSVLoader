@@ -44,6 +44,8 @@ Read by `api/config.py`. Set these in the shell before running
 | `CSV_UPLOADS_SCHEMA` | `csv_uploads` | No | Schema where per-CSV tables and the file registry live. |
 | `CONTROL_SCHEMA` | `control` | No | Schema for tenants, users, memberships and sign-in sessions (M2, #92). |
 | `SESSION_TTL_HOURS` | `12` | No | How long a sign-in session lasts before the user must sign in again. |
+| `SESSION_IDLE_MINUTES` | `30` | No | A session that has not been used for this many minutes is refused and its owner signs in again, even inside the `SESSION_TTL_HOURS` lifetime (#296). `0` turns the idle check off. Every authenticated request counts as use. **Affected:** people who leave a tab idle for longer than this; scripts that hold a session token and call the API less often than this. |
+| `SESSION_PURGE_GRACE_DAYS` | `1` | No | How long the row of a session that has ended (expired, signed out, ended by a password change, or idle past `SESSION_IDLE_MINUTES`) is kept before the purge deletes it (#296). The API purges once when it starts; `scripts/purge_sessions.py` does it on demand or on a schedule. A live session is never purged. |
 | `LOGIN_MAX_FAILURES` | `10` | No | Failed sign-ins within the window that lock an account (#102). |
 | `LOGIN_LOCKOUT_MINUTES` | `15` | No | Length of the failure window and of the lock. |
 | `OIDC_ISSUER` | _(empty)_ | No | Turns on OIDC sign-in (#95). Must match the ID token's `iss`. Leave empty for air-gapped installs that use local accounts. |

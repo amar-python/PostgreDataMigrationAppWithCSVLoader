@@ -251,6 +251,16 @@ python scripts\reset_password.py --username admin
 It prompts for the new password (at least 12 characters), or reads it from
 `TE_NEW_PASSWORD`. It also clears any lockout and signs the user out everywhere.
 
+### Idle sign-out and purging old sessions (#296)
+
+A session that has not been used for `SESSION_IDLE_MINUTES` (default 30) is refused, and its owner signs in again. Set it to `0` to turn that off. Rows of sessions that ended more than `SESSION_PURGE_GRACE_DAYS` (default 1) ago are deleted once each time the API starts. For a deployment that stays up for weeks, run this on a schedule (cron, or a Container Apps job) with the API's `PG*` environment set:
+
+```powershell
+python scripts\purge_sessions.py
+```
+
+It prints how many rows it removed. It never touches a live session, a user or a membership.
+
 ---
 
 ## 6. Start the frontend (Terminal 2)
