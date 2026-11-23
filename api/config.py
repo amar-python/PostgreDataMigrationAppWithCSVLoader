@@ -29,6 +29,10 @@ class Settings:
     AUDIT_RETENTION_YEARS: int = int(os.environ.get("AUDIT_RETENTION_YEARS", "7"))
     # Lifetime of a sign-in session, in hours.
     SESSION_TTL_HOURS: int = int(os.environ.get("SESSION_TTL_HOURS", "12"))
+    # #296: a session not used for this many minutes is refused (0 turns the check off); the rows of sessions that
+    # ended more than this many days ago are deleted by the purge (api/services/accounts.purge_sessions).
+    SESSION_IDLE_MINUTES: int = int(os.environ.get("SESSION_IDLE_MINUTES", "30"))
+    SESSION_PURGE_GRACE_DAYS: int = int(os.environ.get("SESSION_PURGE_GRACE_DAYS", "1"))
     # #102: lock an account after this many failed sign-ins within the window,
     # for the same number of minutes.
     LOGIN_MAX_FAILURES: int = int(os.environ.get("LOGIN_MAX_FAILURES", "10"))
@@ -109,6 +113,10 @@ class Settings:
     RATE_LIMIT_WRITES_PER_MINUTE: int = int(
         os.environ.get("API_RATE_LIMIT_WRITES", "20")
     )
+
+    # #307 (M0 decision 1): imports (upload, stage, import) running at once on this API process; the next is refused
+    # with 503 and Retry-After. 0 turns the limit off. Keep it below the DB pool size (8), which sign-in also draws on.
+    MAX_CONCURRENT_IMPORTS: int = int(os.environ.get("API_MAX_CONCURRENT_IMPORTS", "4"))
 
 
 settings = Settings()

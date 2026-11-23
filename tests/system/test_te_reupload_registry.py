@@ -73,12 +73,12 @@ class TeReuploadRegistry(unittest.TestCase):
 
     def test_all_failed_reupload_keeps_the_earlier_registry_record(self):
         """A T&E re-upload that fails every row leaves the earlier load's registry record alone."""
-        # Two valid rows and one that the check constraint rejects.
-        csv = f"{HEADER}\n{self.tag}_a,government,AU\n{self.tag}_b,prime,AU\n{self.tag}_bad,not_a_type,AU\n"
+        # Two valid rows. (A file with a failing row imports nothing since #289, so the first load is clean.)
+        csv = f"{HEADER}\n{self.tag}_a,government,AU\n{self.tag}_b,prime,AU\n"
         first = self._upload_te(csv)
-        self.assertEqual((first["status"], first["insertedRows"], first["failedRows"]), ("ok", 2, 1), first)
+        self.assertEqual((first["status"], first["insertedRows"], first["failedRows"]), ("ok", 2, 0), first)
         before = self._registry()
-        self.assertEqual([(r["row_count"], r["failed_rows"]) for r in before], [(2, 1)])
+        self.assertEqual([(r["row_count"], r["failed_rows"]) for r in before], [(2, 0)])
 
         # The same file again: both valid rows now collide on the unique name, so every row fails.
         second = self._upload_te(csv)
@@ -87,7 +87,7 @@ class TeReuploadRegistry(unittest.TestCase):
 
         after = self._registry()
         self.assertEqual([(r["id"], r["row_count"], r["failed_rows"]) for r in after],
-                         [(before[0]["id"], 2, 1)],
+                         [(before[0]["id"], 2, 0)],
                          "the earlier load's registry record must survive an all-failed re-upload")
         self.assertEqual(self._loaded_orgs(), 2, "registry and table must still agree")
 
@@ -99,13 +99,13 @@ class TeReuploadRegistry(unittest.TestCase):
         self.assertEqual(first["status"], "ok", first)
         old_id = self._registry()[0]["id"]
 
-        second = self._upload_te(f"{HEADER}\n{self.tag}_b,prime,AU\n{self.tag}_bad,not_a_type,AU\n")
-        self.assertEqual((second["status"], second["insertedRows"], second["failedRows"]), ("ok", 1, 1), second)
+        second = self._upload_te(f"{HEADER}\n{self.tag}_b,prime,AU\n")
+        self.assertEqual((second["status"], second["insertedRows"], second["failedRows"]), ("ok", 1, 0), second)
 
         reg = self._registry()
         self.assertEqual(len(reg), 1, "a re-upload replaces the record, it does not add a second")
         self.assertNotEqual(reg[0]["id"], old_id)
-        self.assertEqual((reg[0]["row_count"], reg[0]["failed_rows"]), (1, 1))
+        self.assertEqual((reg[0]["row_count"], reg[0]["failed_rows"]), (1, 0))
 
     # -- #170's original scenario, in the same place -------------------------
 

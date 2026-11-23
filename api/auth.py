@@ -51,6 +51,8 @@ def require_session(token: str = Depends(bearer_token)) -> dict:
 def _live_session(token: str) -> dict:
     with Conn() as conn, conn.cursor() as cur:
         session = session_for(cur, token)
+        if session is not None:
+            conn.commit()   # session_for records the use (#296); nothing else was written, and a close would roll it back
     if session is None:
         raise HTTPException(status_code=401, detail="Session expired or invalid; sign in again")
     return session

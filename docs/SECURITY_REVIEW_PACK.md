@@ -15,7 +15,7 @@ ADR-0003 (Risk) recommends a security review before the first external tenant, n
  browser (React, sessionStorage token) ──HTTPS──▶  FastAPI (api/)  ──libpq──▶  PostgreSQL
                                                     │  per-router dependencies:
  scripts / services (X-API-Key) ──────────────────▶ │  tenant_scope → role check (allow) → handler
-                                                    │  rate limit middleware (per peer IP)
+                                                    │  rate limit middleware (per client)
  IdP (Keycloak / Entra ID), optional ◀── key fetch ─┘
 ```
 
@@ -40,10 +40,10 @@ Run on 2026-11-10: `make security-evidence` passed (231 tests, 0 failed, about 6
 
 | Control | Where |
 |---|---|
-| Passwords hashed with stdlib scrypt (N=2^14, r=8, p=1), a random salt per hash, constant-time compare; at least 12 characters | `api/services/accounts.py` |
+| Passwords hashed with stdlib scrypt (N=2^17, r=8, p=1: 128 MiB and about 0.44 s per hash on a 4-core development container, against 0.04 s at the old N=2^14), a random salt per hash, constant-time compare; at least 12 characters. A hash made at a weaker cost still verifies and is replaced by a current one the next time its owner signs in (only if the stored hash is unchanged, so a password change is never undone). At most 2 hashes are computed at once, so a burst of sign-ins queues instead of holding 128 MiB each (#294) | `api/services/accounts.py` |
 | An unknown user costs the same time as a wrong password (a dummy hash is checked); wrong tenant, unknown user, wrong password, inactive user and locked account all return the same 401 | `accounts.login` |
 | Lockout: 10 failed sign-ins in 15 minutes lock the account for 15 minutes (`LOGIN_MAX_FAILURES`, `LOGIN_LOCKOUT_MINUTES`); a wrong current password on a password change counts too | `accounts._record_failure` |
-| Session tokens: 256 bits of randomness, returned once, stored only as SHA-256; 12-hour lifetime; logout revokes; a password change ends the other sessions and an admin reset ends all of them | `accounts`, `api/auth.py` |
+| Session tokens: 256 bits of randomness, returned once, stored only as SHA-256; 12-hour lifetime and a 30-minute idle limit (`SESSION_IDLE_MINUTES`; every request counts as use); ended sessions are purged after a day, at start-up and by `scripts/purge_sessions.py` (#296); logout revokes; a password change ends the other sessions and an admin reset ends all of them | `accounts`, `api/auth.py` |
 | Bearer header, not cookies, so there is no CSRF surface. The browser keeps the token in `sessionStorage` (gone when the tab closes) | `csv-table-hub-main/src/lib/session.ts` |
 | OIDC: RS256 or ES256 only (`alg: none` refused); signature, issuer, audience, `exp`, `iat` all required; the user must already exist locally and be a member of the tenant (nobody is created from claims); key set over `https://` (5 s timeout) or a `file://` key file; plain `http://` refused at startup | `api/oidc.py` |
 | Shared API key: constant-time compare; the API refuses to start outside `dev` without one | `api/auth.py`, `api/main.py` |
@@ -115,15 +115,15 @@ Severities are the author's estimate, for the reviewer to confirm or overrule. "
 |---|---|---|---|---|---|
 | F1 | Upload | **No limit on the request body before it is parsed.** Every size check (`MAX_UPLOAD_BYTES`) runs on the parsed JSON, so a signed-in uploader, or anyone with the key, can make the server buffer an arbitrarily large body first. | Medium (authenticated denial of service) | Code: `api/routers/csv_routes.py` (preview, upload), `import_routes.py` (stage) check `len(req.content)` after Pydantic has parsed the body; nothing earlier limits it | Reject on `Content-Length` in a middleware, and cap streamed bodies; also set the proxy's limit |
 | F2 | Deployment | **The unauthenticated health check discloses internals**: database name, `host:port`, the exact PostgreSQL version and the schema name. `/docs`, `/redoc` and `/openapi.json` are open too (the full route map). | Low | Called the API with no credentials: all four returned 200 with those details | `/api/health` returns only `{"status": ...}`; disable the docs or require auth outside `dev` |
-| F3 | Authentication | **Rate limiting keys on the peer IP and ignores `X-Forwarded-For`** (deliberately, so it can't be spoofed). Behind a reverse proxy every caller shares the proxy's address, so one client can exhaust the budget for everyone, and the brute-force limit isn't per attacker. Counters are per instance. | Medium (availability) unless the proxy limits per client | Code: `api/ratelimit.py` `_client_id` | Trust `X-Forwarded-For` only from a configured proxy address, or limit at the proxy; say which in the deployment guide |
-| F4 | Authentication | **scrypt cost is below current guidance** (N=2^14; OWASP currently suggests N=2^17 with r=8, p=1) and hashes aren't upgraded when a user signs in. | Low to medium | Code: `accounts._N, _R, _P`. The hash string stores its parameters, so an upgrade is possible | Raise N, and re-hash on a successful sign-in when the stored parameters are weaker |
-| F5 | Authentication | **Lockout is per username**, so anyone who knows a username can keep it locked (10 bad attempts every 15 minutes). OIDC sign-in ignores the lockout (it never uses the password). | Low | Code: `accounts.login`, `login_trusted` | A product decision: keep, or lock per username and client address |
-| F6 | Authentication | **Sessions have a fixed 12-hour life, no idle timeout, and expired or revoked rows are never deleted.** | Low | Code: `accounts._new_session`, `session_for`; no `DELETE FROM ...sessions` anywhere in `api/` or `scripts/` | Add an idle timeout, and purge expired sessions |
+| F3 | Authentication | **Rate limiting keys on the peer IP and ignores `X-Forwarded-For`** (deliberately, so it can't be spoofed). Behind a reverse proxy every caller shares the proxy's address, so one client can exhaust the budget for everyone, and the brute-force limit isn't per attacker. Counters are per instance. | Medium (availability) unless the proxy limits per client | Code: `api/ratelimit.py` `_client_id` | Trust `X-Forwarded-For` only from a configured proxy address, or limit at the proxy; say which in the deployment guide. **Done in #293** (pending merge) without new code: uvicorn already does the first. Its `ProxyHeadersMiddleware` trusts `X-Forwarded-For` only from the addresses in `FORWARDED_ALLOW_IPS` (default loopback), so set that to the proxy's address; `docs/PROD_DEPLOY.md` says how and tests prove two clients behind a trusted proxy get separate budgets. The repository still defines no proxy or API deployment (F9), so it is not applied anywhere yet |
+| F4 | Authentication | **scrypt cost is below current guidance** (N=2^14; OWASP currently suggests N=2^17 with r=8, p=1) and hashes aren't upgraded when a user signs in. | Low to medium | Code: `accounts._N, _R, _P`. The hash string stores its parameters, so an upgrade is possible | Raise N, and re-hash on a successful sign-in when the stored parameters are weaker. **Done in #294** (pending merge); accounts that never sign in again keep their old hash until they do |
+| F5 | Authentication | **Lockout is per username**, so anyone who knows a username can keep it locked (10 bad attempts every 15 minutes). OIDC sign-in ignores the lockout (it never uses the password). | Low | Code: `accounts.login`, `login_trusted` | A product decision: keep, or lock per username and client address. **Decided in §10 (#295): keep** |
+| F6 | Authentication | **Sessions have a fixed 12-hour life, no idle timeout, and expired or revoked rows are never deleted.** | Low | Code: `accounts._new_session`, `session_for`; no `DELETE FROM ...sessions` anywhere in `api/` or `scripts/` | Add an idle timeout, and purge expired sessions. **Done in #296** (pending merge): idle limit 30 minutes by default; ended sessions purged after a day grace, at start-up and by `scripts/purge_sessions.py`. There is no built-in scheduler: a long-running deployment must schedule the script |
 | F7 | Tenant isolation | **One runtime role can reach every tenant's schema.** Isolation is application-level (schema-qualified queries, tested), not database-level as the Milestone 0 design described; and the role is cluster-wide (#173, open). A missed schema qualification in future code would be a cross-tenant leak, not a database error. | Medium (design) | Code: no `SET ROLE` or per-tenant grants anywhere; `api/db.py` `grant_runtime` grants on all tenant schemas | Decide whether per-tenant roles (or row-level security) are required before the first external tenant |
 | F8 | Role matrix | **The shared API key bypasses tenants and roles**: it reaches the default schemas with full rights, has no per-key identity (every action audits as `api_key`) and one value for everyone. The open item in the VCRM for BR-36. | Medium until it is retired or scoped | Code: `api/auth.py` `tenant_scope`; `docs/ROLES.md` | Per-service keys with scopes and rotation, or retire it for scripts that can use a session |
 | F9 | Deployment | (a) Key Vault and the container registry are created with public network access **"temporarily enabled ... flip to false after bootstrap"**, a manual step that can be forgotten. (b) The Terraform state backend holds the generated passwords, so access to that storage account is access to the secrets. (c) The API's own secrets have no deployment definition (#128). | Medium (configuration) | Code: `infra/terraform-prod/main.tf` (`public_network_access_enabled = true` on the vault and registry; `backend "azurerm"`); grep found no `API_KEY` or `OIDC_` in `infra/` or the deploy docs. **The live state of the vault and the state storage account was not checked** | Check the live settings; make the flip part of the pipeline; restrict and encrypt the state account |
 | F10 | Deployment | **The start-up log prints the first four characters of the API key** as a "fingerprint". | Low | Code: `api/main.py` | Log a hash prefix instead |
-| F11 | Deployment | **`SECURITY.md` names a personal Gmail address** as the vulnerability-report contact, marked as a placeholder (#57). External tenants will expect a real channel. | Low (process) | Read `SECURITY.md` | Replace with a monitored `security@` address |
+| F11 | Deployment | **`SECURITY.md` names a personal Gmail address** as the vulnerability-report contact, marked as a placeholder (#57). External tenants will expect a real channel. | Low (process) | Read `SECURITY.md` | Replace with a monitored `security@` address. **Done differently in #300** (pending merge): `SECURITY.md` now points to GitHub private vulnerability reporting and lists no mailbox (`DECISIONS/2026-11-23-security-contact-private-reporting.md`). The owner must still enable the feature in the repository settings and send a test report |
 
 Reviewed and **not** a finding: the print window's HTML escaping (complete, now tested); tokens in `sessionStorage` rather than `localStorage`; dependency advisories (none today); SQL construction (identifiers always quoted, values always parameterised); the login endpoint's responses (uniform).
 
@@ -142,8 +142,24 @@ No penetration test; no live-environment check (Key Vault and registry network s
 
 | Finding | Decision (fix, accept, defer) | Owner | Issue |
 |---|---|---|---|
-| F1 to F11 | | | |
+| F1 to F4, F6 to F11 | | | |
+| F5 | accept: keep the lockout per username | Project owner (decided 2026-11-23) | #295 |
 
+
+### Decision on F5: account lockout stays per username (#295, 2026-11-23)
+
+**Decision: accept.** Ten wrong passwords in 15 minutes lock the account for 15 minutes (`LOGIN_MAX_FAILURES`, `LOGIN_LOCKOUT_MINUTES`), keyed on the username alone. Nothing is changed in the code.
+
+Why:
+
+- The lock ends by itself after `LOGIN_LOCKOUT_MINUTES`, and a person with database access can end it at once: `scripts/reset_password.py` clears any lockout.
+- By design the API is internal-only (`api/ratelimit.py` describes it as behind an environment boundary with `external_enabled = false`, and the production environment uses an internal load balancer), so the people who can reach it are already inside the network. The repository does not yet define the API's own deployment (F9c), so this is the intent, not something the infrastructure code proves.
+- OIDC (#95) is the intended sign-in path for a real deployment, and it ignores the lockout, so a locked password does not stop an OIDC user.
+- Locking per username and client address would not help yet: behind a proxy every caller shares the proxy's address (F3, #293), so the key would be the same as today's.
+
+Residual risk accepted: someone who knows a username and can reach the API can keep that account's password sign-in locked by sending ten wrong passwords every fifteen minutes. They learn nothing from it, and the account's data is not exposed.
+
+Revisit when the API becomes reachable beyond the internal network, or when a trustworthy client address is available (see #293); then lock per username and client address, or use a progressive delay.
 
 ## 11. Reconciliation 2026-11-20 (appended)
 

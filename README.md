@@ -212,7 +212,7 @@ Start-Process "http://localhost:8080"
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/health` | DB reachability + PostgreSQL version |
+| `GET` | `/api/health` | Whether the API and its database are up (`status` only). With `API_ENV=dev` it also returns the database name, host, PostgreSQL version and schema (#291) |
 | `POST` | `/api/csv/preview` | Parse CSV, infer types, suggest T&E table match |
 | `POST` | `/api/csv/upload` | Load CSV — `mode: "dynamic"` or `mode: "te"` |
 | `GET` | `/api/csv/files` | List all uploaded CSVs |
@@ -221,7 +221,7 @@ Start-Process "http://localhost:8080"
 | `GET` | `/api/audit/log` | Paginated audit trail of uploads and deletions (action, file, table, mode, time) — not currently called by the shipped frontend, see note below |
 | `GET` | `/api/te/tables` | Existence + row counts for the 12 fixed T&E tables |
 
-Interactive docs: `http://localhost:8000/docs`
+Interactive docs: `http://localhost:8000/docs`, only with `API_ENV=dev`. Outside dev, `/docs`, `/redoc` and `/openapi.json` return 404 (#291).
 
 ---
 

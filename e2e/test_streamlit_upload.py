@@ -243,8 +243,10 @@ def test_failed_rows_are_listed_with_their_reasons_and_can_be_downloaded_as_repo
     _choose(page, _csv(name, ORGS))
     page.get_by_role("button", name=f"Upload {name}").click()
 
-    expect(page.get_by_text("6 of 10 rows imported", exact=False)).to_be_visible(timeout=30_000)
-    expect(page.get_by_text("4 failed", exact=False)).to_be_visible()
+    # #289: a T&E file with a failing row is rejected as a whole. The page says so and names how many rows
+    # failed; the failed rows are still listed with their reasons and downloadable, below.
+    expect(page.get_by_text("4 of the 10 rows could not be imported", exact=False)).to_be_visible(timeout=30_000)
+    expect(page.get_by_text("nothing was saved", exact=False)).to_be_visible()
     expect(page.get_by_role("table").first).to_be_visible()  # the row errors, as a real table
     data = click_and_download(page, page.get_by_role("button", name="Error report (CSV)"))
     rows = list(csv.reader(io.StringIO(data.decode("utf-8"))))

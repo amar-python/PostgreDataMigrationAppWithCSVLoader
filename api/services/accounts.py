@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import threading
 from typing import NamedTuple
 
 from psycopg2 import sql
@@ -17,12 +18,26 @@ from api.config import settings
 
 ROLES = ("uploader", "reviewer", "tenant_admin", "auditor")
 MIN_PASSWORD = 12
-_N, _R, _P = 2**14, 8, 1
+# scrypt cost (#294): OWASP's minimum for r=8, p=1 is N=2^17, which needs 128 * N * r = 128 MiB and about half a second
+# on one core. A stored hash carries its own parameters, so older, weaker hashes still verify and are upgraded at sign-in.
+_N, _R, _P = 2**17, 8, 1
+# hashlib.scrypt refuses to run above ``maxmem`` (default 32 MiB, so the current cost would raise ValueError, which
+# verify_password reports as a wrong password). The cap leaves headroom over 128 MiB and also stops a stored hash that
+# asks for far more from being computed.
+_MAXMEM = 256 * 1024 * 1024
+# At most this many hashes at once: 128 MiB each, and the API's smallest container has 1 GiB. A burst of sign-ins queues.
+MAX_CONCURRENT_HASHES = 2
+_HASH_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_HASHES)
+
+
+def _scrypt(password: str, salt: bytes, n: int, r: int, p: int) -> bytes:
+    with _HASH_SLOTS:
+        return hashlib.scrypt(password.encode(), salt=salt, n=n, r=r, p=p, maxmem=_MAXMEM)
 
 
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
-    dk = hashlib.scrypt(password.encode(), salt=salt, n=_N, r=_R, p=_P)
+    dk = _scrypt(password, salt, _N, _R, _P)
     return f"scrypt${_N}${_R}${_P}${salt.hex()}${dk.hex()}"
 
 
@@ -31,10 +46,22 @@ def verify_password(password: str, stored: str) -> bool:
         algo, n, r, p, salt, want = stored.split("$")
         if algo != "scrypt":
             return False
-        dk = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=int(n), r=int(r), p=int(p))
+        dk = _scrypt(password, bytes.fromhex(salt), int(n), int(r), int(p))
     except (ValueError, TypeError):
         return False
     return hmac.compare_digest(dk.hex(), want)
+
+
+def needs_rehash(stored: str) -> bool:
+    """True if ``stored`` is a scrypt hash made with a weaker cost than the current one (#294).
+
+    A stronger hash is left alone (never downgraded), and so is anything that is not a well-formed scrypt hash.
+    """
+    try:
+        algo, n, r, p, _salt, _want = stored.split("$")
+        return algo == "scrypt" and (int(n) < _N or int(r) < _R or int(p) < _P)
+    except (ValueError, TypeError):
+        return False
 
 
 # Checked when the username is unknown, so a miss costs the same time as a hit.
@@ -121,14 +148,31 @@ def login(cur, tenant_slug: str, username: str, password: str) -> dict | None:
         "LEFT JOIN {c}.memberships m ON m.user_id = u.id AND m.tenant_id = t.id "
         "WHERE u.username = %s"), (tenant_slug, username))
     row = cur.fetchone()
-    ok = verify_password(password, row[1] if row else _DUMMY_HASH)
+    stored = row[1] if row else _DUMMY_HASH
+    ok = verify_password(password, stored)
     if row and not ok:
         _record_failure(cur, row[0])
+        if needs_rehash(stored):
+            # An old hash is cheaper to check than the dummy, so a known name would fail faster than an unknown one.
+            verify_password(password, _DUMMY_HASH)
     if not (row and ok and row[2] and row[4]) or row[5]:
         return None
+    if needs_rehash(stored):
+        _upgrade_hash(cur, row[0], stored, password)
     cur.execute(_q("UPDATE {c}.users SET failed_logins = 0, first_failed_at = NULL, "
                    "locked_until = NULL WHERE id = %s"), (row[0],))
     return _new_session(cur, row[0], row[3], username, tenant_slug, row[4])
+
+
+def _upgrade_hash(cur, user_id: int, old_hash: str, password: str) -> bool:
+    """Store a hash of ``password`` at the current cost, if the stored hash is still ``old_hash`` (#294).
+
+    The condition keeps a password changed between the check and this update from being undone. Returns whether a row
+    was changed. The caller commits.
+    """
+    cur.execute(_q("UPDATE {c}.users SET password_hash = %s WHERE id = %s AND password_hash = %s"),
+                (hash_password(password), user_id, old_hash))
+    return cur.rowcount == 1
 
 
 def login_trusted(cur, tenant_slug: str, username: str) -> dict | None:
@@ -173,20 +217,56 @@ def _record_failure(cur, user_id: int) -> None:
 
 
 def session_for(cur, token: str) -> dict | None:
-    """The live session for a token, with its user, tenant and role, else None."""
+    """The live session for a token, with its user, tenant and role, else None.
+
+    Live means not revoked, not past its expiry, and (when ``SESSION_IDLE_MINUTES`` is above 0) used within that many
+    minutes (#296). A hit records the use; the caller commits, or the record is lost.
+    """
+    idle = settings.SESSION_IDLE_MINUTES
     cur.execute(_q(
         "SELECT u.id, u.username, t.id, t.slug, m.role, s.expires_at "
         "FROM {c}.sessions s "
         "JOIN {c}.users u ON u.id = s.user_id AND u.is_active "
         "JOIN {c}.tenants t ON t.id = s.tenant_id "
         "JOIN {c}.memberships m ON m.user_id = u.id AND m.tenant_id = t.id "
-        "WHERE s.token_hash = %s AND s.revoked_at IS NULL AND s.expires_at > now()"),
-        (_token_hash(token),))
+        "WHERE s.token_hash = %s AND s.revoked_at IS NULL AND s.expires_at > now() "
+        "AND (%s <= 0 OR s.last_seen_at > now() - make_interval(mins => %s))"),
+        (_token_hash(token), idle, idle))
     row = cur.fetchone()
     if not row:
         return None
+    _touch(cur, _token_hash(token))
     return {"userId": row[0], "username": row[1], "tenantId": row[2], "tenant": row[3],
             "role": row[4], "expiresAt": row[5].isoformat()}
+
+
+def _touch(cur, token_hash: str) -> None:
+    """Record that a session was just used, writing at most about once a minute (#296).
+
+    Every request would otherwise write. The gap stays well inside the idle limit, so an active session never
+    looks idle because the write was skipped.
+    """
+    idle = settings.SESSION_IDLE_MINUTES
+    gap = max(1, min(60, idle * 15)) if idle > 0 else 60   # seconds: a quarter of the idle limit, at most a minute
+    cur.execute(_q("UPDATE {c}.sessions SET last_seen_at = now() "
+                   "WHERE token_hash = %s AND last_seen_at < now() - make_interval(secs => %s)"),
+                (token_hash, gap))
+
+
+def purge_sessions(cur) -> int:
+    """Delete the rows of sessions that ended more than ``SESSION_PURGE_GRACE_DAYS`` ago; return how many (#296).
+
+    Ended means expired, revoked, or (when the idle limit is on) idle for longer than the limit. A live session, one
+    that ended recently, and every user and membership are left alone. The caller commits.
+    """
+    cur.execute(_q(
+        "DELETE FROM {c}.sessions WHERE "
+        "expires_at < now() - make_interval(days => %(grace)s) "
+        "OR revoked_at < now() - make_interval(days => %(grace)s) "
+        "OR (%(idle)s > 0 AND last_seen_at < now() - make_interval(days => %(grace)s) "
+        "                                       - make_interval(mins => %(idle)s))"),
+        {"grace": settings.SESSION_PURGE_GRACE_DAYS, "idle": settings.SESSION_IDLE_MINUTES})
+    return cur.rowcount
 
 
 def revoke(cur, token: str) -> None:

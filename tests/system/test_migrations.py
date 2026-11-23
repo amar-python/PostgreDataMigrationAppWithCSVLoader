@@ -274,6 +274,47 @@ class MigrationsOnScratchSchema(unittest.TestCase):
                         "AND table_name = 'tenants' AND column_name = 'allow_self_approval'", (settings.CONTROL_SCHEMA,))
             self.assertIsNone(cur.fetchone())
 
+    def _session_columns(self) -> dict[str, tuple[str, str, str | None]]:
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns "
+                        "WHERE table_schema = %s AND table_name = 'sessions'", (settings.CONTROL_SCHEMA,))
+            return {r[0]: (r[1], r[2], r[3]) for r in cur.fetchall()}
+
+    def _session_indexes(self) -> set[str]:
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT indexname FROM pg_indexes WHERE schemaname = %s AND tablename = 'sessions'",
+                        (settings.CONTROL_SCHEMA,))
+            return {r[0] for r in cur.fetchall()}
+
+    def test_0012_adds_last_seen_and_the_purge_indexes(self):
+        command.upgrade(self.cfg, "head")
+        self.assertEqual(self._session_columns()["last_seen_at"],
+                         ("timestamp with time zone", "NO", "now()"))
+        self.assertTrue({"sessions_expires_at_idx", "sessions_revoked_at_idx"} <= self._session_indexes())
+
+    def test_0012_existing_sessions_start_with_a_current_last_seen_so_nobody_is_signed_out(self):
+        command.upgrade(self.cfg, "0011")
+        ctl = settings.CONTROL_SCHEMA
+        with self.conn.cursor() as cur:
+            cur.execute(f'INSERT INTO "{ctl}".tenants (slug, name) VALUES (%s, %s) RETURNING id', ("acme_one", "Acme"))
+            tid = cur.fetchone()[0]
+            cur.execute(f'INSERT INTO "{ctl}".users (username, password_hash) VALUES (%s, %s) RETURNING id', ("u", "x"))
+            uid = cur.fetchone()[0]
+            cur.execute(f'INSERT INTO "{ctl}".sessions (token_hash, user_id, tenant_id, expires_at) '
+                        "VALUES ('h', %s, %s, now() + interval '1 hour')", (uid, tid))
+        command.upgrade(self.cfg, "head")
+        with self.conn.cursor() as cur:
+            cur.execute(f'SELECT extract(epoch FROM now() - last_seen_at) FROM "{ctl}".sessions WHERE token_hash = %s',
+                        ("h",))
+            self.assertLess(cur.fetchone()[0], 120, "an existing session must not look idle after the upgrade")
+
+    def test_0012_downgrade_removes_the_column_and_the_indexes(self):
+        command.upgrade(self.cfg, "head")
+        self.assertIn("last_seen_at", self._session_columns(), "there must be something to remove")
+        command.downgrade(self.cfg, "0011")
+        self.assertNotIn("last_seen_at", self._session_columns())
+        self.assertFalse({"sessions_expires_at_idx", "sessions_revoked_at_idx"} & self._session_indexes())
+
     def test_existing_duplicates_stop_the_upgrade_with_remediation(self):
         command.upgrade(self.cfg, "0001")
         with self.conn.cursor() as cur:
