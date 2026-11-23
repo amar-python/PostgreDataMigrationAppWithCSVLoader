@@ -121,7 +121,8 @@ def test_a_formula_payload_is_a_text_cell_with_no_formula_in_the_xlsx(value):
 
     cell = ws["D2"]  # ERROR_HEADERS: file, row_number, column, value, ...
     assert cell.data_type == "s", "a text cell, not a formula"
-    assert cell.value == ("'" + value).replace("\r", "\n"), "(XML turns a carriage return into a line feed)"
+    # Whether a carriage return survives the XML round trip depends on the parser (lxml or not), so compare modulo \r.
+    assert cell.value.replace("\r", "\n") == ("'" + value).replace("\r", "\n")
 
 
 def test_even_with_the_guard_gone_text_that_starts_with_an_equals_sign_is_stored_as_text(monkeypatch):
