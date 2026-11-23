@@ -33,6 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WEIGHTS_PATH = ROOT / "ci" / "shard_weights.json"
 SHARDS = 3                      # keep in step with the `shard:` matrix in .github/workflows/quality-gate.yml (tested)
 DEFAULT_WEIGHT = 20.0           # seconds, for a file with no recorded duration
+MIN_WEIGHT = 1.0                # seconds: every file costs at least its import and collection
 EXCLUDED_PREFIXES = ("tests/accessibility/",)
 
 
@@ -77,7 +78,7 @@ def weights_from_junit(xml_path: Path, root: Path = ROOT) -> dict[str, float]:
             if (root / rel).is_file():
                 totals[rel] = totals.get(rel, 0.0) + float(case.get("time") or 0)
                 break
-    return {rel: round(seconds, 2) for rel, seconds in sorted(totals.items())}
+    return {rel: round(max(seconds, MIN_WEIGHT), 2) for rel, seconds in sorted(totals.items())}
 
 
 def _plan(n: int) -> int:

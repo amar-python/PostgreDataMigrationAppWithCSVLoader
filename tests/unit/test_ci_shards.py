@@ -153,6 +153,17 @@ def test_durations_are_regenerated_from_a_junit_report(tmp_path):
     assert weights == {"tests/unit/test_one.py": 3.75, "tests/unit/test_two.py": 10.0}
 
 
+def test_a_file_that_took_no_time_still_costs_its_import_and_collection(tmp_path):
+    """Files whose tests are all deselected (or instant) record 0 s; a zero would let one shard take them all for free."""
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_quick.py").write_text("def test_a(): pass\n")
+    xml = tmp_path / "junit.xml"
+    xml.write_text('<testsuites><testsuite><testcase classname="tests.test_quick" name="test_a" time="0.001"/>'
+                   '</testsuite></testsuites>')
+    weights = ci_shards.weights_from_junit(xml, root=tmp_path)
+    assert weights == {"tests/test_quick.py": ci_shards.MIN_WEIGHT} and ci_shards.MIN_WEIGHT >= 1.0
+
+
 # -- the command line the workflow uses --------------------------------------------------------------------------------
 
 def test_the_cli_prints_one_shards_files_one_per_line():
