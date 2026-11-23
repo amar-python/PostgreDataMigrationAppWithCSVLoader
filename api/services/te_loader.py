@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import time
+from collections.abc import Callable
 
 import psycopg2.errors
 from psycopg2 import sql
@@ -102,7 +103,14 @@ def _cleanup_prior_registry_entries(cur, file_name, file_hash):
     )
 
 
-def upload_te(file_name: str, content: str, target_table: str, *, session: dict | None = None) -> dict:
+def upload_te(file_name: str, content: str, target_table: str, *, session: dict | None = None,
+              on_commit: Callable[[object, dict], None] | None = None) -> dict:
+    """Load ``content`` into a T&E table.
+
+    ``on_commit(cur, result)`` runs on the load's cursor just before the commit, given the "ok" result
+    this call will return. Whatever it writes commits with the load. If it raises, the load rolls back
+    and the exception propagates (#288).
+    """
     logs: list[dict] = []
     _log(logs, "receive", f'Received "{file_name}" for T&E table "{target_table}"')
 
@@ -344,9 +352,17 @@ def upload_te(file_name: str, content: str, target_table: str, *, session: dict 
                     "logs": logs,
                 }
             file_id = cur.fetchone()[0]
+            _log(logs, "done", f"T&E load complete: {inserted} rows into {target_table}", count=inserted)
+            result = _ok_result(file_id, target_table, data_rows, inserted, failed_row_count, columns,
+                                col_types, row_errors, logs)
+            if on_commit is not None:
+                on_commit(cur, result)
         conn.commit()
+    return result
 
-    _log(logs, "done", f"T&E load complete: {inserted} rows into {target_table}", count=inserted)
+
+def _ok_result(file_id, target_table, data_rows, inserted, failed_row_count, columns, col_types,
+               row_errors, logs) -> dict:
     return {
         "status": "ok",
         "fileId": str(file_id),

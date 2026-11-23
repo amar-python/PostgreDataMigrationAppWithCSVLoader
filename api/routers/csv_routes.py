@@ -17,10 +17,10 @@ from api.auth import allow, tenant_scope
 from api.config import settings
 from api.tenancy import uploads_schema
 from api.db import Conn
-from api.services.audit import coerce_file_id, record_audit, write_audit
+from api.services.audit import coerce_file_id, write_audit
 from api.services.csv_parse import build_preview
 from api.services.dynamic_loader import upload_dynamic
-from api.services.originals import record_upload
+from api.services.originals import record_upload, store_upload
 from api.services.type_confirmation import require_confirmed_types
 from api.services.reports import like_pattern
 from api.services.staged_import import derive_state, state_columns, state_join
@@ -103,11 +103,30 @@ def _decode_original(b64: str | None) -> bytes | None:
         raise HTTPException(422, "contentBase64 is not valid base64") from None
 
 
+class RecordFailed(Exception):
+    """The load's registry, original or audit record couldn't be written, so the load rolled back (#288)."""
+
+
 @router.post("/upload", dependencies=[Depends(allow("upload"))])
 def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> dict:
     if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
     original = _decode_original(req.contentBase64)
+    recorded: dict = {}
+
+    def record_with_load(cur, result: dict) -> None:
+        # #288 (BR-45, BR-52): runs on the load's cursor just before it commits, so the load, its
+        # registry row, the original (M3b, #107) and the upload audit row (O-04) commit together.
+        # Any failure rolls the load back; wrapping it keeps it out of the loaders' psycopg2 handlers.
+        try:
+            flags = result.pop("_duplicateFlags", None)
+            recorded["uploadId"] = store_upload(cur, req.fileName, req.content, req.mode, result,
+                                                original=original, flags=flags)
+            write_audit(cur, "upload", coerce_file_id(result.get("fileId")), req.fileName,
+                        result.get("tableName"), req.mode)
+        except Exception as exc:  # noqa: BLE001 — any failure here must undo the load
+            raise RecordFailed(str(exc)) from exc
+
     if req.mode == "te":
         if not req.targetTable:
             raise HTTPException(422, "targetTable is required when mode is 'te'")
@@ -117,34 +136,42 @@ def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> 
             raise HTTPException(422, "headerMapping is only supported in 'dynamic' mode")
         if req.typesConfirmed:
             raise HTTPException(422, "typesConfirmed is only supported in 'dynamic' mode")
-        result = upload_te(req.fileName, req.content, req.targetTable, session=session)
+
+        def load() -> dict:
+            return upload_te(req.fileName, req.content, req.targetTable, session=session, on_commit=record_with_load)
     elif req.mode == "dynamic":
         if req.typesConfirmed and not req.types:
             raise HTTPException(422, "typesConfirmed requires the confirmed types to be sent in 'types'")
         require_confirmed_types(req.types, req.typesConfirmed)  # #242, when the server is set to require it
         mapping = [m.model_dump() for m in req.headerMapping] if req.headerMapping else None
-        result = upload_dynamic(req.fileName, req.content, req.types, req.overwrite,
-                                session=session, header_mapping=mapping, types_confirmed=req.typesConfirmed)
+
+        def load() -> dict:
+            return upload_dynamic(req.fileName, req.content, req.types, req.overwrite, session=session,
+                                  header_mapping=mapping, types_confirmed=req.typesConfirmed,
+                                  on_commit=record_with_load)
     else:
         raise HTTPException(422, f"Unknown mode '{req.mode}' — use 'dynamic' or 'te'")
 
-    # M3b (#107): keep the original and its outcome, whatever the outcome was.
-    flags = result.pop("_duplicateFlags", None)
-    upload_id = record_upload(req.fileName, req.content, req.mode, result, original=original, flags=flags)
-    result["uploadId"] = None if upload_id is None else str(upload_id)
+    try:
+        result = load()
+    except RecordFailed as exc:
+        logger.error("Upload of %r rolled back because its records couldn't be written: %s", req.fileName, exc)
+        result = {
+            "status": "error",
+            "reason": "record_failed",
+            "message": "The upload couldn't be recorded, so nothing was imported. Try again; "
+                       "if it keeps failing, contact your administrator.",
+            "logs": [],
+        }
 
-    # O-04: record the load so audit_log covers creations, not just deletions.
-    # Only a genuine load is audited: "duplicate_file" and "error" outcomes
-    # changed nothing, so logging them would make the trail read as if data had
-    # landed when it had not.
     if result.get("status") == "ok":
-        record_audit(
-            action="upload",
-            file_id=coerce_file_id(result.get("fileId")),
-            file_name=req.fileName,
-            table_name=result.get("tableName"),
-            mode=req.mode,
-        )
+        result["uploadId"] = str(recorded["uploadId"])
+    else:
+        # Every attempt gets an uploads row (BR-23). Nothing loaded, so this is best-effort and an
+        # "error", "duplicate_file" or "invalid_structure" outcome writes no audit row.
+        result.pop("_duplicateFlags", None)
+        upload_id = record_upload(req.fileName, req.content, req.mode, result, original=original)
+        result["uploadId"] = None if upload_id is None else str(upload_id)
     return result
 
 
