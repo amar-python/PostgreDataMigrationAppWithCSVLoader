@@ -14,7 +14,6 @@ for a server that was up. Asserted here by running the real script with a PATH t
 """
 from __future__ import annotations
 
-import os
 import re
 import shutil
 import socket
@@ -45,7 +44,12 @@ def path_dir(tmp_path: Path, *, gtimeout: bool = False, timeout: bool = False) -
     if real and timeout and not (shim / "timeout").exists():
         (shim / "timeout").symlink_to(real)
     if real and gtimeout and not (shim / "gtimeout").exists():
-        (shim / "gtimeout").symlink_to(real)
+        # A wrapper script, not a symlink: on some systems `timeout` is one applet of a multicall coreutils binary that
+        # chooses what to run from the name it was started under, so a link called `gtimeout` would not work (CI's
+        # Ubuntu 26.04 is one). The wrapper runs the real one under its own name.
+        wrapper = shim / "gtimeout"
+        wrapper.write_text(f'#!/bin/sh\nexec "{real}" "$@"\n', encoding="utf-8")
+        wrapper.chmod(0o755)
     return str(shim)
 
 
