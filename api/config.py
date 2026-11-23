@@ -114,6 +114,10 @@ class Settings:
         os.environ.get("API_RATE_LIMIT_WRITES", "20")
     )
 
+    # #307 (M0 decision 1): imports (upload, stage, import) running at once on this API process; the next is refused
+    # with 503 and Retry-After. 0 turns the limit off. Keep it below the DB pool size (8), which sign-in also draws on.
+    MAX_CONCURRENT_IMPORTS: int = int(os.environ.get("API_MAX_CONCURRENT_IMPORTS", "4"))
+
 
 settings = Settings()
 
