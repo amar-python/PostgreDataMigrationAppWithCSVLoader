@@ -4,7 +4,18 @@
 # variables on first start, so none is in the image.
 FROM postgres:16
 
-COPY build/deploy_all.sh                          /opt/te/build/deploy_all.sh
+# Debian's security updates for the packages the image scan flagged (#326): zlib1g and the
+# Kerberos libraries. The base image is rebuilt only now and then; the fixes are in Debian's
+# archive sooner. Only the named packages are upgraded (a blanket upgrade could move PostgreSQL
+# itself), and the line does nothing once the base image carries the fixes.
+# Not fixed here: /usr/local/bin/gosu is built with an older Go release, so the scan reports the Go
+# standard library inside it. That needs a newer gosu build upstream; see the PR for #326.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends --only-upgrade \
+      zlib1g libgssapi-krb5-2 libkrb5-3 libk5crypto3 libkrb5support0 \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY build/deploy_all.sh                         /opt/te/build/deploy_all.sh
 COPY build/te_core_schema.sql                     /opt/te/build/te_core_schema.sql
 COPY build/environments/env_prod.example.sql      /opt/te/build/environments/env_prod.example.sql
 # The official image runs everything in this directory once, when the data directory is
