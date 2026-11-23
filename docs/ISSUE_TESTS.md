@@ -65,7 +65,7 @@ Frontend tests are vitest in `csv-table-hub-main/src/__tests__/` (`fe:` below). 
 | 31 | One-time cloud setup for terraform-test/staging | 👤 | cloud account work |
 | 32 | `az` CLI SSL error on the dev machine | 👤 | one machine's setup |
 | 34 | `terraform plan` provider handshake fails locally | 👤 | one machine's setup |
-| 57 | Add SECURITY.md | ✅ | `tests/unit/test_open_issues.py`. The issue's done-when ("on `main`") is met, so it could be closed. The file still carries a placeholder address, noted in a comment inside it |
+| 57 | Add SECURITY.md | ✅ | `tests/unit/test_open_issues.py`. The issue's done-when ("on `main`") is met, so it could be closed. The reporting channel is GitHub private vulnerability reporting (#300, `DECISIONS/2026-11-23-security-contact-private-reporting.md`); the owner must enable it in the repository settings |
 | 59 | Sample Migration Verification Report | — | docs, merged (#216). The issue is still open and could be closed |
 | 60 | Air-gapped install procedure | ✅ / 👤 | `tests/unit/test_open_issues.py` (scripts parse, stop on error, guide names them). The offline dry run, due 15 Nov, is manual |
 | 109 | ART M5: dedup and naming | ✅ | `tests/system/test_versioned_datasets.py` (merged, #226). The issue is still open |
