@@ -156,13 +156,21 @@ _FOLDER_MARKERS = {
 }
 
 
-def pytest_collection_modifyitems(items):
+def pytest_collection_modifyitems(config, items):
     for item in items:
         for part in Path(str(item.fspath)).parts:
             marker = _FOLDER_MARKERS.get(part)
             if marker:
                 item.add_marker(getattr(pytest.mark, marker))
                 break
+    # #310: the negative control for the network-level egress block would simply connect on an open network, so it is
+    # left out of every run (deselected, not skipped: a strict run must not count it) unless the firewall is up. Its own
+    # CI step sets EGRESS_NETWORK_BLOCKED=1 after scripts/egress_firewall.sh has blocked the test user.
+    if os.environ.get("EGRESS_NETWORK_BLOCKED") != "1":
+        dropped = [item for item in items if item.get_closest_marker("egress_network")]
+        if dropped:
+            config.hook.pytest_deselected(items=dropped)
+            items[:] = [item for item in items if item not in dropped]
 
 
 # Env vars tests are allowed to mutate; restored after every test.
