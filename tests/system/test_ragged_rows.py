@@ -71,15 +71,12 @@ class RaggedRowsOverTheApi(unittest.TestCase):
         content = (f"name,org_type,country\nRAG_{self.tag}_1,government,AU\n"
                    f"RAG_{self.tag}_2,government,AU,LOST\n")
         res = self._upload(content, mode="te", targetTable="organisations")
-        self.assertEqual(res["status"], "ok")
-        self.assertEqual((res["insertedRows"], res["failedRows"]), (1, 1))
+        # #289: a T&E file with a bad row is rejected as a whole. The wide row is still reported, never
+        # silently truncated (#82), and the good row does not land either.
+        self.assertEqual(res["status"], "error", res)
+        self.assertEqual((res["totalRows"], res["insertedRows"], res["failedRows"]), (2, 0, 1), res)
         self.assertEqual(res["rowErrors"][0]["value"], "LOST")
-        # #192: accounting identity
-        self.assertEqual(
-            res["totalRows"],
-            res["insertedRows"] + res.get("duplicateRowsSkipped", 0) + res["failedRows"],
-            f"Accounting identity violated: {res}",
-        )
+        self.assertIn("nothing was saved", res["message"])
 
     def test_multiple_ragged_rows_each_get_a_reason(self):
         """Every ragged row gets its own entry in rowErrors with a reason."""
@@ -98,14 +95,21 @@ class RaggedRowsOverTheApi(unittest.TestCase):
 
     # ── #192: what the tests above don't check — the reason is *stored* with the upload
     # (GET /api/csv/uploads/{id}), not just returned, and T&E mode accounts the same way.
-    def _assert_accounted(self, res: dict, ragged_rows: dict[int, str]):
+    def _assert_accounted(self, res: dict, ragged_rows: dict[int, str], *, rejected: bool = False):
         """total = inserted + duplicates + failed, and every ragged row has a
-        reason both in the response and stored with the upload."""
-        self.assertEqual(res["status"], "ok")
-        self.assertEqual(
-            res["totalRows"],
-            res["insertedRows"] + res["duplicateRowsSkipped"] + res["failedRows"],
-            f"rows went missing: {res}")
+        reason both in the response and stored with the upload.
+
+        ``rejected`` (T&E mode, #289): the file is refused as a whole, so nothing is inserted and the identity
+        does not apply; every bad row is still reported and stored."""
+        if rejected:
+            self.assertEqual(res["status"], "error", res)
+            self.assertEqual(res["insertedRows"], 0, res)
+        else:
+            self.assertEqual(res["status"], "ok")
+            self.assertEqual(
+                res["totalRows"],
+                res["insertedRows"] + res["duplicateRowsSkipped"] + res["failedRows"],
+                f"rows went missing: {res}")
         self.assertEqual(res["failedRows"], len(ragged_rows))
 
         def by_row(errors):
@@ -137,5 +141,5 @@ class RaggedRowsOverTheApi(unittest.TestCase):
                    f"RAG_{t}_3,government,AU\n"
                    f"RAG_{t}_4,government,AU,LOST2,MORE\n",
             mode="te", targetTable="organisations")
-        self.assertEqual((res["insertedRows"], res["failedRows"]), (2, 2))
-        self._assert_accounted(res, {2: "LOST1", 4: "LOST2"})
+        self.assertEqual((res["insertedRows"], res["failedRows"]), (0, 2))  # #289: all or nothing
+        self._assert_accounted(res, {2: "LOST1", 4: "LOST2"}, rejected=True)
