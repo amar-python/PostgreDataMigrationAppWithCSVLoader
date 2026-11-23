@@ -7,14 +7,19 @@
 > questions, kept so the work can be picked up without re-deriving any of it.
 >
 > **This is not a to-do list for now.** Nothing here is scheduled.
+>
+> Requirement status (BR-02, BR-21, BR-22) is owned by `docs/VCRM.md`, which is
+> authoritative; this file holds the measurements behind it and nothing else.
 
 Raised while building the Tier X eval (O-08). The measurements below are what
 made the decision possible: before Tier X, the six-engine claim rested on code
 review and nobody had counted.
 
-**Nothing in this file is asserted by a test today.** Tier X scenario 01 pins
-SQLite's *current* 7-table baseline and fails on drift; it deliberately does not
-assert full parity. It is also **no longer run in CI** (ADR-0001) — run it on
+**The table counts under "Measured state" are asserted by a test**
+(`tests/unit/test_gap_registers_agree.py`, which counts the `CREATE TABLE`
+statements in each engine's DDL); nothing else in this file is. Tier X scenario
+01 pins SQLite's *current* 7-table baseline and fails on drift; it deliberately
+does not assert full parity. It is also **no longer run in CI** (ADR-0001) — run it on
 demand with `make evals-engines`. See
 `evals/datasets/tier_x/01_sqlite_schema_structure/NOTES.txt`.
 
@@ -30,9 +35,19 @@ on 2026-09-10.
 | **postgresql** | 12 | reference | `te_core_schema.sql`, `te_seed_data.sql` |
 | **sqlite** | 7 | 5 missing | `te_core_schema.sql`, `te_seed_data.sql` |
 | **mariadb** | 7 | 5 missing | `te_core_schema.sql`, `te_seed_data.sql` |
-| **teradata** | 1 | 11 missing | `te_core_schema.sql` (skeletal) |
+| **teradata** | 12 | none missing by count | `te_core_schema.sql` (12 `CREATE SET TABLE`), `te_seed_data.sql`; never run against a Teradata server |
 | **influxdb** | n/a | no DDL at all | `te_seed_data.lp` only |
 | **redis** | n/a | no DDL at all | `te_seed_data.sh` only |
+
+**Erratum, 2026-11-23.** This table said Teradata defines 1 table, 11 missing,
+"skeletal". That was a miscount: a search for `CREATE TABLE` matched one comment
+line (line 32), and Teradata writes `CREATE SET TABLE`. The file defines all 12,
+the same names as the PostgreSQL set, and did so at the 2026-09-10 baseline. 12
+statements are not verified Teradata DDL: nothing has run them on a server, and
+the adapter that fills in the `{{...}}` placeholders is not exercised by a test.
+BR-02 stays deferred. The old figure is still in `docs/adr/0001-postgresql-first.md`
+and `docs/VCRM.md` (owner's records) and in two superseded registers; tracked in
+#342.
 
 ## Missing from both SQLite and MariaDB
 
@@ -71,8 +86,12 @@ answering them.
    for MariaDB. The answer changes whether the 5 tables are a gap or a design
    choice — and if it is a design choice, it belongs in `docs/ARCHITECTURE.md`
    rather than in a TODO.
-2. **Teradata.** 1 of 12 is closer to a placeholder than an implementation.
-   Either schedule the DDL or drop the claim to "planned".
+2. **Teradata.** The DDL defines all 12 tables (see the erratum above; this
+   question was first asked on a count of 1). What is missing is verification:
+   nothing runs it against a Teradata server, and no test checks that its 12
+   tables match the reference set the way Tier X does for SQLite. Decide whether
+   a structural scenario (no server needed) is wanted, or keep the claim at
+   "DDL written, unverified".
 3. **InfluxDB and Redis.** Neither is relational, so "12 tables" does not
    translate. What would count as supported — seed data landing in the expected
    measurements / key namespaces? That needs defining before it can be verified.
