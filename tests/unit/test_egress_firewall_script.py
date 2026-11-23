@@ -175,7 +175,6 @@ def jumps(fakes) -> list[list[str]]:
 def test_install_rejects_the_users_traffic_except_to_this_machine(fakes):
     done = run(fakes, "install", USER)
     assert done.returncode == 0, done.stderr
-    state = fakes.state()
     assert fakes.state()["chains"]["TE_EGRESS"]["rules"] == CHAIN_RULES
     (rule,) = jumps(fakes)
     assert rule == ["-m", "owner", "--uid-owner", uid_of(USER), "-j", "TE_EGRESS"], rule
