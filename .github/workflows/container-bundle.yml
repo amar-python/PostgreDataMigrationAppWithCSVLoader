@@ -200,14 +200,14 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Download both CPUs' images
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: te-images-*
           path: dist
           merge-multiple: true
 
       - name: Download both CPUs' SBOMs
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: te-sbom-*
           path: dist/sbom
