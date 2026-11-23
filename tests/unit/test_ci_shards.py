@@ -204,3 +204,38 @@ def test_the_cli_writes_regenerated_durations(tmp_path):
     done = cli("update-weights", str(xml), "--output", str(out))
     assert done.returncode == 0, done.stderr
     assert json.loads(out.read_text()) == {"tests/unit/test_ci_shards.py": 4.0}
+
+
+# -- the egress job's shards: only the system tests, split on their own ------------------------------------------------
+
+def test_only_limits_the_files_to_a_prefix():
+    files = ci_shards.test_files(only="tests/system/")
+    assert files and all(f.startswith("tests/system/") for f in files)
+    assert set(files) < set(ci_shards.test_files())
+
+
+@pytest.mark.parametrize("n", [1, 2, 3, 4])
+def test_the_egress_shards_are_disjoint_and_together_hold_every_system_file(n):
+    files = ci_shards.test_files(only="tests/system/")
+    shards = ci_shards.assign(files, ci_shards.load_weights(), n)
+    flat = [f for shard in shards for f in shard]
+    assert sorted(flat) == sorted(files) and len(flat) == len(set(flat))
+
+
+def test_the_system_files_are_balanced_among_themselves_not_by_the_whole_suite():
+    files, weights = ci_shards.test_files(only="tests/system/"), ci_shards.load_weights()
+    totals = [sum(weights.get(f, ci_shards.DEFAULT_WEIGHT) for f in s) for s in ci_shards.assign(files, weights, 3)]
+    average = sum(totals) / len(totals)
+    assert max(totals) <= max(average * 1.25, average + max(weights.get(f, 20) for f in files)), totals
+
+
+def test_the_cli_prints_one_egress_shards_files():
+    expected = ci_shards.assign(ci_shards.test_files(only="tests/system/"), ci_shards.load_weights(), 3)[0]
+    done = cli("files", "--shard", "1", "--of", "3", "--only", "tests/system/")
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.split() == expected
+
+
+def test_an_only_prefix_that_matches_nothing_fails_rather_than_runs_nothing():
+    done = cli("files", "--shard", "1", "--of", "3", "--only", "tests/nowhere/")
+    assert done.returncode != 0 and done.stdout.strip() == ""

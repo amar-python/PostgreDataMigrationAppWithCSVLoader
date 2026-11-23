@@ -7,6 +7,7 @@ own job with its own PostgreSQL (the system tests share databases and assume a f
 server). Each shard still runs through ``scripts/test_report.py --strict``, so every test it holds is accounted for.
 
     python3 scripts/ci_shards.py files --shard 2 --of 3     # the files shard 2 of 3 runs, one per line
+    python3 scripts/ci_shards.py files --shard 1 --of 3 --only tests/system/   # the egress job's split of the system tests
     python3 scripts/ci_shards.py plan --of 3                 # the whole split and its estimated times
     python3 scripts/ci_shards.py update-weights junit.xml    # record fresh durations from a full run's JUnit report
 
@@ -31,21 +32,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WEIGHTS_PATH = ROOT / "ci" / "shard_weights.json"
+EGRESS_SHARDS = 3               # the egress job splits tests/system/ this many ways (the `shard:` matrix of integration-egress)
 SHARDS = 3                      # keep in step with the `shard:` matrix in .github/workflows/quality-gate.yml (tested)
 DEFAULT_WEIGHT = 20.0           # seconds, for a file with no recorded duration
 MIN_WEIGHT = 1.0                # seconds: every file costs at least its import and collection
 EXCLUDED_PREFIXES = ("tests/accessibility/",)
 
 
-def test_files(root: Path = ROOT) -> list[str]:
-    """Every test file CI runs in a shard, as sorted repo-relative posix paths."""
+def test_files(root: Path = ROOT, only: str = "") -> list[str]:
+    """Every test file CI runs in a shard, as sorted repo-relative posix paths; ``only`` keeps one directory prefix."""
     found: set[str] = set()
     for pattern in ("test_*.py", "*_test.py"):
         for path in (root / "tests").rglob(pattern):
             rel = path.relative_to(root).as_posix()
             if "__pycache__" in rel or rel.startswith(EXCLUDED_PREFIXES):
                 continue
-            found.add(rel)
+            if rel.startswith(only):
+                found.add(rel)
     return sorted(found)
 
 
@@ -95,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     files = sub.add_parser("files", help="print one shard's files, one per line")
     files.add_argument("--shard", type=int, required=True)
     files.add_argument("--of", type=int, default=SHARDS, dest="of")
+    files.add_argument("--only", default="", help="split only the files under this prefix, e.g. tests/system/ (egress job)")
     plan = sub.add_parser("plan", help="print every shard with an estimate")
     plan.add_argument("--of", type=int, default=SHARDS, dest="of")
     update = sub.add_parser("update-weights", help="regenerate durations from a JUnit report of a full run")
@@ -117,7 +121,11 @@ def main(argv: list[str] | None = None) -> int:
     if not 1 <= args.shard <= args.of:
         print(f"shard {args.shard} does not exist: shards are 1 to {args.of}", file=sys.stderr)
         return 2
-    print("\n".join(assign(test_files(), load_weights(), args.of)[args.shard - 1]))
+    chosen = test_files(only=args.only)
+    if not chosen:
+        print(f"no test files under {args.only!r}: a typo in the workflow must fail the job, not run nothing", file=sys.stderr)
+        return 2
+    print("\n".join(assign(chosen, load_weights(), args.of)[args.shard - 1]))
     return 0
 
 

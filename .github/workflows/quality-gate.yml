@@ -210,13 +210,28 @@ jobs:
       # The API reads PGDATABASE (api/config.py). The schema lives in te_mgmt_dev, not the job-level default
       # "postgres" (issue #45). Accessibility scans need a browser and the frontend, not this database; they run in the
       # `accessibility` job (#168) and are reported here as NOT RUN, not as skipped.
+      # Coverage is measured here, as the shard runs, instead of in a third run of the whole suite: PYTEST_ADDOPTS reaches
+      # the pytest that scripts/test_report.py starts. The scope is the one in .coveragerc and the Makefile
+      # (tests/unit/test_ci_quality_gate.py fails if they differ). The `coverage` job combines the shards' data files.
       - name: Test shard ${{ matrix.shard }} — final result with skip accounting
         env:
           PGDATABASE: te_mgmt_dev
+          PYTEST_ADDOPTS: --cov=api --cov=streamlit_app --cov=build/csv --cov=evals --cov-branch --cov-report=
         run: |
           files="$(python3 scripts/ci_shards.py files --shard ${{ matrix.shard }} --of 3)"
           echo "$files"
           python3 scripts/test_report.py --markers "not accessibility" --strict --paths $files
+
+      - name: Keep this shard's coverage data
+        run: mv .coverage coverage-shard-${{ matrix.shard }}.dat
+
+      - name: Upload this shard's coverage data
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: coverage-shard-${{ matrix.shard }}.dat
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload eval reports
         if: always()
@@ -230,10 +245,14 @@ jobs:
   # M7 (#111, BR-37) and #310: the API tests with every connection that isn't to this machine refused and recorded.
   # Its own job, in parallel with the shards and the coverage gate (it used to run after the whole suite).
   integration-egress:
-    name: egress-blocked tests (postgres service)
+    name: egress-blocked tests ${{ matrix.shard }} (postgres service)
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.code == 'true'
+    strategy:
+      fail-fast: false   # one red shard must not hide what the others found
+      matrix:
+        shard: [1, 2, 3]   # keep in step with EGRESS_SHARDS in scripts/ci_shards.py (a test checks it)
     services:
       postgres:
         image: postgres:16-alpine
@@ -364,10 +383,13 @@ jobs:
           PGDATABASE: te_mgmt_dev
         run: |
           # The control's EGRESS_NETWORK_BLOCKED is deliberately not passed on: its attempts must not run here.
+          # This shard's part of tests/system, split by recorded duration (scripts/ci_shards.py).
+          files="$(python3 scripts/ci_shards.py files --shard ${{ matrix.shard }} --of 3 --only tests/system/)"
+          echo "$files"
           sudo env "PATH=$PATH" "PGHOST=$PGHOST" "PGPORT=$PGPORT" "PGUSER=$PGUSER" "PGPASSWORD=$PGPASSWORD" \
             "PGDATABASE=$PGDATABASE" \
             bash scripts/egress_firewall.sh run egresstest -- \
-            python3 -m pytest tests/system --block-egress -q -p no:cacheprovider
+            python3 -m pytest $files --block-egress -q -p no:cacheprovider
 
       - name: Fail if anything tried to leave the machine (#310)
         run: sudo bash scripts/egress_firewall.sh check
@@ -380,35 +402,20 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: eval-reports-integration-egress
+          name: eval-reports-integration-egress-shard-${{ matrix.shard }}
           path: evals/reports/
           if-no-files-found: ignore
           retention-days: 30
 
-  # The coverage gate, in its own job, in parallel with the shards (it used to run after the whole suite).
+  # The coverage gate. Each shard records its own coverage while it runs its tests; this job combines their data files and
+  # applies the same floors as before (scripts/check_coverage_floors.py: #194, #274, #278). It runs no tests and needs no
+  # database, so it takes seconds once the shards are done. It is skipped when a shard failed (no verdict from a partial
+  # run); the gate job then fails on the shard anyway.
   coverage:
     name: coverage gate (api, streamlit_app)
     runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      PGHOST: localhost
-      PGPORT: "5432"
-      PGUSER: postgres
-      PGPASSWORD: postgres
-      PGDATABASE: postgres
+    needs: [changes, integration-shards]
+    if: needs.changes.outputs.code == 'true' && needs.integration-shards.result == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -423,91 +430,31 @@ jobs:
             api/requirements.txt
 
       - name: Install dev dependencies
-        # api/requirements.txt is needed too: tests/test_api.py imports FastAPI
-        # at module level, so without it pytest collection fails.
         run: pip install -r requirements-dev.txt -r api/requirements.txt
 
-      - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Download every shard's coverage data
+        uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-shard-*
+          merge-multiple: true
 
-      - name: Write CI database config
-        run: |
-          cat > build/config.local.env <<'EOF'
-          DB_ENGINE="postgresql"
-          PG_HOST="localhost"
-          PG_PORT="5432"
-          PG_SUPERUSER="postgres"
-          PG_SUPERUSER_PASSWORD="postgres"
-          PG_DB_DEV="te_mgmt_dev"
-          PG_SCHEMA_DEV="te_dev"
-          PG_DB_TEST="te_mgmt_test"
-          PG_SCHEMA_TEST="te_test"
-          PG_DB_STAGING="te_mgmt_staging"
-          PG_SCHEMA_STAGING="te_staging"
-          PG_DB_PROD="te_mgmt_prod"
-          PG_SCHEMA_PROD="te_prod"
-          EOF
-
-      # env_*.sql scripts do not create their databases — deploy_all.sh does that
-      # before invoking them (see build/te_core_schema.sql:41). Mirror it here.
-      # Only *.example.sql are committed (concrete env_<env>.sql are gitignored),
-      # so materialise them before anything that deploys an environment.
-      - name: Materialise environment launchers from templates
-        run: |
-          for env in dev test staging prod; do
-            cp "build/environments/env_${env}.example.sql" \
-               "build/environments/env_${env}.sql"
-          done
-          ls -1 build/environments/
-
-      - name: Create environment databases
-        run: |
-          for db in te_mgmt_dev te_mgmt_test te_mgmt_staging te_mgmt_prod; do
-            if [ -z "$(psql -d postgres -tA -c "SELECT 1 FROM pg_database WHERE datname = '$db'")" ]; then
-              psql -v ON_ERROR_STOP=1 -d postgres -c \
-                "CREATE DATABASE \"$db\" WITH OWNER = postgres ENCODING = 'UTF8' TEMPLATE = template0 CONNECTION LIMIT = -1"
-            fi
-          done
-
-      # Tier E deploys all four environments and compares their schemas, so it
-      # runs here where the postgres service exists. Order matters: E deploys
-      # every environment, which the cross-env parity pytest markers then rely on.
-      # Tier X is excluded per ADR-0001 — see the free-tier job's note.
-      - name: Evals — Tiers P, I, S, E
-        run: python3 evals/runner.py --tiers p,i,s,e --verbose
-
-      - name: Deploy all environments (for cross-env parity)
-        run: |
-          for env in dev test staging prod; do
-            bash build/deploy_all.sh "$env"
-          done
-
-      # #194, #274, #278: coverage with per-loader floors and per-package floors for api/ and streamlit_app/
-      # (scripts/check_coverage_floors.py). One scope, the same in .coveragerc and the Makefile; see tests/README.md.
-      # #275: pipefail, so a failing pytest fails this step. Without it the pipe into tail returns tail's
-      # status (0), the step goes green, and the floors are read from a failed run.
+      # #275: a failing step fails the job (bash -e, pipefail). One scope, the same in .coveragerc and the Makefile; see
+      # tests/README.md.
       - name: coverage gate (api, streamlit_app)
-        env:
-          PGDATABASE: te_mgmt_dev
         run: |
-          set -o pipefail
-          python -m pytest tests/ -m "not accessibility" \
-            --cov=api \
-            --cov=streamlit_app \
-            --cov=build/csv \
-            --cov=evals \
-            --cov-branch \
-            --cov-report=json:coverage.json \
-            --cov-report=term-missing \
-            -q --no-header 2>&1 | tail -20
+          set -eo pipefail
+          ls -1 coverage-shard-*.dat
+          python -m coverage combine coverage-shard-*.dat
+          python -m coverage json -o coverage.json
+          python -m coverage report --show-missing | tail -40
           python3 scripts/check_coverage_floors.py coverage.json
 
-      - name: Upload eval reports
+      - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: eval-reports-integration-coverage
-          path: evals/reports/
+          name: coverage-report
+          path: coverage.json
           if-no-files-found: ignore
           retention-days: 30
 
