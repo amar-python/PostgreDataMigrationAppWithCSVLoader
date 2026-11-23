@@ -182,12 +182,47 @@ jobs:
           PGDATABASE: te_mgmt_dev
         run: python3 scripts/test_report.py --markers "not accessibility" --strict
 
-      # M7 (#111, BR-37): the API tests again, with every connection that isn't to this machine refused and
-      # recorded. Fails if the application tries one, even when the code swallows the error.
+      # M7 (#111, BR-37) and #310: the API tests again, with every connection that isn't to this machine refused and
+      # recorded. Two layers. Inside Python, tests/egress_guard.py refuses and records the attempt, even when the code
+      # swallows the error. Below Python (child processes, libpq), scripts/egress_firewall.sh blocks the network of a
+      # throwaway user at the firewall and counts every refused packet; the job fails if the count is not zero.
+      # A dedicated user, because the runner agent that streams this job's log shares the runner's user and must keep
+      # its network (docs/SOVEREIGNTY.md). That user must be able to read the checkout, hence the chmod.
+      - name: Create the user whose network is blocked (#310)
+        run: |
+          sudo useradd --create-home --shell /usr/sbin/nologin egresstest
+          sudo chmod o+x "$HOME"
+
+      - name: Block that user's outbound network (#310)
+        run: sudo bash scripts/egress_firewall.sh install egresstest
+
+      # The negative control: deliberate attempts from a child process and from libpq must be refused, and the firewall
+      # must have counted them. Without that, a zero count below could just mean the counter does not work.
+      - name: Prove the block holds for child processes and libpq (#310)
+        env:
+          PGDATABASE: te_mgmt_dev
+          EGRESS_NETWORK_BLOCKED: "1"
+        run: |
+          sudo -E env "PATH=$PATH" bash scripts/egress_firewall.sh run egresstest -- \
+            python3 -m pytest tests/system/test_egress_network_blocked.py -q -p no:cacheprovider
+          refused="$(sudo bash scripts/egress_firewall.sh count)"
+          echo "the control's deliberate attempts refused by the firewall: $refused packet(s)"
+          test "$refused" -ge 1 || { echo "the firewall counted none of the control's attempts, so a zero count below would prove nothing"; exit 1; }
+          sudo bash scripts/egress_firewall.sh reset
+
       - name: API tests with network egress blocked
         env:
           PGDATABASE: te_mgmt_dev
-        run: python3 -m pytest tests/system --block-egress -q
+        run: |
+          sudo -E env "PATH=$PATH" bash scripts/egress_firewall.sh run egresstest -- \
+            python3 -m pytest tests/system --block-egress -q -p no:cacheprovider
+
+      - name: Fail if anything tried to leave the machine (#310)
+        run: sudo bash scripts/egress_firewall.sh check
+
+      - name: Remove the network block (#310)
+        if: always()
+        run: sudo bash scripts/egress_firewall.sh remove
 
       # #194, #274, #278: coverage with per-loader floors and per-package floors for api/ and streamlit_app/
       # (scripts/check_coverage_floors.py). One scope, the same in .coveragerc and the Makefile; see tests/README.md.
