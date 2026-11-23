@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api import db, oidc, policy
+from api.bodylimit import BodyLimitMiddleware
 from api.config import settings
 from api.ratelimit import rate_limit_middleware
 from api.routers import (audit_routes, auth_routes, csv_routes, import_routes, policy_routes, review_routes,
@@ -84,6 +85,11 @@ app = FastAPI(
     # te_routes.py). It is deliberately NOT applied at app level so external
     # uptime probes can hit /api/health without needing the shared secret.
 )
+
+# #290 (OIT-005): refuse an oversize request body before anything parses it. Added first, so it is the
+# innermost middleware: it still sits in front of every route, and its 413 passes back out through
+# CORSMiddleware, which a browser needs in order to read the status at all.
+app.add_middleware(BodyLimitMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
