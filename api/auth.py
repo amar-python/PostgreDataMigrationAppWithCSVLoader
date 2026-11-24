@@ -20,7 +20,7 @@ from api.config import settings
 from api.db import Conn
 from api.services.accounts import session_for
 from api.services.audit import acting_as
-from api.tenancy import schema_for, scoped
+from api.tenancy import tenant
 
 
 ANONYMOUS_ACTOR = "anonymous"
@@ -61,10 +61,10 @@ async def tenant_scope(authorization: str = Header(default="")) -> AsyncIterator
     """Route the request to one tenant's schema (M2b, #93).
 
     With ``Authorization: Bearer <token>`` the request runs in the signed-in
-    tenant's schema and yields its session. Without one it gets 401 "Sign in
-    required" (#298), unless local dev opted in to anonymous access; then it
-    keeps the deployment's default schemas, yields ``None`` and audits as
-    ``anonymous``. Any ``X-API-Key`` header is ignored: it grants nothing.
+    tenant's schema, as the tenant's own database role (#297), and yields its session.
+    Without one it gets 401 "Sign in required" (#298), unless local dev opted in to
+    anonymous access; then it keeps the deployment's default schemas, yields ``None``
+    and audits as ``anonymous``. Any ``X-API-Key`` header is ignored: it grants nothing.
 
     Async on purpose: the schema is a context variable, and only an async
     dependency sets it in the context the endpoint's worker thread copies.
@@ -76,7 +76,7 @@ async def tenant_scope(authorization: str = Header(default="")) -> AsyncIterator
             yield None
         return
     session = await run_in_threadpool(_live_session, bearer_token(authorization))
-    with scoped(schema_for(session["tenant"])), acting_as(session["username"]):
+    with tenant(session["tenant"]), acting_as(session["username"]):
         yield session
 
 

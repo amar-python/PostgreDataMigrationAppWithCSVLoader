@@ -46,6 +46,11 @@ SELECT
 
 \echo '>> [2/6] Creating application user:' :app_user
 
+-- CREATEROLE (#297): the API, connected as this owner, gives each tenant its own NOLOGIN role when the tenant is
+-- created or migrated (api/tenancy.py provision_tenant_role; DECISIONS/2026-11-24-per-tenant-db-roles.md).
+-- On PostgreSQL 16 and later CREATEROLE only lets it manage the roles it created itself, so it cannot reach other
+-- environments' roles or make a superuser.
+
 DO
 $$
 DECLARE
@@ -57,12 +62,12 @@ BEGIN
    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = v_app_user) THEN
       EXECUTE format(
          'CREATE ROLE %I WITH LOGIN PASSWORD %L
-          NOSUPERUSER NOCREATEDB NOCREATEROLE CONNECTION LIMIT %s',
+          NOSUPERUSER NOCREATEDB CREATEROLE CONNECTION LIMIT %s',
          v_app_user, v_app_password, v_conn_limit
       );
       RAISE NOTICE '[%] Role "%" created.', v_env, v_app_user;
    ELSE
-      EXECUTE format('ALTER ROLE %I PASSWORD %L CONNECTION LIMIT %s',
+      EXECUTE format('ALTER ROLE %I CREATEROLE PASSWORD %L CONNECTION LIMIT %s',
                      v_app_user, v_app_password, v_conn_limit);
       RAISE NOTICE '[%] Role "%" already exists — password and conn_limit refreshed.', v_env, v_app_user;
    END IF;

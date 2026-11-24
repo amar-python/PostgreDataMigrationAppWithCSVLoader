@@ -174,19 +174,61 @@ class Conn:
     BUG-030: getconn() is now bounded by POOL_GETCONN_TIMEOUT. If the pool is
     exhausted for longer than that, this raises psycopg2.pool.PoolError which
     api/main.py surfaces as HTTP 503 (Server busy, please retry shortly).
+
+    #297: borrowed inside a tenant's scope (``api.tenancy.tenant``), the connection switches to that tenant's
+    database role first, in a transaction of its own, so a later rollback by the caller cannot undo it. On the way
+    back to the pool it always returns to the login role, error or not; a connection that cannot is closed, never
+    pooled, so no request inherits another tenant's role.
     """
 
     def __enter__(self):
         if _pool is None:
             raise RuntimeError("DB pool not initialised — call init_pool() first")
         self._conn = _borrow_with_timeout()
+        from api.tenancy import current_role
+
+        role = current_role()
+        if role:
+            try:
+                with self._conn.cursor() as cur:
+                    cur.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(role)))
+                self._conn.commit()
+            except Exception:
+                _pool.putconn(self._conn, close=True)
+                raise
         return self._conn
 
     def __exit__(self, exc_type, exc, tb):
-        if exc_type is not None:
-            self._conn.rollback()
-        _pool.putconn(self._conn)
+        conn, close = self._conn, False
+        try:
+            # Rolling back first discards what the caller left uncommitted (putconn would anyway) and means the
+            # RESET below is committed on its own: a RESET inside an open transaction would be undone by its rollback.
+            conn.rollback()
+            with conn.cursor() as cur:
+                cur.execute("RESET ROLE")
+            conn.commit()
+        except Exception:  # noqa: BLE001 — a connection whose role is unknown must not go back to the pool
+            close = True
+        _pool.putconn(conn, close=close or conn.closed != 0)
         return False
+
+
+@contextmanager
+def acting_role(cur):
+    """Switch an open connection to the current tenant's role for a block, then back to the login role (#297).
+
+    For the rare request that borrowed its connection before the tenant was known and then writes to the tenant's
+    schema in the same transaction (a password reset and its audit entry). On an error the block's transaction is
+    rolled back, which undoes the SET ROLE, and ``Conn`` resets the role again on return.
+    """
+    from api.tenancy import current_role
+
+    role = current_role()
+    if not role:
+        raise RuntimeError("acting_role needs a tenant scope (api.tenancy.tenant)")
+    cur.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(role)))
+    yield
+    cur.execute("RESET ROLE")
 
 
 def bootstrap() -> None:
@@ -296,16 +338,22 @@ APPEND_ONLY = ("audit_log", "uploads", "upload_blobs", "source_rows", "row_decis
 
 
 def grant_runtime(cur, schema: str, create: bool) -> None:
-    """Give the runtime role (APP_DB_USER) what requests need in one schema (M3d, #107).
+    """Give the runtime role (APP_DB_USER) what requests need in one of the deployment's own schemas (M3d, #107).
+
+    For the default, control and T&E template schemas only. A tenant's schema is granted to the tenant's own role
+    instead (``api.tenancy.provision_tenant_role``, #297). Commits. No-op without APP_DB_USER.
+    """
+    if settings.APP_DB_USER:
+        grant_schema(cur, schema, settings.APP_DB_USER, create)
+
+
+def grant_schema(cur, schema: str, role: str, create: bool) -> None:
+    """Give ``role`` what requests need in one schema (M3d, #107).
 
     Read and write on ordinary tables; read and insert only on APPEND_ONLY.
     ``create`` lets it create, and so own and drop, the per-upload csv_* tables;
-    ones the owner created before M3d are handed over. Commits. No-op without
-    APP_DB_USER or if the schema doesn't exist.
+    ones someone else created are handed over. Commits. No-op if the schema doesn't exist.
     """
-    role = settings.APP_DB_USER
-    if not role:
-        return
     cur.execute("SELECT 1 FROM pg_namespace WHERE nspname = %s", (schema,))
     if cur.fetchone() is None:
         return
