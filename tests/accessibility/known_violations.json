@@ -66,30 +66,6 @@
       "rule": "color-contrast",
       "nodes": 2,
       "note": "the same two contrast failures as audit_log_with_history, still on the page behind the open menu"
-    },
-    {
-      "scenario": "streamlit_home",
-      "rule": "color-contrast",
-      "nodes": 1,
-      "note": "Streamlit st.caption text (grey on white) is below 4.5:1: the line under the role list"
-    },
-    {
-      "scenario": "streamlit_review",
-      "rule": "color-contrast",
-      "nodes": 1,
-      "note": "Streamlit st.caption text (grey on white) is below 4.5:1: the upload's caption line"
-    },
-    {
-      "scenario": "streamlit_import_history",
-      "rule": "color-contrast",
-      "nodes": 2,
-      "note": "Streamlit st.caption text (grey on white) is below 4.5:1: the 'Every upload in this tenant' and 'Imports N to M, newest first' lines"
-    },
-    {
-      "scenario": "streamlit_imported_files",
-      "rule": "color-contrast",
-      "nodes": 2,
-      "note": "Streamlit st.caption text (grey on white) is below 4.5:1: the page's caption and the 'Files N to M of K, newest first' lines"
     }
   ]
 }
