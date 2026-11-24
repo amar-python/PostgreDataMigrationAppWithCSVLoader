@@ -29,6 +29,7 @@ from sqlalchemy.exc import ProgrammingError
 
 from api import db
 from api.config import settings
+from pydantic import SecretStr
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
@@ -170,7 +171,7 @@ def test_permanent_failure_message_names_user_host_port_and_env_vars(fake, monke
     monkeypatch.setattr(settings, "PG_USER", "alice")
     monkeypatch.setattr(settings, "PG_HOST", "db.example.test")
     monkeypatch.setattr(settings, "PG_PORT", 6543)
-    monkeypatch.setattr(settings, "PG_PASSWORD", _SECRET)
+    monkeypatch.setattr(settings, "PG_PASSWORD", SecretStr(_SECRET))
     fake.outcomes = [psycopg2.OperationalError(PERMANENT[0])]
 
     with pytest.raises(db.DatabaseConnectError) as info:
@@ -313,7 +314,7 @@ def _point_at(monkeypatch, server):
     monkeypatch.setattr(settings, "PG_PORT", server.port)
     monkeypatch.setattr(settings, "PG_USER", "alice")
     monkeypatch.setattr(settings, "APP_DB_USER", "")
-    monkeypatch.setattr(settings, "PG_PASSWORD", _SECRET)
+    monkeypatch.setattr(settings, "PG_PASSWORD", SecretStr(_SECRET))
     monkeypatch.setattr(db, "_pool", None)
     monkeypatch.setattr(db, "_getconn_executor", None)
 
@@ -397,7 +398,7 @@ def test_bootstrap_login_refusal_names_the_owner_host_port_and_variables(monkeyp
     monkeypatch.setattr(settings, "APP_DB_USER", "te_runtime")  # the pool's login, not the migrations'
     monkeypatch.setattr(settings, "PG_HOST", "db.example.test")
     monkeypatch.setattr(settings, "PG_PORT", 6543)
-    monkeypatch.setattr(settings, "PG_PASSWORD", _SECRET)
+    monkeypatch.setattr(settings, "PG_PASSWORD", SecretStr(_SECRET))
     _alembic_fails_with(monkeypatch, _wrapped(PERMANENT[0]))
 
     with pytest.raises(db.DatabaseConnectError) as info:
