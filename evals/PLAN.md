@@ -36,7 +36,7 @@ In short: `tests/` proves the **code is correct**; `evals/` proves the **framewo
 - **Tiers in scope:**
   - **Tier P** — Python CSV validator (`build/csv/validator.py`). Pure data-in / files-out. No DB.
   - **Tier I** — Idempotency of `deploy_all.sh` against a clean Dev PostgreSQL.
-  - **Tier S** — SQL test suite integration: deploy fresh + run all 5 suites and assert 142/142.
+  - **Tier S** — SQL test suite integration: deploy fresh + run all 6 suites and assert 159/159 (the expected JSON's threshold still says 142: OIT-018, #303).
 - **Tiers deferred:** *(superseded 2026-09-10 — see the status update at the top)*
   - ~~**Tier X** — Cross-DB schema equivalence (MariaDB/SQLite). Out until Postgres is locked in.~~
     **Implemented**, but kept out of CI by ADR-0001 rather than unbuilt.
