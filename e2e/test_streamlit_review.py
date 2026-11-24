@@ -94,8 +94,15 @@ def _select_row(page, index: int) -> None:
                 raise
 
 
+def _row_number_box(page):
+    """The live "Row number" box. While a run rebuilds the page, Streamlit keeps the previous run's elements on
+    screen, marked data-stale="true", so the old upload's box can sit beside the new one for a moment."""
+    live = page.locator('[data-testid="stElementContainer"]:not([data-stale="true"])')
+    return live.get_by_role("spinbutton", name="Row number", exact=True)
+
+
 def _type_row_number(page, n: int) -> None:
-    box = page.get_by_role("spinbutton", name="Row number", exact=True)
+    box = _row_number_box(page)
     heading = page.get_by_role("heading", name=f"Row {n}")
     for attempt in range(3):
         _idle(page)
@@ -176,7 +183,7 @@ def test_signing_out_leaves_nothing_for_the_next_tenant(page, stack, upload):
 
 def test_the_grid_and_the_row_number_box_stay_in_step(page, stack, upload):
     _open_review(page, stack, "reviewer", upload)
-    box = page.get_by_role("spinbutton", name="Row number", exact=True)
+    box = _row_number_box(page)
     expect(box).to_have_value("")
     expect(page.get_by_text("Select a row in the table, or type its number")).to_be_visible()
 
