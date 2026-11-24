@@ -112,8 +112,7 @@ class NoSessionNoData(_NoAnonymous, unittest.TestCase):
         self.assertNotIn("x-api-key", res.headers.get("access-control-allow-headers", "").lower())
 
 
-@pytest.mark.integration
-@pytest.mark.security
+@pytest.mark.integration  # not also `security`: the free-tier job selects that marker and has no database
 class SignedInCallersAreScopedAndNamed(_NoAnonymous, unittest.TestCase):
     """With sessions only, deletes are role-checked and the audit log names the user."""
 
