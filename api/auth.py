@@ -21,7 +21,7 @@ from api.config import settings
 from api.db import Conn
 from api.services.accounts import session_for
 from api.services.audit import acting_as
-from api.tenancy import schema_for, scoped
+from api.tenancy import tenant
 
 
 def require_api_key(x_api_key: str = Header(default="")) -> None:
@@ -63,7 +63,7 @@ async def tenant_scope(authorization: str = Header(default=""),
     """Route the request to one tenant's schema (M2b, #93).
 
     With ``Authorization: Bearer <token>`` the request runs in the signed-in
-    tenant's schema and yields its session. Without one, the shared API key
+    tenant's schema, as the tenant's own database role (#297), and yields its session. Without one, the shared API key
     applies and the request keeps the deployment's default schemas.
 
     Async on purpose: the schema is a context variable, and only an async
@@ -75,7 +75,7 @@ async def tenant_scope(authorization: str = Header(default=""),
             yield None
         return
     session = await run_in_threadpool(_live_session, bearer_token(authorization))
-    with scoped(schema_for(session["tenant"])), acting_as(session["username"]):
+    with tenant(session["tenant"]), acting_as(session["username"]):
         yield session
 
 

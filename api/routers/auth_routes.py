@@ -11,11 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.auth import PERMISSIONS, bearer_token, require_session
-from api.db import Conn
+from api.db import Conn, acting_role
 from api import oidc
 from api.services import accounts
 from api.services.audit import acting_as, write_audit
-from api.tenancy import schema_for, scoped
+from api.tenancy import tenant
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -115,7 +115,7 @@ def reset_password(username: str, req: ResetPasswordRequest,
             result = accounts.reset_password(cur, session["tenantId"], username, req.newPassword)
             if result == "ok":
                 # The target user goes in file_name, the feed's object column (M3a, #107).
-                with scoped(schema_for(session["tenant"])), acting_as(session["username"]):
+                with tenant(session["tenant"]), acting_as(session["username"]), acting_role(cur):
                     write_audit(cur, "password_reset", None, username, None, None)
         conn.commit()
     if result == "missing":

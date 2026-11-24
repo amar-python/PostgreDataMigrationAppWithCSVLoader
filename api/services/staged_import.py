@@ -265,11 +265,10 @@ def submit(cur, upload_id: int, note: str | None) -> dict:
     return state_of(cur, upload_id)
 
 
-def _self_approval_allowed(cur, session: dict) -> bool:
-    cur.execute(sql.SQL("SELECT allow_self_approval FROM {}.tenants WHERE slug = %s")
-                .format(sql.Identifier(settings.CONTROL_SCHEMA)), (session["tenant"],))
-    row = cur.fetchone()
-    return bool(row and row[0])
+def _self_approval_allowed(session: dict) -> bool:
+    """Read from the session (accounts.session_for), not control.tenants: the request runs as the tenant's own
+    database role, which has no rights on the control schema (#297)."""
+    return bool(session.get("allowSelfApproval"))
 
 
 def decide_approval(cur, upload_id: int, decision: str, reason: str | None, session: dict | None) -> dict:
@@ -289,7 +288,7 @@ def decide_approval(cur, upload_id: int, decision: str, reason: str | None, sess
     if decision == "reject" and not reason:
         raise WorkflowError(422, "A reason is required to reject")
     if decision == "approve" and session is not None and session["username"] in (st["uploader"], st["submission"]["submitter"]):
-        if not _self_approval_allowed(cur, session):
+        if not _self_approval_allowed(session):
             raise WorkflowError(403, "You uploaded or submitted this data, so another member must approve it. "
                                      "A tenant with a single user can allow self-approval.")
     cur.execute(sql.SQL("SELECT COALESCE(max(id), 0) FROM {}.row_decisions WHERE upload_id = %s").format(_s()),
