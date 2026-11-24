@@ -412,7 +412,7 @@ jobs:
   # database, so it takes seconds once the shards are done. It is skipped when a shard failed (no verdict from a partial
   # run); the gate job then fails on the shard anyway.
   coverage:
-    name: coverage gate (api, streamlit_app)
+    name: coverage gate (api, streamlit_app, build/csv, evals)
     runs-on: ubuntu-latest
     needs: [changes, integration-shards]
     if: needs.changes.outputs.code == 'true' && needs.integration-shards.result == 'success'
@@ -440,7 +440,7 @@ jobs:
 
       # #275: a failing step fails the job (bash -e, pipefail). One scope, the same in .coveragerc and the Makefile; see
       # tests/README.md.
-      - name: coverage gate (api, streamlit_app)
+      - name: coverage gate (api, streamlit_app, build/csv, evals)
         run: |
           set -eo pipefail
           ls -1 coverage-shard-*.dat

@@ -215,12 +215,12 @@ class TestCoverageIsMeasuredOneWay(unittest.TestCase):
     """#274, #278: CI, the Makefile and .coveragerc name the same scope, so they cannot drift apart again.
 
     CI measured `api/services`, the Makefile measured `build/csv` and `evals`, and nothing measured or gated the rest
-    of the API or the Streamlit app. Now all three say the same four packages, with branch coverage; only `api` and
-    `streamlit_app` have floors.
+    of the API or the Streamlit app. Now all three say the same four packages, with branch coverage, and all four have a
+    floor (#304 added `build/csv` and `evals`, measured in child processes too).
     """
 
     SCOPE = {"api", "streamlit_app", "build/csv", "evals"}
-    GATED = {"api", "streamlit_app"}
+    GATED = {"api", "streamlit_app", "build/csv", "evals"}
     MAKEFILE = ROOT / "Makefile"
     COVERAGERC = ROOT / ".coveragerc"
 
@@ -254,6 +254,15 @@ class TestCoverageIsMeasuredOneWay(unittest.TestCase):
         parser.read(self.COVERAGERC, encoding="utf-8")
         self.assertEqual({line.strip() for line in parser["run"]["source"].splitlines() if line.strip()}, self.SCOPE)
         self.assertEqual(parser["run"]["branch"].lower(), "true")
+
+    def test_child_processes_are_measured_too(self):
+        """#304: the validator and the evals runner mostly run as child processes; without this they read near 0 %."""
+        import configparser
+
+        parser = configparser.ConfigParser()
+        parser.read(self.COVERAGERC, encoding="utf-8")
+        patches = {p.strip() for p in parser["run"].get("patch", "").replace(",", "\n").splitlines() if p.strip()}
+        self.assertIn("subprocess", patches)
 
     def test_only_the_gated_packages_have_floors_and_they_are_in_the_scope(self):
         sys.path.insert(0, str(ROOT / "scripts"))

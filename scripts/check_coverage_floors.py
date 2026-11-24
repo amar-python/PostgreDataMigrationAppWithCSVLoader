@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
-"""Check coverage floors: per-file for the api/services loaders (#194), and per package for the API and the
-Streamlit app (#274, #278).
+"""Check coverage floors: per-file for the api/services loaders (#194), and per package for the API, the
+Streamlit app (#274, #278), the CSV validator (build/csv) and the evals runner (#304).
 
 Usage:
     python3 scripts/check_coverage_floors.py coverage.json
 
 Reads the JSON coverage report produced by pytest-cov (the scope in .coveragerc: api, streamlit_app, build/csv and
 evals) and verifies that each loader file, and the api/ and streamlit_app/ packages as a whole, meet their minimum
-coverage percentage. build/csv and evals are measured but have no floor (they read low: see tests/README.md). A package's figure is covered
-statements over all statements in it (not an average of file percentages). A file or package missing from the
+coverage percentage. A package's figure is covered statements over all statements in it (not an average of file
+percentages). build/csv/validator.py and evals/runner.py are mostly run as child processes; .coveragerc's
+`patch = subprocess` measures those too (#304), which is what makes a floor for them mean something. build/csv's
+loaders are shell scripts, which coverage.py cannot see: they are not in the figure at all. A file or package missing from the
 report fails, so dropping a `--cov=` option cannot quietly stop it being measured. Exits non-zero if anything
 drops below its floor.
 
-The floors sit a few points under what the full suite measured on 19 Nov 2026 (api 94.4 %, streamlit_app 97.5 %),
-so new code has some room and a real loss of coverage does not. Raise them when the numbers rise.
+The floors sit a few points under what was measured, so new code has some room and a real loss of coverage does not:
+api 94.4 % and streamlit_app 97.5 % on the full suite (19 Nov 2026); build/csv 85.9 % and evals 63.5 % on the
+database-free tiers alone with subprocess measurement on (24 Nov 2026, a lower bound for the full suite). Raise them
+when the numbers rise.
 """
 from __future__ import annotations
 
@@ -31,6 +35,8 @@ FLOORS: dict[str, int] = {
 PACKAGE_FLOORS: dict[str, int] = {
     "api/": 90,
     "streamlit_app/": 92,
+    "build/csv/": 80,   # #304: the validator (validator.py); the shell loaders are invisible to coverage.py
+    "evals/": 60,       # #304: the runner and the gap report
 }
 
 GREEN = "\033[0;32m"
@@ -75,7 +81,7 @@ def main() -> int:
 
     print("  " + "─" * 56)
 
-    print("\n  package coverage floors (#274, #278)")
+    print("\n  package coverage floors (#274, #278, #304)")
     print("  " + "─" * 56)
     print(f"  {'Package':<40} {'Actual':>7} {'Floor':>7}  Result")
     print("  " + "─" * 56)
