@@ -91,8 +91,9 @@ and calls the API from its Python server, so the stub is served over local HTTP
 (`stub_api_url` in conftest.py) and the app is started with `API_URL` pointing at it. Each
 test signs in through the real form (any password except `stub_api.STREAMLIT_PASSWORD` is
 refused) and navigates with the sidebar. Their recorded violations are the `streamlit_*`
-scenarios in `known_violations.json`. Today they are all one thing: `st.caption` text is
-grey on white and below WCAG's 4.5:1 contrast ratio.
+scenarios in `known_violations.json`; today there are none. `st.caption` draws the text colour
+at about 60% opacity, so `streamlit_app/.streamlit/config.toml` sets a darker light-theme
+`textColor` to keep captions above WCAG's 4.5:1.
 
 `st.dataframe` draws on a canvas, so axe cannot see inside grids: those are scanned around,
 not within. Keyboard and screen-reader access to them needs a manual check.
