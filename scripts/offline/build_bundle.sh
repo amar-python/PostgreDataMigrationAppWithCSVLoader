@@ -19,7 +19,9 @@ git archive --format=tar --prefix=app/ HEAD | tar -x -C "$OUT"
 rm -rf "$OUT/app/csv-table-hub-main"   # shipped prebuilt below
 
 echo "== 2/4 Python wheels for CPython 3.12, manylinux x86_64"
-python3 -m pip download -q -r api/requirements.txt -d "$OUT/wheels" \
+# 3.12: the one supported version (DECISIONS/2026-11-24-one-python-version.md). The hashed lock (#327) fixes every
+# version, and pip refuses a wheel whose hash it does not list, so the bundle holds exactly what was locked.
+python3 -m pip download -q -r api/requirements.lock --require-hashes --no-deps -d "$OUT/wheels" \
   --only-binary=:all: --python-version 3.12 --implementation cp \
   --platform manylinux2014_x86_64 --platform manylinux_2_17_x86_64 \
   --platform manylinux_2_28_x86_64 --platform any

@@ -54,6 +54,10 @@ class TestQualityGateStructure(unittest.TestCase):
 # tests/unit/test_ci_parallel_jobs.py asserts they run nothing else.
 PLUMBING_JOBS = {"changes", "integration-postgres"}
 
+# Jobs that check the React frontend only (#329): Node, no Python, and nothing to keep (lint and tsc print to the log;
+# the build output is checked by building it). They still need a checkout and an install.
+NODE_ONLY_JOBS = {"frontend"}
+
 
 class TestAllJobsHaveConsistentStructure(unittest.TestCase):
     """All jobs must have checkout; every job that runs code also python setup, dependencies and an artifact upload."""
@@ -76,7 +80,7 @@ class TestAllJobsHaveConsistentStructure(unittest.TestCase):
             )
 
     def test_all_jobs_have_python_setup(self):
-        for job_id in set(self.jobs) - PLUMBING_JOBS:
+        for job_id in set(self.jobs) - PLUMBING_JOBS - NODE_ONLY_JOBS:
             names = self._step_names(job_id)
             self.assertTrue(
                 any("Setup Python" in n or "Python" in n for n in names),
@@ -84,12 +88,16 @@ class TestAllJobsHaveConsistentStructure(unittest.TestCase):
             )
 
     def test_all_jobs_have_artifact_upload(self):
-        for job_id in set(self.jobs) - PLUMBING_JOBS:
+        for job_id in set(self.jobs) - PLUMBING_JOBS - NODE_ONLY_JOBS:
             names = self._step_names(job_id)
             self.assertTrue(
                 any("Upload" in n for n in names),
                 f"Job {job_id!r} missing artifact upload step",
             )
+
+    def test_the_node_only_jobs_set_up_node(self):
+        for job_id in NODE_ONLY_JOBS:
+            self.assertTrue(any("Setup Node" in n for n in self._step_names(job_id)), job_id)
 
     def test_all_jobs_install_dev_deps(self):
         for job_id in set(self.jobs) - PLUMBING_JOBS:
@@ -118,7 +126,7 @@ class TestAccessibilityJob(unittest.TestCase):
         text = self._run_text("accessibility")
         self.assertIn("playwright install", text)
         self.assertIn("npm ci", text)
-        self.assertIn("requirements-a11y.txt", text)
+        self.assertIn("requirements-a11y.lock", text)
 
     def test_integration_jobs_exclude_accessibility_everywhere_they_run_the_tree(self):
         # The suite runs in the shards (through the accounting script) and the coverage run in its own job.

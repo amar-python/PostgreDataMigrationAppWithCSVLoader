@@ -18,7 +18,7 @@ It uses two scripts:
 | Part | Contents |
 |---|---|
 | `app/` | The repository at the bundle's commit, without the frontend source |
-| `wheels/` | Python wheels for CPython 3.12 on x86_64 Linux: everything in `api/requirements.txt`, plus pip |
+| `wheels/` | Python wheels for CPython 3.12 on x86_64 Linux: everything in `api/requirements.lock` (hash-checked), plus pip |
 | `frontend/` | The frontend, prebuilt to run under Node.js |
 | `debs/` | Ubuntu 24.04 packages for PostgreSQL 16, `python3.12-venv` and Node.js 18, with dependencies, plus an index so apt can use the folder as a repository |
 | `SHA256SUMS` | A checksum for every file in the bundle |

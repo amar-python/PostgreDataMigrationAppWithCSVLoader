@@ -13,7 +13,7 @@ For architecture and rationale see `docs/ARCHITECTURE.md`, `docs/VCRM.md`, and
 | Requirement | Version | Notes |
 |---|---|---|
 | PostgreSQL | 16 or later | CI tests PostgreSQL 16. The walkthrough below uses PostgreSQL 18 on port 5433 |
-| Python | 3.10+ | Must be on PATH |
+| Python | 3.12 | Must be on PATH. The one supported version: CI and the images run it (`.python-version`) |
 | Node.js | 22.12+ | Required for the React frontend (TanStack Start needs >=22.12) |
 | Git Bash | Any | Required for bash scripts on Windows |
 | psql client | Matching server | Must be on PATH; the Windows installer does not add it. Add `C:\Program Files\PostgreSQL\<ver>\bin`. `build/deploy_all.sh` checks and says what to do |

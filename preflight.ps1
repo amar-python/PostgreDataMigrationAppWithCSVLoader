@@ -81,13 +81,21 @@ Test-Check 'python on PATH' {
     $v = (& python --version 2>&1) -replace 'Python ', ''
     if ($LASTEXITCODE -ne 0) { return $false }
     $v
-} -FixHint 'Install Python 3.10+ from python.org or via winget install Python.Python.3.11'
+} -FixHint 'Install Python 3.12 from python.org or via winget install Python.Python.3.12'
 
-Test-Check 'python version >= 3.10' {
+# Python 3.12 is the one supported version (.python-version, DECISIONS/2026-11-24-one-python-version.md): older fails,
+# newer is a warning (it is not what CI and the images run).
+Test-Check 'python version >= 3.12' {
     $v = (& python --version 2>&1) -replace 'Python ', ''
     $parts = $v.Split('.')
-    return ([int]$parts[0] -gt 3) -or ([int]$parts[0] -eq 3 -and [int]$parts[1] -ge 10)
-} -FixHint 'Upgrade Python to 3.10 or later'
+    return ([int]$parts[0] -gt 3) -or ([int]$parts[0] -eq 3 -and [int]$parts[1] -ge 12)
+} -FixHint 'Upgrade Python to 3.12, the supported version'
+
+Test-Check 'python is 3.12 (as CI)' {
+    $v = (& python --version 2>&1) -replace 'Python ', ''
+    $parts = $v.Split('.')
+    return ([int]$parts[0] -eq 3 -and [int]$parts[1] -eq 12)
+} -Optional -FixHint 'CI and the images run Python 3.12; other versions are not tested'
 
 Test-Check 'git on PATH' {
     & git --version 2>&1 | Select-String 'git version'
