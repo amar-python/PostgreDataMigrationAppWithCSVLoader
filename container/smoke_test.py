@@ -9,9 +9,9 @@ Every data call signs in first: the shared API key was retired (#298).
 
 Environment:
   SMOKE_TENANT, SMOKE_USER, SMOKE_PASSWORD   the first tenant admin, created by the installer.
-                   The test signs in as this admin for checks 3 to 6. If any is missing (a
-                   re-run of the installer no longer knows the password), those four are
-                   skipped and the test reports "3 of 3"; the full result is 7 of 7.
+                   The test signs in as this admin for checks 3 to 6. If any is missing, those
+                   four cannot run, and that is a FAIL, not a skip (the repository rule): the
+                   result is then at most "3 of 7" and the exit code non-zero.
   API_URL          default http://localhost:8000   (the API, from inside its container)
   FRONTEND_URL     default http://frontend:8080    (the frontend, over the compose network)
 
@@ -72,7 +72,7 @@ def compact(text: str) -> str:
 def main() -> int:
     tenant, user, password = (os.environ.get(n, "") for n in ("SMOKE_TENANT", "SMOKE_USER", "SMOKE_PASSWORD"))
     with_login = bool(tenant and user and password)
-    total = TOTAL if with_login else TOTAL - 4
+    total = TOTAL
 
     passed = 0
 
@@ -115,7 +115,9 @@ def main() -> int:
         check("upload listed with persisted counts", status == 200 and '"total_rows":2' in compact(text),
               f"HTTP {status}")
     else:
-        print("SKIP  sign-in, upload and listing checks (SMOKE_TENANT, SMOKE_USER and SMOKE_PASSWORD not all set)")
+        # Counted as the four checks it stands for, so the run reports "3 of 7", never a pass.
+        print("FAIL  sign-in, upload and listing checks: set SMOKE_TENANT, SMOKE_USER and SMOKE_PASSWORD "
+              "(the installer's first tenant admin)")
 
     status, text = call(f"{FRONTEND}/")
     check("frontend serves the app", status == 200 and "<html" in text.lower(), f"HTTP {status}")

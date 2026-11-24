@@ -141,6 +141,7 @@ fi
 
 # ---- 6. smoke test -----------------------------------------------------------------------
 step "6/6 smoke test"
+[ -n "${TE_ADMIN_PASSWORD:-}" ] || echo "No admin password known (TE_ADMIN_PASSWORD not set, no ./te-initial-admin): the sign-in checks will FAIL."
 # The smoke test signs in as the first tenant admin; there is no shared API key (#298).
 export SMOKE_TENANT="$TE_TENANT" SMOKE_USER="$TE_ADMIN_USER" SMOKE_PASSWORD="${TE_ADMIN_PASSWORD:-}"
 smoke_rc=0
@@ -150,7 +151,8 @@ if command -v curl >/dev/null 2>&1; then
   curl -sf "http://localhost:8000/api/health" >/dev/null && curl -sf -o /dev/null "http://localhost:8080/" \
     && echo "PASS  ports 8000 and 8080 answer on this machine" || { echo "FAIL  ports 8000 and 8080 do not answer on this machine"; smoke_rc=1; }
 fi
-[ "$smoke_rc" = 0 ] || die "the smoke test failed; the stack is running, so look at: $COMPOSE logs"
+[ "$smoke_rc" = 0 ] || die "the smoke test failed; the stack is running, so look at: $COMPOSE logs.
+  If the admin's password changed since install, or ./te-initial-admin is gone, run this again with TE_ADMIN_PASSWORD set to the current password."
 
 echo
 echo "Installed. Open http://$TE_HOST:8080 and sign in as tenant '$TE_TENANT', user '$TE_ADMIN_USER'."
