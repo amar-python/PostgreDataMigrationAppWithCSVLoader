@@ -1,0 +1,218 @@
+# Migration job definitions.
+# Each job describes one CSV -> PostgreSQL table mapping.
+
+jobs:
+  - name: users
+    source_csv: ./OneDrive/Desktop/Migration using ai/input_data/users.csv
+    target_table: users
+    schema_file: ./OneDrive/Desktop/Migration using ai/input_data/users_schema.sql
+
+    # CSV parsing options
+    delimiter: ","
+    encoding: "utf-8"
+    has_header: true
+    null_values: ["", "NULL", "N/A", "null"]
+
+    # Column mapping: csv_column -> {db_column, type, nullable, max_length}
+    columns:
+      id:
+        db_column: id
+        type: integer
+        nullable: false
+      email:
+        db_column: email
+        type: text
+        nullable: false
+        max_length: 255
+        unique: true
+      full_name:
+        db_column: full_name
+        type: text
+        nullable: false
+        max_length: 200
+      signup_date:
+        db_column: signup_date
+        type: date
+        nullable: false
+      country:
+        db_column: country
+        type: text
+        nullable: true
+        max_length: 2
+      lifetime_value:
+        db_column: lifetime_value
+        type: numeric
+        nullable: true
+
+    # Primary key for duplicate detection
+    primary_key: id
+
+    # Spot-check rules: assert that specific row values landed correctly
+    spot_checks:
+      - row_match: { id: 1 }
+        assert: { email: "alice@example.com", country: "US" }
+      - row_match: { id: 2 }
+        assert: { email: "bob@example.co.uk", country: "GB" }
+
+    # Acceptable thresholds
+    thresholds:
+      max_pct_rows_dropped: 0.0    # Fail if any rows are silently dropped
+      max_pct_null_in_required: 0.0
+      min_rows: 1                  # Fail when CSV is empty (header only)
+
+  - name: ndis_participants
+    source_csv: ./OneDrive/Desktop/Migration using ai/input_data/ndis_participants.csv
+    target_table: ndis_participants
+    schema_file: ./OneDrive/Desktop/Migration using ai/input_data/ndis_participants_schema.sql
+
+    delimiter: ","
+    encoding: "utf-8"
+    has_header: true
+    null_values: ["", "NULL", "N/A", "null"]
+
+    columns:
+      participant_id:
+        db_column: participant_id
+        type: integer
+        nullable: false
+      first_name:
+        db_column: first_name
+        type: text
+        nullable: false
+        max_length: 100
+      last_name:
+        db_column: last_name
+        type: text
+        nullable: false
+        max_length: 100
+      plan_status:
+        db_column: plan_status
+        type: text
+        nullable: false
+        max_length: 20
+      primary_disability:
+        db_column: primary_disability
+        type: text
+        nullable: false
+        max_length: 100
+      support_budget_core:
+        db_column: support_budget_core
+        type: numeric
+        nullable: false
+      support_budget_capacity:
+        db_column: support_budget_capacity
+        type: numeric
+        nullable: false
+      support_budget_capital:
+        db_column: support_budget_capital
+        type: numeric
+        nullable: false
+      plan_start_date:
+        db_column: plan_start_date
+        type: date
+        nullable: false
+      plan_end_date:
+        db_column: plan_end_date
+        type: date
+        nullable: false
+      lga_code:
+        db_column: lga_code
+        type: integer
+        nullable: false
+      state:
+        db_column: state
+        type: text
+        nullable: false
+        max_length: 3
+      created_at:
+        db_column: created_at
+        type: timestamp
+        nullable: false
+
+    primary_key: participant_id
+
+    spot_checks:
+      - row_match: { participant_id: 1 }
+        assert: { first_name: "Amelia", state: "NSW" }
+      - row_match: { participant_id: 4 }
+        assert: { plan_status: "Expired", state: "SA" }
+
+    thresholds:
+      max_pct_rows_dropped: 0.0
+      max_pct_null_in_required: 0.0
+      min_rows: 1
+
+  - name: test_csv_01
+    source_csv: ./OneDrive/Desktop/Migration using ai/input_data/test_csv_01.csv
+    target_table: test_csv_01
+    schema_file: ./OneDrive/Desktop/Migration using ai/input_data/test_csv_01_schema.sql
+    delimiter: ","
+    encoding: "utf-8"
+    has_header: false
+    null_values: ["", "NULL", "N/A", "null"]
+
+    columns:
+      col_1:
+        db_column: col_1
+        type: integer
+        nullable: false
+      col_2:
+        db_column: col_2
+        type: text
+        nullable: false
+        max_length: 20
+      col_3:
+        db_column: col_3
+        type: text
+        nullable: false
+        max_length: 20
+      col_4:
+        db_column: col_4
+        type: text
+        nullable: false
+        max_length: 20
+      col_5:
+        db_column: col_5
+        type: text
+        nullable: false
+        max_length: 100
+      col_6:
+        db_column: col_6
+        type: integer
+        nullable: false
+      col_7:
+        db_column: col_7
+        type: integer
+        nullable: false
+      col_8:
+        db_column: col_8
+        type: integer
+        nullable: false
+      col_9:
+        db_column: col_9
+        type: date
+        nullable: false
+      col_10:
+        db_column: col_10
+        type: date
+        nullable: false
+      col_11:
+        db_column: col_11
+        type: integer
+        nullable: false
+      col_12:
+        db_column: col_12
+        type: text
+        nullable: false
+        max_length: 20
+      col_13:
+        db_column: col_13
+        type: timestamp
+        nullable: false
+
+    primary_key: col_1
+
+    thresholds:
+      max_pct_rows_dropped: 0.0
+      max_pct_null_in_required: 0.0
+      min_rows: 1
