@@ -546,7 +546,7 @@ jobs:
   # app. The tests start the three servers themselves; they need PostgreSQL with the dev environment deployed, a
   # browser and the frontend's dependencies, so they have a job of their own. test_report.py --paths e2e --strict
   # prints the same final block as the other jobs and fails on any skip. Not yet a required check: make it one
-  # after a few green runs (decision 8 in DECISIONS/2026-11-16-streamlit-migration-plan.md).
+  # after a few green runs (still open under "Owner decisions" in DECISIONS/2026-11-16-streamlit-migration-plan.md).
   browser:
     name: browser (Playwright, e2e/)
     runs-on: ubuntu-latest
