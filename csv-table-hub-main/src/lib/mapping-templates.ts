@@ -55,16 +55,10 @@ export function deleteTemplate(id: string): void {
 }
 
 /** Return the best-matching template for a given set of original headers. */
-export function findMatchingTemplate(
-  originalHeaders: string[],
-): MappingTemplate | null {
+export function findMatchingTemplate(originalHeaders: string[]): MappingTemplate | null {
   const templates = loadTemplates();
   const key = originalHeaders.join(",");
-  return (
-    templates.find(
-      (t) => t.columns.map((c) => c.original).join(",") === key,
-    ) ?? null
-  );
+  return templates.find((t) => t.columns.map((c) => c.original).join(",") === key) ?? null;
 }
 
 /** Mark a template as used (updates lastUsedAt). */

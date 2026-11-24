@@ -14,7 +14,9 @@ describe("sanitizeColumns", () => {
 
   it("replaces non-alphanumeric chars with underscores", () => {
     expect(sanitizeColumns(["First Name", "Last-Name", "Col@#$!"])).toEqual([
-      "first_name", "last_name", "col",
+      "first_name",
+      "last_name",
+      "col",
     ]);
   });
 
@@ -53,9 +55,7 @@ describe("sanitizeColumns", () => {
   });
 
   it("handles a mix of edge cases in one call", () => {
-    const result = sanitizeColumns([
-      "First Name", "", "1st_col", "name", "name",
-    ]);
+    const result = sanitizeColumns(["First Name", "", "1st_col", "name", "name"]);
     expect(result[0]).toBe("first_name");
     expect(result[1]).toMatch(/^column_/);
     expect(result[2]).toBe("col_1st_col");
@@ -127,12 +127,16 @@ describe("parseCsvPreview — type inference", () => {
 
   // #123: only types the API's cast accepts may be inferred.
   it("keeps non-ISO dates such as '27 Oct 26' as text", async () => {
-    const preview = await parseCsvPreview(makeFile("Date,Processed On\n27 Oct 26,27 Oct 26 10:15\n28 Oct 26,28 Oct 26 11:00\n"));
+    const preview = await parseCsvPreview(
+      makeFile("Date,Processed On\n27 Oct 26,27 Oct 26 10:15\n28 Oct 26,28 Oct 26 11:00\n"),
+    );
     expect(preview.inferredTypes).toEqual(["text", "text"]);
   });
 
   it("still infers timestamptz for ISO timestamps", async () => {
-    const preview = await parseCsvPreview(makeFile("at\n2026-10-27 10:15:00\n2026-10-28T11:00:00Z\n"));
+    const preview = await parseCsvPreview(
+      makeFile("at\n2026-10-27 10:15:00\n2026-10-28T11:00:00Z\n"),
+    );
     expect(preview.inferredTypes[0]).toBe("timestamptz");
   });
 
