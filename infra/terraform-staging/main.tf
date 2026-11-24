@@ -183,7 +183,7 @@ resource "azurerm_key_vault" "kv" {
   soft_delete_retention_days    = 90
   purge_protection_enabled      = true
   enable_rbac_authorization     = true
-  public_network_access_enabled = true # temporarily enabled so Terraform can seed the secret; flip to false after bootstrap
+  public_network_access_enabled = var.bootstrap_public_access # true only for the bootstrap apply (#299)
   tags                          = local.tags
 }
 
@@ -295,7 +295,7 @@ resource "azurerm_container_registry" "acr" {
   location                      = azurerm_resource_group.rg.location
   sku                           = "Premium"
   admin_enabled                 = false # Use managed identity
-  public_network_access_enabled = true  # temporarily enabled so az acr build can push; flip to false after bootstrap
+  public_network_access_enabled = var.bootstrap_public_access # true only for the bootstrap apply (#299)
   tags                          = local.tags
 
   retention_policy_in_days = 30
