@@ -1,0 +1,47 @@
+# Project metadata and the configuration of the tools that read pyproject.toml (#324, #323).
+#
+# This repository is not installed as a package (there is no [build-system]); the API, the Streamlit app and the
+# scripts run from a checkout. Some tools cannot read this file, so their configuration stays where it was:
+#   flake8    .flake8 (flake8 does not read pyproject.toml). scripts/lint.sh, which CI runs, passes the same options
+#             on its command line; tests/unit/test_tool_config.py fails if the two disagree.
+#   pytest    pytest.ini (it takes precedence over this file, and moving it would churn every test job)
+#   coverage  .coveragerc (tests/unit/test_ci_quality_gate.py keeps its scope in step with the Makefile and CI)
+
+[project]
+name = "postgre-data-migration-app"
+version = "0.0.0"
+description = "CSV loader and T&E data management: FastAPI API, Streamlit app and PostgreSQL schema"
+requires-python = ">=3.10"  # what README and preflight.sh state; CI runs 3.11
+
+# ── Type checking (#323) ─────────────────────────────────────────────────────────────────────────────────────────
+# `make typecheck` and the free-tier CI job run `python3 -m mypy`, which checks the `files` below.
+#
+# Baseline, 24 Nov 2026: no `# type: ignore` anywhere, and both packages pass
+#   both            mypy's default checks plus four --strict flags (warn_unused_ignores, warn_redundant_casts,
+#                   strict_equality, extra_checks)
+#   api/            three more --strict flags, including check_untyped_defs (the bodies of unannotated functions are
+#                   checked too). The rest of --strict (disallow_untyped_defs, disallow_any_generics, warn_return_any,
+#                   ...) still finds 15 to 116 errors per flag on api/; turn each on as its errors are fixed.
+#   streamlit_app/  largely unannotated, so only the checks above.
+[tool.mypy]
+files = ["api", "streamlit_app"]
+# Pages import their siblings as top-level modules (`import api_client`), the way `streamlit run` puts the app's
+# folder on sys.path.
+mypy_path = "streamlit_app"
+explicit_package_bases = true
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+strict_equality = true
+extra_checks = true
+
+[[tool.mypy.overrides]]
+module = ["api", "api.*"]
+check_untyped_defs = true
+no_implicit_reexport = true
+disallow_untyped_decorators = true
+
+# No type information is published for these. Only these modules are exempt; any other unresolved import fails.
+[[tool.mypy.overrides]]
+module = ["pandas", "pandas.*", "openpyxl", "openpyxl.*"]
+ignore_missing_imports = true

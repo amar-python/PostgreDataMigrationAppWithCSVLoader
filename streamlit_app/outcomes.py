@@ -48,7 +48,7 @@ def classify(name: str, res: dict) -> Outcome:
         return Outcome("duplicate", "warning", f"{file}: already imported{as_}. Nothing was changed.")
     if status == "invalid_structure":
         said = res.get("message")
-        text = m.literal(said) if said else STRUCTURE_REASONS.get(res.get("reason"), "The file has no usable structure.")
+        text = m.literal(said) if said else STRUCTURE_REASONS.get(str(res.get("reason")), "The file has no usable structure.")
         return Outcome("error", "error", f"{file}: {text}")
     return Outcome("error", "error", f"{file}: {m.literal(res['message']) if res.get('message') else 'The import failed.'}")
 

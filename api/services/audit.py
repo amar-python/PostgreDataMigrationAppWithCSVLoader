@@ -88,7 +88,7 @@ def verify_chain(cur) -> dict:
     return {"rows": rows, "intact": first_bad is None, "firstBadId": first_bad}
 
 
-def coerce_file_id(raw: object) -> int | None:
+def coerce_file_id(raw: str | int | None) -> int | None:
     """Best-effort conversion of a loader's ``fileId`` to the BIGINT column type.
 
     The loaders return it as a string. A malformed value must not cost us the

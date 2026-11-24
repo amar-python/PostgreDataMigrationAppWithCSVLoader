@@ -40,7 +40,7 @@ def render() -> None:
     st.title("Imported files")
     st.caption("Every file imported into this tenant, whoever uploaded it. The Review page shows the stored rows of one.")
     try:
-        files = _files(auth.session()["token"])
+        files = _files(auth.current()["token"])
     except api_client.Unauthorized:
         auth.lost_session()
     except api_client.ApiError as e:

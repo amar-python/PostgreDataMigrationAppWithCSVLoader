@@ -31,7 +31,7 @@ else:
         pages.append(st.Page(history.render, title="Import history", url_path="history"))  # #253
     pages.append(st.Page(change_password.render, title="Change password", url_path="change-password"))
     page = st.navigation(pages)
-    s = auth.session()
+    s = auth.current()
     with st.sidebar:
         st.markdown(f"**{s['username']}** · {s['tenant']}  \n`{s['role']}`")
         if st.button("Sign out"):
