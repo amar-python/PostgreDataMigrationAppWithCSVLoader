@@ -9,3 +9,8 @@ gatherUsageStats = false
 # so Streamlit never refuses a file the API would take; the app checks the real limit itself (upload_model.prepare),
 # from the same MAX_UPLOAD_BYTES variable, and says so in its own words. Raise this if you raise that.
 maxUploadSize = 53
+
+[theme.light]
+# st.caption draws textColor at about 60% opacity. With the default text colour (#2f2d2b) that is 3.9:1 on white,
+# below WCAG AA's 4.5:1 (tests/accessibility). This one gives captions about 5:1. The dark theme already passes.
+textColor = "#111111"
