@@ -2,7 +2,7 @@
 # smoke_test.sh [API_URL] [FRONTEND_URL]: prove the installed stack works.
 # SMOKE_TENANT/SMOKE_USER/SMOKE_PASSWORD (the installer's first tenant admin) are needed for the
 # sign-in, upload and listing checks: every data call signs in, the shared X-API-Key was retired (#298).
-# Without them those checks are skipped and said so.
+# Without them those checks cannot run, and that is a FAIL, not a skip (the repository rule).
 # Prints PASS/FAIL per check and exits non-zero on any failure.
 set -uo pipefail
 API="${1:-http://localhost:8000}"; FE="${2:-http://localhost:3000}"
@@ -35,7 +35,7 @@ if [ -n "${SMOKE_TENANT:-}" ] && [ -n "${SMOKE_USER:-}" ] && [ -n "${SMOKE_PASSW
   curl -sf -H "Authorization: Bearer $token" "$API/api/csv/files" | grep -q '"total_rows":2' \
     && pass "upload listed with persisted counts" || nope "upload listed with persisted counts"
 else
-  echo "SKIP  sign-in, upload and listing checks (SMOKE_TENANT, SMOKE_USER and SMOKE_PASSWORD not all set)"
+  nope "sign-in, upload and listing checks: set SMOKE_TENANT, SMOKE_USER and SMOKE_PASSWORD (the installer's first tenant admin)"
 fi
 
 curl -sf "$FE/" | grep -qi '<html' && pass "frontend serves the app" || nope "frontend serves the app"

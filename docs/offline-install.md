@@ -100,7 +100,7 @@ sudo env SMOKE_TENANT=main SMOKE_USER=admin SMOKE_PASSWORD='<the admin password>
   bash app/scripts/offline/smoke_test.sh
 ```
 
-Without `SMOKE_TENANT`, `SMOKE_USER` and `SMOKE_PASSWORD` it runs the three checks that need no sign-in and says it skipped the rest. Use the tenant and username the install used (in `/root/te-initial-admin`).
+Without `SMOKE_TENANT`, `SMOKE_USER` and `SMOKE_PASSWORD` the sign-in, upload and listing checks cannot run, so it reports them as a FAIL and exits non-zero. Use the tenant and username the install used (in `/root/te-initial-admin`).
 
 ## Evidence for #60
 
