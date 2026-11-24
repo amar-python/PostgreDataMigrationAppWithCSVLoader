@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from src.config import DBConfig, JobConfig, Thresholds, load_jobs
+from src.config import DBConfig, JobConfig, load_jobs
 
 
 pytestmark = pytest.mark.unit
