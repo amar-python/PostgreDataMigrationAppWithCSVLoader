@@ -91,16 +91,23 @@ class Settings:
         "1", "true", "yes"
     )
 
-    # Shared secret required on every request via the X-API-Key header.
-    # Empty in local dev by default; set API_KEY before deploying anywhere reachable
-    # beyond localhost.
-    API_KEY: str = os.environ.get("API_KEY", "")
+    # #298 (OIT-013): the shared X-API-Key is retired. Every data endpoint needs a
+    # signed-in session (Authorization: Bearer), so each request has a tenant, a
+    # role and a named user in the audit log.
+    #
+    # Local development and the test suite may call the data endpoints without
+    # signing in, but only by explicit opt-in: API_ALLOW_ANONYMOUS=1 together with
+    # API_ENV=dev. Anonymous requests use the deployment's default schemas, are
+    # not role-checked and audit as "anonymous". The API refuses to start if the
+    # opt-in is set with any other API_ENV (see assert_auth_configured in
+    # api/main.py), so a deployment can never run open by accident.
+    API_ALLOW_ANONYMOUS: bool = os.environ.get("API_ALLOW_ANONYMOUS", "").strip().lower() in (
+        "1", "true", "yes"
+    )
 
-    # O-03: which deployment this process believes it is. Only "dev" tolerates an
-    # empty API_KEY; every other value makes a missing key a startup failure
-    # (see the fail-closed check in api/main.py lifespan). Keeping the default at
-    # "dev" means local workflows are unchanged, while any deployed environment
-    # must set both API_ENV and API_KEY or refuse to boot.
+    # O-03: which deployment this process believes it is. Only "dev" serves the
+    # interactive docs and the detailed health body, uses the bootstrap fallback,
+    # and may allow anonymous access (above).
     API_ENV: str = os.environ.get("API_ENV", "dev").strip().lower()
 
     # O-03: per-client sliding-window rate limits, requests per minute.

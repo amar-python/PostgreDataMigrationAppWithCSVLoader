@@ -37,7 +37,7 @@ python3.12 -m venv "$DEST/venv"
 "$DEST/venv/bin/pip" install -q --no-index --find-links "$BUNDLE/wheels" -r "$DEST/app/api/requirements.txt"
 
 echo "== 4/6 database, T&E schema and application role"
-DB_PASS="$(openssl rand -hex 24)"; API_KEY="$(openssl rand -hex 32)"
+DB_PASS="$(openssl rand -hex 24)"
 # env_prod.sql creates te_mgmt_prod, schema te_prod and login role te_prod_user.
 sed "s/__INJECT_AT_DEPLOY__/$DB_PASS/" "$DEST/app/build/environments/env_prod.example.sql" \
   > "$DEST/app/build/environments/env_prod.sql"
@@ -55,7 +55,6 @@ sudo -u postgres psql -q -v ON_ERROR_STOP=1 -d te_mgmt_prod -c "SET client_min_m
 echo "== 5/6 configuration and services"
 cat > "$DEST/env" <<ENV
 API_ENV=prod
-API_KEY=$API_KEY
 PGHOST=localhost
 PGPORT=5432
 PGUSER=te_prod_user
@@ -111,4 +110,4 @@ fi
   runuser -u te-app -- "$DEST/venv/bin/python" scripts/create_tenant_admin.py \
     --tenant "$TE_TENANT" --name "$TE_TENANT" --username "$TE_ADMIN_USER" )
 SMOKE_TENANT="$TE_TENANT" SMOKE_USER="$TE_ADMIN_USER" SMOKE_PASSWORD="$TE_ADMIN_PASSWORD" \
-  bash "$DEST/app/scripts/offline/smoke_test.sh" "$API_KEY"
+  bash "$DEST/app/scripts/offline/smoke_test.sh"

@@ -7,8 +7,8 @@ Run (from the repo root):
     Interactive docs: http://localhost:8000/docs
 """
 
-import hashlib
 import logging
+import os
 from contextlib import asynccontextmanager
 
 import psycopg2.pool
@@ -27,30 +27,24 @@ from api.services import accounts
 logger = logging.getLogger(__name__)
 
 
-def assert_auth_configured(api_env: str, api_key: str) -> None:
-    """Fail closed when a deployed environment has no API key (O-03).
+def assert_auth_configured(api_env: str, allow_anonymous: bool) -> None:
+    """Refuse to start when anonymous access is asked for outside dev (O-03, #298).
 
     Split out of ``lifespan`` so the rule can be unit-tested without a database:
     ``lifespan`` also opens the connection pool, which would make every test of
     this check an integration test.
 
-    Only ``dev`` may run unauthenticated. Raises RuntimeError otherwise.
+    Data endpoints need a signed-in session. Only ``API_ENV=dev`` may opt in to
+    anonymous access with ``API_ALLOW_ANONYMOUS``; with any other ``API_ENV``
+    the opt-in is a misconfiguration and this raises RuntimeError rather than
+    quietly ignoring it.
     """
-    if not api_key and api_env != "dev":
+    if allow_anonymous and api_env != "dev":
         raise RuntimeError(
-            f"API_KEY is not set but API_ENV is '{api_env}'. "
-            "Refusing to start: every endpoint would be unauthenticated. "
-            "Set API_KEY, or set API_ENV=dev for local development."
+            f"API_ALLOW_ANONYMOUS is set but API_ENV is '{api_env}'. "
+            "Refusing to start: anonymous access is for local development only. "
+            "Unset API_ALLOW_ANONYMOUS; callers sign in (POST /api/auth/login)."
         )
-
-
-def key_fingerprint(key: str) -> str:
-    """A short one-way tag of ``key``: the first 8 hex digits of its SHA-256 (#292, BR-55).
-
-    Enough to tell in a log whether two keys are the same, and it contains no part of the key. The key itself,
-    in whole or in part, is never logged.
-    """
-    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:8]
 
 
 def docs_urls(api_env: str) -> dict:
@@ -80,26 +74,22 @@ def _purge_old_sessions() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # O-03: fail closed. A warning was not enough — an unset key left every
-    # router open, and a warning in a container log is easy to miss.
-    assert_auth_configured(settings.API_ENV, settings.API_KEY)
+    # O-03 / #298: fail closed. Anonymous access is refused outside dev, and even in dev it needs the explicit
+    # API_ALLOW_ANONYMOUS opt-in; without it every data endpoint answers 401 until the caller signs in.
+    assert_auth_configured(settings.API_ENV, settings.API_ALLOW_ANONYMOUS)
     oidc.check_config()
     policy.check_config(settings.DATA_CLASSIFICATION, settings.AUDIT_RETENTION_YEARS)
-    if not settings.API_KEY:
+    if settings.API_ALLOW_ANONYMOUS:
         logger.warning(
-            "API_KEY is not set - every endpoint is unauthenticated. "
-            "Tolerated because API_ENV=dev. Set the API_KEY environment "
-            "variable before deploying anywhere reachable beyond localhost."
+            "!!! ANONYMOUS ACCESS IS ON (API_ALLOW_ANONYMOUS with API_ENV=dev): data endpoints answer without "
+            "sign-in, with no tenant, no role checks and full delete rights. Local development and tests only. !!!"
         )
-    else:
-        # A one-way fingerprint plus the length, so a script's key mismatch is diagnosable (BUG-006; a stray
-        # space or newline shows as a wrong length) without any part of the secret reaching the log (#292,
-        # BR-55: the first four characters used to be logged). Browsers no longer hold this key; they sign in
-        # per user (#96).
-        logger.info(
-            "API_KEY is set (fingerprint: sha256:%s, length: %d). "
-            "Scripts and services send it in the X-API-Key header; browsers sign in.",
-            key_fingerprint(settings.API_KEY), len(settings.API_KEY),
+    if os.environ.get("API_KEY"):
+        # #298: the shared key was retired. Say so, so an old install's leftover variable is not mistaken for
+        # protection. Nothing about its value is logged.
+        logger.warning(
+            "API_KEY is set but no longer used: the shared X-API-Key was retired (#298). "
+            "Scripts sign in with POST /api/auth/login and send Authorization: Bearer <token>."
         )
     if not settings.PG_PASSWORD:
         logger.warning(
@@ -133,7 +123,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE"],  # PUT: review changes (M4, #108)
-    allow_headers=["Content-Type", "X-API-Key", "Authorization", "Idempotency-Key"],  # the last: M6 import (#110)
+    allow_headers=["Content-Type", "Authorization", "Idempotency-Key"],  # the last: M6 import (#110)
     expose_headers=["X-Data-Classification"],  # so the browser can read the marking (M7)
 )
 

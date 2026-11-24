@@ -16,8 +16,9 @@ from api.auth import PERMISSIONS
 def authorized_drop_table(cur, session: dict | None, schema: str, table_name: str) -> None:
     """Drop a table only if the caller holds delete_file permission.
 
-    ``session`` is ``None`` for API-key (non-session) requests, which are
-    allowed through (they have full access until per-key roles exist).
+    ``session`` is ``None`` only under the local-dev anonymous opt-in (#298,
+    ``API_ALLOW_ANONYMOUS`` with ``API_ENV=dev``), which is allowed through;
+    every deployed request has a session and is role-checked.
     Raises HTTP 403 if the session's role lacks ``delete_file``.
     """
     _require_delete(session)
@@ -46,7 +47,12 @@ def safe_cleanup_prior(cur, session: dict | None, schema: str,
 
 
 def _require_delete(session: dict | None) -> None:
-    """Raise 403 if the session's role cannot delete files."""
+    """Raise 403 if the session's role cannot delete files.
+
+    ``None`` means the local-dev anonymous opt-in (#298); tenant_scope refuses
+    session-less requests everywhere else, so no deployed caller reaches here
+    without a role.
+    """
     if session is None:
         return
     roles = PERMISSIONS["delete_file"]

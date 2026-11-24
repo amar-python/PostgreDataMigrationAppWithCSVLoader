@@ -50,7 +50,7 @@ def test_outside_dev_a_missing_alembic_ini_stops_bootstrap(monkeypatch, fallback
 def test_outside_dev_the_api_does_not_start_without_alembic_ini(monkeypatch, fallback_calls):
     """The acceptance criterion: with alembic.ini absent and API_ENV=prod, start-up fails."""
     monkeypatch.setattr(settings, "API_ENV", "prod")
-    monkeypatch.setattr(settings, "API_KEY", "k" * 24)
+    monkeypatch.setattr(settings, "API_ALLOW_ANONYMOUS", False)  # the suite opts in; not allowed outside dev (#298)
     monkeypatch.setattr(main.oidc, "check_config", lambda: None)
     monkeypatch.setattr(main.policy, "check_config", lambda *a, **k: None)
     monkeypatch.setattr(main.db, "init_pool", lambda: None)

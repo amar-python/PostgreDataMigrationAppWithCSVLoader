@@ -72,7 +72,7 @@ FIRST_RUN=0
 if [ ! -f .env ] && $RT volume inspect te_te-db >/dev/null 2>&1; then
   if [ "${TE_RESET:-}" = 1 ]; then
     echo "TE_RESET=1: removing the earlier database volume and its containers. This deletes its data."
-    TE_VERSION=x POSTGRES_PASSWORD=x TE_DB_PASSWORD=x TE_RUNTIME_PASSWORD=x API_KEY=x $COMPOSE down -v >/dev/null 2>&1 || true
+    TE_VERSION=x POSTGRES_PASSWORD=x TE_DB_PASSWORD=x TE_RUNTIME_PASSWORD=x $COMPOSE down -v >/dev/null 2>&1 || true
     $RT volume rm -f te_te-db >/dev/null 2>&1 || true
     $RT volume inspect te_te-db >/dev/null 2>&1 && die "could not remove the volume te_te-db; remove it by hand ($RT volume rm te_te-db) and run this again"
   else
@@ -91,7 +91,7 @@ if [ -f .env ]; then
 else
   FIRST_RUN=1
   TE_HOST="${HOST_ARG:-localhost}"
-  POSTGRES_PASSWORD="$(rnd)"; TE_DB_PASSWORD="$(rnd)"; TE_RUNTIME_PASSWORD="$(rnd)"; API_KEY="$(rnd)"
+  POSTGRES_PASSWORD="$(rnd)"; TE_DB_PASSWORD="$(rnd)"; TE_RUNTIME_PASSWORD="$(rnd)"
   echo "generated new secrets"
 fi
 ( umask 077
@@ -101,7 +101,6 @@ fi
     echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
     echo "TE_DB_PASSWORD=$TE_DB_PASSWORD"
     echo "TE_RUNTIME_PASSWORD=$TE_RUNTIME_PASSWORD"
-    echo "API_KEY=$API_KEY"
   } > .env.tmp )
 mv .env.tmp .env; chmod 600 .env
 export TE_VERSION TE_HOST
@@ -142,8 +141,7 @@ fi
 
 # ---- 6. smoke test -----------------------------------------------------------------------
 step "6/6 smoke test"
-# API_KEY is not forwarded: the API container already has it in its environment, and a bare
-# `-e API_KEY` makes podman-compose 1.6 re-read the service's ${API_KEY:?} and fail.
+# The smoke test signs in as the first tenant admin; there is no shared API key (#298).
 export SMOKE_TENANT="$TE_TENANT" SMOKE_USER="$TE_ADMIN_USER" SMOKE_PASSWORD="${TE_ADMIN_PASSWORD:-}"
 smoke_rc=0
 $COMPOSE exec -T -e SMOKE_TENANT -e SMOKE_USER -e SMOKE_PASSWORD api python smoke_test.py || smoke_rc=$?

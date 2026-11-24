@@ -82,7 +82,7 @@ class ComposeUsesOnlyBundledImages(unittest.TestCase):
     def test_secrets_come_from_variables_not_literals(self):
         services = compose()["services"]
         for svc, var in (("db", "POSTGRES_PASSWORD"), ("db", "TE_DB_PASSWORD"), ("db", "TE_RUNTIME_PASSWORD"),
-                         ("api", "API_KEY"), ("api", "PGPASSWORD"), ("api", "APP_DB_PASSWORD")):
+                         ("api", "PGPASSWORD"), ("api", "APP_DB_PASSWORD")):
             with self.subTest(service=svc, variable=var):
                 self.assertRegex(str(services[svc]["environment"][var]), r"^\$\{[A-Z_]+:\?",
                                  "a secret must be required from .env, never written in the file")
@@ -209,7 +209,7 @@ class _FakeStack(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):  # noqa: N802
-        authed = self.headers.get("X-API-Key") == "k" or self.headers.get("Authorization") == "Bearer tok"
+        authed = self.headers.get("Authorization") == "Bearer tok"  # #298: a session only, never X-API-Key
         if self.path == "/api/health":
             self._send(200, '{"status":"ok"}')
         elif self.path == "/api/csv/files":
@@ -227,7 +227,10 @@ class _FakeStack(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         self.rfile.read(int(self.headers.get("content-length", 0)))
         if self.path == "/api/csv/upload":
-            self._send(200, '{"insertedRows": %d}' % (0 if "upload" in self.broken else 2))
+            if self.headers.get("Authorization") != "Bearer tok":
+                self._send(401, "{}")
+            else:
+                self._send(200, '{"insertedRows": %d}' % (0 if "upload" in self.broken else 2))
         elif self.path == "/api/auth/login":
             self._send(200, '{"token":"tok"}')
         else:
@@ -252,7 +255,7 @@ class SmokeTestLogic(unittest.TestCase):
     def run_smoke(self, *, broken: set[str] = frozenset(), with_login: bool = True):
         _FakeStack.broken = set(broken)
         env = {k: v for k, v in os.environ.items() if not k.startswith("SMOKE_") and k != "API_KEY"}
-        env.update(API_URL=self.url, FRONTEND_URL=self.url, API_KEY="k")
+        env.update(API_URL=self.url, FRONTEND_URL=self.url)
         if with_login:
             env.update(SMOKE_TENANT="main", SMOKE_USER="admin", SMOKE_PASSWORD="long-enough-password")
         return subprocess.run([sys.executable, str(CONTAINER / "smoke_test.py")], env=env,
@@ -264,14 +267,14 @@ class SmokeTestLogic(unittest.TestCase):
         self.assertIn("7 of 7 passed", res.stdout)
         self.assertEqual(res.stdout.count("PASS  "), 7)
 
-    def test_without_admin_credentials_it_runs_five_and_says_so(self):
+    def test_without_admin_credentials_it_runs_three_and_says_so(self):
         res = self.run_smoke(with_login=False)
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
-        self.assertIn("5 of 5 passed", res.stdout)
+        self.assertIn("3 of 3 passed", res.stdout)
         self.assertIn("SKIP", res.stdout)
 
     def test_each_failure_is_reported_and_fails_the_run(self):
-        for breakage, label in (("no401", "API rejects a missing key"), ("upload", "upload a CSV"),
+        for breakage, label in (("no401", "API rejects a request without a session"), ("upload", "upload a CSV"),
                                 ("role", "session is tenant_admin")):
             with self.subTest(breakage=breakage):
                 res = self.run_smoke(broken={breakage})
@@ -279,10 +282,11 @@ class SmokeTestLogic(unittest.TestCase):
                 self.assertIn(f"FAIL  {label}", res.stdout)
                 self.assertNotIn("7 of 7", res.stdout)
 
-    def test_it_refuses_to_run_without_the_api_key(self):
-        env = {k: v for k, v in os.environ.items() if k != "API_KEY"}
-        res = subprocess.run([sys.executable, str(CONTAINER / "smoke_test.py")], env=env, capture_output=True, text=True, timeout=30)
-        self.assertEqual(res.returncode, 2)
+    def test_it_needs_no_api_key(self):
+        """#298: the shared key is retired; the smoke test signs in and never sends X-API-Key."""
+        text = (CONTAINER / "smoke_test.py").read_text(encoding="utf-8")
+        self.assertNotIn("X-API-Key", text)
+        self.assertNotIn("API_KEY", text)
 
     def test_the_script_parses_and_defines_seven_checks(self):
         tree = ast.parse((CONTAINER / "smoke_test.py").read_text(encoding="utf-8"))
