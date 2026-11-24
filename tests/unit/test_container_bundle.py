@@ -267,11 +267,14 @@ class SmokeTestLogic(unittest.TestCase):
         self.assertIn("7 of 7 passed", res.stdout)
         self.assertEqual(res.stdout.count("PASS  "), 7)
 
-    def test_without_admin_credentials_it_runs_three_and_says_so(self):
+    def test_without_admin_credentials_it_fails_and_says_what_to_set(self):
+        """A missing prerequisite is a failure, never a skip: without the admin, only 3 of 7 checks can pass."""
         res = self.run_smoke(with_login=False)
-        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
-        self.assertIn("3 of 3 passed", res.stdout)
-        self.assertIn("SKIP", res.stdout)
+        self.assertNotEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("3 of 7 passed", res.stdout)
+        self.assertIn("FAIL  sign-in, upload and listing checks: set SMOKE_TENANT, SMOKE_USER and SMOKE_PASSWORD",
+                      res.stdout)
+        self.assertNotIn("SKIP", res.stdout)
 
     def test_each_failure_is_reported_and_fails_the_run(self):
         for breakage, label in (("no401", "API rejects a request without a session"), ("upload", "upload a CSV"),

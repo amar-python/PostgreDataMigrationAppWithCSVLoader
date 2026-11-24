@@ -190,6 +190,7 @@ if ($FirstRun) {
 
 # ---- 6. smoke test --------------------------------------------------------------------------
 Step '6/6 smoke test'
+if (-not $AdminPassword) { Write-Host 'No admin password known (TE_ADMIN_PASSWORD not set, no .\te-initial-admin): the sign-in checks will FAIL.' }
 # The smoke test signs in as the first tenant admin; there is no shared API key (#298).
 $env:SMOKE_TENANT = $TeTenant; $env:SMOKE_USER = $TeAdminUser; $env:SMOKE_PASSWORD = $AdminPassword
 Compose exec -T -e SMOKE_TENANT -e SMOKE_USER -e SMOKE_PASSWORD api python smoke_test.py
@@ -202,7 +203,10 @@ try {
 } catch {
     Write-Host 'FAIL  ports 8000 and 8080 do not answer on this machine'; $smokeOk = $false
 }
-if (-not $smokeOk) { Fail "the smoke test failed; the stack is running, so look at: $RT compose logs" }
+if (-not $smokeOk) {
+    Fail ("the smoke test failed; the stack is running, so look at: $RT compose logs`n" +
+          "  If the admin's password changed since install, or .\te-initial-admin is gone, run this again with TE_ADMIN_PASSWORD set to the current password.")
+}
 
 Write-Host ''
 Write-Host "Installed. Open http://${TeHostFinal}:8080 and sign in as tenant '$TeTenant', user '$TeAdminUser'."
