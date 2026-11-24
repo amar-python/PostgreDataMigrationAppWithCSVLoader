@@ -6,7 +6,7 @@ Living snapshot of the project state. Full detail lives in:
 - `docs/VCRM.md` (requirement status; the master traceability record)
 - GitHub Issues and PRs (per-item work)
 
-Last updated: 2026-11-24 (`main` at `6111019`, merge of PR #400). Rewritten on that date; the 2 Nov session log is kept below as history, and git history has the earlier text.
+Last updated: 2026-11-24 (`main` at `948ba44`, merge of PR #403). Rewritten on that date; the 2 Nov session log is kept below as history, and git history has the earlier text.
 
 ---
 
@@ -16,10 +16,10 @@ Last updated: 2026-11-24 (`main` at `6111019`, merge of PR #400). Rewritten on t
 - **Frontend: the Streamlit app is on `main`** (`streamlit_app/`): app shell, review screen, import history and upload screens (migration steps 1 to 4, #251 to #255, merged 19 Nov). The React app (`csv-table-hub-main/`) is still the default until cutover. Steps 5 (packaging, #256) and 6 (cutover and deletion, #257) are not started; step 5 waits for the offline dry run.
 - **Streamlit migration decisions: all answered by the owner on 24 Nov** (`DECISIONS/2026-11-16-streamlit-migration-plan.md`, "Owner decisions"): whole-app cutover with React kept one release as rollback; no OIDC in the UI; saved mapping templates and the "App changelog" dropped; server audit events kept; no page for the audit log and its verification; about 116 MB more in the offline bundle accepted; the accessibility job scans Streamlit as well as React (#388); Azure host is Container Apps on the private network only (#394); `browser` and accessibility jobs required.
 - **Tenant isolation at the database:** one PostgreSQL role per tenant, `SET ROLE` per request (#297, OIT-012, merged in PR #400, closed 24 Nov; `DECISIONS/2026-11-24-per-tenant-db-roles.md`).
-- **Shared API key retired:** every data request needs a session (#298, OIT-013, merged in PR #401, closed 24 Nov). Follow-up PR #403 (container smoke test fails, not skips, without admin credentials) is open.
+- **Shared API key retired:** every data request needs a session (#298, OIT-013, merged in PR #401, closed 24 Nov). Follow-up PR #403 (container smoke test fails, not skips, without admin credentials) merged 24 Nov.
 - **T&E audit review of 20 Nov:** most OIT fixes merged on 23 and 24 Nov (OIT-001 to OIT-016 apart from OIT-014, and others; see the tracker). Requirement status in `docs/VCRM.md` lags these fixes for seven requirements (§6.5 there).
 - **SQL suite:** 159 assertions in 6 suites, 159 of 159 pass (Tier S). The Tier S threshold still says 142 (#303).
-- Open issues: 50. Open PRs: 1 (#403). Counted from the GitHub API on 24 Nov.
+- Open issues: 50. Open PRs: 7 (#404 to #410, including this update), all opened on 24 Nov while several sessions work in parallel. Counted from the GitHub API on 24 Nov, 11:40 UTC.
 
 ## Open items (snapshot — the tracker is master)
 
