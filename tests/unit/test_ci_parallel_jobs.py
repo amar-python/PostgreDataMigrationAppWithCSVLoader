@@ -46,8 +46,8 @@ finally:
 def tree(tmp_path):
     """A small repository: docs nothing reads, a doc a test reads, a doc a workflow names, code."""
     files = {
-        "docs/audit/20261123.md": "# report\n",
-        "docs/NOTES.md": "# notes\n",
+        "docs/audit/example_report.md": "# report\n",
+        "docs/NOTES_EXAMPLE.md": "# notes\n",
         "docs/ROLES.md": "# roles\n",
         "docs/WORKFLOW_ONLY.md": "# named by a workflow\n",
         "DECISIONS/2026-11-23-x.md": "# decision\n",
@@ -64,8 +64,8 @@ def tree(tmp_path):
 
 
 def test_a_change_to_documents_nothing_reads_skips_the_database_jobs(tree):
-    assert ci_changes.is_docs_only(["docs/audit/20261123.md"], tree) is True
-    assert ci_changes.is_docs_only(["docs/audit/20261123.md", "DECISIONS/2026-11-23-x.md", "docs/NOTES.md"], tree) is True
+    assert ci_changes.is_docs_only(["docs/audit/example_report.md"], tree) is True
+    assert ci_changes.is_docs_only(["docs/audit/example_report.md", "DECISIONS/2026-11-23-x.md", "docs/NOTES_EXAMPLE.md"], tree) is True
 
 
 def test_code_always_runs_everything(tree):
@@ -75,7 +75,7 @@ def test_code_always_runs_everything(tree):
 
 
 def test_one_code_file_among_documents_runs_everything(tree):
-    assert ci_changes.is_docs_only(["docs/NOTES.md", "api/main.py"], tree) is False
+    assert ci_changes.is_docs_only(["docs/NOTES_EXAMPLE.md", "api/main.py"], tree) is False
 
 
 def test_a_document_a_test_reads_counts_as_code(tree):
@@ -88,8 +88,8 @@ def test_a_document_a_workflow_names_counts_as_code(tree):
 
 
 def test_a_document_only_other_documents_mention_does_not_count_as_read(tree):
-    (tree / "docs" / "OTHER.md").write_text("see NOTES.md and audit/20261123.md\n")
-    assert ci_changes.is_docs_only(["docs/NOTES.md"], tree) is True
+    (tree / "docs" / "OTHER.md").write_text("see NOTES_EXAMPLE.md and audit/example_report.md\n")
+    assert ci_changes.is_docs_only(["docs/NOTES_EXAMPLE.md"], tree) is True
 
 
 def test_the_root_readme_is_documentation_but_a_test_that_names_it_makes_it_code(tree):
@@ -109,16 +109,16 @@ def test_a_deleted_or_renamed_document_nothing_reads_is_still_documentation(tree
 
 
 def test_a_push_always_runs_everything(tree):
-    assert ci_changes.decide("push", ["docs/NOTES.md"], tree) == "true"
+    assert ci_changes.decide("push", ["docs/NOTES_EXAMPLE.md"], tree) == "true"
 
 
 def test_a_pull_request_decides_by_its_files(tree):
-    assert ci_changes.decide("pull_request", ["docs/NOTES.md"], tree) == "false"
-    assert ci_changes.decide("pull_request", ["docs/NOTES.md", "api/main.py"], tree) == "true"
+    assert ci_changes.decide("pull_request", ["docs/NOTES_EXAMPLE.md"], tree) == "false"
+    assert ci_changes.decide("pull_request", ["docs/NOTES_EXAMPLE.md", "api/main.py"], tree) == "true"
 
 
 def test_any_other_event_or_no_files_runs_everything(tree):
-    assert ci_changes.decide("workflow_dispatch", ["docs/NOTES.md"], tree) == "true"
+    assert ci_changes.decide("workflow_dispatch", ["docs/NOTES_EXAMPLE.md"], tree) == "true"
     assert ci_changes.decide("pull_request", [], tree) == "true"
     assert ci_changes.decide("pull_request", None, tree) == "true", "a failed git diff must not skip the tests"
 
@@ -355,3 +355,20 @@ def test_the_triggers_are_unchanged_and_nothing_is_skipped_by_path_at_the_workfl
     assert "paths-ignore" not in str(on) and "paths" not in (on.get("pull_request") or {}), (
         "a workflow-level path filter would leave the required check pending forever; the changes job decides instead")
     assert on["push"]["branches"] == ["main", "master"]
+
+
+# -- the sample documents must not be real ones -------------------------------------------------------------------------
+
+def test_the_sample_documents_in_the_fixture_are_not_real_documents_of_this_repository(tree):
+    """A test file naming a real document makes that document count as 'read by a test', so a change to it could never
+    skip the database jobs (found the first time the real audit report was changed on its own). The fixture's documents
+    that stand for 'nothing reads this' must therefore have names no real file has."""
+    real_root = Path(__file__).resolve().parents[2]
+    for rel in ("docs/audit/example_report.md", "docs/NOTES_EXAMPLE.md"):
+        assert (tree / rel).is_file(), f"the fixture lost its sample document {rel}"
+        assert not (real_root / rel).exists(), f"{rel} is a real file now: pick another sample name"
+    # The real report's name is built, not written, so that this very file does not name it (that would defeat the point).
+    real_report = "2026" + "1123.md"
+    assert not (tree / "docs" / "audit" / real_report).exists(), "the fixture must not use the real report's name"
+    assert not (tree / "docs" / ("NOTES" + ".md")).exists()
+    assert (real_root / "docs" / "audit" / real_report).is_file(), "the real report this guard protects was renamed: update it"
