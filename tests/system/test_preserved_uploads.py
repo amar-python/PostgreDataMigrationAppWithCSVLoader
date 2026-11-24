@@ -64,7 +64,7 @@ class PreservedUploads(unittest.TestCase):
         self.assertEqual(res["status"], "ok", res)
         row = self._upload_row(res["uploadId"])
         self.assertEqual((row["status"], row["uploader"], row["total_rows"], row["imported_rows"]),
-                         ("imported", "api_key", 2, 2))
+                         ("imported", "anonymous", 2, 2))
         self.assertEqual(row["csv_file_id"], res["fileId"])
         original = self.client.get(f"/api/csv/uploads/{res['uploadId']}/original")
         self.assertEqual(original.content, content.encode("utf-8"))
@@ -72,7 +72,7 @@ class PreservedUploads(unittest.TestCase):
         self.assertEqual(self._source_rows(res["uploadId"]),
                          [["name", "note"], [self.tag, "a, b"], ["second", "line\nbreak"]])
         [listed] = [f for f in self.client.get("/api/csv/files").json() if f["file_name"] == self.name]
-        self.assertEqual((listed["uploader"], listed["upload_id"]), ("api_key", res["uploadId"]))
+        self.assertEqual((listed["uploader"], listed["upload_id"]), ("anonymous", res["uploadId"]))
 
     def test_a_failed_upload_still_keeps_its_original(self):
         content = f"Date,Ref\n27 Oct 26,{self.tag}\n"

@@ -12,13 +12,15 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Tests exercise the API directly via TestClient without an API key; bypass the
-# require_api_key dependency for the whole test session rather than threading
-# a header through every test's client.get/post/delete call.
-from api.auth import require_api_key  # noqa: E402
-from api.main import app  # noqa: E402
+# #298: data endpoints need a signed-in session. Most tests call them through TestClient without signing in, so
+# the suite opts in to the local-dev anonymous mode (API_ALLOW_ANONYMOUS with API_ENV=dev) rather than signing in
+# on every call. Only the in-process setting is changed, not os.environ, so an API that a test starts in a
+# subprocess (e.g. with API_ENV=prod) gets no opt-in. Tests of the sign-in requirement itself switch it off
+# (tests/system/test_sessions_required.py).
+from api.config import settings as _settings  # noqa: E402
+from api.main import app  # noqa: E402,F401
 
-app.dependency_overrides[require_api_key] = lambda: None
+_settings.API_ALLOW_ANONYMOUS = True
 
 # O-03: the rate-limit middleware is real for every TestClient request, and all
 # tests share one bucket (TestClient always presents the same client identity).
@@ -26,7 +28,6 @@ app.dependency_overrides[require_api_key] = lambda: None
 # upload-heavy modules and fail tests for reasons unrelated to what they assert.
 # Disable both budgets for the session — the same stance taken above for auth —
 # and let tests that specifically exercise limiting set their own budgets.
-from api.config import settings as _settings  # noqa: E402
 from api.ratelimit import limiter as _limiter  # noqa: E402
 
 

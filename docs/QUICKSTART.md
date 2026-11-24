@@ -55,7 +55,8 @@ Get-Content env.dev.example | ForEach-Object {
 > **Key values in `env.dev.example`:**
 > - `PGPORT=5433` — PG 18 default (change to `5432` if using PG 17)
 > - `PGPASSWORD=changeme_local_only` — update to match your local install
-> - `API_KEY=` — empty is fine for local dev (unauthenticated)
+> - `API_ALLOW_ANONYMOUS=` — leave empty: sign in through the frontend (below). Setting it to `1` lets the API
+>   answer without sign-in, for local experiments only; it works only with `API_ENV=dev` (#298)
 
 To make `PGPORT=5433` permanent across all PowerShell sessions:
 
@@ -163,7 +164,7 @@ Verify it's running: open `http://localhost:8000/api/health` — should return
 `{"status": "ok"}`. Interactive docs at `http://localhost:8000/docs`.
 
 > **Expected startup warnings (safe to ignore):**
-> - `API_KEY is not set` — fine for local dev
+> - `ANONYMOUS ACCESS IS ON` — only if you set `API_ALLOW_ANONYMOUS=1`; unset it to require sign-in
 
 ### Create your sign-in (first run only)
 
@@ -380,7 +381,7 @@ PostgreDataMigrationAppWithCSVLoader/
 │   ├── main.py                   ← app entrypoint, CORS, lifespan
 │   ├── config.py                 ← env-var settings + TE_TABLES list
 │   ├── db.py                     ← psycopg2 pool + Conn context manager
-│   ├── auth.py                   ← optional X-API-Key guard
+│   ├── auth.py                   ← sign-in sessions, tenant scope, role checks
 │   ├── routers/
 │   │   ├── csv_routes.py         ← /api/csv/* endpoints
 │   │   └── te_routes.py          ← /api/te/tables

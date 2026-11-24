@@ -71,8 +71,13 @@ if (-not $env:APP_DB_USER) {
     Write-Host ("APP_DB_USER not set - requests run as the owner. Run once: python scripts\create_app_role.py --env {0}" -f $env:API_ENV) -ForegroundColor Yellow
 }
 
-if (-not $env:API_KEY) {
-    Write-Host "API_KEY not set - every endpoint is unauthenticated (fine for local dev)." -ForegroundColor Yellow
+# #298: the shared API key is retired; data endpoints need a signed-in session. Local dev may opt in to
+# anonymous access with $env:API_ALLOW_ANONYMOUS = "1" (only with API_ENV=dev; the API refuses to start otherwise).
+if ($env:API_ALLOW_ANONYMOUS) {
+    Write-Host "API_ALLOW_ANONYMOUS is set - data endpoints answer without sign-in (local dev only)." -ForegroundColor Yellow
+}
+if ($env:API_KEY) {
+    Write-Host "API_KEY is set but no longer used: sign in instead (the shared key was retired, #298)." -ForegroundColor Yellow
 }
 
 # The server is there (checked above); now test the owner login before starting. A wrong password

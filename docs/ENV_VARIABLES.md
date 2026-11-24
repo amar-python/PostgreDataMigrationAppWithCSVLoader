@@ -32,7 +32,8 @@ Read by `api/config.py`. Set these in the shell before running
 
 | Variable | Default | Required in prod | Description |
 |---|---|---|---|
-| `API_KEY` | _(empty)_ | **Yes** | Shared secret sent in `X-API-Key` header. Empty = unauthenticated (local dev only). Set a strong random value for any non-localhost deployment. |
+| `API_ALLOW_ANONYMOUS` | _(empty)_ | **Must not be set** | `1` lets data endpoints answer without a signed-in session: no tenant, no role checks, audited as `anonymous`. Honoured only with `API_ENV=dev`; with any other `API_ENV` the API refuses to start. Local development and tests only (#298). |
+| `API_KEY` | — | No | **Retired (#298).** No longer read; every data request signs in. If it is still set, the API logs a warning at start-up (and nothing of its value). Remove it from old installs' environment files. |
 | `API_ALLOW_DESTRUCTIVE` | `false` | No | Set to `true` to enable `DELETE /api/csv/files/{id}`. Deliberately opt-in — never leave enabled in shared or prod environments. |
 | `DATA_CLASSIFICATION` | `OFFICIAL: Sensitive` | No | Marked on every API response in `X-Data-Classification` (decision 7). One of `UNOFFICIAL`, `OFFICIAL`, `OFFICIAL: Sensitive`. `PROTECTED` is refused at startup: it needs IRAP-assessed hosting (#49). See `docs/SOVEREIGNTY.md`. |
 | `AUDIT_RETENTION_YEARS` | `7` | No | Minimum years to keep audit rows (decision 7; confirm against the client's records authority). Nothing in the app deletes them; this binds any operator purge. At least 1. |
@@ -110,8 +111,8 @@ VITE_API_BASE=http://localhost:8000
 VITE_API_BASE=https://your-api.azurecontainerapps.io
 ```
 
-There is no `VITE_API_KEY` any more: the browser signs in per user (#96) and
-never holds the shared `API_KEY`, which is for scripts and services.
+There is no `VITE_API_KEY` any more: the browser signs in per user (#96), and
+the shared `API_KEY` itself was retired (#298).
 
 ---
 
@@ -161,7 +162,8 @@ Change them by editing the source file directly.
 ### Local development
 ```powershell
 $env:PGPASSWORD = "your-local-postgres-password"
-# API_KEY left empty — unauthenticated is fine locally
+# Sign in through the frontend (create an account once with scripts/create_tenant_admin.py).
+# Or, for quick local experiments only: $env:API_ALLOW_ANONYMOUS = "1"
 .\scripts\start-api.ps1
 ```
 
@@ -179,7 +181,6 @@ PGPORT         = 5432
 PGUSER         = postgres
 PGPASSWORD     = <from Key Vault>
 PGDATABASE     = te_mgmt_prod
-API_KEY        = <strong random value>
 CORS_ORIGINS   = https://your-frontend.azurestaticapps.net
 TE_SCHEMA      = te_prod
 CSV_UPLOADS_SCHEMA = csv_uploads

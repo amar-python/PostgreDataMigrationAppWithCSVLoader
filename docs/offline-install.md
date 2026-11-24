@@ -69,7 +69,7 @@ The script runs six steps:
 2. Installs the Ubuntu packages, using the bundle as the only apt source. The VM's own apt sources are ignored.
 3. Copies the app to `/opt/te-migration`, creates the `te-app` system user, and builds a Python virtual environment from `wheels/` without network access.
 4. Deploys database `te_mgmt_prod` with schema `te_prod` and its owner role `te_prod_user`. It also creates the runtime role `te_prod_runtime`, which serves requests and can only read and insert the audit and upload tables (M3d, #107). Both get generated passwords.
-5. Writes `/opt/te-migration/env` (mode 600) with both passwords and a generated API key, and starts the `te-api` (port 8000) and `te-frontend` (port 3000) services under systemd. The API key is for scripts only. The frontend holds no key; people sign in.
+5. Writes `/opt/te-migration/env` (mode 600) with both passwords, and starts the `te-api` (port 8000) and `te-frontend` (port 3000) services under systemd. There is no shared API key (#298): people and scripts sign in.
 6. Creates the first tenant and its tenant admin, then runs the smoke test.
 
 During step 2, apt may print `W: Download is performed unsandboxed as root`. This only means apt's sandbox user can't read the bundle folder, and it's harmless.
@@ -80,13 +80,15 @@ The install finishes by printing these seven lines. Every one must read PASS:
 
 ```
 PASS  API health
-PASS  API rejects a missing key
+PASS  API rejects a request without a session
+PASS  admin signs in
+PASS  session is tenant_admin
 PASS  upload a CSV (2 rows inserted)
 PASS  upload listed with persisted counts
 PASS  frontend serves the app
-PASS  admin signs in
-PASS  session is tenant_admin
 ```
+
+The upload and listing checks sign in as the first tenant admin.
 
 Then open `http://<API_HOST>:3000` in a browser. You should land on the sign-in page. Sign in with the tenant, username and password from `/root/te-initial-admin`, or the values you set.
 
@@ -94,8 +96,11 @@ You can re-run the check at any time:
 
 ```bash
 cd /opt/te-migration
-sudo bash app/scripts/offline/smoke_test.sh "$(sudo sed -n 's/^API_KEY=//p' env)"
+sudo env SMOKE_TENANT=main SMOKE_USER=admin SMOKE_PASSWORD='<the admin password>' \
+  bash app/scripts/offline/smoke_test.sh
 ```
+
+Without `SMOKE_TENANT`, `SMOKE_USER` and `SMOKE_PASSWORD` it runs the three checks that need no sign-in and says it skipped the rest. Use the tenant and username the install used (in `/root/te-initial-admin`).
 
 ## Evidence for #60
 
