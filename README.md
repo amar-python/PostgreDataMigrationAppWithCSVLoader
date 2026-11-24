@@ -45,10 +45,10 @@
   `032b522` ([`docs/art/milestone-0-assessment.md`](docs/art/milestone-0-assessment.md)),
   which M1 fixed with UNIQUE constraints. Traced as BR-45 in [`docs/VCRM.md`](docs/VCRM.md).
 - **Authentication:** people sign in per user: local accounts with lockout,
-  OIDC, four roles (`docs/ROLES.md`) and a schema per tenant. The shared
-  `API_KEY` is for scripts and services only; the browser never holds it. The
-  API refuses to start outside `dev` without `API_KEY`. Requests that use the
-  key reach the default schemas, not any tenant's.
+  OIDC, four roles (`docs/ROLES.md`) and a schema per tenant. Every data
+  request needs a signed-in session, scripts included: the shared `API_KEY`
+  was retired (#298). Local dev and tests can opt in to anonymous access with
+  `API_ALLOW_ANONYMOUS=1`, which works only with `API_ENV=dev`.
   Users change their own password from the header; a tenant admin can reset
   members of their own tenant only. A user who belongs to more than one tenant
   can be reset only by an operator with `scripts/reset_password.py` (#117).
@@ -108,7 +108,7 @@ PostgreDataMigrationAppWithCSVLoader/
 │   ├── main.py                       ← app entrypoint, CORS, lifespan
 │   ├── config.py                     ← env-var settings, TE_TABLES list
 │   ├── db.py                         ← psycopg2 connection pool
-│   ├── auth.py                       ← optional X-API-Key guard
+│   ├── auth.py                       ← sign-in sessions, tenant scope, role checks
 │   ├── routers/                      ← csv, te, auth, audit, import, policy, review routes
 │   │   ├── csv_routes.py             ← /api/csv/* (upload, preview, files, rows)
 │   │   └── te_routes.py              ← /api/te/tables (T&E table row counts)
@@ -316,7 +316,7 @@ See **`docs/ENV_VARIABLES.md`** for the full reference. Key variables:
 | `PGPORT` | `5433` (`env.dev.example`) | PostgreSQL port. The template is authoritative; `api/config.py` falls back to `5432` only if `PGPORT` is unset |
 | `PGPASSWORD` | _(empty)_ | PostgreSQL password |
 | `PGDATABASE` | `te_mgmt_dev` | Target database |
-| `API_KEY` | _(empty)_ | Shared secret for `X-API-Key` header (empty = unauthenticated) |
+| `API_ALLOW_ANONYMOUS` | _(empty)_ | `1` lets data endpoints answer without sign-in. Local dev and tests only: honoured only with `API_ENV=dev`, and the API refuses to start with it otherwise (#298) |
 | `CORS_ORIGINS` | `http://localhost:8080,...` | Allowed frontend origins |
 | `TE_SCHEMA` | `te_dev` | Schema for the 12 T&E tables |
 | `CSV_UPLOADS_SCHEMA` | `csv_uploads` | Schema for dynamic CSV tables and the upload registry (`api/config.py`) |

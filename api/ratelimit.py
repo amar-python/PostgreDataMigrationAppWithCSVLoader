@@ -90,8 +90,9 @@ _EXEMPT_PATHS = frozenset({"/api/health", "/openapi.json", "/docs", "/redoc"})
 def _client_id(request: Request) -> str:
     """Identify the caller by a trusted attribute: the client address of the connection.
 
-    The API key is NOT used here because it is checked before authentication: an attacker could rotate
-    arbitrary X-API-Key values to get a fresh rate-limit bucket each time, bypassing brute-force protection (#183).
+    No request header is used here because limiting runs before authentication: an attacker could rotate
+    arbitrary header values (the retired X-API-Key, or a bearer token) to get a fresh rate-limit bucket each time,
+    bypassing brute-force protection (#183).
 
     ``X-Forwarded-For`` is not read here, because a client controls it. uvicorn does read it, in its
     ``ProxyHeadersMiddleware``, and only for connections from an address listed in ``FORWARDED_ALLOW_IPS`` (default:

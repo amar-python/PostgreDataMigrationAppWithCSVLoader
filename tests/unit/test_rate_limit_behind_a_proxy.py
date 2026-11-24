@@ -40,7 +40,6 @@ PROXY = "10.0.0.1"
 @pytest.fixture(autouse=True)
 def small_write_budget(monkeypatch):
     monkeypatch.setattr(settings, "RATE_LIMIT_WRITES_PER_MINUTE", 2)
-    monkeypatch.setattr(settings, "API_KEY", "")
     limiter.reset()
     yield
     limiter.reset()

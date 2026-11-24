@@ -109,7 +109,7 @@ def docs_statuses(api_env: str) -> dict[str, int]:
         "c = TestClient(app)\n"
         "print(json.dumps({p: c.get(p).status_code for p in ('/docs', '/redoc', '/openapi.json')}))\n"
     )
-    env = {**os.environ, "API_ENV": api_env, "API_KEY": "k" * 24}
+    env = {**os.environ, "API_ENV": api_env}
     done = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=env, capture_output=True, text=True,
                           timeout=180)
     assert done.returncode == 0, done.stderr[-600:]

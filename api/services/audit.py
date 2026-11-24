@@ -32,7 +32,8 @@ VALID_ACTIONS = frozenset({"upload", "delete", "password_reset", "row_decision",
                            "submit", "approve", "reject", "import"})
 
 # Who is acting (M3a, #107). tenant_scope sets it per request: the signed-in
-# username, or "api_key" for a request made with the shared key.
+# username, or "anonymous" under the local-dev anonymous opt-in (#298; the shared
+# key that used to audit as "api_key" was retired).
 _actor: ContextVar[str | None] = ContextVar("audit_actor", default=None)
 
 

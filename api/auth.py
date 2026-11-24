@@ -1,17 +1,16 @@
-"""API key authentication dependency.
+"""Authentication and authorisation dependencies.
 
-Applied per-router — see the ``dependencies=[Depends(require_api_key)]`` argument
-in ``api/routers/{csv,te,audit}_routes.py``. It is deliberately NOT applied at app
-level so ``/api/health`` stays reachable for uptime probes without the shared
-secret (BUG-035).
+Data routers depend on ``tenant_scope`` (directly or through ``allow``). It is
+deliberately NOT applied at app level so ``/api/health`` stays reachable for
+uptime probes (BUG-035).
 
-Fail-closed behaviour: an empty ``settings.API_KEY`` leaves these routers open.
-That is tolerated only when ``API_ENV`` is ``dev``; any other value makes a
-missing key a startup failure in ``api/main.py`` lifespan (O-03), so this
-function can never silently wave traffic through in a deployed environment.
+#298 (OIT-013): there is no shared API key any more. A request needs a signed-in
+session (``Authorization: Bearer <token>``), or gets 401. The only exception is
+local development and tests, by explicit opt-in: ``API_ALLOW_ANONYMOUS=1`` with
+``API_ENV=dev`` (see ``api/config.py``). Fail-closed: anything else, including
+the default ``API_ENV=dev`` on its own, requires a session.
 """
 
-import secrets
 from collections.abc import AsyncIterator
 
 from fastapi import Depends, Header, HTTPException
@@ -24,12 +23,12 @@ from api.services.audit import acting_as
 from api.tenancy import tenant
 
 
-def require_api_key(x_api_key: str = Header(default="")) -> None:
-    if not settings.API_KEY:
-        # No key configured — only acceptable for local dev (see config.py comment).
-        return
-    if not secrets.compare_digest(x_api_key, settings.API_KEY):
-        raise HTTPException(status_code=401, detail="Missing or invalid X-API-Key header")
+ANONYMOUS_ACTOR = "anonymous"
+
+
+def anonymous_allowed() -> bool:
+    """True only when local dev has opted in to unauthenticated data access (#298)."""
+    return settings.API_ALLOW_ANONYMOUS and settings.API_ENV == "dev"
 
 
 def bearer_token(authorization: str = Header(default="")) -> str:
@@ -58,20 +57,22 @@ def _live_session(token: str) -> dict:
     return session
 
 
-async def tenant_scope(authorization: str = Header(default=""),
-                       x_api_key: str = Header(default="")) -> AsyncIterator[dict | None]:
+async def tenant_scope(authorization: str = Header(default="")) -> AsyncIterator[dict | None]:
     """Route the request to one tenant's schema (M2b, #93).
 
     With ``Authorization: Bearer <token>`` the request runs in the signed-in
-    tenant's schema, as the tenant's own database role (#297), and yields its session. Without one, the shared API key
-    applies and the request keeps the deployment's default schemas.
+    tenant's schema, as the tenant's own database role (#297), and yields its session.
+    Without one it gets 401 "Sign in required" (#298), unless local dev opted in to
+    anonymous access; then it keeps the deployment's default schemas, yields ``None``
+    and audits as ``anonymous``. Any ``X-API-Key`` header is ignored: it grants nothing.
 
     Async on purpose: the schema is a context variable, and only an async
     dependency sets it in the context the endpoint's worker thread copies.
     """
     if not authorization:
-        require_api_key(x_api_key)
-        with acting_as("api_key"):
+        if not anonymous_allowed():
+            raise HTTPException(status_code=401, detail="Sign in required")
+        with acting_as(ANONYMOUS_ACTOR):
             yield None
         return
     session = await run_in_threadpool(_live_session, bearer_token(authorization))
@@ -100,8 +101,8 @@ PERMISSIONS: dict[str, frozenset[str]] = {
 def allow(action: str):
     """Route dependency: 403 unless the signed-in role may perform ``action``.
 
-    Requests without a session (API key or dev) are not role-checked; they keep
-    today's single-operator access until the shared key is retired.
+    Requests without a session exist only under the local-dev anonymous opt-in
+    (#298); they are not role-checked.
     """
     roles = PERMISSIONS[action]
 

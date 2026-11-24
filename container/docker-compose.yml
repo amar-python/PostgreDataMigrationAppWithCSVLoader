@@ -35,7 +35,6 @@ services:
         condition: service_healthy
     environment:
       API_ENV: prod
-      API_KEY: ${API_KEY:?}
       PGHOST: db
       PGPORT: "5432"
       PGUSER: te_prod_user

@@ -13,5 +13,5 @@ router = APIRouter(prefix="/api/policy", tags=["policy"],
 
 @router.get("")
 def get_policy() -> dict:
-    """Open to any signed-in member, or a request with the shared key: it only says how to handle the data."""
+    """Open to any signed-in member, or an anonymous local-dev request (#298): it only says how to handle the data."""
     return policy.current()
