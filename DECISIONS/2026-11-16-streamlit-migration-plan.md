@@ -1,8 +1,8 @@
 # Decision: Plan for moving the frontend from React to Streamlit (#212)
 
-Status:  Accepted by the owner on 24 Nov, except where the app runs in Azure and whether the `browser` job is a required check, which are still open. Steps 1 to 4 were built on the defaults, and the owner confirmed every one of them (see "Owner decisions")
+Status:  Accepted by the owner on 24 Nov, except whether the `browser` job is a required check, which is still open. Steps 1 to 4 were built on the defaults, and the owner confirmed every one of them (see "Owner decisions")
 Date:    2026-11-16, updated 2026-11-19
-Review:  Before step 5 (packaging) starts. It still needs the owner's Azure answer and the offline dry run (#60); the bundle size is accepted. The upload spike (step 4) is done and did not change the plan
+Review:  Before step 5 (packaging) starts. It still needs the offline dry run (#60); the bundle size and the Azure host are decided. The upload spike (step 4) is done and did not change the plan
 
 ## Where it stands (19 Nov)
 
@@ -13,7 +13,7 @@ Review:  Before step 5 (packaging) starts. It still needs the owner's Azure answ
 | 2 Review screen | #252 | Merged (#267) |
 | 3 Import history | #253 | Merged (#269) |
 | 4 Upload and imported files | #255 | Merged (#270, with this update) |
-| 5 Packaging | #256 | Not started. Waits for the #60 dry run and the owner's Azure answer |
+| 5 Packaging | #256 | Not started. Waits for the #60 dry run; the Azure half is decided (Container Apps, private network only) |
 | 6 Cutover and deletion | #257 | Not started. Needs steps 1 to 5. The accessibility job already scans the Streamlit app too (#388), so the React scans can go with React |
 | Tests | #258 | Done as each screen landed: 364 unit tests (`AppTest` and plain functions) and 49 browser tests in four files. The browser tests run in CI in their own `browser` job (#273), not yet as a required check |
 
@@ -117,10 +117,21 @@ The build used the defaults below before the owner had answered. On 24 Nov the o
 | The server's audit log and its verification | No page (`GET /api/audit/log` and `/verify` stay API-only) | 24 Nov |
 | About 116 MB more in the offline bundle | Accepted | 24 Nov |
 | Accessibility job | Scans the Streamlit app as well as React (#388, merged 24 Nov), with no recorded Streamlit violations after the caption-contrast fix. The React scans go with React in step 6 | 24 Nov |
-| Where it runs in Azure | **Open** | |
+| Where it runs in Azure | Azure Container Apps, in the existing internal environment (`cae-te-prod`): one always-on app for the API and one for Streamlit, reachable from the private network only, with no public address. See "Azure host" below | 24 Nov |
 | `browser` job (#273), and the accessibility job, as required checks | **Open**: a branch-protection setting | |
 
-Still for the owner: where the app runs in Azure (it needs a Terraform service, and blocks the Azure half of step 5), and whether the `browser` and accessibility jobs block a merge.
+Still for the owner: whether the `browser` and accessibility jobs block a merge.
+
+### Azure host (decided 24 Nov)
+
+`infra/terraform-prod` today runs only the migration batch job (a Container Apps job); it deploys no API and no front end (F9 in `docs/SECURITY_REVIEW_PACK.md`). The owner chose to add both to the same Container Apps environment, which is already internal-only (`internal_load_balancer_enabled = true`), rather than an App Service plan or keeping the web app out of Azure. Users reach it from inside the Azure network (VPN, ExpressRoute or a jump host); it gets no public address, since sign-in is by password only (no OIDC).
+
+What the build (the Azure half of #256) has to do and check:
+
+- Two `azurerm_container_app` resources, API and Streamlit, from images in the existing registry, using the existing managed identity, Key Vault secrets and Log Analytics workspace. The API talks to the private PostgreSQL; Streamlit gets `API_URL` set to the API's internal address and `MAX_UPLOAD_BYTES` set to the API's value.
+- Streamlit: internal HTTP ingress, **one replica minimum** (no scale to zero, which would drop sessions and add a cold start) and **sticky sessions** if it ever runs more than one replica, because a session lives in that replica's memory.
+- Not verified yet: that WebSockets stay open through the internal ingress for a long review session, and that a 50 MiB upload passes the ingress. Test both before cutover.
+- Rough added cost: two small always-on apps, about AUD 40 to 70 a month on top of the ~AUD 285 already estimated in `infra/terraform-prod/main.tf`.
 
 ## Not verified
 
