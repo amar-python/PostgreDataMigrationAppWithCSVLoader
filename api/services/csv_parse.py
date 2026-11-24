@@ -64,6 +64,9 @@ _RESERVED = {"_id", "_row_hash", "_created_at"}
 
 _INT_RE = re.compile(r"^-?\d+$")
 _NUM_RE = re.compile(r"^-?\d+(\.\d+)?$")
+# A zero followed by another digit ("02134", "0412345678", "-007"): padding, not a number. A single zero ("0") and a zero
+# before a decimal point ("0.5") do not match.
+_PADDED_RE = re.compile(r"^-?0\d")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _BOOL_TRUE = {"true", "t", "yes", "y", "1"}
 _BOOL_FALSE = {"false", "f", "no", "n", "0"}
@@ -235,6 +238,10 @@ def infer_type(values: list[str]) -> str:
     def all_match(pred) -> bool:
         return all(pred(v) for v in non_empty)
 
+    # #352: identifiers such as postcodes, phone and account numbers keep their leading zeros only as text. Stored as a
+    # number, 02134 becomes 2134 and the zeros cannot be recovered.
+    if all_match(lambda v: bool(_NUM_RE.match(v))) and any(_PADDED_RE.match(v) for v in non_empty):
+        return "text"
     if all_match(lambda v: bool(_INT_RE.match(v))):
         return "int8"
     if all_match(lambda v: bool(_NUM_RE.match(v))):
