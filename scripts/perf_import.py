@@ -37,7 +37,7 @@ from api.db import Conn  # noqa: E402
 from api.main import app  # noqa: E402
 from api.ratelimit import limiter  # noqa: E402
 from api.services import accounts  # noqa: E402
-from api.tenancy import migrate_tenant, schema_for  # noqa: E402
+from api.tenancy import drop_tenant_role, migrate_tenant, schema_for  # noqa: E402
 
 MAX_IMPORT_SECONDS = 60.0
 MAX_FIRST_PAGE_SECONDS = 2.0
@@ -172,6 +172,7 @@ def run(rows: int) -> dict:
                 control = sql.Identifier(settings.CONTROL_SCHEMA)
                 cur.execute(sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(control), (slug,))
                 cur.execute(sql.SQL("DELETE FROM {}.users WHERE username = %s").format(control), (f"{slug}_u",))
+                drop_tenant_role(cur, slug)   # #297: each tenant has its own database role
                 conn.commit()
     timings["upToImported"] = round(sum(timings[k] for k in ("stage", "submit", "approve", "import")), 3)
     # This process only (the API and the CSV in memory), not PostgreSQL's.

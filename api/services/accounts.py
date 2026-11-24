@@ -224,7 +224,7 @@ def session_for(cur, token: str) -> dict | None:
     """
     idle = settings.SESSION_IDLE_MINUTES
     cur.execute(_q(
-        "SELECT u.id, u.username, t.id, t.slug, m.role, s.expires_at "
+        "SELECT u.id, u.username, t.id, t.slug, m.role, s.expires_at, t.allow_self_approval "
         "FROM {c}.sessions s "
         "JOIN {c}.users u ON u.id = s.user_id AND u.is_active "
         "JOIN {c}.tenants t ON t.id = s.tenant_id "
@@ -237,7 +237,7 @@ def session_for(cur, token: str) -> dict | None:
         return None
     _touch(cur, _token_hash(token))
     return {"userId": row[0], "username": row[1], "tenantId": row[2], "tenant": row[3],
-            "role": row[4], "expiresAt": row[5].isoformat()}
+            "role": row[4], "expiresAt": row[5].isoformat(), "allowSelfApproval": bool(row[6])}
 
 
 def _touch(cur, token_hash: str) -> None:

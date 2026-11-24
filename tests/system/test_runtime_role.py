@@ -3,6 +3,9 @@
 Integration: needs a live PostgreSQL and an owner that can create roles (CI's
 postgres superuser). Fails (never skips) without one. Runs the real
 scripts/create_app_role.py, then drives the API as that role.
+
+#297: a signed-in tenant's requests run as the tenant's own role, which the runtime role may switch to but does
+not inherit, and the runtime role has no rights of its own on any tenant's schema.
 """
 
 from __future__ import annotations
@@ -24,6 +27,8 @@ from psycopg2 import sql
 from api.config import settings
 from api.db import Conn
 from api.main import app
+from api.services import accounts
+from api.tenancy import drop_tenant_role, migrate_tenant, role_for, schema_for
 
 _ROOT = Path(__file__).resolve().parents[2]
 
@@ -129,3 +134,65 @@ class RuntimeRole(unittest.TestCase):
             conn.rollback()
         finally:
             conn.close()
+
+    def test_a_signed_in_tenant_works_through_its_own_role(self):
+        """#297: upload, review, history, audit and a staged import for a signed-in tenant, as the runtime role."""
+        slug, pw = f"rt_{uuid.uuid4().hex[:8]}", "correct horse battery staple"
+        with Conn() as conn, conn.cursor() as cur:
+            tid = accounts.create_tenant(cur, slug, "Runtime role tenant")
+            accounts.add_membership(cur, accounts.create_user(cur, f"{slug}_u", pw), tid, "tenant_admin")
+            accounts.set_self_approval(cur, slug, True)   # one user here; also checks the session carries the flag
+            conn.commit()
+        try:
+            migrate_tenant(slug)
+            login = self.client.post("/api/auth/login", json={"tenant": slug, "username": f"{slug}_u", "password": pw})
+            self.assertEqual(login.status_code, 200, login.text)
+            h = {"Authorization": f"Bearer {login.json()['token']}"}
+            name = f"rt_{uuid.uuid4().hex[:8]}.csv"
+            up = self.client.post("/api/csv/upload", headers=h, json={"fileName": name, "content": f"v\n{name}\n"})
+            self.assertEqual(up.json()["status"], "ok", up.text)
+            uid = up.json()["uploadId"]
+            for res in (
+                self.client.put(f"/api/csv/uploads/{uid}/rows/1/decision", headers=h,
+                                json={"decision": "exclude", "reason": "runtime role case"}),
+                self.client.get(f"/api/csv/uploads/{uid}/rows/1/history", headers=h),
+                self.client.get(f"/api/csv/tables/{up.json()['tableName']}/rows", headers=h),
+                self.client.get("/api/csv/uploads", headers=h),
+            ):
+                self.assertEqual(res.status_code, 200, res.text)
+            self.assertIn(name, [f["file_name"] for f in self.client.get("/api/csv/files", headers=h).json()])
+            log = self.client.get("/api/audit/log?limit=50", headers=h).json()["entries"]
+            self.assertIn(name, [e["fileName"] for e in log])
+            self.assertTrue(self.client.get("/api/audit/verify", headers=h).json()["intact"])
+            staged = self.client.post("/api/csv/uploads", headers=h,
+                                      json={"fileName": "s_" + name, "content": "v\nstaged\n"}).json()["uploadId"]
+            for action, body in (("submit", None), ("approval", {"decision": "approve"})):
+                res = self.client.post(f"/api/csv/uploads/{staged}/{action}", headers=h, json=body)
+                self.assertEqual(res.status_code, 200, res.text)
+            res = self.client.post(f"/api/csv/uploads/{staged}/import", headers={**h, "Idempotency-Key": "rt"})
+            self.assertEqual(res.status_code, 200, res.text)
+            self.assertEqual(res.json()["reconciliation"]["imported"], 1)
+
+            conn = self._as_runtime()
+            try:
+                with conn.cursor() as cur:
+                    with self.assertRaises(psycopg2.errors.InsufficientPrivilege):   # no rights without SET ROLE
+                        cur.execute(sql.SQL("SELECT * FROM {}.csv_files").format(sql.Identifier(schema_for(slug))))
+                    conn.rollback()
+                    cur.execute("SELECT m.inherit_option, m.set_option FROM pg_auth_members m "
+                                "WHERE m.roleid = to_regrole(%s) AND m.member = to_regrole(%s)",
+                                (role_for(slug), self.role))
+                    self.assertEqual(cur.fetchone(), (False, True), "member WITH INHERIT FALSE, SET TRUE")
+                    cur.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(role_for(slug))))
+                    cur.execute(sql.SQL("SELECT count(*) FROM {}.csv_files").format(sql.Identifier(schema_for(slug))))
+                    self.assertGreaterEqual(cur.fetchone()[0], 2)
+            finally:
+                conn.close()
+        finally:
+            with _owner() as conn, conn.cursor() as cur:
+                cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_for(slug))))
+                cur.execute(sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(
+                    sql.Identifier(settings.CONTROL_SCHEMA)), (slug,))
+                cur.execute(sql.SQL("DELETE FROM {}.users WHERE username = %s").format(
+                    sql.Identifier(settings.CONTROL_SCHEMA)), (f"{slug}_u",))
+                drop_tenant_role(cur, slug)

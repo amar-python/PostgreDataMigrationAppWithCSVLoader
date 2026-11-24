@@ -4,10 +4,16 @@ Each tenant's registry, audit log, uploaded tables and T&E tables live in
 schema ``tenant_<slug>``. A request signed in to a tenant runs with that schema set
 here; ``uploads_schema()`` and ``te_schema()`` read it. A request without a
 session (API-key or dev) keeps the deployment's default schemas.
+
+Each tenant also has its own NOLOGIN database role (#297, OIT-012; DECISIONS/2026-11-24-per-tenant-db-roles.md)
+with rights only on its own schema. ``tenant()`` sets that role alongside the schema, and every connection a
+request borrows runs ``SET ROLE`` to it (``api.db.Conn``), so a query that reaches another tenant's schema
+fails at the database instead of returning its rows.
 """
 
 from __future__ import annotations
 
+import hashlib
 import re
 import threading
 from contextlib import contextmanager
@@ -15,10 +21,12 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from psycopg2 import sql
+from psycopg2.errors import InsufficientPrivilege
 
 from api.config import TE_TABLES, settings
 
 _current: ContextVar[str | None] = ContextVar("tenant_schema", default=None)
+_role: ContextVar[str | None] = ContextVar("tenant_role", default=None)
 _migrate_lock = threading.Lock()
 
 
@@ -27,8 +35,24 @@ def schema_for(slug: str) -> str:
     return f"tenant_{slug}"
 
 
+def role_for(slug: str) -> str:
+    """The tenant's database role: ``app_t_<slug>_<8 hex of the database name>`` (#297).
+
+    Roles belong to the whole PostgreSQL cluster, not one database, and several environments often share one
+    cluster (#173). Without the database in the name, tenant ``acme`` in Dev and in Prod would be the same role,
+    and Dev's runtime role could reach Prod's ``tenant_acme``. A hash keeps the name inside PostgreSQL's 63-byte
+    limit for any database name (the slug is at most 41 characters); ``COMMENT ON ROLE`` says which it is.
+    """
+    return f"app_t_{slug}_{hashlib.sha256(settings.PG_DATABASE.encode()).hexdigest()[:8]}"
+
+
 def current_schema() -> str | None:
     return _current.get()
+
+
+def current_role() -> str | None:
+    """The database role this request's connections run as, or None for the login role."""
+    return _role.get()
 
 
 def uploads_schema() -> str:
@@ -40,12 +64,18 @@ def te_schema() -> str:
 
 
 @contextmanager
-def scoped(schema: str):
-    token = _current.set(schema)
+def scoped(schema: str, role: str | None = None):
+    token, role_token = _current.set(schema), _role.set(role)
     try:
         yield
     finally:
+        _role.reset(role_token)
         _current.reset(token)
+
+
+def tenant(slug: str):
+    """Route to one tenant: its schema, and its database role for every connection borrowed inside (#297)."""
+    return scoped(schema_for(slug), role_for(slug))
 
 
 def migrate_tenant(slug: str) -> None:
@@ -68,12 +98,81 @@ def migrate_tenant(slug: str) -> None:
             command.upgrade(cfg, "head")
         finally:
             settings.UPLOADS_SCHEMA = original
-    from api.db import grant_runtime, owner_connect
+    from api.db import owner_connect
 
     with owner_connect() as conn:
         with conn.cursor() as cur:
             migrate_te_schema(conn, cur, schema_for(slug))
-            grant_runtime(cur, schema_for(slug), create=True)
+            provision_tenant_role(cur, slug)
+
+
+def provision_tenant_role(cur, slug: str) -> str:
+    """Create or update the tenant's own role and give it its schema, and only that (#297). Returns the role.
+
+    Run as the owner after every migration of the tenant (``migrate_tenant``), so it is also how tenants that
+    existed before #297 get their role: the next API start migrates every tenant. Idempotent.
+
+    - the role is NOLOGIN: the runtime role reaches it only through ``SET ROLE``;
+    - the same rights the runtime role had (``grant_schema``): read and write, read and insert only on the
+      append-only tables, and CREATE, so the per-upload ``csv_*`` tables the loader makes at run time are created
+      by, and owned by, the tenant role. Ones made earlier by the owner or the runtime role are handed to it;
+    - default privileges, so tables a later migration creates (as the owner) are granted too, before
+      ``grant_schema`` runs again and takes UPDATE and DELETE back from the append-only ones;
+    - the runtime role (APP_DB_USER) becomes a member WITH INHERIT FALSE: it may ``SET ROLE`` to the tenant role
+      but has none of its rights without doing so, and its own rights on the schema are revoked. A pooled
+      connection that has not switched role therefore reaches no tenant's data at all;
+    - the owner becomes a member too, so it can hand tables over and, when APP_DB_USER is unset (dev), the API
+      connecting as the owner still switches to the tenant role per request.
+    Commits.
+    """
+    from api.db import grant_schema
+
+    schema, role = schema_for(slug), role_for(slug)
+    s, r = sql.Identifier(schema), sql.Identifier(role)
+    cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,))
+    if cur.fetchone() is None:
+        try:
+            cur.execute(sql.SQL("CREATE ROLE {} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT").format(r))
+        except InsufficientPrivilege as exc:
+            cur.connection.rollback()
+            raise RuntimeError(
+                f"Tenant {slug!r}: the owner {settings.PG_USER!r} may not create the tenant's database role {role!r} "
+                f"(#297). Give it CREATEROLE, as a superuser or the server administrator: ALTER ROLE "
+                f"{settings.PG_USER} CREATEROLE; (build/deploy_all.sh does this for the environments it deploys). "
+                "See DECISIONS/2026-11-24-per-tenant-db-roles.md.") from exc
+    cur.execute(sql.SQL("COMMENT ON ROLE {} IS {}").format(r, sql.Literal(
+        f"Tenant {slug} in database {settings.PG_DATABASE}: rights on schema {schema} only (#297)")))
+    cur.execute(sql.SQL("GRANT {} TO CURRENT_USER WITH INHERIT TRUE, SET TRUE").format(r))
+    grant_schema(cur, schema, role, create=True)
+    cur.execute(sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA {} GRANT SELECT, INSERT, UPDATE, DELETE "
+                        "ON TABLES TO {}").format(s, r))
+    cur.execute(sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA {} GRANT USAGE, SELECT, UPDATE "
+                        "ON SEQUENCES TO {}").format(s, r))
+    runtime = settings.APP_DB_USER
+    if runtime and runtime != settings.PG_USER:
+        rt = sql.Identifier(runtime)
+        cur.execute(sql.SQL("GRANT {} TO {} WITH INHERIT FALSE, SET TRUE").format(r, rt))
+        # Tables the runtime role created before #297 (it owned them, so a REVOKE alone would not stop it).
+        cur.execute("SELECT relname FROM pg_class WHERE relnamespace = %s::regnamespace AND relkind IN ('r', 'p') "
+                    "AND pg_get_userbyid(relowner) = %s", (schema, runtime))
+        for (table,) in cur.fetchall():
+            cur.execute(sql.SQL("ALTER TABLE {}.{} OWNER TO {}").format(s, sql.Identifier(table), r))
+        cur.execute(sql.SQL("REVOKE ALL ON ALL TABLES IN SCHEMA {} FROM {}").format(s, rt))
+        cur.execute(sql.SQL("REVOKE ALL ON ALL SEQUENCES IN SCHEMA {} FROM {}").format(s, rt))
+        cur.execute(sql.SQL("REVOKE ALL ON SCHEMA {} FROM {}").format(s, rt))
+    cur.connection.commit()
+    return role
+
+
+def drop_tenant_role(cur, slug: str) -> None:
+    """Drop the tenant's role, after its schema is gone (#297). As the owner; the caller commits.
+
+    ``DROP OWNED BY`` first removes what is left in this database: default privileges and any grants.
+    """
+    role = role_for(slug)
+    cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,))
+    if cur.fetchone() is not None:
+        cur.execute(sql.SQL("DROP OWNED BY {r}; DROP ROLE {r}").format(r=sql.Identifier(role)))
 
 
 TE_VERSION_TABLE = "alembic_version_te"
