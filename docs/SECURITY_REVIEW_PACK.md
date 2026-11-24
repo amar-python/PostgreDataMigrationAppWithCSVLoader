@@ -140,10 +140,21 @@ No penetration test; no live-environment check (Key Vault and registry network s
 | Date | |
 | Outcome | |
 
-| Finding | Decision (fix, accept, defer) | Owner | Issue |
-|---|---|---|---|
-| F1 to F4, F6 to F11 | | | |
-| F5 | accept: keep the lockout per username | Project owner (decided 2026-11-23) | #295 |
+The decisions below were proposed on 24 Nov 2026 from the state of each issue, for the independent reviewer to confirm, change or reject. They are not signed off until the block above has the reviewer, the date and the outcome (#312).
+
+| Finding | Decision (fix, accept, defer) | State on 24 Nov 2026 | Owner | Issue |
+|---|---|---|---|---|
+| F1 | fix | Fixed: closed (completed) | Project owner | #290 |
+| F2 | fix | Fixed: closed (completed) | Project owner | #291 |
+| F3 | fix | Fixed: closed (completed) | Project owner | #293 |
+| F4 | fix | Fixed: closed (completed) | Project owner | #294 |
+| F5 | accept: keep the lockout per username | Decided 2026-11-23 (see below) | Project owner | #295 |
+| F6 | fix | Fixed: closed (completed) | Project owner | #296 |
+| F7 | fix: one database role per tenant (owner's decision, 24 Nov) | In progress, open | Project owner | #297 |
+| F8 | fix: the T&E drop without the destructive flag (#287) is fixed; the shared API key is being retired (owner's decision, 24 Nov) | #287 closed; #298 in progress, open | Project owner | #287, #298 |
+| F9 | fix: Key Vault and ACR default to private in Terraform (#398, merged 24 Nov); the live Azure settings still need an `az` check, and the API's own deployment is decided (Container Apps, private network only) but not yet built (#256) | Partly fixed, open | Project owner | #299, #256 |
+| F10 | fix | Fixed: closed (completed) | Project owner | #292 |
+| F11 | fix | Fixed: closed (completed) | Project owner | #300 |
 
 
 ### Decision on F5: account lockout stays per username (#295, 2026-11-23)
