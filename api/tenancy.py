@@ -21,6 +21,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from psycopg2 import sql
+from psycopg2.errors import InsufficientPrivilege
 
 from api.config import TE_TABLES, settings
 
@@ -130,7 +131,15 @@ def provision_tenant_role(cur, slug: str) -> str:
     s, r = sql.Identifier(schema), sql.Identifier(role)
     cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,))
     if cur.fetchone() is None:
-        cur.execute(sql.SQL("CREATE ROLE {} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT").format(r))
+        try:
+            cur.execute(sql.SQL("CREATE ROLE {} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT").format(r))
+        except InsufficientPrivilege as exc:
+            cur.connection.rollback()
+            raise RuntimeError(
+                f"Tenant {slug!r}: the owner {settings.PG_USER!r} may not create the tenant's database role {role!r} "
+                f"(#297). Give it CREATEROLE, as a superuser or the server administrator: ALTER ROLE "
+                f"{settings.PG_USER} CREATEROLE; (build/deploy_all.sh does this for the environments it deploys). "
+                "See DECISIONS/2026-11-24-per-tenant-db-roles.md.") from exc
     cur.execute(sql.SQL("COMMENT ON ROLE {} IS {}").format(r, sql.Literal(
         f"Tenant {slug} in database {settings.PG_DATABASE}: rights on schema {schema} only (#297)")))
     cur.execute(sql.SQL("GRANT {} TO CURRENT_USER WITH INHERIT TRUE, SET TRUE").format(r))

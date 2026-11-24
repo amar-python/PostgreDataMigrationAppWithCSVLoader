@@ -42,7 +42,11 @@ This supersedes the open question in `docs/SECURITY_REVIEW_PACK.md` §4 and find
 ## Trade-offs accepted
 
 - **One role per tenant per database.** Roles are cheap, but a deployment with hundreds of tenants has hundreds of roles to list and audit. Dropping a tenant must now also drop its role, as the owner, after the schema: `api.tenancy.drop_tenant_role` runs `DROP OWNED BY` and then `DROP ROLE`. No tenant-deletion command exists yet. The tests, the e2e fixtures and `scripts/perf_import.py` call the helper.
-- **The owner needs CREATEROLE.** CI's `postgres` and Azure Flexible Server's administrator have it. An owner without it fails at the next tenant migration with a clear PostgreSQL error, and nothing is half-applied.
+- **The environment owner (`te_<env>_user`, PG_USER) now has CREATEROLE.**
+  - `build/te_core_schema.sql` (both copies) creates it with CREATEROLE, and adds it on a re-deploy. On PostgreSQL 16 and later, CREATEROLE only lets a role manage roles it created itself, so the owner cannot touch other environments' roles or make a superuser.
+  - An owner without CREATEROLE stops API start at the first tenant migration. The error names the role and the fix (`ALTER ROLE <owner> CREATEROLE`, run as a superuser or the server administrator), and nothing is half-applied.
+  - **Upgrade step for an existing environment:** re-run `build/deploy_all.sh <env>`, or run that one `ALTER ROLE`, before starting the new release. It is reversible (`NOCREATEROLE`). It changes a real database, so it is the owner's to run, not CI's.
+  - Found by CI's container install jobs, whose owner is `te_prod_user`, not a superuser.
 - **Two extra round trips per borrowed connection** (`SET ROLE` on borrow, `RESET ROLE` on return). Negligible next to the queries.
 - **The runtime role can still switch into any tenant of its own database.** That is inherent to (a): one API process serves all tenants. What changes is that it must name the tenant to do so. Code that forgets to switch reaches no tenant at all, and code that switches to tenant A cannot read tenant B.
 - PostgreSQL 16 or later is needed for `WITH INHERIT FALSE, SET TRUE`. That is already the supported minimum (README).
