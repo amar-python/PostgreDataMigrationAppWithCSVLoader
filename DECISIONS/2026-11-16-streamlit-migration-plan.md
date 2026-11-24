@@ -1,8 +1,8 @@
 # Decision: Plan for moving the frontend from React to Streamlit (#212)
 
-Status:  Proposed, for the owner to accept or change (nothing here is decided). Updated 19 Nov to match what has been built. The owner's questions below are still unanswered; steps 1 to 4 were built on their defaults, and every default is listed under "Defaults applied"
+Status:  Accepted by the owner on 24 Nov, except where the app runs in Azure and whether the `browser` job is a required check, which are still open. Steps 1 to 4 were built on the defaults, and the owner confirmed every one of them (see "Owner decisions")
 Date:    2026-11-16, updated 2026-11-19
-Review:  Before step 5 (packaging) starts. It is the next step that needs the owner: where the app runs in Azure, the bundle size, and the offline dry run (#60). The upload spike (step 4) is done and did not change the plan
+Review:  Before step 5 (packaging) starts. It still needs the owner's Azure answer and the offline dry run (#60); the bundle size is accepted. The upload spike (step 4) is done and did not change the plan
 
 ## Where it stands (19 Nov)
 
@@ -14,10 +14,10 @@ Review:  Before step 5 (packaging) starts. It is the next step that needs the ow
 | 3 Import history | #253 | Merged (#269) |
 | 4 Upload and imported files | #255 | Merged (#270, with this update) |
 | 5 Packaging | #256 | Not started. Waits for the #60 dry run and the owner's Azure answer |
-| 6 Cutover and deletion | #257 | Not started. Needs steps 1 to 5 and the accessibility decision |
+| 6 Cutover and deletion | #257 | Not started. Needs steps 1 to 5. The accessibility job already scans the Streamlit app too (#388), so the React scans can go with React |
 | Tests | #258 | Done as each screen landed: 364 unit tests (`AppTest` and plain functions) and 49 browser tests in four files. The browser tests run in CI in their own `browser` job (#273), not yet as a required check |
 
-The three screen PRs were stacked and merged in that order on 19 Nov (#267, #269, #270), as merge commits, once each had passed CI. The issues #252, #253 and #255 were closed on 19 Nov on the owner's instruction, each with its evidence in a comment. #253 and #255 were closed with their owner decisions (the audit-log screen and the changelog, the mapping templates) still on the defaults listed under "Defaults applied", unconfirmed; they can be reopened if the owner decides otherwise. #268 was one PR carrying all three screens; it was closed in favour of the stack, and its branch `claude/streamlit-migration-plan` is kept for reference only. Nothing in this plan is accepted until the owner says so.
+The three screen PRs were stacked and merged in that order on 19 Nov (#267, #269, #270), as merge commits, once each had passed CI. The issues #252, #253 and #255 were closed on 19 Nov on the owner's instruction, each with its evidence in a comment. #253 and #255 were closed with their owner decisions (the audit-log screen and the changelog, the mapping templates) on the plan's defaults, which the owner confirmed on 24 Nov (see "Owner decisions"). #268 was one PR carrying all three screens; it was closed in favour of the stack, and its branch `claude/streamlit-migration-plan` is kept for reference only. The owner accepted the plan on 24 Nov, apart from the two questions still open under "Owner decisions".
 
 ## Choice
 
@@ -95,7 +95,7 @@ Found while building steps 2 to 4.
 
 **4. The React history page now shows the server's audit events.** PR #261 (merged 18 Nov) added a "Server audit events" panel (BR-35), so only `GET /api/audit/log` and `/api/audit/verify` have no screen anywhere. The Streamlit Import history page has a matching "Server audit events" view for roles that may read the audit log (`GET /api/audit/events`: filters by actor, action, file and date, pages of 100, and the server's own CSV). It follows the React page, so it needs no separate decision; whether to also build the log and its verification is still open (decision 5).
 
-**5. What was dropped, on the plan's defaults** (each is the owner's call; see "Defaults applied"): saved mapping templates, the "App changelog", bulk selection and "Retry" on the history page (an import is retried from the upload screen), "Print / save as PDF", and the header-mapping and cancellation columns of the report (the server does not store them).
+**5. What was dropped, on the plan's defaults** (saved mapping templates and the "App changelog" were confirmed by the owner on 24 Nov, see "Owner decisions"; the rest were not asked about separately): saved mapping templates, the "App changelog", bulk selection and "Retry" on the history page (an import is retried from the upload screen), "Print / save as PDF", and the header-mapping and cancellation columns of the report (the server does not store them).
 
 **6. Text from a file or a person is a stranger's, and Streamlit reads more of it as Markdown than expected.** `st.table` renders a cell as Markdown (a file name `[x](https://...)` became a link in a browser test); widget labels, expander titles, buttons and spinners are Markdown too, and Streamlit uses a label as a box's `aria-label` exactly as written. Backslash-escaping is not enough: a bare `https://` still links. The rule now: every such text goes through `review_model.literal` (an inline code span), and the labels of per-column boxes are cut down to letters, digits and spaces (`column_label`). Each screen has tests for it. Any new screen must follow it.
 
@@ -103,32 +103,24 @@ Found while building steps 2 to 4.
 
 **8. Rules the upload work settled** (the API's behaviour, not a design choice): the same bytes are `duplicate_file` whatever the file is called; the same name with new bytes is the next version of the dataset (the `overwrite` flag is ignored since M5); a file that is not UTF-8 is refused with the reason, not decoded with replacement characters; two files with the same bytes under two names are two separate files on the screen (they used to share a widget key and crash it); the picker of imported files includes the table name, because versions share a file name.
 
-## Defaults applied
+## Owner decisions
 
-The owner has not answered the questions below, so the build used these. Each is cheap to change before step 6.
+The build used the defaults below before the owner had answered. On 24 Nov the owner confirmed every one of them, so the build needs no change.
 
-| Question | Default used | If the owner says otherwise |
+| Question | Decision | Confirmed |
 |---|---|---|
-| Whole-app or per-screen cutover | Whole app | Per screen means a second sign-in, and a plan for both apps side by side |
-| OIDC sign-in in the UI | Not built | `st.login()` and the `streamlit[auth]` extra (+6 MB of wheels) |
-| Saved mapping templates | Dropped | Session-only is small; server-side needs API work |
-| "App changelog" | Dropped (release notes do the job) | A static page |
-| Server audit events | Included on the history page, as React now has it | Remove the view |
-| The server's audit log and its verification | Not built | A new page on `GET /api/audit/log` and `/verify` |
-| Accessibility job | Open: it still scans React | Retire it, or point it at the Streamlit app |
-| Where it runs in Azure | Open | Needs a Terraform service |
-| About 116 MB more in the offline bundle | Assumed acceptable | Re-think packaging |
+| Whole-app or per-screen cutover | Whole app, with React kept for one release as the rollback | 24 Nov |
+| OIDC sign-in in the UI | Not built | 24 Nov |
+| Saved mapping templates | Dropped: renames apply to one upload | 24 Nov |
+| "App changelog" | Dropped: release notes do the job | 24 Nov |
+| Server audit events | Kept on the history page, as React has it | 24 Nov |
+| The server's audit log and its verification | No page (`GET /api/audit/log` and `/verify` stay API-only) | 24 Nov |
+| About 116 MB more in the offline bundle | Accepted | 24 Nov |
+| Accessibility job | Scans the Streamlit app as well as React (#388, merged 24 Nov), with no recorded Streamlit violations after the caption-contrast fix. The React scans go with React in step 6 | 24 Nov |
+| Where it runs in Azure | **Open** | |
+| `browser` job (#273), and the accessibility job, as required checks | **Open**: a branch-protection setting | |
 
-## What the owner decides
-
-1. Whole-app cutover (this plan) or per screen, accepting a second sign-in?
-2. Is OIDC sign-in in the UI wanted? (Not needed for parity.)
-3. Where should the Streamlit app run in Azure?
-4. Is about 116 MB more in the offline bundle (143 MB to roughly 260 MB) acceptable?
-5. Build a screen for the server's audit log and its verification (the events view exists; correction 4)? Drop the "App changelog" for release notes (done on the default)?
-6. What happens to saved mapping templates: drop (done on the default), session-only, or server-side (correction 3)?
-7. Replace or retire the accessibility job when React goes (correction 2 and 7)?
-8. Should the `browser` job (#273) be a required check? The browser tests now run in CI; whether a failure blocks a merge is a branch-protection setting, and the same question applies to the accessibility job (decision 7).
+Still for the owner: where the app runs in Azure (it needs a Terraform service, and blocks the Azure half of step 5), and whether the `browser` and accessibility jobs block a merge.
 
 ## Not verified
 
