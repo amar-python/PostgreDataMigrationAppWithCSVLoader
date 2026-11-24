@@ -49,7 +49,7 @@ redirected to sign-in or showed an error would otherwise scan clean and pass for
 reason. `test_signed_out_visitors_are_sent_to_sign_in` guards the redirect itself.
 
 Not covered: dark mode, mobile widths, keyboard-only flows (axe-core checks markup, not whether
-a task can be completed), and the Streamlit spike (#154).
+a task can be completed). The Streamlit app has its own scans: see "Streamlit scans" below.
 
 ## Known violations, and why the job passes today
 
@@ -83,3 +83,16 @@ default over the stored import history, and the second reads that back, so saved
 shown after a reload. Production builds do not double-run effects. `stub_api.seed_script`
 drops writes of `[]` to that key so the audit page can be scanned with rows in it; without that, the
 page was scanned empty and passed without checking a single row. Remove the guard when the hook is fixed.
+
+## Streamlit scans
+
+The `test_streamlit_*` tests scan `streamlit_app/`. The app runs in a real `streamlit run`
+and calls the API from its Python server, so the stub is served over local HTTP
+(`stub_api_url` in conftest.py) and the app is started with `API_URL` pointing at it. Each
+test signs in through the real form (any password except `stub_api.STREAMLIT_PASSWORD` is
+refused) and navigates with the sidebar. Their recorded violations are the `streamlit_*`
+scenarios in `known_violations.json`. Today they are all one thing: `st.caption` text is
+grey on white and below WCAG's 4.5:1 contrast ratio.
+
+`st.dataframe` draws on a canvas, so axe cannot see inside grids: those are scanned around,
+not within. Keyboard and screen-reader access to them needs a manual check.

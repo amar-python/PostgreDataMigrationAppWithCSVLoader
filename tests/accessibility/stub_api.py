@@ -26,6 +26,13 @@ FILES = [{
     "column_names": ["id", "name", "email"], "created_at": "2026-11-01T01:02:03Z",
 }]
 
+# What the Streamlit app signs in with (its roles are the API's: tenant_admin, not the React app's "admin").
+STREAMLIT_SESSION = {**SESSION, "role": "tenant_admin"}
+STREAMLIT_PASSWORD = "a11y-password"
+
+# One upload's detail (GET /api/csv/uploads/{id}): the row errors the history screen lists.
+UPLOAD_DETAIL = {"rowErrors": [{"rowNumber": 1, "column": "date", "value": "27 Oct 26", "reason": "not a timestamp"}]}
+
 TE_TABLES = [{"table": "organisations", "exists": True, "rowCount": 3},
              {"table": "programs", "exists": True, "rowCount": 2}]
 
@@ -94,6 +101,8 @@ def respond(path: str, responses: Responses) -> tuple[int, Any]:
         return (401, body) if path == "/api/auth/login" and not _is_session(body) else (200, body)
     if path.startswith("/api/csv/uploads/") and path.endswith("/rows"):
         return 200, REVIEW_PAGE
+    if path.startswith("/api/csv/uploads/") and path.count("/") == 4:
+        return 200, UPLOAD_DETAIL
     return 404, {"detail": f"a11y stub has no response for {path}"}
 
 
