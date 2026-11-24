@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# smoke_test.sh [API_URL] [FRONTEND_URL]: prove the installed stack works.
+# smoke_test.sh [API_URL] [FRONTEND_URL] [STREAMLIT_URL]: prove the installed stack works.
 # SMOKE_TENANT/SMOKE_USER/SMOKE_PASSWORD (the installer's first tenant admin) are needed for the
 # sign-in, upload and listing checks: every data call signs in, the shared X-API-Key was retired (#298).
 # Without them those checks cannot run, and that is a FAIL, not a skip (the repository rule).
 # Prints PASS/FAIL per check and exits non-zero on any failure.
 set -uo pipefail
-API="${1:-http://localhost:8000}"; FE="${2:-http://localhost:3000}"
+API="${1:-http://localhost:8000}"; FE="${2:-http://localhost:3000}"; ST="${3:-http://localhost:8501}"
 fail=0
 pass() { echo "PASS  $1"; }
 nope() { echo "FAIL  $1"; fail=1; }
 # Services may still be starting: wait up to 30 s for each.
 for _ in $(seq 1 30); do curl -sf "$API/api/health" >/dev/null && break; sleep 1; done
 for _ in $(seq 1 30); do curl -sf -o /dev/null "$FE/" && break; sleep 1; done
+for _ in $(seq 1 30); do curl -sf -o /dev/null "$ST/_stcore/health" && break; sleep 1; done
 
 curl -sf "$API/api/health" >/dev/null && pass "API health" || nope "API health"
 
@@ -39,4 +40,6 @@ else
 fi
 
 curl -sf "$FE/" | grep -qi '<html' && pass "frontend serves the app" || nope "frontend serves the app"
+# Streamlit's own health endpoint answers "ok" once the server is up (#256).
+[ "$(curl -sf "$ST/_stcore/health")" = ok ] && pass "Streamlit app health" || nope "Streamlit app health"
 exit $fail

@@ -11,7 +11,7 @@ output "acr_login_server" {
 }
 
 output "acr_name" {
-  value       = azurerm_container_registry.acr.name
+  value = azurerm_container_registry.acr.name
 }
 
 output "pg_fqdn" {
@@ -25,19 +25,19 @@ output "pg_admin_login" {
 }
 
 output "pg_database_name" {
-  value       = azurerm_postgresql_flexible_server_database.te_prod.name
+  value = azurerm_postgresql_flexible_server_database.te_prod.name
 }
 
 output "key_vault_name" {
-  value       = azurerm_key_vault.kv.name
+  value = azurerm_key_vault.kv.name
 }
 
 output "key_vault_uri" {
-  value       = azurerm_key_vault.kv.vault_uri
+  value = azurerm_key_vault.kv.vault_uri
 }
 
 output "container_apps_environment_name" {
-  value       = azurerm_container_app_environment.env.name
+  value = azurerm_container_app_environment.env.name
 }
 
 output "container_apps_job_name" {
@@ -46,11 +46,11 @@ output "container_apps_job_name" {
 }
 
 output "runner_identity_id" {
-  value       = azurerm_user_assigned_identity.runner.id
+  value = azurerm_user_assigned_identity.runner.id
 }
 
 output "runner_identity_client_id" {
-  value       = azurerm_user_assigned_identity.runner.client_id
+  value = azurerm_user_assigned_identity.runner.client_id
 }
 
 output "vnet_id" {
@@ -59,5 +59,23 @@ output "vnet_id" {
 }
 
 output "log_analytics_workspace_name" {
-  value       = azurerm_log_analytics_workspace.logs.name
+  value = azurerm_log_analytics_workspace.logs.name
+}
+
+output "api_internal_url" {
+  value       = local.api_internal_url
+  description = "The API's address inside the Container Apps environment (#256). Not reachable from the VNet; the Streamlit app calls it. Empty when web_apps_enabled is false."
+}
+
+output "streamlit_url" {
+  value       = var.web_apps_enabled ? "https://${azurerm_container_app.streamlit[0].ingress[0].fqdn}" : ""
+  description = "Where people open the Streamlit app, from the private network only (#256). It resolves through the environment's private DNS; see docs/PROD_DEPLOY.md."
+}
+
+output "api_app_name" {
+  value = var.web_apps_enabled ? azurerm_container_app.api[0].name : ""
+}
+
+output "streamlit_app_name" {
+  value = var.web_apps_enabled ? azurerm_container_app.streamlit[0].name : ""
 }
