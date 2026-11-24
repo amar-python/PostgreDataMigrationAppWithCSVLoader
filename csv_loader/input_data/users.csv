@@ -1,0 +1,11 @@
+id,email,full_name,signup_date,country,lifetime_value
+1,alice@example.com,Alice Example,2024-01-05,US,1250.50
+2,bob@example.co.uk,Bob Example,2024-01-12,GB,310.00
+3,carol@example.org,Carol Example,2024-02-03,AU,0.00
+4,dan@example.net,Dan Example,2024-02-20,CA,87.25
+5,erin@example.com,Erin Example,2024-03-01,NZ,4200.10
+6,frank@example.com,Frank Example,2024-03-15,US,15.99
+7,grace@example.co.uk,Grace Example,2024-04-02,GB,640.00
+8,heidi@example.org,Heidi Example,2024-04-18,DE,99.50
+9,ivan@example.net,Ivan Example,2024-05-09,FR,2750.75
+10,judy@example.com,Judy Example,2024-05-30,,

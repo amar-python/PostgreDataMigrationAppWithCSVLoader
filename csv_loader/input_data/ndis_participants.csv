@@ -1,0 +1,6 @@
+participant_id,first_name,last_name,plan_status,primary_disability,support_budget_core,support_budget_capacity,support_budget_capital,plan_start_date,plan_end_date,lga_code,state,created_at
+1,Amelia,Sample,Active,Sample category A,10000.00,2000.00,500.00,2024-01-01,2024-12-31,10000,NSW,2024-01-01 09:00:00
+2,Noah,Sample,Active,Sample category B,8000.00,1500.00,0.00,2024-02-01,2025-01-31,20000,VIC,2024-02-01 09:00:00
+3,Olivia,Sample,Pending,Sample category C,12000.00,2500.00,1000.00,2024-03-01,2025-02-28,30000,QLD,2024-03-01 09:00:00
+4,Liam,Sample,Expired,Sample category A,5000.00,1000.00,0.00,2022-01-01,2023-01-01,40000,SA,2022-01-01 09:00:00
+5,Charlotte,Sample,Active,Sample category B,9500.00,1800.00,250.00,2024-05-01,2025-04-30,50000,WA,2024-05-01 09:00:00

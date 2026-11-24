@@ -1,0 +1,4 @@
+id,email,full_name,signup_date,country,lifetime_value
+1,a@example.com,A,2024-01-01,US,1.00
+2,b@example.com,B,2024-01-02,GB,2.00,EXTRA,FIELDS
+3,c@example.com,C,2024-01-03,AU,3.00
