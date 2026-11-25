@@ -11,9 +11,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# Same Debian security update as the API image (#326): zlib1g. Does nothing once the base image carries the fix.
+# Same Debian security update as the API image (#326): zlib1g and libzstd1. Does nothing once the base image carries the fix.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends --only-upgrade zlib1g \
+ && apt-get install -y --no-install-recommends --only-upgrade zlib1g libzstd1 \
  && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --system --uid 10001 --create-home --home-dir /home/app app

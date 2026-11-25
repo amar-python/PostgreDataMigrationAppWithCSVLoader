@@ -90,8 +90,9 @@ def test_nothing_in_the_container_start_up_needs_npm():
 
 
 @pytest.mark.parametrize("image, packages", [
-    ("api.Dockerfile", ["zlib1g"]),
-    ("db.Dockerfile", ["zlib1g", "libgssapi-krb5-2", "libkrb5-3", "libk5crypto3", "libkrb5support0"]),
+    ("api.Dockerfile", ["zlib1g", "libzstd1"]),
+    ("streamlit.Dockerfile", ["zlib1g", "libzstd1"]),
+    ("db.Dockerfile", ["zlib1g", "libzstd1", "zstd", "libgssapi-krb5-2", "libkrb5-3", "libk5crypto3", "libkrb5support0"]),
 ])
 def test_the_debian_packages_the_scan_flagged_are_upgraded(image, packages):
     items = joined(dockerfile(image))
