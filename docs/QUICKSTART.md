@@ -329,7 +329,7 @@ npm test
 # Tier P — 23 CSV validator scenarios (no DB needed, ~5 seconds)
 python evals\runner.py --tiers p
 
-# All tiers — P + I (idempotency) + S (142 SQL assertions)
+# All tiers — P + I (idempotency) + S (159 SQL assertions)
 python evals\runner.py --tiers p,i,s
 ```
 
@@ -424,6 +424,6 @@ PostgreDataMigrationAppWithCSVLoader/
 - `docs/ENV_VARIABLES.md` — full list of every environment variable
 - `docs/API_INTEGRATION.md` — API design notes: auth model, known gaps, migrations
   (route list: `http://localhost:8000/docs` with the API running)
-- `docs/VCRM.md` — business requirement traceability (142 SQL assertions)
+- `docs/VCRM.md` — business requirement traceability (159 SQL assertions)
 - `docs/ARCHITECTURE.md` — three-layer architecture rationale
 - `evals/USAGE.md` — eval runner flags and CI integration

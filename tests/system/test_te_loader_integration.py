@@ -1,7 +1,7 @@
 """Integration tests for mode=te upload — issue #16.
 
 These are the highest-risk untested paths in the API: upload_te() writes
-directly into the 12 fixed T&E tables that the 142 SQL assertions validate.
+directly into the 12 fixed T&E tables that the 159 SQL assertions validate.
 A defect here could silently corrupt the schema the entire test suite depends on.
 
 All tests target the ``organisations`` table because it has no foreign-key
