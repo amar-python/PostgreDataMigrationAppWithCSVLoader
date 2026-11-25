@@ -1,0 +1,7 @@
+# Commits that only reformat code, so `git blame` shows who last changed what a line does (#324).
+# GitHub's blame view reads this file. For `git blame` locally, once per clone:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# Add a commit here only when it changes nothing but formatting.
+
+# ruff format and import order over the tree, except csv_loader/
+20cd32e8e8a203e9db27091cd74f861c5509e994
