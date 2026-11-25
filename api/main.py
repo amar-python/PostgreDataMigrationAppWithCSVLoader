@@ -91,7 +91,7 @@ async def lifespan(app: FastAPI):
             "API_KEY is set but no longer used: the shared X-API-Key was retired (#298). "
             "Scripts sign in with POST /api/auth/login and send Authorization: Bearer <token>."
         )
-    if not settings.PG_PASSWORD:
+    if not settings.PG_PASSWORD.get_secret_value():
         logger.warning(
             "PGPASSWORD is not set - connecting with an empty password. "
             "Fine for local dev; set PGPASSWORD before deploying anywhere else."

@@ -93,7 +93,7 @@ def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
                 host=settings.PG_HOST,
                 port=settings.PG_PORT,
                 user=user,
-                password=settings.APP_DB_PASSWORD if settings.APP_DB_USER else settings.PG_PASSWORD,
+                password=(settings.APP_DB_PASSWORD if settings.APP_DB_USER else settings.PG_PASSWORD).get_secret_value(),
                 dbname=settings.PG_DATABASE,
             )
             if attempt > 1:
@@ -199,6 +199,8 @@ class Conn:
         return self._conn
 
     def __exit__(self, exc_type, exc, tb):
+        # __enter__ refused to borrow without a pool, so there is one to return the connection to.
+        assert _pool is not None  # nosec B101 — narrows the type for mypy; not a runtime check
         conn, close = self._conn, False
         try:
             # Rolling back first discards what the caller left uncommitted (putconn would anyway) and means the
@@ -314,7 +316,7 @@ def owner_connect():
     Closed on exit; the caller commits."""
     try:
         conn = psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                                password=settings.PG_PASSWORD, dbname=settings.PG_DATABASE)
+                                password=settings.PG_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
     except psycopg2.OperationalError as exc:
         raise _connect_error(exc, settings.PG_USER, "PGUSER / PGPASSWORD", permanent=_is_permanent(exc)) from exc
     try:

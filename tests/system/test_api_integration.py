@@ -502,7 +502,7 @@ class PoolTimeout(unittest.TestCase):
             db._pool = psycopg2.pool.ThreadedConnectionPool(
                 minconn=1, maxconn=2,
                 host=db.settings.PG_HOST, port=db.settings.PG_PORT,
-                user=db.settings.PG_USER, password=db.settings.PG_PASSWORD,
+                user=db.settings.PG_USER, password=db.settings.PG_PASSWORD.get_secret_value(),
                 dbname=db.settings.PG_DATABASE,
             )
         except Exception as exc:  # noqa: BLE001

@@ -18,10 +18,12 @@ build scripts, and provisioning scripts.
 | Variable | Default | Required in prod | Description |
 |---|---|---|---|
 | `PGHOST` | `localhost` | Yes | PostgreSQL host |
-| `PGPORT` | `5433` (API) / `5432` (build scripts) | Yes | PostgreSQL port — note the all components default to **5432** |
+| `PGPORT` | `5432` | Yes | PostgreSQL port, 1 to 65535. The API and the build scripts use the same default. |
 | `PGUSER` | `postgres` | Yes | PostgreSQL superuser for provisioning; app user for normal operation |
 | `PGPASSWORD` | _(empty)_ | Yes | PostgreSQL password — never commit a real value |
 | `PGDATABASE` | `te_mgmt_dev` | Yes | Target database — switch per environment (see section 3) |
+| `APP_DB_USER` | _(empty)_ | Recommended | The runtime role the API's request pool connects as (M3d, #107); it may only read and insert in the append-only tables. `PGUSER` stays the owner, used at start-up for migrations and grants. Empty: the pool connects as `PGUSER`. `scripts/create_app_role.py` creates the role and writes both variables to an env file only you can read. |
+| `APP_DB_PASSWORD` | _(empty)_ | With `APP_DB_USER` | Password of `APP_DB_USER`. Never printed by the API (#331). |
 
 ---
 
@@ -30,10 +32,17 @@ build scripts, and provisioning scripts.
 Read by `api/config.py`. Set these in the shell before running
 `scripts/start-api.ps1` or in the Azure Container App environment.
 
+The API checks every value when it starts (#331). A value of the wrong type or out of range (a port that is not a
+number, a negative session length, an unknown `API_ENV`, an on/off variable that is not one of `1`/`true`/`yes` or
+`0`/`false`/`no`/empty) stops it with one message that names each bad variable, its value and what was expected.
+Password values are never shown. `tests/unit/test_config.py` keeps this page's variables and defaults in step with
+the code.
+
 | Variable | Default | Required in prod | Description |
 |---|---|---|---|
 | `API_ALLOW_ANONYMOUS` | _(empty)_ | **Must not be set** | `1` lets data endpoints answer without a signed-in session: no tenant, no role checks, audited as `anonymous`. Honoured only with `API_ENV=dev`; with any other `API_ENV` the API refuses to start. Local development and tests only (#298). |
 | `API_KEY` | — | No | **Retired (#298).** No longer read; every data request signs in. If it is still set, the API logs a warning at start-up (and nothing of its value). Remove it from old installs' environment files. |
+| `API_ENV` | `dev` | Yes | Which deployment this process is: `dev`, `test`, `staging` or `prod` (anything else stops start-up). Only `dev` serves the interactive API docs and the detailed health body, may use the bootstrap fallback, and may allow anonymous access (`API_ALLOW_ANONYMOUS`). Every other value fails closed. `scripts/dev-env.ps1` sets it to the environment you load. |
 | `API_ALLOW_DESTRUCTIVE` | `false` | No | Set to `true` to enable `DELETE /api/csv/files/{id}`. Deliberately opt-in — never leave enabled in shared or prod environments. |
 | `DATA_CLASSIFICATION` | `OFFICIAL: Sensitive` | No | Marked on every API response in `X-Data-Classification` (decision 7). One of `UNOFFICIAL`, `OFFICIAL`, `OFFICIAL: Sensitive`. `PROTECTED` is refused at startup: it needs IRAP-assessed hosting (#49). See `docs/SOVEREIGNTY.md`. |
 | `AUDIT_RETENTION_YEARS` | `7` | No | Minimum years to keep audit rows (decision 7; confirm against the client's records authority). Nothing in the app deletes them; this binds any operator purge. At least 1. |

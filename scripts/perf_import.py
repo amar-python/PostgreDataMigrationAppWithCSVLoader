@@ -188,7 +188,7 @@ def preflight() -> None:
 
     try:
         psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                         password=settings.PG_PASSWORD, dbname=settings.PG_DATABASE, connect_timeout=5).close()
+                         password=settings.PG_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE, connect_timeout=5).close()
     except psycopg2.OperationalError as exc:
         sys.exit(f"Cannot connect to PostgreSQL as '{settings.PG_USER}' at {settings.PG_HOST}:{settings.PG_PORT}, "
                  f"database '{settings.PG_DATABASE}':\n  {str(exc).strip()}\n"

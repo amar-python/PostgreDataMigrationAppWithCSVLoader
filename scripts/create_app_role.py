@@ -35,6 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from psycopg2 import sql  # noqa: E402
+from pydantic import SecretStr  # noqa: E402
 
 from api import db  # noqa: E402
 from api.config import settings  # noqa: E402
@@ -107,7 +108,7 @@ def main() -> int:
         cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (LEGACY_ROLE,))
         legacy_role_present = cur.fetchone() is not None and role_name != LEGACY_ROLE
 
-    settings.APP_DB_USER, settings.APP_DB_PASSWORD = role_name, password
+    settings.APP_DB_USER, settings.APP_DB_PASSWORD = role_name, SecretStr(password)
     db.bootstrap()   # migrations, then grants on every schema, tenants included
 
     env_file.parent.mkdir(parents=True, exist_ok=True)
