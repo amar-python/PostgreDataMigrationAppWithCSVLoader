@@ -13,7 +13,7 @@ Last updated: 2026-11-24 (`main` at `948ba44`, merge of PR #403). Rewritten on t
 ## Current state (24 Nov 2026)
 
 - **Branch protection: applied on `main`** (24 Nov, by the owner). Five required checks, each bound to GitHub Actions: `python-validator-tests`, `free-tier (unit, lint, health, evals-p)`, `integration (postgres service)`, `browser (Playwright, e2e/)`, `accessibility (Playwright + axe-core, WCAG 2.1 AA)`. Branch must be up to date (`strict`), admins included (`enforce_admins`), pull request required with 0 approvals, no force-push or deletion. Record and read-back: `DECISIONS/2026-11-02-main-branch-protection.md`, "Applied, 24 Nov 2026". `GET /branches/main` reports `protected: true`. #301 (OIT-016) closed 24 Nov. From 2 Nov to 24 Nov it was decided but not applied; this file said otherwise until 18 Nov.
-- **Frontend: the Streamlit app is on `main`** (`streamlit_app/`): app shell, review screen, import history and upload screens (migration steps 1 to 4, #251 to #255, merged 19 Nov). The React app (`csv-table-hub-main/`) is still the default until cutover. Steps 5 (packaging, #256) and 6 (cutover and deletion, #257) are not started; step 5 waits for the offline dry run.
+- **Frontend: the Streamlit app is on `main`** (`streamlit_app/`): app shell, review screen, import history and upload screens (migration steps 1 to 4, #251 to #255, merged 19 Nov). The React app (`csv-table-hub-main/`) is still the default until cutover. Step 5 (packaging, #256): the repository side merged on 24 Nov (PR #411: the offline bundle and the Azure Container Apps for the API and Streamlit); #256 stays open until the owner's clean-VM dry run (#60) passes. Step 6 (cutover and deletion, #257) is not started.
 - **Streamlit migration decisions: all answered by the owner on 24 Nov** (`DECISIONS/2026-11-16-streamlit-migration-plan.md`, "Owner decisions"): whole-app cutover with React kept one release as rollback; no OIDC in the UI; saved mapping templates and the "App changelog" dropped; server audit events kept; no page for the audit log and its verification; about 116 MB more in the offline bundle accepted; the accessibility job scans Streamlit as well as React (#388); Azure host is Container Apps on the private network only (#394); `browser` and accessibility jobs required.
 - **Tenant isolation at the database:** one PostgreSQL role per tenant, `SET ROLE` per request (#297, OIT-012, merged in PR #400, closed 24 Nov; `DECISIONS/2026-11-24-per-tenant-db-roles.md`).
 - **Shared API key retired:** every data request needs a session (#298, OIT-013, merged in PR #401, closed 24 Nov). Follow-up PR #403 (container smoke test fails, not skips, without admin credentials) merged 24 Nov.
@@ -24,7 +24,7 @@ Last updated: 2026-11-24 (`main` at `948ba44`, merge of PR #403). Rewritten on t
 ## Open items (snapshot — the tracker is master)
 
 ### Streamlit migration
-- #256 Package the Streamlit app for the offline bundle and Azure (step 5)
+- #256 Package the Streamlit app for the offline bundle and Azure (step 5): code merged in #411; waits on the clean-VM dry run (#60)
 - #257 Switch the default frontend to Streamlit and retire React (step 6)
 
 ### Verification and T&E audit follow-ups
