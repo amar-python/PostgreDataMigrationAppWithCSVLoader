@@ -431,62 +431,11 @@ def import_upload(upload_id: int, key: str, session: dict | None) -> dict:
             columns, col_types, valid = plan["columns"], plan["types"], plan["valid"]
             counts = _reconciliation(plan["rowsIn"], plan["excluded"], plan["edited"], plan["duplicate"], len(valid))
 
-            # Same per-dataset lock as the loader, so versions are never handed out twice (M5).
-            dataset = dataset_slug(st["fileName"])
-            cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"{schema}.{dataset}",))
-            cur.execute(sql.SQL("SELECT id, file_name, table_name, version FROM {}.csv_files WHERE dataset = %s "
-                                "ORDER BY version DESC").format(_s()), (dataset,))
-            priors = cur.fetchall()
-            version = priors[0][3] + 1 if priors else 1
-            table_name = f"csv_{dataset}_v{version}"
-            schema_check = _schema_diff(cur, schema, priors[0][2], columns, col_types) if priors else None
-
-            try:
-                cur.execute(sql.SQL(
-                    "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names, "
-                    "total_rows, duplicate_rows_skipped, failed_rows, types_provenance, dataset, version) "
-                    "VALUES (%s, %s, %s, 'dynamic', %s, %s, %s, %s, 0, %s, %s, %s) RETURNING id").format(_s()),
-                    (st["fileName"], st["sha256"], table_name, len(valid), columns, counts["rowsIn"],
-                     counts["duplicate"], st["typesProvenance"] or "inferred_unconfirmed", dataset, version))
-            except psycopg2.errors.UniqueViolation:
-                conn.rollback()  # the same bytes were imported meanwhile (exact-file dedup, BR-28)
-                raise WorkflowError(409, "These exact file contents were already imported", state="duplicate_file") from None
-            file_id = cur.fetchone()[0]
-            cur.execute(sql.SQL(
-                "INSERT INTO {}.imports (upload_id, approval_id, idempotency_key, rows_in, rows_excluded, "
-                "rows_edited, rows_duplicate, rows_imported, csv_file_id, table_name, importer) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id").format(_s()),
-                (upload_id, int(approval["id"]), key, counts["rowsIn"], counts["excluded"], counts["edited"],
-                 counts["duplicate"], len(valid), file_id, table_name, current_actor()))
-            import_id = cur.fetchone()[0]
+            dataset, version, table_name, schema_check = _next_version(cur, schema, st["fileName"], columns, col_types)
+            file_id, import_id = _register_import(conn, cur, upload_id, key, st, int(approval["id"]), table_name,
+                                                  columns, len(valid), counts, dataset, version)
             _checkpoint("registered")
-
-            target, staging = sql.Identifier(schema, table_name), sql.Identifier(f"_stg_{import_id}")
-            col_defs = sql.SQL(", ").join(sql.SQL("{} {}").format(sql.Identifier(c), sql.SQL(_TYPE_SQL[t]))
-                                          for c, t in zip(columns, col_types))
-            cols = sql.SQL(", ").join(sql.Identifier(c) for c in columns)
-            # Plain CREATE: a name clash must fail the import, not append to another table.
-            cur.execute(sql.SQL("CREATE TABLE {} (_id BIGSERIAL PRIMARY KEY, {}, _row_hash TEXT NOT NULL UNIQUE, "
-                                "_created_at TIMESTAMPTZ NOT NULL DEFAULT now(), "
-                                "_source_row_id INTEGER NOT NULL, _import_id BIGINT NOT NULL)")
-                        .format(target, col_defs))
-            cur.execute(sql.SQL("CREATE TEMP TABLE {} (_source_row_id INTEGER, {}, _row_hash TEXT) ON COMMIT DROP")
-                        .format(staging, col_defs))
-            try:
-                cur.copy_expert(
-                    sql.SQL("COPY {} (_source_row_id, {}, _row_hash) FROM STDIN WITH (FORMAT csv, NULL '\\N')")
-                    .format(staging, cols).as_string(cur),
-                    _copy_data([(n, *values, h) for n, values, h in valid]))
-                _checkpoint("staged")
-                cur.execute(sql.SQL("INSERT INTO {t} ({c}, _row_hash, _source_row_id, _import_id) "
-                                    "SELECT {c}, _row_hash, _source_row_id, %s FROM {s} ORDER BY _source_row_id")
-                            .format(t=target, c=cols, s=staging), (import_id,))
-            except psycopg2.errors.DataError as exc:
-                conn.rollback()
-                raise WorkflowError(422, "The database rejected the data: " + str(exc).splitlines()[0]) from None
-            if cur.rowcount != len(valid):
-                raise RuntimeError(f"Import {import_id} promoted {cur.rowcount} rows; expected {len(valid)}")
-            _checkpoint("promoted")
+            _create_and_fill(conn, cur, schema, table_name, import_id, columns, col_types, valid)
             write_audit(cur, "import", file_id, st["fileName"], table_name, "dynamic",
                         before={"upload": upload_id, "state": "approved"},
                         after={"upload": upload_id, "import": import_id, "approval": int(approval["id"]),
@@ -495,3 +444,72 @@ def import_upload(upload_id: int, key: str, session: dict | None) -> dict:
     return {"status": "ok", "replayed": False, "importId": str(import_id), "fileId": str(file_id),
             "tableName": table_name, "dataset": dataset, "version": version, "reconciliation": counts,
             "schemaCheck": schema_check}
+
+
+def _next_version(cur, schema: str, file_name: str, columns: list[str],
+                  col_types: list[str]) -> tuple[str, int, str, dict | None]:
+    """The dataset, the version this import becomes, its table name, and how it compares with the previous one."""
+    # Same per-dataset lock as the loader, so versions are never handed out twice (M5).
+    dataset = dataset_slug(file_name)
+    cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"{schema}.{dataset}",))
+    cur.execute(sql.SQL("SELECT id, file_name, table_name, version FROM {}.csv_files WHERE dataset = %s "
+                        "ORDER BY version DESC").format(_s()), (dataset,))
+    priors = cur.fetchall()
+    version = priors[0][3] + 1 if priors else 1
+    table_name = f"csv_{dataset}_v{version}"
+    schema_check = _schema_diff(cur, schema, priors[0][2], columns, col_types) if priors else None
+    return dataset, version, table_name, schema_check
+
+
+def _register_import(conn, cur, upload_id: int, key: str, st: dict, approval_id: int, table_name: str,
+                     columns: list[str], imported: int, counts: dict, dataset: str, version: int) -> tuple[int, int]:
+    """The csv_files row and the imports record. Returns their ids. Refuses bytes that were imported meanwhile."""
+    try:
+        cur.execute(sql.SQL(
+            "INSERT INTO {}.csv_files (file_name, file_hash, table_name, mode, row_count, column_names, "
+            "total_rows, duplicate_rows_skipped, failed_rows, types_provenance, dataset, version) "
+            "VALUES (%s, %s, %s, 'dynamic', %s, %s, %s, %s, 0, %s, %s, %s) RETURNING id").format(_s()),
+            (st["fileName"], st["sha256"], table_name, imported, columns, counts["rowsIn"],
+             counts["duplicate"], st["typesProvenance"] or "inferred_unconfirmed", dataset, version))
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()  # the same bytes were imported meanwhile (exact-file dedup, BR-28)
+        raise WorkflowError(409, "These exact file contents were already imported", state="duplicate_file") from None
+    file_id = cur.fetchone()[0]
+    cur.execute(sql.SQL(
+        "INSERT INTO {}.imports (upload_id, approval_id, idempotency_key, rows_in, rows_excluded, "
+        "rows_edited, rows_duplicate, rows_imported, csv_file_id, table_name, importer) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id").format(_s()),
+        (upload_id, approval_id, key, counts["rowsIn"], counts["excluded"], counts["edited"],
+         counts["duplicate"], imported, file_id, table_name, current_actor()))
+    return file_id, cur.fetchone()[0]
+
+
+def _create_and_fill(conn, cur, schema: str, table_name: str, import_id: int, columns: list[str],
+                     col_types: list[str], valid: list) -> None:
+    """Create the dataset's table and fill it through a temporary staging table, checking every row arrived."""
+    target, staging = sql.Identifier(schema, table_name), sql.Identifier(f"_stg_{import_id}")
+    col_defs = sql.SQL(", ").join(sql.SQL("{} {}").format(sql.Identifier(c), sql.SQL(_TYPE_SQL[t]))
+                                  for c, t in zip(columns, col_types))
+    cols = sql.SQL(", ").join(sql.Identifier(c) for c in columns)
+    # Plain CREATE: a name clash must fail the import, not append to another table.
+    cur.execute(sql.SQL("CREATE TABLE {} (_id BIGSERIAL PRIMARY KEY, {}, _row_hash TEXT NOT NULL UNIQUE, "
+                        "_created_at TIMESTAMPTZ NOT NULL DEFAULT now(), "
+                        "_source_row_id INTEGER NOT NULL, _import_id BIGINT NOT NULL)")
+                .format(target, col_defs))
+    cur.execute(sql.SQL("CREATE TEMP TABLE {} (_source_row_id INTEGER, {}, _row_hash TEXT) ON COMMIT DROP")
+                .format(staging, col_defs))
+    try:
+        cur.copy_expert(
+            sql.SQL("COPY {} (_source_row_id, {}, _row_hash) FROM STDIN WITH (FORMAT csv, NULL '\\N')")
+            .format(staging, cols).as_string(cur),
+            _copy_data([(n, *values, h) for n, values, h in valid]))
+        _checkpoint("staged")
+        cur.execute(sql.SQL("INSERT INTO {t} ({c}, _row_hash, _source_row_id, _import_id) "
+                            "SELECT {c}, _row_hash, _source_row_id, %s FROM {s} ORDER BY _source_row_id")
+                    .format(t=target, c=cols, s=staging), (import_id,))
+    except psycopg2.errors.DataError as exc:
+        conn.rollback()
+        raise WorkflowError(422, "The database rejected the data: " + str(exc).splitlines()[0]) from None
+    if cur.rowcount != len(valid):
+        raise RuntimeError(f"Import {import_id} promoted {cur.rowcount} rows; expected {len(valid)}")
+    _checkpoint("promoted")
