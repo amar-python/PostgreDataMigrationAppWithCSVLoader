@@ -22,7 +22,9 @@ import psycopg2
 import yaml
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = Path.home()
+# The tool's own folder: config.yaml, src/ and input_data/ live here. (It used to be the home folder, which only worked
+# when the project was copied there; see #347.)
+REPO_ROOT = SCRIPT_DIR
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.config import load_db_config  # noqa: E402
@@ -226,6 +228,15 @@ def generate_schema_sql(table_name: str, columns: list[dict], primary_key: str) 
 # ---------------------------------------------------------------------------
 
 
+def config_relative(path: Path) -> str:
+    """The path as config.yaml holds it: relative to the folder config.yaml is in, with a leading ``./``.
+
+    ``load_jobs`` resolves relative paths against that folder, so a job written with this string is found again.
+    A path outside that folder raises ValueError: auto_migrate copies such files into input_data/ first.
+    """
+    return "./" + Path(path).resolve().relative_to(CONFIG_PATH.parent.resolve()).as_posix()
+
+
 def job_exists_in_config(job_name: str) -> bool:
     with CONFIG_PATH.open("r", encoding="utf-8") as f:
         config = yaml.safe_load(f) or {"jobs": []}
@@ -384,8 +395,8 @@ def auto_migrate(csv_path: str | Path, dry_run: bool = False) -> int:
         print(f"  Job '{job_name}' already exists in config.yaml — skipping config update.")
         print("  (The existing job definition will be used for migration.)")
     else:
-        csv_rel = f"./OneDrive/Desktop/Migration using ai/input_data/{csv_path.name}"
-        schema_rel = f"./OneDrive/Desktop/Migration using ai/input_data/{schema_path.name}"
+        csv_rel = config_relative(csv_path)
+        schema_rel = config_relative(schema_path)
         append_job_to_config(job_name, csv_rel, schema_rel, columns, pk_col["db_column"],
                              has_header=has_header)
         print(f"  Job '{job_name}' added to config.yaml.")

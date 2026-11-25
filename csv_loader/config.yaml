@@ -3,9 +3,9 @@
 
 jobs:
   - name: users
-    source_csv: ./OneDrive/Desktop/Migration using ai/input_data/users.csv
+    source_csv: ./input_data/users.csv
     target_table: users
-    schema_file: ./OneDrive/Desktop/Migration using ai/input_data/users_schema.sql
+    schema_file: ./input_data/users_schema.sql
 
     # CSV parsing options
     delimiter: ","
@@ -61,9 +61,9 @@ jobs:
       min_rows: 1                  # Fail when CSV is empty (header only)
 
   - name: ndis_participants
-    source_csv: ./OneDrive/Desktop/Migration using ai/input_data/ndis_participants.csv
+    source_csv: ./input_data/ndis_participants.csv
     target_table: ndis_participants
-    schema_file: ./OneDrive/Desktop/Migration using ai/input_data/ndis_participants_schema.sql
+    schema_file: ./input_data/ndis_participants_schema.sql
 
     delimiter: ","
     encoding: "utf-8"
@@ -143,9 +143,9 @@ jobs:
       min_rows: 1
 
   - name: test_csv_01
-    source_csv: ./OneDrive/Desktop/Migration using ai/input_data/test_csv_01.csv
+    source_csv: ./input_data/test_csv_01.csv
     target_table: test_csv_01
-    schema_file: ./OneDrive/Desktop/Migration using ai/input_data/test_csv_01_schema.sql
+    schema_file: ./input_data/test_csv_01_schema.sql
     delimiter: ","
     encoding: "utf-8"
     has_header: false
