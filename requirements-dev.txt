@@ -20,7 +20,7 @@ openpyxl>=3.1,<4
 # #323: static type check (`make typecheck`, configured in pyproject.toml). types-psycopg2 is typeshed's stubs for
 # psycopg2, which ships none; without them every psycopg2 call would go unchecked.
 mypy>=2.3.1
-types-psycopg2>=2.9.21
+types-psycopg2>=2.9.21.20261122
 
 # #324: local hooks before each commit (.pre-commit-config.yaml). Run `pre-commit install` once per clone.
 pre-commit>=4.7.0
