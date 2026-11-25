@@ -53,7 +53,7 @@ def _read(method: str, path: str, **kwargs):
 
 
 def render() -> None:
-    s = auth.session()
+    s = auth.current()
     st.title("Review")
     flash = st.session_state.pop(FLASH, None)
     if flash:

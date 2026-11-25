@@ -262,7 +262,7 @@ def submit(cur, upload_id: int, note: str | None) -> dict:
     write_audit(cur, "submit", None, st["fileName"], None, "dynamic",
                 before={"upload": upload_id, "state": st["state"]},
                 after={"upload": upload_id, "submission": sub_id, "note": (note or "").strip() or None})
-    return state_of(cur, upload_id)
+    return _require(cur, upload_id)
 
 
 def _self_approval_allowed(session: dict) -> bool:
@@ -310,7 +310,7 @@ def decide_approval(cur, upload_id: int, decision: str, reason: str | None, sess
                 before={"upload": upload_id, "state": "submitted"},
                 after={"upload": upload_id, "submission": int(st["submission"]["id"]), "approval": approval_id,
                        "decision": decision, "reason": reason})
-    return state_of(cur, upload_id)
+    return _require(cur, upload_id)
 
 
 # -- the rows an import would load -----------------------------------------------------------
@@ -350,7 +350,7 @@ def effective_rows(cur, upload_id: int, decisions_upto: int, edits_upto: int) ->
         if changed:
             out["edited"] += 1
         cells = [changed[c] if c in changed else (raw[c] if c < len(raw) else "") for c in range(width)]
-        error = None
+        error: dict[str, str | None] | None = None
         if extra_cells(raw, width):
             error = {"column": "(beyond header)", "value": extra_cells(raw, width)[0],
                      "reason": ragged_row_reason(raw, width)}
