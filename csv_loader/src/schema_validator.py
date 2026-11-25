@@ -144,12 +144,34 @@ def validate_schema(conn, job: JobConfig) -> StageResult:
     return stage
 
 
+def _fetch_column_types(conn, table_name: str) -> List[dict]:
+    """Return each column's name and exact type, e.g. ``numeric(12,2)`` or ``character(2)``.
+
+    #349: ``information_schema.columns.data_type`` has no precision, scale or length, so building staging from it turned
+    ``NUMERIC(12,2)`` into plain ``numeric`` and ``CHAR(2)`` into ``character`` (``CHAR(1)``). ``format_type`` on the
+    catalog gives the full type. ``to_regclass`` finds the table through the search_path, the same way an unqualified SQL
+    statement (and ``_fetch_table_columns``, BUG-08) does.
+    """
+    query = """
+        SELECT a.attname AS column_name, format_type(a.atttypid, a.atttypmod) AS full_type
+        FROM pg_attribute a
+        WHERE a.attrelid = to_regclass(quote_ident(%s))
+          AND a.attnum > 0
+          AND NOT a.attisdropped
+        ORDER BY a.attnum
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, (table_name,))
+        return cur.fetchall()
+
+
 def ensure_staging_table(conn, job: JobConfig) -> None:
-    """Create (or replace) a staging table that mirrors the target table.
+    """Create (or replace) a staging table with the same column types as the target table.
 
     Using `CREATE TABLE LIKE ... INCLUDING ALL` would copy NOT NULL constraints,
     which we do NOT want — staging accepts everything so we can validate it.
-    Instead we copy column names + types only.
+    Instead we copy column names + exact types only (#349: ``format_type``, so precision, scale and length are kept and
+    a value the target would round or reject is caught in staging, not silently changed on promotion).
     """
     target = job.target_table
     staging = job.staging_table
@@ -159,20 +181,17 @@ def ensure_staging_table(conn, job: JobConfig) -> None:
             sql.Identifier(staging)
         ))
 
-    cols = _fetch_table_columns(conn, target)
+    cols = _fetch_column_types(conn, target)
     if not cols:
         raise RuntimeError(
             f"Cannot create staging — target table {target} does not exist"
         )
 
-    col_defs = []
-    for c in cols:
-        dtype = c["data_type"]
-        if dtype == "character varying" and c["character_maximum_length"]:
-            dtype = f"varchar({c['character_maximum_length']})"
-        col_defs.append(sql.SQL("{} {}").format(
-            sql.Identifier(c["column_name"]), sql.SQL(dtype)
-        ))
+    # The type text comes from the database catalogue, not from user input.
+    col_defs = [
+        sql.SQL("{} {}").format(sql.Identifier(c["column_name"]), sql.SQL(c["full_type"]))
+        for c in cols
+    ]
     ddl = sql.SQL("CREATE TABLE {} ({})").format(
         sql.Identifier(staging), sql.SQL(", ").join(col_defs)
     )
