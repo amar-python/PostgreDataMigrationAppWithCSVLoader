@@ -31,6 +31,11 @@ LINT = ROOT / "scripts" / "lint.sh"
 TEST_CODE = ("tests/", "e2e/")
 
 
+def is_test_code(path: str) -> bool:
+    """A tests/ folder at any depth (csv_loader/tests/) or e2e/, as in scripts/lint.sh."""
+    return path.startswith(TEST_CODE) or "/tests/" in path
+
+
 def short(paths, limit: int = 12) -> str:
     items = sorted(paths)
     return f"{len(items)} file(s): {items[:limit]}" + (" ..." if len(items) > limit else "")
@@ -61,7 +66,7 @@ def test_flake8_scope_is_every_tracked_python_file():
 
 def test_bandit_scope_is_every_tracked_python_file_except_test_code():
     tracked, secured, excluded = tracked_python(), listed("--list-security-files"), listed("--list-excluded")
-    expected = {f for f in tracked if not f.startswith(TEST_CODE)} - excluded
+    expected = {f for f in tracked if not is_test_code(f)} - excluded
     assert expected - secured == set(), f"source files bandit never scans: {short(expected - secured)}"
     assert secured - expected == set(), f"files bandit scans that it should not: {short(secured - expected)}"
 
@@ -123,3 +128,21 @@ def test_test_code_is_style_checked_but_not_security_scanned(scratch_repo):
     add("tests/test_unused.py", "import os\n")  # but flake8 does
     result = lint_in(repo)
     assert result.returncode != 0 and "F401" in result.stdout + result.stderr
+
+
+def test_test_code_in_a_package_folder_is_also_not_security_scanned(scratch_repo):
+    """csv_loader/tests/ is test code like tests/: its fixtures build SQL and temp paths on purpose (bandit B608, B108)."""
+    repo, add = scratch_repo
+    add("csv_loader/tests/test_fetch.py",
+        "import urllib.request\n\n\ndef test_x(url):\n    return urllib.request.urlopen(url)\n")  # B310 in a fixture
+    assert lint_in(repo).returncode == 0, "bandit should not scan a tests/ folder inside a package"
+    add("csv_loader/tests/test_unused.py", "import os\n")  # but flake8 does
+    result = lint_in(repo)
+    assert result.returncode != 0 and "F401" in result.stdout + result.stderr
+
+
+def test_a_source_file_whose_folder_merely_contains_tests_in_its_name_is_still_scanned(scratch_repo):
+    repo, add = scratch_repo
+    add("api/contests/fetch.py", "import urllib.request\n\n\ndef get(url):\n    return urllib.request.urlopen(url)\n")
+    result = lint_in(repo)
+    assert result.returncode != 0 and "B310" in result.stdout + result.stderr, "only a folder named tests is test code"
