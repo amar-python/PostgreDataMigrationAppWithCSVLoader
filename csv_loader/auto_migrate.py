@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from uuid import UUID
@@ -26,7 +25,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = Path.home()
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.config import load_db_config
+from src.config import load_db_config  # noqa: E402
 
 INPUT_DIR = SCRIPT_DIR / "input_data"
 CONFIG_PATH = REPO_ROOT / "config.yaml"
@@ -329,7 +328,7 @@ def auto_migrate(csv_path: str | Path, dry_run: bool = False) -> int:
         col_count = len(df.columns)
         df.columns = [f"col_{i+1}" for i in range(col_count)]
         print(f"  No header row detected — generated {col_count} column names (col_1, col_2, ...).")
-        print(f"  TIP: You can rename columns later in config.yaml.")
+        print("  TIP: You can rename columns later in config.yaml.")
 
     if df.empty:
         print("ERROR: CSV has no data rows.")
@@ -383,7 +382,7 @@ def auto_migrate(csv_path: str | Path, dry_run: bool = False) -> int:
     print("\n[4/5] Updating config.yaml...")
     if job_exists_in_config(job_name):
         print(f"  Job '{job_name}' already exists in config.yaml — skipping config update.")
-        print(f"  (The existing job definition will be used for migration.)")
+        print("  (The existing job definition will be used for migration.)")
     else:
         csv_rel = f"./OneDrive/Desktop/Migration using ai/input_data/{csv_path.name}"
         schema_rel = f"./OneDrive/Desktop/Migration using ai/input_data/{schema_path.name}"
@@ -410,7 +409,7 @@ def auto_migrate(csv_path: str | Path, dry_run: bool = False) -> int:
         print(f"\n  Migration {'(dry-run) ' if dry_run else ''}SUCCEEDED.")
         print(f"  Table '{job_name}' now has data in PostgreSQL.")
     else:
-        print(f"\n  Migration FAILED. Check reports/ for details.")
+        print("\n  Migration FAILED. Check reports/ for details.")
     return 0 if ok else 1
 
 

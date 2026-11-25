@@ -8,7 +8,6 @@ No database required — these are pure CSV-side validation tests.
 from __future__ import annotations
 
 import sys
-from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -16,8 +15,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.config import ColumnSpec, JobConfig, Thresholds
-from src.pre_import_validator import validate_csv
+from src.config import ColumnSpec, JobConfig, Thresholds  # noqa: E402
+from src.pre_import_validator import validate_csv  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
