@@ -494,8 +494,8 @@ def _run_fresh_deploy_then_tests(
     total_assertions = None
     pass_rate        = None
     for line in tests.stdout.splitlines():
-        # Summary row may be plain ("142 142 0 100.0% ...") or a psql table
-        # row ("142 |  142 |  0 | 0 | 100.0% | ..."); strip pipes first.
+        # Summary row may be plain ("159 159 0 100.0% ...") or a psql table
+        # row ("159 |  159 |  0 | 0 | 100.0% | ..."); strip pipes first.
         parts = line.replace("|", " ").split()
         if (len(parts) >= 4 and parts[0].isdigit() and parts[1].isdigit()
                 and parts[2].isdigit()):

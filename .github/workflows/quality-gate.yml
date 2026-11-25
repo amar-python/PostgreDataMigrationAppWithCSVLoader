@@ -104,7 +104,7 @@ jobs:
   # The whole suite, split by test file (scripts/ci_shards.py) into parallel jobs, each with its own PostgreSQL: the
   # system tests share databases and assume a fresh one, so they cannot share a server. Each shard prints the same final
   # block as before (PASSED / FAILED / ERROR / SKIPPED with reasons / NOT RUN) and --strict fails it on any skip.
-  # Full integration surface: Tier I deploys env_dev.sql twice (idempotency), Tier S runs the 142-assertion SQL suite,
+  # Full integration surface: Tier I deploys env_dev.sql twice (idempotency), Tier S runs the 159-assertion SQL suite,
   # then the PG-gated pytest tiers run. Every shard repeats that cheap setup (a few seconds): the cross-environment
   # parity tests rely on it.
   integration-shards:

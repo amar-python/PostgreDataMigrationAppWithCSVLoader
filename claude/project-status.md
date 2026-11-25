@@ -17,8 +17,8 @@ Last updated: 2026-11-24 (`main` at `948ba44`, merge of PR #403). Rewritten on t
 - **Streamlit migration decisions: all answered by the owner on 24 Nov** (`DECISIONS/2026-11-16-streamlit-migration-plan.md`, "Owner decisions"): whole-app cutover with React kept one release as rollback; no OIDC in the UI; saved mapping templates and the "App changelog" dropped; server audit events kept; no page for the audit log and its verification; about 116 MB more in the offline bundle accepted; the accessibility job scans Streamlit as well as React (#388); Azure host is Container Apps on the private network only (#394); `browser` and accessibility jobs required.
 - **Tenant isolation at the database:** one PostgreSQL role per tenant, `SET ROLE` per request (#297, OIT-012, merged in PR #400, closed 24 Nov; `DECISIONS/2026-11-24-per-tenant-db-roles.md`).
 - **Shared API key retired:** every data request needs a session (#298, OIT-013, merged in PR #401, closed 24 Nov). Follow-up PR #403 (container smoke test fails, not skips, without admin credentials) merged 24 Nov.
-- **T&E audit review of 20 Nov:** most OIT fixes merged on 23 and 24 Nov (OIT-001 to OIT-016 apart from OIT-014, and others; see the tracker). Requirement status in `docs/VCRM.md` lags these fixes for seven requirements (§6.5 there).
-- **SQL suite:** 159 assertions in 6 suites, 159 of 159 pass (Tier S). The Tier S threshold still says 142 (#303).
+- **T&E audit review of 20 Nov:** most OIT fixes merged on 23 and 24 Nov (OIT-001 to OIT-016 apart from OIT-014, and others; see the tracker). `docs/VCRM.md` records seven of them as verified on 25 Nov (BR-45, BR-50, BR-51, BR-53, BR-54, BR-55, BR-58): 34 of 49 requirements verified, 3 deferred, 12 partial, none not started.
+- **SQL suite:** 159 assertions in 6 suites, 159 of 159 pass (Tier S). The Tier S threshold was raised to 159 on 25 Nov, and a unit test keeps it equal to the suite's count (#303).
 - Open issues: 50. Open PRs: 7 (#404 to #410, including this update), all opened on 24 Nov while several sessions work in parallel. Counted from the GitHub API on 24 Nov, 11:40 UTC.
 
 ## Open items (snapshot — the tracker is master)

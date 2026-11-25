@@ -33,7 +33,7 @@
 | `evals/datasets/tier_s/01_fresh_deploy_then_all_tests_pass/` | SQL-suite integration scenario |
 | `evals/expected/tier_p/*.json` | 23 expected-outcome files |
 | `evals/expected/tier_i/01_deploy_dev_twice.json` | Expected outcome (exit codes + row-count parity) |
-| `evals/expected/tier_s/01_fresh_deploy_then_all_tests_pass.json` | Expected outcome (100 % pass + ALL TESTS PASSED; the suite has 159 assertions, but the threshold in the file is still `min_total_assertions: 142`, #303) |
+| `evals/expected/tier_s/01_fresh_deploy_then_all_tests_pass.json` | Expected outcome (159/159 + ALL TESTS PASSED; `min_total_assertions: 159`, kept equal to the suite's count by `tests/unit/test_tier_s_threshold.py`, #303) |
 | `evals/reports/` | Auto-created at runtime; one folder per run with `summary.json` |
 
 ## What was executed
