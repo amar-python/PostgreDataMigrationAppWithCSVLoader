@@ -14,33 +14,38 @@ description = "CSV loader and T&E data management: FastAPI API, Streamlit app an
 requires-python = ">=3.12"  # 3.12 is the one supported version: .python-version, DECISIONS/2026-11-24-one-python-version.md
 
 # ── Type checking (#323) ─────────────────────────────────────────────────────────────────────────────────────────
-# `make typecheck` and the free-tier CI job run `python3 -m mypy`, which checks the `files` below.
+# `make typecheck` and the free-tier CI job run `python3 -m mypy`, which checks the `files` below. There is no
+# `# type: ignore` anywhere: every error was fixed in the code.
 #
-# Baseline, 24 Nov 2026: no `# type: ignore` anywhere, and both packages pass
-#   both            mypy's default checks plus four --strict flags (warn_unused_ignores, warn_redundant_casts,
-#                   strict_equality, extra_checks)
-#   api/            three more --strict flags, including check_untyped_defs (the bodies of unannotated functions are
-#                   checked too). The rest of --strict (disallow_untyped_defs, disallow_any_generics, warn_return_any,
-#                   ...) still finds 15 to 116 errors per flag on api/; turn each on as its errors are fixed.
-#   streamlit_app/  largely unannotated, so only the checks above.
+#   api/            the whole of --strict (`mypy --strict api` passes too). The loaders' results are typed
+#                   (api/services/results.py), so a misspelt result key is a type error.
+#   everything else mypy's default checks plus check_untyped_defs and the --strict flags set globally below.
+#                   streamlit_app/ is largely unannotated, so the flags that require annotations stay api/-only.
 [tool.mypy]
-files = ["api", "streamlit_app"]
+files = ["api", "streamlit_app", "build/csv", "evals"]
 python_version = "3.12"   # check against the supported version (.python-version), whatever runs mypy
 # Pages import their siblings as top-level modules (`import api_client`), the way `streamlit run` puts the app's
-# folder on sys.path.
-mypy_path = "streamlit_app"
+# folder on sys.path; evals/runner.py imports gap_report the same way.
+mypy_path = ["streamlit_app", "evals"]
 explicit_package_bases = true
 warn_unused_configs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 strict_equality = true
 extra_checks = true
+check_untyped_defs = true
 
+# api/: the rest of --strict.
 [[tool.mypy.overrides]]
 module = ["api", "api.*"]
-check_untyped_defs = true
 no_implicit_reexport = true
 disallow_untyped_decorators = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_any_generics = true
+disallow_untyped_calls = true
+disallow_subclassing_any = true
+warn_return_any = true
 
 # No type information is published for these. Only these modules are exempt; any other unresolved import fails.
 [[tool.mypy.overrides]]

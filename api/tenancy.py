@@ -24,6 +24,14 @@ from psycopg2 import sql
 from psycopg2.errors import InsufficientPrivilege
 
 from api.config import TE_TABLES, settings
+from typing import Any
+from psycopg2.extensions import connection, cursor
+from collections.abc import Iterator
+from contextlib import AbstractContextManager
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from alembic.config import Config
 
 _current: ContextVar[str | None] = ContextVar("tenant_schema", default=None)
 _role: ContextVar[str | None] = ContextVar("tenant_role", default=None)
@@ -64,7 +72,7 @@ def te_schema() -> str:
 
 
 @contextmanager
-def scoped(schema: str, role: str | None = None):
+def scoped(schema: str, role: str | None = None) -> Iterator[None]:
     token, role_token = _current.set(schema), _role.set(role)
     try:
         yield
@@ -73,7 +81,7 @@ def scoped(schema: str, role: str | None = None):
         _current.reset(token)
 
 
-def tenant(slug: str):
+def tenant(slug: str) -> AbstractContextManager[None]:
     """Route to one tenant: its schema, and its database role for every connection borrowed inside (#297)."""
     return scoped(schema_for(slug), role_for(slug))
 
@@ -106,7 +114,7 @@ def migrate_tenant(slug: str) -> None:
             provision_tenant_role(cur, slug)
 
 
-def provision_tenant_role(cur, slug: str) -> str:
+def provision_tenant_role(cur: cursor, slug: str) -> str:
     """Create or update the tenant's own role and give it its schema, and only that (#297). Returns the role.
 
     Run as the owner after every migration of the tenant (``migrate_tenant``), so it is also how tenants that
@@ -164,7 +172,7 @@ def provision_tenant_role(cur, slug: str) -> str:
     return role
 
 
-def drop_tenant_role(cur, slug: str) -> None:
+def drop_tenant_role(cur: cursor, slug: str) -> None:
     """Drop the tenant's role, after its schema is gone (#297). As the owner; the caller commits.
 
     ``DROP OWNED BY`` first removes what is left in this database: default privileges and any grants.
@@ -180,7 +188,7 @@ TE_BASELINE = "te0001"
 _TE_VERSION_COMMENT = re.compile(r"te_schema_version=(\w+)")
 
 
-def _te_config(schema: str):
+def _te_config(schema: str) -> Config:
     from alembic.config import Config
 
     cfg = Config()
@@ -199,7 +207,7 @@ def te_head() -> str:
     return head
 
 
-def template_te_version(cur, template: str) -> str | None:
+def template_te_version(cur: cursor, template: str) -> str | None:
     """The T&E migration the template schema is at, as build/te_core_schema.sql stamped it."""
     cur.execute("SELECT obj_description(oid, 'pg_namespace') FROM pg_namespace WHERE nspname = %s", (template,))
     row = cur.fetchone()
@@ -207,13 +215,13 @@ def template_te_version(cur, template: str) -> str | None:
     return m.group(1) if m else None
 
 
-def _te_tables_present(cur, schema: str) -> set[str]:
+def _te_tables_present(cur: cursor, schema: str) -> set[str]:
     cur.execute("SELECT c.relname FROM pg_class c WHERE c.relnamespace = to_regnamespace(%s) "
                 "AND c.relkind = 'r' AND c.relname = ANY(%s)", (schema, TE_TABLES))
     return {r[0] for r in cur.fetchall()}
 
 
-def migrate_te_schema(conn, cur, schema: str) -> str:
+def migrate_te_schema(conn: connection, cur: cursor, schema: str) -> str:
     """Bring one tenant's T&E tables to the newest migration (#184). Returns what was done.
 
     - no T&E tables: clone them from the template (#99), stamp the tenant at the template's
@@ -230,12 +238,14 @@ def migrate_te_schema(conn, cur, schema: str) -> str:
     from alembic import command
     from alembic.util import CommandError
 
+    from api.db import fetch_one
+
     cfg, template = _te_config(schema), settings.TE_SCHEMA
     cur.execute("SELECT pg_advisory_lock(hashtextextended(%s, 0))", (f"te_schema:{schema}",))
     try:
         present = _te_tables_present(cur, schema)
         cur.execute("SELECT to_regclass(%s)", (f'"{schema}"."{TE_VERSION_TABLE}"',))
-        versioned = cur.fetchone()[0] is not None
+        versioned = fetch_one(cur)[0] is not None
         conn.commit()
         if versioned and len(present) == len(TE_TABLES):
             action, stamp = "upgraded", None
@@ -269,7 +279,7 @@ def migrate_te_schema(conn, cur, schema: str) -> str:
         conn.commit()
 
 
-def _use_template_names(cur, schema: str, template: str, tables: list[str]) -> None:
+def _use_template_names(cur: cursor, schema: str, template: str, tables: list[str]) -> None:
     """Give the cloned indexes and unique constraints the template's names (#184).
 
     ``CREATE TABLE ... LIKE ... INCLUDING ALL`` names them by PostgreSQL's default rules
@@ -277,7 +287,7 @@ def _use_template_names(cur, schema: str, template: str, tables: list[str]) -> N
     that drops or renames an index by name would then work on the template and fail on every
     tenant. Matched on what each index is (table, columns, method), since the names differ.
     """
-    def listing(sch: str) -> list[tuple]:
+    def listing(sch: str) -> list[tuple[Any, ...]]:
         cur.execute(
             "SELECT t.relname, i.relname, pg_get_indexdef(i.oid), c.conname FROM pg_index x "
             "JOIN pg_class i ON i.oid = x.indexrelid JOIN pg_class t ON t.oid = x.indrelid "
@@ -300,7 +310,7 @@ def _use_template_names(cur, schema: str, template: str, tables: list[str]) -> N
                 sql.Identifier(schema), sql.Identifier(have[0]), sql.Identifier(name)))
 
 
-def provision_te_tables(cur, schema: str, template: str) -> int:
+def provision_te_tables(cur: cursor, schema: str, template: str) -> int:
     """Give a tenant its own T&E tables, cloned from the deployment's T&E schema (#99).
 
     ``template`` is the schema build/deploy_all.sh created. Copies columns,
@@ -309,9 +319,11 @@ def provision_te_tables(cur, schema: str, template: str) -> int:
     UUIDs, so no sequence is shared between tenants. Idempotent: only missing
     tables are created. Returns how many were. The caller commits.
     """
+    from api.db import fetch_one
+
     cur.execute("SET LOCAL search_path = pg_catalog")  # makes catalog DDL schema-qualified
     cur.execute("SELECT quote_ident(%s), quote_ident(%s)", (template, schema))
-    qt, qs = cur.fetchone()
+    qt, qs = fetch_one(cur)
     cur.execute("SELECT relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
                 "WHERE n.nspname = %s AND c.relkind = 'r' AND c.relname = ANY(%s)", (template, TE_TABLES))
     if {r[0] for r in cur.fetchall()} != set(TE_TABLES):
@@ -328,7 +340,7 @@ def provision_te_tables(cur, schema: str, template: str) -> int:
             sql.Identifier(schema), sql.Identifier(table), sql.Identifier(template), sql.Identifier(table)))
     _use_template_names(cur, schema, template, missing)
 
-    def defs(query: str) -> list[tuple]:
+    def defs(query: str) -> list[tuple[Any, ...]]:
         cur.execute(query, (template, missing))
         return cur.fetchall()
 

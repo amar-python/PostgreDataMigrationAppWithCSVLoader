@@ -16,6 +16,7 @@ from api import oidc
 from api.services import accounts
 from api.services.audit import acting_as, write_audit
 from api.tenancy import tenant
+from typing import Any
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -27,7 +28,7 @@ class LoginRequest(BaseModel):
 
 
 @router.post("/login")
-def login(req: LoginRequest) -> dict:
+def login(req: LoginRequest) -> dict[str, Any]:
     with Conn() as conn:
         with conn.cursor() as cur:
             session = accounts.login(cur, req.tenant, req.username, req.password)
@@ -43,7 +44,7 @@ class OidcLoginRequest(BaseModel):
 
 
 @router.post("/oidc")
-def oidc_login(req: OidcLoginRequest) -> dict:
+def oidc_login(req: OidcLoginRequest) -> dict[str, Any]:
     """Exchange an IdP ID token for a session (#95). 404 when OIDC isn't configured."""
     if not oidc.enabled():
         raise HTTPException(status_code=404, detail="OIDC sign-in is not configured")
@@ -60,7 +61,7 @@ def oidc_login(req: OidcLoginRequest) -> dict:
 
 
 @router.post("/logout")
-def logout(token: str = Depends(bearer_token)) -> dict:
+def logout(token: str = Depends(bearer_token)) -> dict[str, Any]:
     with Conn() as conn:
         with conn.cursor() as cur:
             accounts.revoke(cur, token)
@@ -69,7 +70,7 @@ def logout(token: str = Depends(bearer_token)) -> dict:
 
 
 @router.get("/me")
-def me(session: dict = Depends(require_session)) -> dict:
+def me(session: dict[str, Any] = Depends(require_session)) -> dict[str, Any]:
     return session
 
 
@@ -83,7 +84,7 @@ class ChangePasswordRequest(BaseModel):
 
 @router.post("/password")
 def change_password(req: ChangePasswordRequest, token: str = Depends(bearer_token),
-                    session: dict = Depends(require_session)) -> dict:
+                    session: dict[str, Any] = Depends(require_session)) -> dict[str, Any]:
     """Change your own password (#117). This session stays signed in; all others end.
 
     A wrong current password is 400, not 401, so the browser keeps the session,
@@ -105,7 +106,7 @@ class ResetPasswordRequest(BaseModel):
 
 @router.post("/users/{username}/password")
 def reset_password(username: str, req: ResetPasswordRequest,
-                   session: dict = Depends(require_session)) -> dict:
+                   session: dict[str, Any] = Depends(require_session)) -> dict[str, Any]:
     """A tenant admin sets a member's password, unlocking the account and ending
     its sessions (#117). Audited in the tenant's audit log."""
     if session["role"] not in PERMISSIONS["reset_password"]:

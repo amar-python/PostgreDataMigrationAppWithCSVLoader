@@ -17,6 +17,7 @@ that are within the file limit. The routes keep their own exact checks on the de
 from __future__ import annotations
 
 from api.config import settings
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 _REFUSAL = b'{"detail":"Request body too large"}'
 
@@ -26,7 +27,7 @@ def max_body_bytes() -> int:
     return 2 * settings.MAX_UPLOAD_BYTES - 1
 
 
-def _declared_length(scope: dict) -> int | None:
+def _declared_length(scope: Scope) -> int | None:
     """The request's ``Content-Length``, or None if it has none or it is not a usable number."""
     for name, value in scope.get("headers", []):
         if name == b"content-length":
@@ -38,7 +39,7 @@ def _declared_length(scope: dict) -> int | None:
     return None
 
 
-async def _refuse(send) -> None:
+async def _refuse(send: Send) -> None:
     await send({
         "type": "http.response.start",
         "status": 413,
@@ -49,10 +50,10 @@ async def _refuse(send) -> None:
 
 
 class BodyLimitMiddleware:
-    def __init__(self, app):
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -67,7 +68,7 @@ class BodyLimitMiddleware:
         refused = False
         started = False  # the app has begun its own response, so a 413 can no longer be sent
 
-        async def limited_receive():
+        async def limited_receive() -> Message:
             nonlocal seen, refused
             if refused:
                 return {"type": "http.disconnect"}
@@ -80,7 +81,7 @@ class BodyLimitMiddleware:
                     return {"type": "http.disconnect"}
             return message
 
-        async def guarded_send(message):
+        async def guarded_send(message: Message) -> None:
             nonlocal started
             if refused:
                 return  # the handler's own, late answer to a request we already refused

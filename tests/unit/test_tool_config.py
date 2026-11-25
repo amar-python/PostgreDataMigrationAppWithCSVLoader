@@ -69,8 +69,9 @@ def _mypy() -> dict:
     return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["mypy"]
 
 
-def test_type_check_covers_the_api_and_the_streamlit_app():
-    assert set(_mypy()["files"]) >= {"api", "streamlit_app"}
+def test_type_check_covers_every_python_package_ci_measures():
+    """The same four as the coverage scope (.coveragerc): the API, the Streamlit app, the validator and the evals."""
+    assert set(_mypy()["files"]) >= {"api", "streamlit_app", "build/csv", "evals"}
 
 
 def test_type_check_is_not_silenced():
@@ -88,9 +89,54 @@ def test_type_check_is_not_silenced():
             assert not ours, f"missing imports are ignored for our own modules {ours}"
 
 
-def test_api_keeps_its_stricter_baseline():
+# Every flag `mypy --strict` turns on (mypy 2.x), split between the global section and the api/ override.
+STRICT_GLOBAL = {"warn_unused_configs", "warn_unused_ignores", "warn_redundant_casts", "strict_equality",
+                 "extra_checks", "check_untyped_defs"}
+STRICT_API = {"no_implicit_reexport", "disallow_untyped_decorators", "disallow_untyped_defs",
+              "disallow_incomplete_defs", "disallow_any_generics", "disallow_untyped_calls",
+              "disallow_subclassing_any", "warn_return_any"}
+
+
+def test_every_package_gets_the_strict_flags_that_need_no_annotations():
+    mypy = _mypy()
+    assert {f for f in STRICT_GLOBAL if mypy.get(f) is True} == STRICT_GLOBAL
+
+
+def test_api_is_checked_with_the_whole_of_strict():
+    """#323: api/ is strict. Switching a flag off again has to change this test too."""
     api = next(o for o in _mypy()["overrides"] if "api" in o["module"])
-    assert api.get("check_untyped_defs"), "api/ is checked inside unannotated functions too (#323)"
+    assert {f for f in STRICT_API if api.get(f) is True} == STRICT_API
+
+
+def test_the_loader_result_type_declares_every_key_the_loaders_set():
+    """The point of LoadResult (#323): a key a loader or the route sets must be declared, or mypy is not checking it.
+
+    mypy enforces this for literals; this catches keys set through a variable name mypy cannot see, by reading the
+    keyword arguments and literal keys in the result builders' callers.
+    """
+    import ast
+    from typing import get_type_hints
+
+    from api.services.results import LoadResult
+
+    declared = set(get_type_hints(LoadResult))
+    used: set[str] = set()
+    trees = [ast.parse((ROOT / path).read_text(encoding="utf-8")) for path in (
+        "api/services/dynamic_loader.py", "api/services/te_loader.py", "api/services/load_common.py",
+        "api/services/staged_import.py")]
+    # Only the upload route: the preview route also calls its dict `result`, but that is build_preview's shape.
+    routes = ast.parse((ROOT / "api/routers/csv_routes.py").read_text(encoding="utf-8"))
+    trees += [n for n in ast.walk(routes) if isinstance(n, ast.FunctionDef) and n.name == "upload"]
+    for tree in trees:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", "") in ("ok_result", "rows_failed"):
+                used |= {k.arg for k in node.keywords if k.arg}
+            if (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
+                    and node.value.id == "result" and isinstance(node.slice, ast.Constant)
+                    and isinstance(node.slice.value, str)):
+                used.add(node.slice.value)
+    assert used, "found no result keys; the loaders' structure changed, so update this test"
+    assert used <= declared, f"set but not declared in LoadResult: {sorted(used - declared)}"
 
 
 def test_ci_runs_the_type_check():

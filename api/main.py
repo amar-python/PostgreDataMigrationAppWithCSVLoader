@@ -23,6 +23,8 @@ from api.ratelimit import rate_limit_middleware
 from api.routers import (audit_routes, auth_routes, csv_routes, import_routes, policy_routes, review_routes,
                          te_routes)
 from api.services import accounts
+from typing import Any
+from collections.abc import AsyncIterator
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +49,7 @@ def assert_auth_configured(api_env: str, allow_anonymous: bool) -> None:
         )
 
 
-def docs_urls(api_env: str) -> dict:
+def docs_urls(api_env: str) -> dict[str, Any]:
     """FastAPI arguments that serve the interactive docs and the OpenAPI schema only in dev (#291, BR-54).
 
     ``/docs``, ``/redoc`` and ``/openapi.json`` list every route to anyone who can reach the port, with no key
@@ -73,7 +75,7 @@ def _purge_old_sessions() -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # O-03 / #298: fail closed. Anonymous access is refused outside dev, and even in dev it needs the explicit
     # API_ALLOW_ANONYMOUS opt-in; without it every data endpoint answers 401 until the caller signs in.
     assert_auth_configured(settings.API_ENV, settings.API_ALLOW_ANONYMOUS)
@@ -148,7 +150,7 @@ def pool_exhausted_handler(request: Request, exc: psycopg2.pool.PoolError) -> JS
 
 
 @app.get("/api/health", tags=["health"])
-def health() -> dict:
+def health() -> dict[str, Any]:
     # BUG-031: verify the uploads schema is present, not just that Postgres is
     # up. Otherwise a half-bootstrapped API reports "ok" and then every /upload
     # call throws UndefinedTable.
@@ -157,13 +159,13 @@ def health() -> dict:
         with db.Conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT version()")
-                pg_version = cur.fetchone()[0]
+                pg_version = db.fetch_one(cur)[0]
                 cur.execute(
                     _sql.SQL("SELECT 1 FROM {}.csv_files LIMIT 0").format(
                         _sql.Identifier(settings.UPLOADS_SCHEMA)
                     )
                 )
-        body: dict = {"status": "ok"}
+        body: dict[str, Any] = {"status": "ok"}
         # #291 (BR-54): /api/health is open to anyone who can reach the port, so outside dev it says
         # only whether the API is up. The database name, host, version and schema are dev details.
         if settings.API_ENV == "dev":
@@ -179,7 +181,7 @@ def health() -> dict:
         # is deliberately unauthenticated (see BUG-035 comment above), and
         # psycopg2's OperationalError text can include host/port/user details.
         logger.warning("Health check failed: %s", exc)
-        degraded: dict = {"status": "degraded"}
+        degraded: dict[str, Any] = {"status": "degraded"}
         if settings.API_ENV == "dev":
             degraded["error"] = "Database is unreachable or not fully bootstrapped."
         return degraded
