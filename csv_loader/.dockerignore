@@ -1,0 +1,14 @@
+__pycache__
+*.pyc
+*.pyo
+.env
+.git
+.gitignore
+tests/
+reports/
+*.md
+pytest.ini
+run_tests.py
+deploy/
+.dockerignore
+Dockerfile

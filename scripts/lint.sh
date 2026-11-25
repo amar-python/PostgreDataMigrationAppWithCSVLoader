@@ -7,7 +7,8 @@
 # e2e/ and the later migrations were never checked and "lint clean" said nothing about the code that changes most.
 #
 #   flake8  every tracked .py file
-#   bandit  every tracked .py file except test code (tests/, e2e/), where its findings are about fixtures and asserts
+#   bandit  every tracked .py file except test code (a tests/ folder at any depth, and e2e/), where its findings are
+#           about fixtures and asserts
 #
 # LINT_EXCLUDE below skips exact paths from BOTH tools. Give each entry a reason. It is empty today, and
 # tests/unit/test_lint_scope.py fails if a tracked file is outside the scope and not named here.
@@ -42,7 +43,7 @@ while IFS= read -r path; do
     is_excluded "$path" && continue
     LINT_FILES+=("$path")
     case "$path" in
-        tests/*|e2e/*) ;;
+        tests/*|*/tests/*|e2e/*) ;;
         *) SECURITY_FILES+=("$path") ;;
     esac
 done < <(git ls-files '*.py' | LC_ALL=C sort)
