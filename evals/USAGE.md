@@ -13,7 +13,7 @@ quick start, see the root `../README.md`. For the architectural rationale, see
 
 | Tool | Required for | How to check |
 |------|--------------|--------------|
-| Python 3.10+ | All tiers | `python --version` (or `python3 --version`) |
+| Python 3.12 | All tiers | `python --version` (or `python3 --version`) |
 | psql client | Tiers I + S only | `psql --version` |
 | PostgreSQL server | Tiers I + S only | `psql -c "SELECT 1"` returns `1` |
 
@@ -228,7 +228,7 @@ These need a runner branch because each scenario does different work (deploy, co
 | Tier I fails with `row counts changed between runs: {table_name: (n1, n2)}` | A seed INSERT in `env_dev.sql` (or one of its includes) isn't using `ON CONFLICT DO NOTHING` — the eval just caught a real idempotency bug | Fix the seed script; re-run |
 | Encoding garbled in terminal (mojibake on emoji / CJK) | Windows console using cp1252 | Set `$env:PYTHONIOENCODING = 'utf-8'`, or use Windows Terminal (which defaults to UTF-8) |
 | Tier I times out after 120 s | Deploy script is hanging on a prompt (e.g. `\set` asking for a value) | Make sure `build/environments/env_dev.sql` has no interactive prompts; check `actual.stderr` in the report |
-| `SyntaxError: unterminated string literal` when running runner.py | You're on Python <3.10 | Upgrade to Python 3.10+. The runner uses syntax that requires it. |
+| `SyntaxError: unterminated string literal` when running runner.py | You're on Python <3.10 | Use Python 3.12, the supported version. The runner uses syntax that requires 3.10 or later. |
 
 ---
 
@@ -267,7 +267,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
+        with: { python-version-file: .python-version }
 
       - name: Install psql client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client

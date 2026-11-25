@@ -155,7 +155,7 @@ def test_the_apps_can_be_left_out_of_the_bootstrap_apply():
 # --- container/streamlit.Dockerfile -------------------------------------
 
 def test_the_image_runs_streamlit_from_streamlit_app_as_a_non_root_user():
-    assert re.search(r"(?m)^FROM python:3\.12-slim$", DOCKERFILE)
+    assert re.search(r"(?m)^FROM python:3\.12-slim@sha256:[0-9a-f]{64}$", DOCKERFILE)  # pinned by digest (#327)
     assert re.search(r"(?m)^WORKDIR /app/streamlit_app$", DOCKERFILE)
     assert re.search(r"(?m)^COPY streamlit_app/ \./$", DOCKERFILE)  # includes .streamlit/config.toml
     assert re.search(r"(?m)^USER app$", DOCKERFILE)

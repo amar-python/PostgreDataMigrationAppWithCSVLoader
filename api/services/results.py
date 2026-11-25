@@ -10,9 +10,8 @@ These are types only: at run time each is a plain ``dict``, so nothing about the
 
 from __future__ import annotations
 
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, Required, TypedDict
 
-from typing_extensions import NotRequired, Required
 
 Status = Literal["ok", "error", "duplicate_file", "invalid_structure", "staged"]  # "staged": api/services/staged_import.stage
 

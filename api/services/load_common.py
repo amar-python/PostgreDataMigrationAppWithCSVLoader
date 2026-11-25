@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
-from typing import Any, cast
+from typing import Any, Unpack, cast
 
 from psycopg2 import sql
 from psycopg2.extensions import cursor
 from psycopg2.extras import execute_values
-from typing_extensions import Unpack
 
 from api.config import settings
 from api.services.csv_parse import extra_cells, ragged_row_reason

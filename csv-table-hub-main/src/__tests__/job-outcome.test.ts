@@ -7,8 +7,14 @@
 
 import { describe, it, expect } from "vitest";
 import {
-  classifyUploadResult, classifyThrownError, buildCancelPatch,
-  buildCancelToastMessage, canStop, decideOverwriteAction, failedRowsNote, typesProvenanceNote,
+  classifyUploadResult,
+  classifyThrownError,
+  buildCancelPatch,
+  buildCancelToastMessage,
+  canStop,
+  decideOverwriteAction,
+  failedRowsNote,
+  typesProvenanceNote,
 } from "@/lib/job-outcome";
 import type { UploadResult } from "@/lib/csv.functions";
 import type { Job } from "@/lib/job-types";
@@ -16,29 +22,47 @@ import type { Job } from "@/lib/job-types";
 describe("classifyUploadResult", () => {
   it("status ok -> done, success toast, notify, and invalidateRoute", () => {
     const res: UploadResult = {
-      status: "ok", fileId: "1", tableName: "csv_abc", totalRows: 10,
-      insertedRows: 9, duplicateRowsSkipped: 1, failedRows: 0,
-      columns: ["a"], types: ["text"], rowErrors: [], logs: [],
+      status: "ok",
+      fileId: "1",
+      tableName: "csv_abc",
+      totalRows: 10,
+      insertedRows: 9,
+      duplicateRowsSkipped: 1,
+      failedRows: 0,
+      columns: ["a"],
+      types: ["text"],
+      rowErrors: [],
+      logs: [],
     };
     const outcome = classifyUploadResult("widgets.csv", res);
     expect(outcome.patch.status).toBe("done");
     expect(outcome.patch.progress).toBe(100);
     expect(outcome.patch.insertedRows).toBe(9);
-    expect(outcome.toast).toEqual({ type: "success", message: "widgets.csv: 9 of 10 rows imported" });
+    expect(outcome.toast).toEqual({
+      type: "success",
+      message: "widgets.csv: 9 of 10 rows imported",
+    });
     expect(outcome.notify?.title).toBe("Import complete");
     expect(outcome.invalidateRoute).toBe(true);
   });
 
   it("status ok with overwritten and failedRows composes the full message", () => {
     const res: UploadResult = {
-      status: "ok", fileId: "1", tableName: "csv_abc", totalRows: 10,
-      insertedRows: 8, duplicateRowsSkipped: 0, failedRows: 2,
-      columns: [], types: [], rowErrors: [], logs: [], overwritten: true,
+      status: "ok",
+      fileId: "1",
+      tableName: "csv_abc",
+      totalRows: 10,
+      insertedRows: 8,
+      duplicateRowsSkipped: 0,
+      failedRows: 2,
+      columns: [],
+      types: [],
+      rowErrors: [],
+      logs: [],
+      overwritten: true,
     };
     const outcome = classifyUploadResult("widgets.csv", res);
-    expect(outcome.toast.message).toBe(
-      "widgets.csv: overwrote · 8 of 10 rows imported · 2 failed",
-    );
+    expect(outcome.toast.message).toBe("widgets.csv: overwrote · 8 of 10 rows imported · 2 failed");
     expect(outcome.patch.overwritten).toBe(true);
     expect(outcome.toast.type).toBe("warning"); // #123: failed rows are not a plain success
     expect(outcome.notify?.title).toBe("Import complete with failed rows");
@@ -46,8 +70,12 @@ describe("classifyUploadResult", () => {
 
   it("status duplicate_file -> duplicate patch, warning toast, no invalidateRoute", () => {
     const res: UploadResult = {
-      status: "duplicate_file", reason: "content", existingFileName: "widgets.csv",
-      tableName: "csv_abc", existingRowCount: 5, logs: [],
+      status: "duplicate_file",
+      reason: "content",
+      existingFileName: "widgets.csv",
+      tableName: "csv_abc",
+      existingRowCount: 5,
+      logs: [],
     };
     const outcome = classifyUploadResult("widgets.csv", res);
     expect(outcome.patch.status).toBe("duplicate");
@@ -58,7 +86,10 @@ describe("classifyUploadResult", () => {
 
   it("status invalid_structure -> error patch carrying invalidReason", () => {
     const res: UploadResult = {
-      status: "invalid_structure", reason: "empty", message: "This CSV is empty.", logs: [],
+      status: "invalid_structure",
+      reason: "empty",
+      message: "This CSV is empty.",
+      logs: [],
     };
     const outcome = classifyUploadResult("widgets.csv", res);
     expect(outcome.patch.status).toBe("error");
@@ -69,8 +100,10 @@ describe("classifyUploadResult", () => {
 
   it("status error -> error patch carrying rowErrors", () => {
     const res: UploadResult = {
-      status: "error", message: "DB is on fire",
-      rowErrors: [{ rowNumber: 3, reason: "bad cast" }], logs: [],
+      status: "error",
+      message: "DB is on fire",
+      rowErrors: [{ rowNumber: 3, reason: "bad cast" }],
+      logs: [],
     };
     const outcome = classifyUploadResult("widgets.csv", res);
     expect(outcome.patch.status).toBe("error");
@@ -115,7 +148,9 @@ describe("canStop (#188)", () => {
 describe("buildCancelPatch / buildCancelToastMessage", () => {
   it("defaults the cancellation reason when none is given", () => {
     expect(buildCancelPatch()).toEqual({
-      status: "cancelled", progress: 100, cancellationReason: "Cancelled by user",
+      status: "cancelled",
+      progress: 100,
+      cancellationReason: "Cancelled by user",
     });
     expect(buildCancelToastMessage()).toBe("Import cancelled.");
   });
@@ -128,8 +163,13 @@ describe("buildCancelPatch / buildCancelToastMessage", () => {
 
 describe("decideOverwriteAction", () => {
   const baseJob: Job = {
-    id: "1", batchId: "b1", name: "f.csv", size: 10, status: "duplicate",
-    progress: 100, createdAt: 0,
+    id: "1",
+    batchId: "b1",
+    name: "f.csv",
+    size: 10,
+    status: "duplicate",
+    progress: 100,
+    createdAt: 0,
   };
 
   it("shows the diff dialog when the job already has a tableName", () => {
