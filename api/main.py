@@ -7,8 +7,8 @@ Run (from the repo root):
     Interactive docs: http://localhost:8000/docs
 """
 
-import hashlib
 import logging
+import os
 from contextlib import asynccontextmanager
 
 import psycopg2.pool
@@ -23,37 +23,33 @@ from api.ratelimit import rate_limit_middleware
 from api.routers import (audit_routes, auth_routes, csv_routes, import_routes, policy_routes, review_routes,
                          te_routes)
 from api.services import accounts
+from typing import Any
+from collections.abc import AsyncIterator
 
 logger = logging.getLogger(__name__)
 
 
-def assert_auth_configured(api_env: str, api_key: str) -> None:
-    """Fail closed when a deployed environment has no API key (O-03).
+def assert_auth_configured(api_env: str, allow_anonymous: bool) -> None:
+    """Refuse to start when anonymous access is asked for outside dev (O-03, #298).
 
     Split out of ``lifespan`` so the rule can be unit-tested without a database:
     ``lifespan`` also opens the connection pool, which would make every test of
     this check an integration test.
 
-    Only ``dev`` may run unauthenticated. Raises RuntimeError otherwise.
+    Data endpoints need a signed-in session. Only ``API_ENV=dev`` may opt in to
+    anonymous access with ``API_ALLOW_ANONYMOUS``; with any other ``API_ENV``
+    the opt-in is a misconfiguration and this raises RuntimeError rather than
+    quietly ignoring it.
     """
-    if not api_key and api_env != "dev":
+    if allow_anonymous and api_env != "dev":
         raise RuntimeError(
-            f"API_KEY is not set but API_ENV is '{api_env}'. "
-            "Refusing to start: every endpoint would be unauthenticated. "
-            "Set API_KEY, or set API_ENV=dev for local development."
+            f"API_ALLOW_ANONYMOUS is set but API_ENV is '{api_env}'. "
+            "Refusing to start: anonymous access is for local development only. "
+            "Unset API_ALLOW_ANONYMOUS; callers sign in (POST /api/auth/login)."
         )
 
 
-def key_fingerprint(key: str) -> str:
-    """A short one-way tag of ``key``: the first 8 hex digits of its SHA-256 (#292, BR-55).
-
-    Enough to tell in a log whether two keys are the same, and it contains no part of the key. The key itself,
-    in whole or in part, is never logged.
-    """
-    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:8]
-
-
-def docs_urls(api_env: str) -> dict:
+def docs_urls(api_env: str) -> dict[str, Any]:
     """FastAPI arguments that serve the interactive docs and the OpenAPI schema only in dev (#291, BR-54).
 
     ``/docs``, ``/redoc`` and ``/openapi.json`` list every route to anyone who can reach the port, with no key
@@ -79,29 +75,25 @@ def _purge_old_sessions() -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    # O-03: fail closed. A warning was not enough — an unset key left every
-    # router open, and a warning in a container log is easy to miss.
-    assert_auth_configured(settings.API_ENV, settings.API_KEY)
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # O-03 / #298: fail closed. Anonymous access is refused outside dev, and even in dev it needs the explicit
+    # API_ALLOW_ANONYMOUS opt-in; without it every data endpoint answers 401 until the caller signs in.
+    assert_auth_configured(settings.API_ENV, settings.API_ALLOW_ANONYMOUS)
     oidc.check_config()
     policy.check_config(settings.DATA_CLASSIFICATION, settings.AUDIT_RETENTION_YEARS)
-    if not settings.API_KEY:
+    if settings.API_ALLOW_ANONYMOUS:
         logger.warning(
-            "API_KEY is not set - every endpoint is unauthenticated. "
-            "Tolerated because API_ENV=dev. Set the API_KEY environment "
-            "variable before deploying anywhere reachable beyond localhost."
+            "!!! ANONYMOUS ACCESS IS ON (API_ALLOW_ANONYMOUS with API_ENV=dev): data endpoints answer without "
+            "sign-in, with no tenant, no role checks and full delete rights. Local development and tests only. !!!"
         )
-    else:
-        # A one-way fingerprint plus the length, so a script's key mismatch is diagnosable (BUG-006; a stray
-        # space or newline shows as a wrong length) without any part of the secret reaching the log (#292,
-        # BR-55: the first four characters used to be logged). Browsers no longer hold this key; they sign in
-        # per user (#96).
-        logger.info(
-            "API_KEY is set (fingerprint: sha256:%s, length: %d). "
-            "Scripts and services send it in the X-API-Key header; browsers sign in.",
-            key_fingerprint(settings.API_KEY), len(settings.API_KEY),
+    if os.environ.get("API_KEY"):
+        # #298: the shared key was retired. Say so, so an old install's leftover variable is not mistaken for
+        # protection. Nothing about its value is logged.
+        logger.warning(
+            "API_KEY is set but no longer used: the shared X-API-Key was retired (#298). "
+            "Scripts sign in with POST /api/auth/login and send Authorization: Bearer <token>."
         )
-    if not settings.PG_PASSWORD:
+    if not settings.PG_PASSWORD.get_secret_value():
         logger.warning(
             "PGPASSWORD is not set - connecting with an empty password. "
             "Fine for local dev; set PGPASSWORD before deploying anywhere else."
@@ -133,7 +125,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE"],  # PUT: review changes (M4, #108)
-    allow_headers=["Content-Type", "X-API-Key", "Authorization", "Idempotency-Key"],  # the last: M6 import (#110)
+    allow_headers=["Content-Type", "Authorization", "Idempotency-Key"],  # the last: M6 import (#110)
     expose_headers=["X-Data-Classification"],  # so the browser can read the marking (M7)
 )
 
@@ -158,7 +150,7 @@ def pool_exhausted_handler(request: Request, exc: psycopg2.pool.PoolError) -> JS
 
 
 @app.get("/api/health", tags=["health"])
-def health() -> dict:
+def health() -> dict[str, Any]:
     # BUG-031: verify the uploads schema is present, not just that Postgres is
     # up. Otherwise a half-bootstrapped API reports "ok" and then every /upload
     # call throws UndefinedTable.
@@ -167,13 +159,13 @@ def health() -> dict:
         with db.Conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT version()")
-                pg_version = cur.fetchone()[0]
+                pg_version = db.fetch_one(cur)[0]
                 cur.execute(
                     _sql.SQL("SELECT 1 FROM {}.csv_files LIMIT 0").format(
                         _sql.Identifier(settings.UPLOADS_SCHEMA)
                     )
                 )
-        body: dict = {"status": "ok"}
+        body: dict[str, Any] = {"status": "ok"}
         # #291 (BR-54): /api/health is open to anyone who can reach the port, so outside dev it says
         # only whether the API is up. The database name, host, version and schema are dev details.
         if settings.API_ENV == "dev":
@@ -189,7 +181,7 @@ def health() -> dict:
         # is deliberately unauthenticated (see BUG-035 comment above), and
         # psycopg2's OperationalError text can include host/port/user details.
         logger.warning("Health check failed: %s", exc)
-        degraded: dict = {"status": "degraded"}
+        degraded: dict[str, Any] = {"status": "degraded"}
         if settings.API_ENV == "dev":
             degraded["error"] = "Database is unreachable or not fully bootstrapped."
         return degraded

@@ -1,7 +1,23 @@
 version: 2
 updates:
-  # Python dev dependencies (requirements-dev.txt at repo root)
+  # Python dependencies: the requirements*.txt files people edit (direct dependencies with ranges). Dependabot does
+  # not regenerate the hashed *.lock files compiled from them (#327): after merging a bump, run
+  # `bash scripts/lock_requirements.sh`. tests/unit/test_reproducible_builds.py fails while a lock no longer satisfies
+  # its requirements file, so a stale lock cannot merge unnoticed.
   - package-ecosystem: "pip"
+    directories:
+      - "/"
+      - "/api"
+      - "/streamlit_app"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+
+  # GitHub Actions used by the workflows. They are pinned to commit SHAs with the version in a comment (#325);
+  # Dependabot updates the SHA and the comment together.
+  - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -9,9 +25,30 @@ updates:
     labels:
       - "dependencies"
 
-  # GitHub Actions used by the workflows
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  # The React frontend (#325). package-lock.json is its one lock file (#327).
+  - package-ecosystem: "npm"
+    directory: "/csv-table-hub-main"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+
+  # Base images of the shipped containers and the migration runner, pinned by digest (#325, #327). Dependabot
+  # proposes the new digest when a tag moves, and newer tags within the same line.
+  - package-ecosystem: "docker"
+    directories:
+      - "/container"
+      - "/infra"
+    ignore:
+      # Python's version is a decision (DECISIONS/2026-11-24-one-python-version.md), changed with CI and the locks.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # Node 22 and PostgreSQL 16 are the supported lines; moving off them is a decision too, not a weekly bump.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5

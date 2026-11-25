@@ -1,18 +1,26 @@
 """Connection pool + Alembic-driven schema bootstrap for the uploads registry."""
 
+from __future__ import annotations
+
 import logging
 import re
 import sys
 import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from pathlib import Path
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Literal
 
 import psycopg2
 import psycopg2.pool
 from psycopg2 import sql
 
 from api.config import settings
+
+if TYPE_CHECKING:
+    from psycopg2.extensions import connection, cursor
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +101,7 @@ def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
                 host=settings.PG_HOST,
                 port=settings.PG_PORT,
                 user=user,
-                password=settings.APP_DB_PASSWORD if settings.APP_DB_USER else settings.PG_PASSWORD,
+                password=(settings.APP_DB_PASSWORD if settings.APP_DB_USER else settings.PG_PASSWORD).get_secret_value(),
                 dbname=settings.PG_DATABASE,
             )
             if attempt > 1:
@@ -131,7 +139,7 @@ def close_pool() -> None:
         _getconn_executor = None
 
 
-def _borrow_with_timeout():
+def _borrow_with_timeout() -> connection:
     """Wrap pool.getconn() so a hung/exhausted pool raises PoolError instead
     of blocking the request thread forever.
 
@@ -150,7 +158,7 @@ def _borrow_with_timeout():
         # the task hasn't started yet; getconn is a blocking call that
         # started immediately, so we can't cancel it — but adding a done
         # callback returns the connection if it arrives late.
-        def _return_late_conn(fut):
+        def _return_late_conn(fut: Future[connection]) -> None:
             try:
                 conn = fut.result(timeout=0)
                 _pool.putconn(conn)
@@ -174,19 +182,64 @@ class Conn:
     BUG-030: getconn() is now bounded by POOL_GETCONN_TIMEOUT. If the pool is
     exhausted for longer than that, this raises psycopg2.pool.PoolError which
     api/main.py surfaces as HTTP 503 (Server busy, please retry shortly).
+
+    #297: borrowed inside a tenant's scope (``api.tenancy.tenant``), the connection switches to that tenant's
+    database role first, in a transaction of its own, so a later rollback by the caller cannot undo it. On the way
+    back to the pool it always returns to the login role, error or not; a connection that cannot is closed, never
+    pooled, so no request inherits another tenant's role.
     """
 
-    def __enter__(self):
+    def __enter__(self) -> connection:
         if _pool is None:
             raise RuntimeError("DB pool not initialised — call init_pool() first")
         self._conn = _borrow_with_timeout()
+        from api.tenancy import current_role
+
+        role = current_role()
+        if role:
+            try:
+                with self._conn.cursor() as cur:
+                    cur.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(role)))
+                self._conn.commit()
+            except Exception:
+                _pool.putconn(self._conn, close=True)
+                raise
         return self._conn
 
-    def __exit__(self, exc_type, exc, tb):
-        if exc_type is not None:
-            self._conn.rollback()
-        _pool.putconn(self._conn)
+    def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None,
+                 tb: TracebackType | None) -> Literal[False]:
+        # __enter__ refused to borrow without a pool, so there is one to return the connection to.
+        assert _pool is not None  # nosec B101 — narrows the type for mypy; not a runtime check
+        conn, close = self._conn, False
+        try:
+            # Rolling back first discards what the caller left uncommitted (putconn would anyway) and means the
+            # RESET below is committed on its own: a RESET inside an open transaction would be undone by its rollback.
+            conn.rollback()
+            with conn.cursor() as cur:
+                cur.execute("RESET ROLE")
+            conn.commit()
+        except Exception:  # noqa: BLE001 — a connection whose role is unknown must not go back to the pool
+            close = True
+        _pool.putconn(conn, close=close or conn.closed != 0)
         return False
+
+
+@contextmanager
+def acting_role(cur: cursor) -> Iterator[None]:
+    """Switch an open connection to the current tenant's role for a block, then back to the login role (#297).
+
+    For the rare request that borrowed its connection before the tenant was known and then writes to the tenant's
+    schema in the same transaction (a password reset and its audit entry). On an error the block's transaction is
+    rolled back, which undoes the SET ROLE, and ``Conn`` resets the role again on return.
+    """
+    from api.tenancy import current_role
+
+    role = current_role()
+    if not role:
+        raise RuntimeError("acting_role needs a tenant scope (api.tenancy.tenant)")
+    cur.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(role)))
+    yield
+    cur.execute("RESET ROLE")
 
 
 def bootstrap() -> None:
@@ -267,12 +320,12 @@ def bootstrap() -> None:
 
 
 @contextmanager
-def owner_connect():
+def owner_connect() -> Iterator[connection]:
     """A connection as the owner (PG_USER): for migrations, provisioning and grants, never requests.
     Closed on exit; the caller commits."""
     try:
         conn = psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                                password=settings.PG_PASSWORD, dbname=settings.PG_DATABASE)
+                                password=settings.PG_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
     except psycopg2.OperationalError as exc:
         raise _connect_error(exc, settings.PG_USER, "PGUSER / PGPASSWORD", permanent=_is_permanent(exc)) from exc
     try:
@@ -281,7 +334,7 @@ def owner_connect():
         conn.close()
 
 
-def run_cli(main) -> int:
+def run_cli(main: Callable[[], int]) -> int:
     """Run a script's main(). A connection failure prints its message and returns 1, not a traceback."""
     try:
         return main()
@@ -295,17 +348,23 @@ APPEND_ONLY = ("audit_log", "uploads", "upload_blobs", "source_rows", "row_decis
                "row_flags", "submissions", "approvals", "imports", "alembic_version", "alembic_version_te")
 
 
-def grant_runtime(cur, schema: str, create: bool) -> None:
-    """Give the runtime role (APP_DB_USER) what requests need in one schema (M3d, #107).
+def grant_runtime(cur: cursor, schema: str, create: bool) -> None:
+    """Give the runtime role (APP_DB_USER) what requests need in one of the deployment's own schemas (M3d, #107).
+
+    For the default, control and T&E template schemas only. A tenant's schema is granted to the tenant's own role
+    instead (``api.tenancy.provision_tenant_role``, #297). Commits. No-op without APP_DB_USER.
+    """
+    if settings.APP_DB_USER:
+        grant_schema(cur, schema, settings.APP_DB_USER, create)
+
+
+def grant_schema(cur: cursor, schema: str, role: str, create: bool) -> None:
+    """Give ``role`` what requests need in one schema (M3d, #107).
 
     Read and write on ordinary tables; read and insert only on APPEND_ONLY.
     ``create`` lets it create, and so own and drop, the per-upload csv_* tables;
-    ones the owner created before M3d are handed over. Commits. No-op without
-    APP_DB_USER or if the schema doesn't exist.
+    ones someone else created are handed over. Commits. No-op if the schema doesn't exist.
     """
-    role = settings.APP_DB_USER
-    if not role:
-        return
     cur.execute("SELECT 1 FROM pg_namespace WHERE nspname = %s", (schema,))
     if cur.fetchone() is None:
         return
@@ -320,7 +379,7 @@ def grant_runtime(cur, schema: str, create: bool) -> None:
         cur.execute(sql.SQL("REVOKE UPDATE, DELETE, TRUNCATE ON {}.{} FROM {}").format(
             s, sql.Identifier(table), r))
     cur.execute("SELECT to_regclass(%s)", (f'"{schema}".csv_files',))
-    if create and cur.fetchone()[0] is not None:
+    if create and fetch_one(cur)[0] is not None:
         cur.execute(sql.SQL(
             "SELECT c.relname FROM {}.csv_files f JOIN pg_class c ON c.relname = f.table_name "
             "AND c.relnamespace = %s::regnamespace WHERE f.mode = 'dynamic' "
@@ -328,6 +387,18 @@ def grant_runtime(cur, schema: str, create: bool) -> None:
         for (table,) in cur.fetchall():
             cur.execute(sql.SQL("ALTER TABLE {}.{} OWNER TO {}").format(s, sql.Identifier(table), r))
     cur.connection.commit()
+
+
+def fetch_one(cur: cursor) -> tuple[Any, ...]:
+    """The row of a statement that always returns one (``INSERT ... RETURNING``, ``SELECT count(*)``).
+
+    psycopg2 types ``fetchone()`` as possibly None. For these statements a missing row is a bug, so it raises here,
+    naming it, instead of failing later as ``'NoneType' object is not subscriptable`` (#323).
+    """
+    row = cur.fetchone()
+    if row is None:
+        raise RuntimeError("the statement returned no row, though it always returns one")
+    return row
 
 
 def alembic_ini_path() -> Path:

@@ -53,7 +53,7 @@ job of `quality-gate.yml`, with branch coverage.
 |---|---|
 | Measured | `api/` (routers, auth, tenancy, services), `streamlit_app/`, `build/csv` (the validator) and `evals/` (the runner) |
 | Gated | the three loaders in `api/services/` per file, and `api/` and `streamlit_app/` each as a whole (`scripts/check_coverage_floors.py`) |
-| Measured, not gated | `build/csv` and `evals/`: the loaders are shell, which coverage.py cannot see, and the runner is exercised through subprocesses, so they read low (0 % and 39 % on the full suite, 19 Nov) and a floor would mean nothing |
+| Gated since #304 | `build/csv` (80 %) and `evals/` (60 %). The validator and the runner mostly run as child processes of the tests; `patch = subprocess` in `.coveragerc` measures those too, which they were not before (they read 0 % and 39 % on 19 Nov). The shell loaders in `build/csv` are invisible to coverage.py and are not in the figure |
 | Not measured | `scripts/`, and the React app (`csv-table-hub-main/`, which has its own vitest suite) |
 
 `make coverage` runs what CI runs: the whole suite (it needs PostgreSQL, `PGDATABASE=te_mgmt_dev`), then the floors.

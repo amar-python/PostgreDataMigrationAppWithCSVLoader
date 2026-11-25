@@ -3,4 +3,4 @@
 streamlit==1.67.0
 requests>=2.32
 # XLSX reports (exports.py). Pure Python, with one small dependency (et-xmlfile); a few hundred kB for the offline bundle.
-openpyxl>=3.1,<4
+openpyxl>=3.1.5,<4

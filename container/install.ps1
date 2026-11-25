@@ -103,12 +103,12 @@ if ($FirstRun) {
     if ($LASTEXITCODE -eq 0) {
         if ((Get-Setting 'TE_RESET' '') -eq '1') {
             Write-Host 'TE_RESET=1: removing the earlier database volume and its containers. This deletes its data.'
-            $env:TE_VERSION = 'x'; $env:POSTGRES_PASSWORD = 'x'; $env:TE_DB_PASSWORD = 'x'; $env:TE_RUNTIME_PASSWORD = 'x'; $env:API_KEY = 'x'
+            $env:TE_VERSION = 'x'; $env:POSTGRES_PASSWORD = 'x'; $env:TE_DB_PASSWORD = 'x'; $env:TE_RUNTIME_PASSWORD = 'x'
             Compose down -v *> $null
             & $RT volume rm -f te_te-db *> $null
             & $RT volume inspect te_te-db *> $null
             if ($LASTEXITCODE -eq 0) { Fail "could not remove the volume te_te-db; remove it by hand ($RT volume rm te_te-db) and run this again" }
-            foreach ($v in 'TE_VERSION', 'POSTGRES_PASSWORD', 'TE_DB_PASSWORD', 'TE_RUNTIME_PASSWORD', 'API_KEY') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
+            foreach ($v in 'TE_VERSION', 'POSTGRES_PASSWORD', 'TE_DB_PASSWORD', 'TE_RUNTIME_PASSWORD') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
         } else {
             Fail ("a database volume (te_te-db) from an earlier install exists, but this folder has no .env, so the secrets it was created with are gone and the API could not sign in to it.`n" +
                   "  To keep the data: copy the .env from the earlier install's folder into this one, then run this again.`n" +
@@ -121,7 +121,6 @@ if ($FirstRun) {
         POSTGRES_PASSWORD   = New-Hex 24
         TE_DB_PASSWORD      = New-Hex 24
         TE_RUNTIME_PASSWORD = New-Hex 24
-        API_KEY             = New-Hex 24
     }
     $TeHostFinal = if ($HostArg) { $HostArg } else { 'localhost' }
     Write-Host 'generated new secrets'
@@ -129,14 +128,13 @@ if ($FirstRun) {
     # Keep the existing secrets: the database volume was initialised with them.
     $old = @{}
     foreach ($l in Get-Content -LiteralPath '.env') { if ($l -match '^([A-Z_]+)=(.*)$') { $old[$Matches[1]] = $Matches[2] } }
-    foreach ($k in 'POSTGRES_PASSWORD', 'TE_DB_PASSWORD', 'TE_RUNTIME_PASSWORD', 'API_KEY') {
+    foreach ($k in 'POSTGRES_PASSWORD', 'TE_DB_PASSWORD', 'TE_RUNTIME_PASSWORD') {
         if (-not $old.ContainsKey($k)) { Fail ".env has no $k; delete .env only if you also remove the data volume (compose down -v)" }
     }
     $Secrets = @{
         POSTGRES_PASSWORD   = $old['POSTGRES_PASSWORD']
         TE_DB_PASSWORD      = $old['TE_DB_PASSWORD']
         TE_RUNTIME_PASSWORD = $old['TE_RUNTIME_PASSWORD']
-        API_KEY             = $old['API_KEY']
     }
     $TeHostFinal = if ($HostArg) { $HostArg } elseif ($old.ContainsKey('TE_HOST')) { $old['TE_HOST'] } else { 'localhost' }
     Write-Host 'keeping the secrets in .env'
@@ -146,8 +144,7 @@ Write-Private '.env' @(
     "TE_HOST=$TeHostFinal",
     "POSTGRES_PASSWORD=$($Secrets.POSTGRES_PASSWORD)",
     "TE_DB_PASSWORD=$($Secrets.TE_DB_PASSWORD)",
-    "TE_RUNTIME_PASSWORD=$($Secrets.TE_RUNTIME_PASSWORD)",
-    "API_KEY=$($Secrets.API_KEY)"
+    "TE_RUNTIME_PASSWORD=$($Secrets.TE_RUNTIME_PASSWORD)"
 )
 $env:TE_VERSION = $TeVersion; $env:TE_HOST = $TeHostFinal
 
@@ -193,8 +190,8 @@ if ($FirstRun) {
 
 # ---- 6. smoke test --------------------------------------------------------------------------
 Step '6/6 smoke test'
-# API_KEY is not forwarded: the API container already has it in its environment, and a bare
-# `-e API_KEY` makes podman-compose 1.6 re-read the service's ${API_KEY:?} and fail.
+if (-not $AdminPassword) { Write-Host 'No admin password known (TE_ADMIN_PASSWORD not set, no .\te-initial-admin): the sign-in checks will FAIL.' }
+# The smoke test signs in as the first tenant admin; there is no shared API key (#298).
 $env:SMOKE_TENANT = $TeTenant; $env:SMOKE_USER = $TeAdminUser; $env:SMOKE_PASSWORD = $AdminPassword
 Compose exec -T -e SMOKE_TENANT -e SMOKE_USER -e SMOKE_PASSWORD api python smoke_test.py
 $smokeOk = ($LASTEXITCODE -eq 0)
@@ -206,7 +203,10 @@ try {
 } catch {
     Write-Host 'FAIL  ports 8000 and 8080 do not answer on this machine'; $smokeOk = $false
 }
-if (-not $smokeOk) { Fail "the smoke test failed; the stack is running, so look at: $RT compose logs" }
+if (-not $smokeOk) {
+    Fail ("the smoke test failed; the stack is running, so look at: $RT compose logs`n" +
+          "  If the admin's password changed since install, or .\te-initial-admin is gone, run this again with TE_ADMIN_PASSWORD set to the current password.")
+}
 
 Write-Host ''
 Write-Host "Installed. Open http://${TeHostFinal}:8080 and sign in as tenant '$TeTenant', user '$TeAdminUser'."

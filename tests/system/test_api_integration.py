@@ -43,44 +43,36 @@ class HealthContract(unittest.TestCase):
     def test_openapi_schema_is_served(self):
         self.assertEqual(client.get("/openapi.json").status_code, 200)
 
-    def test_health_is_not_behind_api_key(self):
-        """BUG-035 regression: /api/health must be reachable without X-API-Key
-        even when API_KEY is set, so external uptime probes can use it.
+    def test_health_needs_no_sign_in(self):
+        """BUG-035 regression: /api/health must be reachable without signing in,
+        even when anonymous access is off, so external uptime probes can use it.
         """
         from api.config import settings
 
-        original = settings.API_KEY
-        settings.API_KEY = "test-key-do-not-use"
+        original = settings.API_ALLOW_ANONYMOUS
+        settings.API_ALLOW_ANONYMOUS = False
         try:
-            # No header sent — should still return 200, not 401.
-            r = client.get("/api/health")
+            r = client.get("/api/health")  # no Authorization header
             self.assertEqual(r.status_code, 200)
         finally:
-            settings.API_KEY = original
+            settings.API_ALLOW_ANONYMOUS = original
 
-    def test_csv_endpoint_still_requires_api_key_when_set(self):
-        """BUG-035 counterpart: business endpoints must still be guarded.
+    def test_csv_endpoint_requires_sign_in(self):
+        """BUG-035 counterpart, #298: business endpoints are still guarded.
 
-        conftest.py overrides require_api_key to a no-op for the whole test
-        session (so other tests don't need to thread an X-API-Key header
-        through every call), which means this test — the one test meant to
-        prove auth is actually enforced — could never see a real 401. Pop
-        the override for just this test's scope so the real dependency runs.
+        conftest.py turns on the local-dev anonymous opt-in for the suite, so
+        this test switches it off to see the real 401.
         """
-        from api.auth import require_api_key
         from api.config import settings
 
-        original = settings.API_KEY
-        settings.API_KEY = "test-key-do-not-use"
-        had_override = require_api_key in app.dependency_overrides
-        saved_override = app.dependency_overrides.pop(require_api_key, None)
+        original = settings.API_ALLOW_ANONYMOUS
+        settings.API_ALLOW_ANONYMOUS = False
         try:
-            r = client.get("/api/csv/files")  # no X-API-Key header
+            r = client.get("/api/csv/files")  # no Authorization header
             self.assertEqual(r.status_code, 401)
+            self.assertEqual(r.json()["detail"], "Sign in required")
         finally:
-            settings.API_KEY = original
-            if had_override:
-                app.dependency_overrides[require_api_key] = saved_override
+            settings.API_ALLOW_ANONYMOUS = original
 
 
 @pytest.mark.integration
@@ -420,7 +412,7 @@ class AuditLogTrail(unittest.TestCase):
                               json={"fileName": self.name, "content": self.content})
         self.assertEqual(up.json()["status"], "ok", up.text)
         row = next(e for e in self._entries_for(self.name) if e["action"] == "upload")
-        self.assertEqual(row["actor"], "api_key")
+        self.assertEqual(row["actor"], "anonymous")
         check = self.client.get("/api/audit/verify").json()
         self.assertTrue(check["intact"], check)
         self.assertGreaterEqual(check["rows"], 1)
@@ -510,7 +502,7 @@ class PoolTimeout(unittest.TestCase):
             db._pool = psycopg2.pool.ThreadedConnectionPool(
                 minconn=1, maxconn=2,
                 host=db.settings.PG_HOST, port=db.settings.PG_PORT,
-                user=db.settings.PG_USER, password=db.settings.PG_PASSWORD,
+                user=db.settings.PG_USER, password=db.settings.PG_PASSWORD.get_secret_value(),
                 dbname=db.settings.PG_DATABASE,
             )
         except Exception as exc:  # noqa: BLE001

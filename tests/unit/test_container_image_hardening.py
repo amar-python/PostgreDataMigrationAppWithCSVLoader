@@ -128,7 +128,8 @@ def test_gosu_is_built_in_its_own_stage_from_a_go_image_that_has_the_fixes():
     stage_list = db_stages()
     assert len(stage_list) == 2, "db.Dockerfile: one stage that builds gosu, then the PostgreSQL image"
     build = stage_list[0]
-    assert re.fullmatch(r"FROM golang:1\.\d+ AS gosu", build[0]), "build gosu from a pinned golang release line"
+    assert re.fullmatch(r"FROM golang:1\.\d+@sha256:[0-9a-f]{64} AS gosu", build[0]), (
+        "build gosu from a pinned golang release line, pinned by digest (#327)")
     arg = next((ins for ins in build if ins.startswith("ARG GO_MINIMUM_VERSION=")), None)
     assert arg, "the stage must state the oldest Go release it accepts"
     minimum = tuple(int(part) for part in arg.split("=", 1)[1].split("."))
@@ -156,7 +157,7 @@ def test_gosu_is_built_static_from_a_release_tag_with_the_toolchain_pinned():
 
 def test_the_database_image_runs_the_rebuilt_gosu_at_the_path_the_official_entrypoint_uses():
     final = db_stages()[-1]
-    assert final[0] == "FROM postgres:16"
+    assert re.fullmatch(r"FROM postgres:16@sha256:[0-9a-f]{64}", final[0]), "PostgreSQL 16, pinned by digest (#327)"
     copy = index_of(final, "COPY --from=gosu")
     assert copy != -1, "copy the rebuilt gosu out of the build stage"
     assert final[copy].rstrip().endswith("/usr/local/bin/gosu"), "docker-entrypoint.sh calls gosu from the PATH"

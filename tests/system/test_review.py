@@ -81,7 +81,7 @@ class Review(unittest.TestCase):
         self.assertEqual(self._rows(uid)["excludedRows"], 0)
         history = self.client.get(f"/api/csv/uploads/{uid}/rows/2/history").json()
         self.assertEqual([(h["decision"], h["actor"], h["reason"]) for h in history],
-                         [("exclude", "api_key", "checked with the owner"), ("include", "api_key", "fixed upstream")])
+                         [("exclude", "anonymous", "checked with the owner"), ("include", "anonymous", "fixed upstream")])
 
     def test_cell_edits_are_versions_over_the_unchanged_original(self):
         uid = self._three_rows()

@@ -206,10 +206,13 @@ class TestCatalogueGenerator(unittest.TestCase):
 
 @pytest.mark.unit
 class CoverageFloorGate(unittest.TestCase):
-    FILES = ("api/services/csv_parse.py", "api/services/dynamic_loader.py", "api/services/te_loader.py")
+    FILES = ("api/services/csv_parse.py", "api/services/dynamic_loader.py", "api/services/load_common.py",
+             "api/services/te_loader.py")
 
     # Package floors (#274, #278): the report must also hold files from these packages, with statement counts.
     PACKAGE_FILES = {"api/main.py": 100, "streamlit_app/app.py": 100}
+    # #304: build/csv and evals have package floors too. Present at 100 % unless a test says otherwise.
+    OTHER_PACKAGES = {"build/csv/validator.py": 100, "evals/runner.py": 100}
 
     @staticmethod
     def _summary(pct: float, statements: int = 100) -> dict:
@@ -217,7 +220,9 @@ class CoverageFloorGate(unittest.TestCase):
 
     def _gate(self, pct: dict[str, float], drop: str | None = None, packages: dict | None = None) -> int:
         report = {"files": {f: {"summary": self._summary(pct[f])} for f in self.FILES if f != drop}}
-        for name, value in (self.PACKAGE_FILES if packages is None else packages).items():
+        for name, value in {**self.OTHER_PACKAGES, **(self.PACKAGE_FILES if packages is None else packages)}.items():
+            if value is None:   # None: leave this file out of the report
+                continue
             report["files"][name] = {"summary": value if isinstance(value, dict) else self._summary(value)}
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             json.dump(report, f)
@@ -254,7 +259,22 @@ class CoverageFloorGate(unittest.TestCase):
             import check_coverage_floors as gate
         finally:
             sys.path.pop(0)
-        self.assertEqual(set(gate.PACKAGE_FLOORS), {"api/", "streamlit_app/"})
+        self.assertEqual(set(gate.PACKAGE_FLOORS), {"api/", "streamlit_app/", "build/csv/", "evals/"})
+
+    def test_fails_when_the_validator_drops_below_its_package_floor(self):
+        """#304"""
+        self.assertEqual(self._gate({f: 100.0 for f in self.FILES}, packages={**self.PACKAGE_FILES,
+                                                                              "build/csv/validator.py": 50}), 1)
+
+    def test_fails_when_the_evals_runner_drops_below_its_package_floor(self):
+        """#304"""
+        self.assertEqual(self._gate({f: 100.0 for f in self.FILES}, packages={**self.PACKAGE_FILES,
+                                                                              "evals/runner.py": 30}), 1)
+
+    def test_fails_when_evals_is_not_in_the_report_at_all(self):
+        """#304: taking --cov=evals out must fail the gate, not quietly stop gating it."""
+        self.assertEqual(self._gate({f: 100.0 for f in self.FILES}, packages={**self.PACKAGE_FILES,
+                                                                              "evals/runner.py": None}), 1)
 
     def test_fails_when_the_streamlit_app_drops_below_its_package_floor(self):
         full = {f: 100.0 for f in self.FILES}
@@ -262,7 +282,9 @@ class CoverageFloorGate(unittest.TestCase):
 
     def test_fails_when_the_api_drops_below_its_package_floor(self):
         full = {f: 100.0 for f in self.FILES}
-        self.assertEqual(self._gate(full, packages={"api/main.py": 50, "streamlit_app/app.py": 100}), 1)
+        # api/main.py big enough that api/ is well under its floor however many loader files the report holds.
+        low = self._summary(50, statements=1000)
+        self.assertEqual(self._gate(full, packages={"api/main.py": low, "streamlit_app/app.py": 100}), 1)
 
     def test_fails_when_the_streamlit_app_is_not_in_the_report_at_all(self):
         """Taking --cov=streamlit_app out of CI must fail the gate, not quietly stop measuring it."""

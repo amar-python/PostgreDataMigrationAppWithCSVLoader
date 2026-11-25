@@ -63,7 +63,7 @@ Building Tier X measured what each engine's `te_core_schema.sql` actually define
 | postgresql | 12 | reference |
 | sqlite | 7 | 5 missing |
 | mariadb | 7 | 5 missing |
-| teradata | 1 | 11 missing |
+| teradata | ~~1~~ 12 *(corrected 2026-11-24, #342: the count of 1 matched a comment)* | ~~11 missing~~ none missing, never run on Teradata |
 | influxdb | no DDL (seed `.lp` only) | n/a |
 | redis | no DDL (seed `.sh` only) | n/a |
 

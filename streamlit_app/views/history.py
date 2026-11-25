@@ -68,7 +68,7 @@ def render() -> None:
     view = st.radio("Show", views, horizontal=True, label_visibility="collapsed", key="history_view") \
         if len(views) > 1 else views[0]
     if view == VIEWS[0]:
-        _imports(auth.session()["token"])
+        _imports(auth.current()["token"])
     else:
         _events()
 
@@ -220,7 +220,7 @@ def _events() -> None:
 
 
 def _read_file(path: str, **kwargs):
-    s = auth.session()
+    s = auth.current()
     try:
         return api_client.download("GET", path, token=s["token"], **kwargs)
     except api_client.Unauthorized:

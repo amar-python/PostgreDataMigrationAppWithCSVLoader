@@ -6,12 +6,13 @@ from fastapi import APIRouter, Depends
 
 from api import policy
 from api.auth import tenant_scope
+from typing import Any
 
 router = APIRouter(prefix="/api/policy", tags=["policy"],
                    dependencies=[Depends(tenant_scope), Depends(policy.mark_classification)])
 
 
 @router.get("")
-def get_policy() -> dict:
-    """Open to any signed-in member, or a request with the shared key: it only says how to handle the data."""
+def get_policy() -> dict[str, Any]:
+    """Open to any signed-in member, or an anonymous local-dev request (#298): it only says how to handle the data."""
     return policy.current()

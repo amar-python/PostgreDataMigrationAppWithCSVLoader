@@ -9,7 +9,7 @@ Every test condition that runs against the codebase, in one place. Python unit t
 | Category | Count | Where it lives | Driver |
 |----------|-------|---------------|--------|
 | Python unit tests | 54 | `tests/test_*.py` (9 files) | `unittest discover` |
-| SQL test-suite assertions | 142 | `tests/suites/test_0[1-5]_*.sql` | `tests/run_all_tests.sql` |
+| SQL test-suite assertions | 159 | `tests/suites/test_0[1-6]_*.sql` | `tests/run_all_tests.sql` |
 | Tier P eval scenarios | 23 | `evals/datasets/tier_p/` | `evals/runner.py` |
 | Tier I eval scenarios | 1 | `evals/datasets/tier_i/` | `evals/runner.py` |
 | Tier S eval scenarios | 1 | `evals/datasets/tier_s/` | `evals/runner.py` |
@@ -45,7 +45,7 @@ Located in `tests/`, run as `python -m unittest discover -s tests -p "test*.py"`
 
 ---
 
-## 2. SQL test-suite assertions (142)
+## 2. SQL test-suite assertions (159)
 
 Located in `tests/suites/`. Each suite is a standalone `.sql` file that uses the assertion library defined in `tests/framework/test_framework.sql`. Invoked via `tests/run_all_tests.sql` (orchestrator) or `tests/run_tests.sh` (Bash wrapper).
 
@@ -70,9 +70,10 @@ Located in `tests/suites/`. Each suite is a standalone `.sql` file that uses the
 | `test_02_programs_phases.sql` | 25 | `test_programs` and `test_phases` seed rows; classification marking values (`UNCLASSIFIED`/`PROTECTED`/`SECRET`/`TOP SECRET`); `phase_type` enum (`DT&E`/`AT&E`/`OT&E`/etc.); date-range rules (start before end); TEMP document version sequencing |
 | `test_03_requirements_vcrm.sql` | 23 | `requirements` and `vcrm_entries` seed rows; **100% VCRM coverage check for CYB9131** (every requirement has at least one mapped test case); intentional gap detection for LAND400 (verifies the gap is reported, not hidden); per-program coverage percentages |
 | `test_04_execution_defects.sql` | 38 | `test_events`, `test_results`, `defect_reports` seed rows; verdict mix (pass/fail/blocked/inconclusive); DR → fail result linkage; `severity` enum (`critical`/`major`/`minor`/`observation`); `resolved_at` lifecycle (NULL while open, populated when closed) |
-| `test_05_schema_and_business_rules.sql` | 31 | Table existence; index existence; trigger firing; updated_at timestamp auto-update; cross-table business rules (e.g. `test_results.event_id` must reference an event in the same phase as the test case) |
+| `test_05_schema_and_business_rules.sql` | 33 | Table existence; index existence; trigger firing; updated_at timestamp auto-update; cross-table business rules (e.g. `test_results.event_id` must reference an event in the same phase as the test case) |
+| `test_06_program_consistency.sql` | 11 (+ 6 `tf_record`) | A test case, VCRM entry, result or defect cannot join rows from two different programs; the triggers refuse it |
 
-The suite reports **142 assertions** at runtime (`142 | 142 | 0 | 0 | 100.0%`). A raw grep of `assert_*` call sites returns fewer, because some assertions run inside loops.
+The suite reports **159 assertions** at runtime (`159 | 159 | 0 | 0 | 100.0%`; Tier S on PostgreSQL 16, 24 Nov 2026). Per file, as recorded in `te_test_harness.test_run_results`: 23, 25, 23, 38, 33 and 17. A grep of `assert_*` call sites finds 153; the other 6 are suite 06's `tf_record` calls, each written as a pass branch and a fail branch of which one runs. (Corrected 24 Nov 2026: this said 142 and blamed loops for the gap.)
 
 **Pass criteria for Tier S:** suite output contains `ALL TESTS PASSED` and the total/pass-rate line shows 100%.
 

@@ -1,4 +1,4 @@
-flake8>=7.3.0
+flake8>=7.5.0
 bandit[toml]>=1.9.4
 pytest>=9.2.0
 pytest-cov>=7.1.0
@@ -16,3 +16,11 @@ streamlit==1.67.0
 # The Streamlit app writes XLSX reports (streamlit_app/exports.py), and its tests read them back. Keep in step
 # with streamlit_app/requirements.txt.
 openpyxl>=3.1,<4
+
+# #323: static type check (`make typecheck`, configured in pyproject.toml). types-psycopg2 is typeshed's stubs for
+# psycopg2, which ships none; without them every psycopg2 call would go unchecked.
+mypy>=2.3.1
+types-psycopg2>=2.9.21
+
+# #324: local hooks before each commit (.pre-commit-config.yaml). Run `pre-commit install` once per clone.
+pre-commit>=4.7.0

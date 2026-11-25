@@ -6,14 +6,16 @@
 # API_PUBLIC_URL every time the container starts. Same placeholder as the Ubuntu
 # bundle (scripts/offline/build_bundle.sh). No API key is built in: browsers sign in
 # per user (#96).
-FROM node:22-slim AS build
+# #327: the base image is pinned by digest (the tag alone can move under the same name); Dependabot's docker
+# ecosystem proposes the new digest when the tag moves. The tag stays for people and for Dependabot.
+FROM node:22-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS build
 WORKDIR /src
 COPY csv-table-hub-main/package.json csv-table-hub-main/package-lock.json ./
 RUN npm ci
 COPY csv-table-hub-main/ ./
 RUN NITRO_PRESET=node-server VITE_API_BASE=__OFFLINE_API_BASE__ npm run build
 
-FROM node:22-slim
+FROM node:22-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     NITRO_HOST=0.0.0.0 \
@@ -29,4 +31,7 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
  && rm -f /usr/local/bin/npm /usr/local/bin/npx
 USER node
 EXPOSE 8080
+# #327: the same check as the frontend service in docker-compose.yml (the page container/smoke_test.py checks).
+HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=6 \
+  CMD node -e "fetch('http://localhost:8080/').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
 ENTRYPOINT ["frontend-entrypoint.sh"]

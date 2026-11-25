@@ -27,7 +27,7 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from api import concurrency
-from api.config import settings
+from api.config import Settings, settings
 from api.main import app
 from api.routers import csv_routes, import_routes
 from api.services import staged_import
@@ -57,14 +57,14 @@ def release(held) -> None:
 @pytest.fixture(autouse=True)
 def limit(monkeypatch):
     monkeypatch.setattr(settings, "MAX_CONCURRENT_IMPORTS", 4)
-    monkeypatch.setattr(settings, "API_KEY", "")
     yield
     assert concurrency.active_imports() == 0, "a test left a slot taken"
 
 
 def test_the_default_is_four():
     assert os.environ.get("API_MAX_CONCURRENT_IMPORTS") is None, "this check is about the shipped default"
-    assert type(settings).MAX_CONCURRENT_IMPORTS == 4    # the class attribute: the fixture patches the instance
+    # A configuration built from an empty environment, so the fixture's patch of the shared instance cannot hide it.
+    assert Settings.from_env({}).MAX_CONCURRENT_IMPORTS == 4
 
 
 def test_it_admits_the_limit_and_refuses_the_next_with_503_and_retry_after():
@@ -197,14 +197,17 @@ def test_with_the_limit_off_nothing_is_refused(loader, monkeypatch):
 
 
 def test_a_failed_authentication_is_refused_before_it_is_counted(loader, monkeypatch):
-    """With the server full, a caller without the key learns nothing about its load: it gets the usual 401."""
-    monkeypatch.setattr(settings, "API_KEY", "right-key")
+    """With the server full, a caller who has not signed in learns nothing about its load: it gets the usual 401.
+
+    The four imports that fill the server get in under the suite's anonymous opt-in; it is then switched off, so the
+    next callers (one with a retired X-API-Key header, one with nothing) must sign in (#298).
+    """
     client = TestClient(app, raise_server_exceptions=False)
-    good = {"X-API-Key": "right-key"}
     with ThreadPoolExecutor(4) as pool:
-        running = [pool.submit(post, client, "import", good) for _ in range(4)]
+        running = [pool.submit(post, client, "import") for _ in range(4)]
         loader.wait_for(4)
-        wrong = post(client, "import", {"X-API-Key": "wrong"})
+        monkeypatch.setattr(settings, "API_ALLOW_ANONYMOUS", False)
+        wrong = post(client, "import", {"X-API-Key": "anything"})
         none = post(client, "import")
         loader.release.set()
         [f.result() for f in running]

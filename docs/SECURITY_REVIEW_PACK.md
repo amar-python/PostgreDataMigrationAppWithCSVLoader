@@ -14,14 +14,14 @@ ADR-0003 (Risk) recommends a security review before the first external tenant, n
 ```
  browser (React, sessionStorage token) ──HTTPS──▶  FastAPI (api/)  ──libpq──▶  PostgreSQL
                                                     │  per-router dependencies:
- scripts / services (X-API-Key) ──────────────────▶ │  tenant_scope → role check (allow) → handler
+ scripts / services (signed in, Bearer) ─────────▶ │  tenant_scope → role check (allow) → handler
                                                     │  rate limit middleware (per client)
  IdP (Keycloak / Entra ID), optional ◀── key fetch ─┘
 ```
 
 - **Trust boundaries:** the internet or intranet to the API; the API to PostgreSQL; the API to the IdP (optional, key fetch only); a tenant to every other tenant.
-- **Assets:** uploaded data and its preserved originals; the audit trail; credentials (passwords, session tokens, the shared API key, database roles); tenant separation.
-- **Actors:** four tenant roles (`uploader`, `reviewer`, `tenant_admin`, `auditor`, `docs/ROLES.md`); a request with the shared API key and no session (scripts and services; in `dev` with no key set, anyone); an operator with database access.
+- **Assets:** uploaded data and its preserved originals; the audit trail; credentials (passwords, session tokens, database roles); tenant separation.
+- **Actors:** four tenant roles (`uploader`, `reviewer`, `tenant_admin`, `auditor`, `docs/ROLES.md`); scripts and services, which sign in as named accounts like people do (the shared API key was retired in #298); in local `dev` only, an anonymous caller when `API_ALLOW_ANONYMOUS=1` is set; an operator with database access.
 - **Not exposed over the API, on purpose:** creating tenants, creating users, changing roles. Those are `scripts/create_tenant_admin.py` and database operations.
 
 ## 2. Run the evidence
@@ -46,9 +46,9 @@ Run on 2026-11-10: `make security-evidence` passed (231 tests, 0 failed, about 6
 | Session tokens: 256 bits of randomness, returned once, stored only as SHA-256; 12-hour lifetime and a 30-minute idle limit (`SESSION_IDLE_MINUTES`; every request counts as use); ended sessions are purged after a day, at start-up and by `scripts/purge_sessions.py` (#296); logout revokes; a password change ends the other sessions and an admin reset ends all of them | `accounts`, `api/auth.py` |
 | Bearer header, not cookies, so there is no CSRF surface. The browser keeps the token in `sessionStorage` (gone when the tab closes) | `csv-table-hub-main/src/lib/session.ts` |
 | OIDC: RS256 or ES256 only (`alg: none` refused); signature, issuer, audience, `exp`, `iat` all required; the user must already exist locally and be a member of the tenant (nobody is created from claims); key set over `https://` (5 s timeout) or a `file://` key file; plain `http://` refused at startup | `api/oidc.py` |
-| Shared API key: constant-time compare; the API refuses to start outside `dev` without one | `api/auth.py`, `api/main.py` |
+| No shared key (#298): a data request without a session gets 401; an `X-API-Key` header grants nothing. Anonymous access needs `API_ALLOW_ANONYMOUS=1` **and** `API_ENV=dev`, logs a warning at start-up, and the API refuses to start with it outside `dev` | `api/auth.py` `tenant_scope`, `api/main.py` `assert_auth_configured` |
 
-**Evidence:** `tests/system/test_accounts.py`, `test_password_reset.py`, `test_oidc.py`, `test_oidc_https.py` (the `https://` fetch, key rotation, an untrusted certificate and an IdP that is down or hangs, against a local TLS server), `tests/unit/test_api_hardening.py` (auth fails closed outside `dev`, rate limiting).
+**Evidence:** `tests/system/test_accounts.py`, `test_password_reset.py`, `test_oidc.py`, `test_oidc_https.py` (the `https://` fetch, key rotation, an untrusted certificate and an IdP that is down or hangs, against a local TLS server), `tests/unit/test_api_hardening.py` (anonymous access refused outside `dev`, rate limiting), `tests/system/test_sessions_required.py` (every data route 401 without a session; `X-API-Key` grants nothing; uploader 403 on delete and replace; audit names the user).
 
 **Not yet evidenced:** one sign-in against the real IdP (#113, `docs/OIDC_REAL_IDP_CHECK.md`).
 
@@ -66,7 +66,7 @@ Run on 2026-11-10: `make security-evidence` passed (231 tests, 0 failed, about 6
 
 **Questions for the reviewer**
 
-1. The Milestone 0 design said "schema per tenant, using `SET LOCAL search_path` and **per-tenant roles** inside each request's transaction". What was built is schema-qualified queries with **one** runtime role that holds privileges on every tenant schema (see F7). Is that enough for a customer-facing deployment, or must the database enforce isolation too?
+1. The Milestone 0 design said "schema per tenant, using `SET LOCAL search_path` and **per-tenant roles** inside each request's transaction". What was built is schema-qualified queries with **one** runtime role that holds privileges on every tenant schema (see F7). Is that enough for a customer-facing deployment, or must the database enforce isolation too? **Answered 24 Nov (#297):** the database must enforce it. Each tenant has its own role and every signed-in request runs `SET ROLE` to it (`DECISIONS/2026-11-24-per-tenant-db-roles.md`).
 2. `tenant_scope` is an `async` dependency on purpose: the schema is a context variable that only an async dependency sets in the context the endpoint's worker thread copies. Is there any way a new route, or a synchronous dependency added later, could run before the scope is set?
 
 ## 5. Role matrix
@@ -83,7 +83,7 @@ Run on 2026-11-10: `make security-evidence` passed (231 tests, 0 failed, about 6
 
 1. `tenant_admin` holds every permission, including upload and approve. Separation rests only on the "not your own upload or submission" rule. Is that acceptable, or should an editor also be barred from approving the rows they edited?
 2. `auditor` can read stored rows and download preserved originals (`read_rows`), not only the audit trail. Is that intended?
-3. A request with the shared key has no role and is never role-checked. Is that acceptable once there are external tenants (F8)?
+3. ~~A request with the shared key has no role and is never role-checked (F8).~~ Resolved by retiring the key (#298): every deployed request has a session and a role.
 
 ## 6. Upload handling
 
@@ -101,11 +101,11 @@ Run on 2026-11-10: `make security-evidence` passed (231 tests, 0 failed, about 6
 
 **Controls**
 
-- The API won't start outside `dev` without `API_KEY`. The runtime database role is made by `scripts/create_app_role.py` with a random password, written to a `0600` file and never printed. `*.tfvars` and `build/config.local.env` are git-ignored.
+- The API won't start outside `dev` with `API_ALLOW_ANONYMOUS` set, and there is no shared API key to manage (#298). The runtime database role is made by `scripts/create_app_role.py` with a random password, written to a `0600` file and never printed. `*.tfvars` and `build/config.local.env` are git-ignored.
 - In the Azure Terraform, the database passwords are `random_password` resources stored in Key Vault, and the Container App reads them through Key Vault secret references, so they are not in the image.
 - `tests/unit/test_security.py` scans for hard-coded credentials and for passwords echoed by scripts.
 
-**Not covered by anything in the repository:** the API's own secrets (`API_KEY`, `APP_DB_PASSWORD`, the `OIDC_*` settings). `infra/` deploys the migration and evals container, not the application (BR-38, #128), so there is no deployment definition to review for them yet (F9).
+**Not covered by anything in the repository:** the API's own secrets (`APP_DB_PASSWORD`, the `OIDC_*` settings). `infra/` deploys the migration and evals container, not the application (BR-38, #128), so there is no deployment definition to review for them yet (F9).
 
 ## 8. Weaknesses the author found
 
@@ -115,15 +115,15 @@ Severities are the author's estimate, for the reviewer to confirm or overrule. "
 |---|---|---|---|---|---|
 | F1 | Upload | **No limit on the request body before it is parsed.** Every size check (`MAX_UPLOAD_BYTES`) runs on the parsed JSON, so a signed-in uploader, or anyone with the key, can make the server buffer an arbitrarily large body first. | Medium (authenticated denial of service) | Code: `api/routers/csv_routes.py` (preview, upload), `import_routes.py` (stage) check `len(req.content)` after Pydantic has parsed the body; nothing earlier limits it | Reject on `Content-Length` in a middleware, and cap streamed bodies; also set the proxy's limit |
 | F2 | Deployment | **The unauthenticated health check discloses internals**: database name, `host:port`, the exact PostgreSQL version and the schema name. `/docs`, `/redoc` and `/openapi.json` are open too (the full route map). | Low | Called the API with no credentials: all four returned 200 with those details | `/api/health` returns only `{"status": ...}`; disable the docs or require auth outside `dev` |
-| F3 | Authentication | **Rate limiting keys on the peer IP and ignores `X-Forwarded-For`** (deliberately, so it can't be spoofed). Behind a reverse proxy every caller shares the proxy's address, so one client can exhaust the budget for everyone, and the brute-force limit isn't per attacker. Counters are per instance. | Medium (availability) unless the proxy limits per client | Code: `api/ratelimit.py` `_client_id` | Trust `X-Forwarded-For` only from a configured proxy address, or limit at the proxy; say which in the deployment guide. **Done in #293** (pending merge) without new code: uvicorn already does the first. Its `ProxyHeadersMiddleware` trusts `X-Forwarded-For` only from the addresses in `FORWARDED_ALLOW_IPS` (default loopback), so set that to the proxy's address; `docs/PROD_DEPLOY.md` says how and tests prove two clients behind a trusted proxy get separate budgets. The repository still defines no proxy or API deployment (F9), so it is not applied anywhere yet |
-| F4 | Authentication | **scrypt cost is below current guidance** (N=2^14; OWASP currently suggests N=2^17 with r=8, p=1) and hashes aren't upgraded when a user signs in. | Low to medium | Code: `accounts._N, _R, _P`. The hash string stores its parameters, so an upgrade is possible | Raise N, and re-hash on a successful sign-in when the stored parameters are weaker. **Done in #294** (pending merge); accounts that never sign in again keep their old hash until they do |
+| F3 | Authentication | **Rate limiting keys on the peer IP and ignores `X-Forwarded-For`** (deliberately, so it can't be spoofed). Behind a reverse proxy every caller shares the proxy's address, so one client can exhaust the budget for everyone, and the brute-force limit isn't per attacker. Counters are per instance. | Medium (availability) unless the proxy limits per client | Code: `api/ratelimit.py` `_client_id` | Trust `X-Forwarded-For` only from a configured proxy address, or limit at the proxy; say which in the deployment guide. **Done in #293** (merged 23 Nov: #375, through batch PR #378, `7fd7b5a`) without new code: uvicorn already does the first. Its `ProxyHeadersMiddleware` trusts `X-Forwarded-For` only from the addresses in `FORWARDED_ALLOW_IPS` (default loopback), so set that to the proxy's address; `docs/PROD_DEPLOY.md` says how and tests prove two clients behind a trusted proxy get separate budgets. The repository still defines no proxy or API deployment (F9), so it is not applied anywhere yet |
+| F4 | Authentication | **scrypt cost is below current guidance** (N=2^14; OWASP currently suggests N=2^17 with r=8, p=1) and hashes aren't upgraded when a user signs in. | Low to medium | Code: `accounts._N, _R, _P`. The hash string stores its parameters, so an upgrade is possible | Raise N, and re-hash on a successful sign-in when the stored parameters are weaker. **Done in #294** (merged 23 Nov: #370, through batch PR #378, `7fd7b5a`); accounts that never sign in again keep their old hash until they do |
 | F5 | Authentication | **Lockout is per username**, so anyone who knows a username can keep it locked (10 bad attempts every 15 minutes). OIDC sign-in ignores the lockout (it never uses the password). | Low | Code: `accounts.login`, `login_trusted` | A product decision: keep, or lock per username and client address. **Decided in §10 (#295): keep** |
-| F6 | Authentication | **Sessions have a fixed 12-hour life, no idle timeout, and expired or revoked rows are never deleted.** | Low | Code: `accounts._new_session`, `session_for`; no `DELETE FROM ...sessions` anywhere in `api/` or `scripts/` | Add an idle timeout, and purge expired sessions. **Done in #296** (pending merge): idle limit 30 minutes by default; ended sessions purged after a day grace, at start-up and by `scripts/purge_sessions.py`. There is no built-in scheduler: a long-running deployment must schedule the script |
-| F7 | Tenant isolation | **One runtime role can reach every tenant's schema.** Isolation is application-level (schema-qualified queries, tested), not database-level as the Milestone 0 design described; and the role is cluster-wide (#173, open). A missed schema qualification in future code would be a cross-tenant leak, not a database error. | Medium (design) | Code: no `SET ROLE` or per-tenant grants anywhere; `api/db.py` `grant_runtime` grants on all tenant schemas | Decide whether per-tenant roles (or row-level security) are required before the first external tenant |
-| F8 | Role matrix | **The shared API key bypasses tenants and roles**: it reaches the default schemas with full rights, has no per-key identity (every action audits as `api_key`) and one value for everyone. The open item in the VCRM for BR-36. | Medium until it is retired or scoped | Code: `api/auth.py` `tenant_scope`; `docs/ROLES.md` | Per-service keys with scopes and rotation, or retire it for scripts that can use a session |
-| F9 | Deployment | (a) Key Vault and the container registry are created with public network access **"temporarily enabled ... flip to false after bootstrap"**, a manual step that can be forgotten. (b) The Terraform state backend holds the generated passwords, so access to that storage account is access to the secrets. (c) The API's own secrets have no deployment definition (#128). | Medium (configuration) | Code: `infra/terraform-prod/main.tf` (`public_network_access_enabled = true` on the vault and registry; `backend "azurerm"`); grep found no `API_KEY` or `OIDC_` in `infra/` or the deploy docs. **The live state of the vault and the state storage account was not checked** | Check the live settings; make the flip part of the pipeline; restrict and encrypt the state account |
+| F6 | Authentication | **Sessions have a fixed 12-hour life, no idle timeout, and expired or revoked rows are never deleted.** | Low | Code: `accounts._new_session`, `session_for`; no `DELETE FROM ...sessions` anywhere in `api/` or `scripts/` | Add an idle timeout, and purge expired sessions. **Done in #296** (merged 23 Nov: #373, through batch PR #378, `7fd7b5a`): idle limit 30 minutes by default; ended sessions purged after a day grace, at start-up and by `scripts/purge_sessions.py`. There is no built-in scheduler: a long-running deployment must schedule the script |
+| F7 | Tenant isolation | **One runtime role can reach every tenant's schema.** Isolation is application-level (schema-qualified queries, tested), not database-level as the Milestone 0 design described; and the role is cluster-wide (#173, open). A missed schema qualification in future code would be a cross-tenant leak, not a database error. | Medium (design) | Code: no `SET ROLE` or per-tenant grants anywhere; `api/db.py` `grant_runtime` grants on all tenant schemas | Decide whether per-tenant roles (or row-level security) are required before the first external tenant. **Decided 24 Nov: per-tenant roles** (`DECISIONS/2026-11-24-per-tenant-db-roles.md`, #297). Each tenant has a NOLOGIN role `app_t_<slug>_<db hash>` with rights only on its own schema. A signed-in request's connections `SET ROLE` to it, and the runtime role is a member without inheriting. A cross-tenant query now fails with `InsufficientPrivilege` (`tests/system/test_tenant_isolation.py`). Code in #400 (#297) |
+| F8 | Role matrix | **The shared API key bypasses tenants and roles**: it reaches the default schemas with full rights, has no per-key identity (every action audits as `api_key`) and one value for everyone. The open item in the VCRM for BR-36. | Medium until it is retired or scoped | Code: `api/auth.py` `tenant_scope`; `docs/ROLES.md` | Per-service keys with scopes and rotation, or retire it for scripts that can use a session. **Done in #298** (merged in #401, 24 Nov 2026): the key is retired. Every data request needs a session, so it has a tenant, a role and a named user in the audit log, and deletes and replacements are role-checked. Anonymous access remains only for local dev and tests, by explicit opt-in (`API_ALLOW_ANONYMOUS=1` with `API_ENV=dev`); the API refuses to start with it elsewhere, which also closes the earlier gap where an unset `API_ENV` and `API_KEY` left everything open. Evidence: `tests/system/test_sessions_required.py` |
+| F9 | Deployment | (a) Key Vault and the container registry are created with public network access **"temporarily enabled ... flip to false after bootstrap"**, a manual step that can be forgotten. (b) The Terraform state backend holds the generated passwords, so access to that storage account is access to the secrets. (c) The API's own secrets have no deployment definition (#128). | Medium (configuration) | Code: `infra/terraform-prod/main.tf` (`public_network_access_enabled = true` on the vault and registry; `backend "azurerm"`); grep found no `OIDC_` in `infra/` or the deploy docs (`API_KEY` was retired in #298). **The live state of the vault and the state storage account was not checked** | Check the live settings; make the flip part of the pipeline; restrict and encrypt the state account |
 | F10 | Deployment | **The start-up log prints the first four characters of the API key** as a "fingerprint". | Low | Code: `api/main.py` | Log a hash prefix instead |
-| F11 | Deployment | **`SECURITY.md` names a personal Gmail address** as the vulnerability-report contact, marked as a placeholder (#57). External tenants will expect a real channel. | Low (process) | Read `SECURITY.md` | Replace with a monitored `security@` address. **Done differently in #300** (pending merge): `SECURITY.md` now points to GitHub private vulnerability reporting and lists no mailbox (`DECISIONS/2026-11-23-security-contact-private-reporting.md`). The owner must still enable the feature in the repository settings and send a test report |
+| F11 | Deployment | **`SECURITY.md` names a personal Gmail address** as the vulnerability-report contact, marked as a placeholder (#57). External tenants will expect a real channel. | Low (process) | Read `SECURITY.md` | Replace with a monitored `security@` address. **Done differently in #300** (merged 23 Nov: #372, through batch PR #378, `7fd7b5a`): `SECURITY.md` now points to GitHub private vulnerability reporting and lists no mailbox (`DECISIONS/2026-11-23-security-contact-private-reporting.md`). The owner must still enable the feature in the repository settings and send a test report |
 
 Reviewed and **not** a finding: the print window's HTML escaping (complete, now tested); tokens in `sessionStorage` rather than `localStorage`; dependency advisories (none today); SQL construction (identifiers always quoted, values always parameterised); the login endpoint's responses (uniform).
 
@@ -140,10 +140,21 @@ No penetration test; no live-environment check (Key Vault and registry network s
 | Date | |
 | Outcome | |
 
-| Finding | Decision (fix, accept, defer) | Owner | Issue |
-|---|---|---|---|
-| F1 to F4, F6 to F11 | | | |
-| F5 | accept: keep the lockout per username | Project owner (decided 2026-11-23) | #295 |
+The decisions below were proposed on 24 Nov 2026 from the state of each issue, for the independent reviewer to confirm, change or reject. They are not signed off until the block above has the reviewer, the date and the outcome (#312).
+
+| Finding | Decision (fix, accept, defer) | State on 24 Nov 2026 | Owner | Issue |
+|---|---|---|---|---|
+| F1 | fix | Fixed: closed (completed) | Project owner | #290 |
+| F2 | fix | Fixed: closed (completed) | Project owner | #291 |
+| F3 | fix | Fixed: closed (completed) | Project owner | #293 |
+| F4 | fix | Fixed: closed (completed) | Project owner | #294 |
+| F5 | accept: keep the lockout per username | Decided 2026-11-23 (see below) | Project owner | #295 |
+| F6 | fix | Fixed: closed (completed) | Project owner | #296 |
+| F7 | fix: one database role per tenant (owner's decision, 24 Nov) | In progress, open | Project owner | #297 |
+| F8 | fix: the T&E drop without the destructive flag (#287) is fixed; the shared API key is being retired (owner's decision, 24 Nov) | #287 closed; #298 in progress, open | Project owner | #287, #298 |
+| F9 | fix: Key Vault and ACR default to private in Terraform (#398, merged 24 Nov); the live Azure settings still need an `az` check, and the API's own deployment is decided (Container Apps, private network only) and defined in `infra/terraform-prod` by #256 (in review; validated, not applied), with its database passwords from Key Vault | Partly fixed, open | Project owner | #299, #256 |
+| F10 | fix | Fixed: closed (completed) | Project owner | #292 |
+| F11 | fix | Fixed: closed (completed) | Project owner | #300 |
 
 
 ### Decision on F5: account lockout stays per username (#295, 2026-11-23)

@@ -43,9 +43,16 @@ _SYMBOLS = re.compile(r"^(✅|⚠️?|⏸️?|❌)")
 
 
 def statuses() -> dict[str, str]:
-    """BR-xx -> verified | partial | deferred | not started, read from VCRM.md's coverage table."""
+    """BR-xx -> verified | partial | deferred | not started, read from VCRM.md's sections 1 and 2.
+
+    Only the text before "## 3." is read. Section 6 keeps the 2026-11-20 review's own table of statuses as a record;
+    a later row there would otherwise override the current status in section 2.
+    """
     found: dict[str, str] = {}
-    for line in VCRM.read_text(encoding="utf-8").splitlines():
+    text = VCRM.read_text(encoding="utf-8")
+    current = text.split("\n## 3.", 1)[0]
+    assert current != text, "VCRM.md has no '## 3.' heading; statuses() reads only sections 1 and 2"
+    for line in current.splitlines():
         m = re.match(r"\| (BR-\d+) \|", line)
         if not m:
             continue

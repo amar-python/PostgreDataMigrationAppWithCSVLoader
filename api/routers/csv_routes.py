@@ -26,6 +26,9 @@ from api.services.type_confirmation import require_confirmed_types
 from api.services.reports import like_pattern
 from api.services.staged_import import derive_state, state_columns, state_join
 from api.services.te_loader import match_te_table, upload_te
+from typing import Any
+from psycopg2.extensions import cursor
+from api.services.results import LoadResult
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +71,7 @@ class UploadRequest(BaseModel):
 
 
 @router.post("/preview", dependencies=[Depends(allow("preview"))])
-def preview(req: PreviewRequest) -> dict:
+def preview(req: PreviewRequest) -> dict[str, Any]:
     if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
     # BUG-025: mirror the try/except contract that /upload has. An unexpected
@@ -109,13 +112,13 @@ class RecordFailed(Exception):
 
 
 @router.post("/upload", dependencies=[Depends(allow("upload")), Depends(import_slot)])
-def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> dict:
+def upload(req: UploadRequest, session: dict[str, Any] | None = Depends(tenant_scope)) -> dict[str, Any]:
     if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
     original = _decode_original(req.contentBase64)
-    recorded: dict = {}
+    recorded: dict[str, Any] = {}
 
-    def record_with_load(cur, result: dict) -> None:
+    def record_with_load(cur: cursor, result: LoadResult) -> None:
         # #288 (BR-45, BR-52): runs on the load's cursor just before it commits, so the load, its
         # registry row, the original (M3b, #107) and the upload audit row (O-04) commit together.
         # Any failure rolls the load back; wrapping it keeps it out of the loaders' psycopg2 handlers.
@@ -129,7 +132,8 @@ def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> 
             raise RecordFailed(str(exc)) from exc
 
     if req.mode == "te":
-        if not req.targetTable:
+        target_table = req.targetTable
+        if not target_table:
             raise HTTPException(422, "targetTable is required when mode is 'te'")
         if req.headerMapping:
             # T&E columns must match the fixed schema exactly; a rename could
@@ -138,21 +142,22 @@ def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> 
         if req.typesConfirmed:
             raise HTTPException(422, "typesConfirmed is only supported in 'dynamic' mode")
 
-        def load() -> dict:
-            return upload_te(req.fileName, req.content, req.targetTable, session=session, on_commit=record_with_load)
+        def load() -> LoadResult:
+            return upload_te(req.fileName, req.content, target_table, session=session, on_commit=record_with_load)
     elif req.mode == "dynamic":
         if req.typesConfirmed and not req.types:
             raise HTTPException(422, "typesConfirmed requires the confirmed types to be sent in 'types'")
         require_confirmed_types(req.types, req.typesConfirmed)  # #242, when the server is set to require it
         mapping = [m.model_dump() for m in req.headerMapping] if req.headerMapping else None
 
-        def load() -> dict:
+        def load() -> LoadResult:
             return upload_dynamic(req.fileName, req.content, req.types, req.overwrite, session=session,
                                   header_mapping=mapping, types_confirmed=req.typesConfirmed,
                                   on_commit=record_with_load)
     else:
         raise HTTPException(422, f"Unknown mode '{req.mode}' — use 'dynamic' or 'te'")
 
+    result: LoadResult
     try:
         result = load()
     except RecordFailed as exc:
@@ -173,11 +178,11 @@ def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> 
         result.pop("_duplicateFlags", None)
         upload_id = record_upload(req.fileName, req.content, req.mode, result, original=original)
         result["uploadId"] = None if upload_id is None else str(upload_id)
-    return result
+    return dict(result)  # the same keys and values; typed as LoadResult above, and a plain JSON object to FastAPI
 
 
 @router.get("/files", dependencies=[Depends(allow("list_files"))])
-def list_files() -> list[dict]:
+def list_files() -> list[dict[str, Any]]:
     with Conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -230,28 +235,29 @@ def list_uploads(
     file: str | None = Query(None, description="file name contains this text, ignoring case"),
     date_from: datetime | None = Query(None, alias="from", description="uploaded on or after this time"),
     date_to: datetime | None = Query(None, alias="to", description="uploaded before this time"),
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Every upload attempt and its outcome, newest first (M3b, #107; BR-23), filterable (M7, #111; BR-35).
 
     ``state`` is the M6 workflow state; ``failureReason`` says why an attempt didn't import cleanly.
     """
     if status is not None and status not in _UPLOAD_STATUSES:
         raise HTTPException(422, f"Unknown status {status!r}; expected one of {list(_UPLOAD_STATUSES)}")
-    where, params = [], []
+    where: list[sql.Composable] = []
+    params: list[object] = []
     for clause, value in (("u.status = %s", status), ("u.uploader = %s", uploader),
                           ("u.file_name ILIKE %s ESCAPE '\\'", None if file is None else like_pattern(file)),
                           ("u.uploaded_at >= %s", date_from), ("u.uploaded_at < %s", date_to)):
         if value is not None:
             where.append(sql.SQL(clause))
             params.append(value)
-    clause = sql.SQL(" WHERE ") + sql.SQL(" AND ").join(where) if where else sql.SQL("")
+    where_sql = sql.SQL(" WHERE ") + sql.SQL(" AND ").join(where) if where else sql.SQL("")
     with Conn() as conn, conn.cursor() as cur:
         cur.execute(sql.SQL(
             "SELECT u.id, u.file_name, u.sha256, u.byte_size, u.uploader, u.mode, u.status, u.total_rows, "
             "u.imported_rows, u.failed_rows, u.csv_file_id, u.uploaded_at, {reason}, {cols} "
             "FROM {s}.uploads u {join}{where} ORDER BY u.id DESC LIMIT %s OFFSET %s"
         ).format(reason=sql.SQL(_FAILURE_REASON), cols=state_columns(), s=sql.Identifier(uploads_schema()),
-                 join=state_join(), where=clause), [*params, max(1, min(limit, 500)), max(0, offset)])
+                 join=state_join(), where=where_sql), [*params, max(1, min(limit, 500)), max(0, offset)])
         keys = ("id", "file_name", "sha256", "byte_size", "uploader", "mode", "status", "total_rows",
                 "imported_rows", "failed_rows", "csv_file_id", "uploaded_at", "failure_reason")
         out = []
@@ -267,7 +273,7 @@ def list_uploads(
 
 
 @router.get("/uploads/{upload_id}", dependencies=[Depends(allow("list_files"))])
-def upload_detail(upload_id: int) -> dict:
+def upload_detail(upload_id: int) -> dict[str, Any]:
     """One upload's outcome, why its rows failed, and its step log (M3c, #107).
     Stored on the server, so any session in the tenant can read them."""
     with Conn() as conn, conn.cursor() as cur:
@@ -300,7 +306,7 @@ def upload_original(upload_id: int) -> Response:
 
 
 @router.get("/tables/{table_name}/rows", dependencies=[Depends(allow("read_rows"))])
-def table_rows(table_name: str, limit: int = 50) -> dict:
+def table_rows(table_name: str, limit: int = 50) -> dict[str, Any]:
     if not table_name.startswith("csv_") or len(table_name) > 64:
         raise HTTPException(422, "Invalid table name")
     limit = max(1, min(limit, 200))
@@ -321,6 +327,7 @@ def table_rows(table_name: str, limit: int = 50) -> dict:
                 ),
                 (limit,),
             )
+            assert cur.description is not None  # nosec B101 — a SELECT always describes its columns
             cols = [d[0] for d in cur.description]
             rows = [dict(zip(cols, r)) for r in cur.fetchall()]
     # JSON-safe: stringify anything exotic (dates, Decimals)
@@ -332,7 +339,7 @@ def table_rows(table_name: str, limit: int = 50) -> dict:
 
 
 @router.delete("/files/{file_id}", dependencies=[Depends(allow("delete_file"))])
-def delete_file(file_id: int) -> dict:
+def delete_file(file_id: int) -> dict[str, Any]:
     if not settings.allow_destructive:
         raise HTTPException(
             403,
