@@ -27,7 +27,7 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from api import concurrency
-from api.config import settings
+from api.config import Settings, settings
 from api.main import app
 from api.routers import csv_routes, import_routes
 from api.services import staged_import
@@ -63,7 +63,8 @@ def limit(monkeypatch):
 
 def test_the_default_is_four():
     assert os.environ.get("API_MAX_CONCURRENT_IMPORTS") is None, "this check is about the shipped default"
-    assert type(settings).MAX_CONCURRENT_IMPORTS == 4    # the class attribute: the fixture patches the instance
+    # A configuration built from an empty environment, so the fixture's patch of the shared instance cannot hide it.
+    assert Settings.from_env({}).MAX_CONCURRENT_IMPORTS == 4
 
 
 def test_it_admits_the_limit_and_refuses_the_next_with_503_and_retry_after():
