@@ -60,6 +60,30 @@ def _open_csv(
     return df
 
 
+def _wrong_field_counts(path: Path, job: JobConfig) -> list[str]:
+    """Lines whose number of fields differs from the header's (or from the configured columns when there is no header).
+
+    Uses the same CSV dialect the loader uses (quoted fields may contain the delimiter and newlines). Blank lines are
+    skipped. A file that cannot be decoded is left to the parse step below, which reports it.
+    """
+    problems: list[str] = []
+    expected = None if job.has_header else len(job.columns)
+    try:
+        with path.open("r", encoding=job.encoding, newline="") as f:
+            reader = csv.reader(f, delimiter=job.delimiter)
+            for row in reader:
+                if not row or (len(row) == 1 and not row[0].strip()):
+                    continue                      # a blank line is not a row
+                if expected is None:
+                    expected = len(row)           # the header row defines the width
+                    continue
+                if len(row) != expected:
+                    problems.append(f"line {reader.line_num}: {len(row)} fields, expected {expected}")
+    except (UnicodeDecodeError, csv.Error):
+        return []
+    return problems
+
+
 def validate_csv(job: JobConfig) -> Tuple[StageResult, Optional[pd.DataFrame]]:
     """Run pre-import checks for a single job.
 
@@ -117,6 +141,19 @@ def validate_csv(job: JobConfig) -> Tuple[StageResult, Optional[pd.DataFrame]]:
             detail="Could not sniff (small file or unusual content); "
                    "deferring to pandas parse",
         )
+
+    # 3b. #350: every row must have the header's number of fields. pandas raises only on rows with too MANY fields; a
+    #     row with too few is padded with empty values, so a truncated export would load with NULLs and pass every
+    #     check (unless the missing column happened to be required). An empty value ("2,b@x.com,") has all its fields
+    #     and is fine; a missing field is not.
+    wrong = _wrong_field_counts(path, job)
+    if wrong:
+        shown = "; ".join(wrong[:5]) + (f"; and {len(wrong) - 5} more" if len(wrong) > 5 else "")
+        stage.record(
+            "row_shape_consistent", False,
+            detail=f"{len(wrong)} row(s) with the wrong number of fields: {shown}",
+        )
+        return stage, None
 
     # 4. Parse the file. Catches ragged rows, bad delimiters, truncated files
     #    in one place. BUG-11: previously this stage always reported True
