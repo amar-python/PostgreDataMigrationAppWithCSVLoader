@@ -16,6 +16,7 @@ Policy
 
 Exit status: 0 clean, 1 a blocking finding or an expired allow-list entry, 2 could not audit.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -74,8 +75,14 @@ def parse_pip_audit(text: str, source: str) -> list[Finding]:
     findings: dict[tuple, Finding] = {}  # pip-audit can list the same advisory twice for one package
     for dep in audited:
         for vuln in dep["vulns"]:
-            finding = Finding(source=source, package=dep["name"], version=dep["version"], advisory=vuln["id"],
-                              aliases=tuple(vuln.get("aliases", ())), fix=", ".join(vuln.get("fix_versions") or ()))
+            finding = Finding(
+                source=source,
+                package=dep["name"],
+                version=dep["version"],
+                advisory=vuln["id"],
+                aliases=tuple(vuln.get("aliases", ())),
+                fix=", ".join(vuln.get("fix_versions") or ()),
+            )
             findings.setdefault((finding.package, finding.version, finding.advisory), finding)
     return list(findings.values())
 
@@ -102,9 +109,16 @@ def parse_npm_audit(text: str, source: str) -> list[Finding]:
             if severity not in NPM_BLOCKING:
                 continue
             advisory = (via.get("url") or "").rstrip("/").rsplit("/", 1)[-1] or str(via.get("source", name))
-            findings.append(Finding(source=source, package=name, version=entry.get("range", ""),
-                                    advisory=advisory, fix=str(entry.get("fixAvailable", "")),
-                                    severity=severity))
+            findings.append(
+                Finding(
+                    source=source,
+                    package=name,
+                    version=entry.get("range", ""),
+                    advisory=advisory,
+                    fix=str(entry.get("fixAvailable", "")),
+                    severity=severity,
+                )
+            )
     return findings
 
 
@@ -152,8 +166,11 @@ def _run(cmd: list[str], cwd: Path, what: str) -> str:
 
 
 def run_pip_audit(requirements: str) -> str:
-    return _run([sys.executable, "-m", "pip_audit", "-r", requirements, "--progress-spinner", "off",
-                 "--format", "json"], ROOT, f"pip-audit on {requirements}")
+    return _run(
+        [sys.executable, "-m", "pip_audit", "-r", requirements, "--progress-spinner", "off", "--format", "json"],
+        ROOT,
+        f"pip-audit on {requirements}",
+    )
 
 
 def run_npm_audit(directory: str) -> str:
@@ -163,8 +180,16 @@ def run_npm_audit(directory: str) -> str:
     return _run([npm, "audit", "--omit=dev", "--json"], ROOT / directory, f"npm audit in {directory}")
 
 
-def main(argv=None, *, pip_runner=run_pip_audit, npm_runner=run_npm_audit, today=None, requirements=None,
-         allowlist_text=None, npm_dir=NPM_DIR) -> int:
+def main(
+    argv=None,
+    *,
+    pip_runner=run_pip_audit,
+    npm_runner=run_npm_audit,
+    today=None,
+    requirements=None,
+    allowlist_text=None,
+    npm_dir=NPM_DIR,
+) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--allowlist", type=Path, default=ALLOWLIST)
     args = parser.parse_args(argv)
@@ -172,8 +197,9 @@ def main(argv=None, *, pip_runner=run_pip_audit, npm_runner=run_npm_audit, today
     problems: list[str] = []
     findings: list[Finding] = []
     try:
-        entries = parse_allowlist(allowlist_text if allowlist_text is not None
-                                  else args.allowlist.read_text(encoding="utf-8"))
+        entries = parse_allowlist(
+            allowlist_text if allowlist_text is not None else args.allowlist.read_text(encoding="utf-8")
+        )
         files = requirements if requirements is not None else discover_requirements()
     except (AuditError, OSError) as exc:
         print(f"could not audit: {exc}")
@@ -198,16 +224,22 @@ def main(argv=None, *, pip_runner=run_pip_audit, npm_runner=run_npm_audit, today
     for f in result.allowed:
         print(f"allowed   {f.package} {f.version}  {f.advisory}  ({f.source})")
     for e in result.expired:
-        print(f"expired allow-list entry: {e.advisory} was valid through {e.expires}; renew it with a new reason, "
-              "or remove it")
+        print(
+            f"expired allow-list entry: {e.advisory} was valid through {e.expires}; renew it with a new reason, "
+            "or remove it"
+        )
     for f in result.blocking:
         print(f"BLOCKING  {f.package} {f.version}  {f.advisory}  fix: {f.fix or 'none known'}  ({f.source})")
     if result.blocking or result.expired:
-        print(f"\n{len(result.blocking)} blocking, {len(result.expired)} expired exception(s). Upgrade the package, "
-              "or add an entry to security/audit-allowlist.txt with a reason and an expiry date.")
+        print(
+            f"\n{len(result.blocking)} blocking, {len(result.expired)} expired exception(s). Upgrade the package, "
+            "or add an entry to security/audit-allowlist.txt with a reason and an expiry date."
+        )
         return 1
-    print(f"no known vulnerabilities in {len(files)} requirements file(s) or in {npm_dir}'s production dependencies"
-          + (f" ({len(result.allowed)} allowed)" if result.allowed else ""))
+    print(
+        f"no known vulnerabilities in {len(files)} requirements file(s) or in {npm_dir}'s production dependencies"
+        + (f" ({len(result.allowed)} allowed)" if result.allowed else "")
+    )
     return 0
 
 

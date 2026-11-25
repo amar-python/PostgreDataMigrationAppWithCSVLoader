@@ -26,6 +26,7 @@ Then verify::
 
     python -m pytest tests/test_issue_04_multi_file_upload.py
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,36 +36,34 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "api" / "services" / "dynamic_loader.py"
 
-OLD_STMT = '''                stmt = sql.SQL(
+OLD_STMT = """                stmt = sql.SQL(
                     "INSERT INTO {}.{} ({}) VALUES %s ON CONFLICT (_row_hash) DO NOTHING"
-                ).format(sql.Identifier(schema), sql.Identifier(table_name), insert_cols)'''
+                ).format(sql.Identifier(schema), sql.Identifier(table_name), insert_cols)"""
 
-NEW_STMT = '''                # RETURNING + fetch=True is deliberate: execute_values pages at 100
+NEW_STMT = """                # RETURNING + fetch=True is deliberate: execute_values pages at 100
                 # by default and cur.rowcount reflects only the last page, which
                 # under-counted every file over 100 rows. Counting returned rows is
                 # page-size independent. See docs/DEFECT_INSERTED_ROWS.md.
                 stmt = sql.SQL(
                     "INSERT INTO {}.{} ({}) VALUES %s "
                     "ON CONFLICT (_row_hash) DO NOTHING RETURNING 1"
-                ).format(sql.Identifier(schema), sql.Identifier(table_name), insert_cols)'''
+                ).format(sql.Identifier(schema), sql.Identifier(table_name), insert_cols)"""
 
-OLD_LOOP = '''                for i in range(0, len(to_insert), 500):
+OLD_LOOP = """                for i in range(0, len(to_insert), 500):
                     chunk = to_insert[i : i + 500]
                     execute_values(cur, stmt.as_string(cur), chunk)
-                    inserted += cur.rowcount if cur.rowcount >= 0 else len(chunk)'''
+                    inserted += cur.rowcount if cur.rowcount >= 0 else len(chunk)"""
 
-NEW_LOOP = '''                for i in range(0, len(to_insert), 500):
+NEW_LOOP = """                for i in range(0, len(to_insert), 500):
                     chunk = to_insert[i : i + 500]
                     returned = execute_values(
                         cur, stmt.as_string(cur), chunk, fetch=True)
-                    inserted += len(returned)'''
+                    inserted += len(returned)"""
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dry-run", action="store_true",
-                    help="show what would change without writing")
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--dry-run", action="store_true", help="show what would change without writing")
     args = ap.parse_args()
 
     if not TARGET.exists():
@@ -77,9 +76,9 @@ def main() -> int:
         print("  already fixed — nothing to do")
         return 0
 
-    missing = [name for name, snippet in
-               (("INSERT statement", OLD_STMT), ("insert loop", OLD_LOOP))
-               if snippet not in text]
+    missing = [
+        name for name, snippet in (("INSERT statement", OLD_STMT), ("insert loop", OLD_LOOP)) if snippet not in text
+    ]
     if missing:
         print("error: could not locate the expected code:")
         for name in missing:

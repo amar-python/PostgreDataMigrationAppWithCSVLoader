@@ -45,8 +45,10 @@ def import_slot() -> Iterator[None]:
             if _active >= limit:
                 raise HTTPException(
                     status_code=503,
-                    detail=(f"Too many imports are running on this server (the limit is {limit}). "
-                            f"Try again in {RETRY_AFTER_SECONDS} seconds."),
+                    detail=(
+                        f"Too many imports are running on this server (the limit is {limit}). "
+                        f"Try again in {RETRY_AFTER_SECONDS} seconds."
+                    ),
                     headers={"Retry-After": str(RETRY_AFTER_SECONDS)},
                 )
             _active += 1

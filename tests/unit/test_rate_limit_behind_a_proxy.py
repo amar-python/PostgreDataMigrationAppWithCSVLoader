@@ -18,6 +18,7 @@ trusted proxy, and the peer everywhere else. Asserted here, through the wrapper 
   * the setting, and the two rate-limit settings that were undocumented, are documented, and so is where a limit set in
     the proxy belongs; the limiter's docstring says how the client address is chosen.
 """
+
 from __future__ import annotations
 
 import re
@@ -62,6 +63,7 @@ def preview(client: TestClient, forwarded: str) -> int:
 
 # -- behind a trusted proxy ------------------------------------------------------------------------------------------
 
+
 def test_two_clients_behind_a_trusted_proxy_have_separate_budgets(monkeypatch):
     client = served(monkeypatch, PROXY)
     assert [preview(client, "203.0.113.5") for _ in range(2)] == [200, 200]
@@ -93,15 +95,16 @@ def test_forging_the_header_does_not_mint_a_budget_behind_a_trusted_proxy(monkey
 
 # -- not behind a trusted proxy --------------------------------------------------------------------------------------
 
+
 def test_a_header_from_an_untrusted_peer_is_ignored(monkeypatch):
-    client = served(monkeypatch, "10.0.0.2")             # a different address is the trusted one
+    client = served(monkeypatch, "10.0.0.2")  # a different address is the trusted one
     statuses = [preview(client, f"203.0.113.{i}") for i in range(3)]
     assert statuses == [200, 200, 429], "all three share the peer's budget, whatever the header says"
 
 
 def test_by_default_only_loopback_is_trusted(monkeypatch):
     assert uvicorn.Config("api.main:app", log_config=None).forwarded_allow_ips in ("127.0.0.1,::1", "127.0.0.1")
-    client = served(monkeypatch, None)                    # FORWARDED_ALLOW_IPS unset: the shipped default
+    client = served(monkeypatch, None)  # FORWARDED_ALLOW_IPS unset: the shipped default
     assert [preview(client, f"203.0.113.{i}") for i in range(3)] == [200, 200, 429]
 
 
@@ -115,19 +118,23 @@ def test_a_loopback_proxy_is_trusted_by_default(monkeypatch):
 def test_the_limiter_itself_keys_on_whatever_client_address_it_is_given():
     """Without the wrapper (a different server, or a test), the peer is the identity and the header is not."""
     from starlette.requests import Request
+
     scope = {"type": "http", "headers": [(b"x-forwarded-for", b"203.0.113.5")], "client": (PROXY, 5000)}
     assert _client_id(Request(scope)) == f"ip:{PROXY}"
 
 
 # -- what the repo starts, and what it says --------------------------------------------------------------------------
 
+
 def _start_up_files() -> list[Path]:
     roots = [ROOT / "container", ROOT / "scripts" / "offline", ROOT / "infra", ROOT / ".github" / "workflows"]
     found = []
     for base in roots:
         for path in base.rglob("*"):
-            scanned = path.suffix in {".sh", ".ps1", ".yml", ".yaml", ".tf", ".tfvars", ".json", ".md", ""} \
-                or "dockerfile" in path.name.lower()       # api.Dockerfile has the suffix ".Dockerfile"
+            scanned = (
+                path.suffix in {".sh", ".ps1", ".yml", ".yaml", ".tf", ".tfvars", ".json", ".md", ""}
+                or "dockerfile" in path.name.lower()
+            )  # api.Dockerfile has the suffix ".Dockerfile"
             if path.is_file() and ".terraform" not in path.parts and scanned:
                 found.append(path)
     assert any(p.name == "api.Dockerfile" for p in found), "the scan must include the API image"

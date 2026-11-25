@@ -12,6 +12,7 @@ for a server that was up. Asserted here by running the real script with a PATH t
 
 `tooling` only: these run bash, and the Windows job's `bash` is WSL's, with no distribution installed.
 """
+
 from __future__ import annotations
 
 import re
@@ -55,8 +56,9 @@ def path_dir(tmp_path: Path, *, gtimeout: bool = False, timeout: bool = False) -
 
 def run_preflight(path: str, host: str, port: int) -> str:
     env = {"PATH": path, "HOME": str(Path.home()), "PGHOST": host, "PGPORT": str(port)}
-    done = subprocess.run([shutil.which("bash"), str(SCRIPT)], cwd=ROOT, env=env, capture_output=True, text=True,
-                          timeout=120)
+    done = subprocess.run(
+        [shutil.which("bash"), str(SCRIPT)], cwd=ROOT, env=env, capture_output=True, text=True, timeout=120
+    )
     return done.stdout
 
 
@@ -78,10 +80,11 @@ def listening_port():
 def closed_port():
     with closing(socket.socket()) as probe:
         probe.bind(("127.0.0.1", 0))
-        return probe.getsockname()[1]   # closed again as soon as the block ends
+        return probe.getsockname()[1]  # closed again as soon as the block ends
 
 
 # -- the real script, on a PATH like stock macOS ---------------------------------------------------------------------
+
 
 def test_an_open_port_is_reachable_with_no_timeout_command(tmp_path, listening_port):
     assert port_line(run_preflight(path_dir(tmp_path), "127.0.0.1", listening_port), listening_port) == "PASS"
@@ -105,6 +108,7 @@ def test_an_open_port_is_still_reachable_with_the_gnu_timeout(tmp_path, listenin
 
 # -- with_timeout itself ---------------------------------------------------------------------------------------------
 
+
 def helper() -> str:
     text = SCRIPT.read_text(encoding="utf-8")
     match = re.search(r"^with_timeout\(\) \{.*?^\}\n", text, re.DOTALL | re.MULTILINE)
@@ -114,8 +118,13 @@ def helper() -> str:
 
 def with_timeout(path: str, *args: str) -> tuple[int, float]:
     started = time.monotonic()
-    done = subprocess.run([shutil.which("bash"), "-c", helper() + '\nwith_timeout "$@"', "_", *args],
-                          env={"PATH": path}, capture_output=True, text=True, timeout=60)
+    done = subprocess.run(
+        [shutil.which("bash"), "-c", helper() + '\nwith_timeout "$@"', "_", *args],
+        env={"PATH": path},
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
     return done.returncode, time.monotonic() - started
 
 

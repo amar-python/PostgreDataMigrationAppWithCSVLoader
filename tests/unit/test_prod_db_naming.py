@@ -57,8 +57,9 @@ def _bash(args: list[str], env: dict[str, str | None]) -> subprocess.CompletedPr
         else:
             full_env[key] = value
     # The scripts print UTF-8 symbols; the Windows locale codec cannot decode them.
-    return subprocess.run([_BASH, *args], env=full_env, capture_output=True, encoding="utf-8",
-                          errors="replace", timeout=60)
+    return subprocess.run(
+        [_BASH, *args], env=full_env, capture_output=True, encoding="utf-8", errors="replace", timeout=60
+    )
 
 
 def _require_bash() -> None:
@@ -83,8 +84,10 @@ class DeployerReadsNamesFromTheLauncher(unittest.TestCase):
         shutil.copy(BUILD / "deploy_all.sh", self.tmp / "build" / "deploy_all.sh")
         shutil.copytree(BUILD / "environments", self.tmp / "build" / "environments")
         for env in ("dev", "test", "staging", "prod"):
-            shutil.copy(self.tmp / "build" / "environments" / f"env_{env}.example.sql",
-                        self.tmp / "build" / "environments" / f"env_{env}.sql")
+            shutil.copy(
+                self.tmp / "build" / "environments" / f"env_{env}.example.sql",
+                self.tmp / "build" / "environments" / f"env_{env}.sql",
+            )
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -94,16 +97,21 @@ class DeployerReadsNamesFromTheLauncher(unittest.TestCase):
 
     def _dry_run(self, *envs: str) -> subprocess.CompletedProcess:
         # PGHOST is unreachable on purpose: a dry run must not touch PostgreSQL.
-        return _bash([_posix(self.tmp / "build" / "deploy_all.sh"), "--dry-run", *envs],
-                     {"PGHOST": "/nonexistent-socket-dir"})
+        return _bash(
+            [_posix(self.tmp / "build" / "deploy_all.sh"), "--dry-run", *envs], {"PGHOST": "/nonexistent-socket-dir"}
+        )
 
     def _write_launcher(self, env: str, text: str) -> None:
         self._launcher(env).write_text(text, encoding="utf-8", newline="\n")
 
     def test_committed_templates_keep_the_on_prem_names(self):
         out = self._dry_run().stdout
-        for env, db in (("DEV", "te_mgmt_dev"), ("TEST", "te_mgmt_test"),
-                        ("STAGING", "te_mgmt_staging"), ("PROD", "te_mgmt_prod")):
+        for env, db in (
+            ("DEV", "te_mgmt_dev"),
+            ("TEST", "te_mgmt_test"),
+            ("STAGING", "te_mgmt_staging"),
+            ("PROD", "te_mgmt_prod"),
+        ):
             self.assertRegex(out, rf"{env}\s+\(database: {db}, owner: postgres\)")
 
     def test_the_launcher_decides_the_database_and_owner(self):
@@ -116,14 +124,18 @@ class DeployerReadsNamesFromTheLauncher(unittest.TestCase):
         self.assertRegex(res.stdout, r"PROD\s+\(database: te_prod, owner: pgadmin\)")
 
     def test_a_launcher_that_sets_neither_falls_back_to_the_on_prem_names(self):
-        lines = [ln for ln in self._launcher("prod").read_text(encoding="utf-8").splitlines()
-                 if not re.match(r"\\set (db_name|db_owner)\b", ln)]
+        lines = [
+            ln
+            for ln in self._launcher("prod").read_text(encoding="utf-8").splitlines()
+            if not re.match(r"\\set (db_name|db_owner)\b", ln)
+        ]
         self._write_launcher("prod", "\n".join(lines))
         self.assertRegex(self._dry_run("prod").stdout, r"database: te_mgmt_prod, owner: postgres")
 
     def test_an_unsafe_identifier_is_refused(self):
-        text = re.sub(r"(\\set db_name\s+).*", r'\1"x; DROP DATABASE y"',
-                      self._launcher("prod").read_text(encoding="utf-8"))
+        text = re.sub(
+            r"(\\set db_name\s+).*", r'\1"x; DROP DATABASE y"', self._launcher("prod").read_text(encoding="utf-8")
+        )
         self._write_launcher("prod", text)
         res = self._dry_run("prod")
         self.assertNotEqual(res.returncode, 0)
@@ -142,9 +154,16 @@ class EntrypointWritesTheLauncher(unittest.TestCase):
         (self.home / "build" / "environments").mkdir(parents=True)
         for template in (BUILD / "environments").glob("env_*.example.sql"):
             shutil.copy(template, self.home / "build" / "environments" / template.name)
-        self.env = {"MIGRATION_HOME": _posix(self.home), "TARGET_ENV": "prod", "PGHOST": "unused",
-                    "PGPORT": "5432", "PGUSER": "pgadmin", "PGDATABASE": "te_prod",
-                    "WAIT_FOR_DB_SECONDS": "1", "APP_DB_PASSWORD": SECRET}
+        self.env = {
+            "MIGRATION_HOME": _posix(self.home),
+            "TARGET_ENV": "prod",
+            "PGHOST": "unused",
+            "PGPORT": "5432",
+            "PGUSER": "pgadmin",
+            "PGDATABASE": "te_prod",
+            "WAIT_FOR_DB_SECONDS": "1",
+            "APP_DB_PASSWORD": SECRET,
+        }
 
     def tearDown(self):
         shutil.rmtree(self.home, ignore_errors=True)
@@ -154,8 +173,14 @@ class EntrypointWritesTheLauncher(unittest.TestCase):
         return _bash([_posix(ENTRYPOINT), "render"], {**self.env, **override})
 
     def test_the_image_has_no_concrete_launcher(self):
-        self.assertEqual([p.name for p in (self.home / "build" / "environments").glob("env_*.sql")
-                          if not p.name.endswith(".example.sql")], [])
+        self.assertEqual(
+            [
+                p.name
+                for p in (self.home / "build" / "environments").glob("env_*.sql")
+                if not p.name.endswith(".example.sql")
+            ],
+            [],
+        )
 
     def test_the_launcher_is_made_from_the_containers_database_and_user(self):
         res = self._render()
@@ -198,8 +223,10 @@ class EntrypointWritesTheLauncher(unittest.TestCase):
 @pytest.mark.unit
 class TerraformAgreesWithTheDeployment(unittest.TestCase):
     def test_the_database_terraform_creates_is_te_prod(self):
-        m = re.search(r'resource "azurerm_postgresql_flexible_server_database" "te_prod"\s*\{[^}]*?name\s*=\s*"([^"]+)"',
-                      TERRAFORM)
+        m = re.search(
+            r'resource "azurerm_postgresql_flexible_server_database" "te_prod"\s*\{[^}]*?name\s*=\s*"([^"]+)"',
+            TERRAFORM,
+        )
         self.assertIsNotNone(m)
         self.assertEqual(m.group(1), "te_prod")
 
@@ -210,7 +237,9 @@ class TerraformAgreesWithTheDeployment(unittest.TestCase):
 
     def test_the_job_receives_the_application_password_as_a_secret(self):
         self.assertEqual(_tf_env("APP_DB_PASSWORD"), "app-password")
-        self.assertRegex(TERRAFORM, r'secret\s*\{\s*name\s*=\s*"app-password"[^}]*azurerm_key_vault_secret\.app_password\.id')
+        self.assertRegex(
+            TERRAFORM, r'secret\s*\{\s*name\s*=\s*"app-password"[^}]*azurerm_key_vault_secret\.app_password\.id'
+        )
 
     def test_every_extension_the_schema_creates_is_allow_listed_on_azure(self):
         needed = set(re.findall(r'CREATE EXTENSION IF NOT EXISTS "([^"]+)"', SCHEMA_SQL.read_text(encoding="utf-8")))
@@ -228,7 +257,7 @@ class DeploymentOutputDoesNotEchoThePassword(unittest.TestCase):
     def test_the_password_row_is_captured_not_printed(self):
         text = SCHEMA_SQL.read_text(encoding="utf-8")
         start = text.index("set_config('te.env_label'")
-        stmt = text[start:text.index("\\echo", start)]
+        stmt = text[start : text.index("\\echo", start)]
         self.assertIn("te.app_password", stmt)
         self.assertIn("\\gset", stmt)
         self.assertNotIn(";", stmt, "a ';'-terminated SELECT prints the row, password included")

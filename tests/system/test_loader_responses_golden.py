@@ -50,19 +50,37 @@ def corpus(t: str) -> list[tuple[str, dict]]:
     return [
         ("good", _dyn(f"people_{t}.csv", f"id,name,qty\n1,a{t},5\n2,b,6\n")),
         ("same bytes again", _dyn(f"other_{t}.csv", f"id,name,qty\n1,a{t},5\n2,b,6\n")),
-        ("version 2, new column, one row repeated", _dyn(f"people_{t}.csv", f"id,name,qty,extra\n1,a{t},5,\n3,c,7,z\n")),
-        ("version 3, typed, one bad row", _dyn(f"people_{t}.csv", f"id,name,qty\n4,d{t},8\nx,e,9\n5,f,1.5\n",
-                                               types=["int8", "text", "numeric"], typesConfirmed=True)),
+        (
+            "version 2, new column, one row repeated",
+            _dyn(f"people_{t}.csv", f"id,name,qty,extra\n1,a{t},5,\n3,c,7,z\n"),
+        ),
+        (
+            "version 3, typed, one bad row",
+            _dyn(
+                f"people_{t}.csv",
+                f"id,name,qty\n4,d{t},8\nx,e,9\n5,f,1.5\n",
+                types=["int8", "text", "numeric"],
+                typesConfirmed=True,
+            ),
+        ),
         ("every row bad", _dyn(f"allbad_{t}.csv", f"n,tag\nx,{t}\ny,{t}\n", types=["int8", "text"])),
         ("ragged and short rows", _dyn(f"ragged_{t}.csv", f"a,b\n1,2,3\n4\n5,{t}\n")),
         ("in-file duplicates", _dyn(f"dupes_{t}.csv", f"a\n{t}\n{t}\n2\n")),
         ("empty", _dyn(f"empty_{t}.csv", "")),
         ("header only", _dyn(f"header_{t}.csv", "a,b\n")),
         ("blank header", _dyn(f"blank_{t}.csv", f",\n1,{t}\n")),
-        ("header rename", _dyn(f"rename_{t}.csv", f"Old Name,b\n1,{t}\n",
-                               headerMapping=[{"original": "Old Name", "renamed": "new_name"}])),
-        ("bad header mapping", _dyn(f"rename2_{t}.csv", f"a\n{t}\n",
-                                    headerMapping=[{"original": "nope", "renamed": "x"}])),
+        (
+            "header rename",
+            _dyn(
+                f"rename_{t}.csv",
+                f"Old Name,b\n1,{t}\n",
+                headerMapping=[{"original": "Old Name", "renamed": "new_name"}],
+            ),
+        ),
+        (
+            "bad header mapping",
+            _dyn(f"rename2_{t}.csv", f"a\n{t}\n", headerMapping=[{"original": "nope", "renamed": "x"}]),
+        ),
         ("type count mismatch", _dyn(f"types_{t}.csv", f"a,b\n1,{t}\n", types=["int8"])),
         ("unsupported type", _dyn(f"types2_{t}.csv", f"a\n{t}\n", types=["money"])),
         ("over the row cap", _dyn(f"big_{t}.csv", "a\n" + "".join(f"{i}\n" for i in range(60)))),
@@ -72,12 +90,17 @@ def corpus(t: str) -> list[tuple[str, dict]]:
         ("te: empty", _te(f"t1_{t}.csv", "name\n")),
         ("te: unknown column", _te(f"t2_{t}.csv", f"name,bogus\n{t},1\n")),
         ("te: good", _te(f"orgs_{t}.csv", f"name,org_type,country\nAlpha {t},prime,AU\nBeta {t},test_unit,NZ\n")),
-        ("te: CHECK violation on one row (database fallback)",
-         _te(f"orgs2_{t}.csv", f"name,org_type,country\nGamma {t},prime,AU\nDelta {t},not_a_type,AU\n")),
+        (
+            "te: CHECK violation on one row (database fallback)",
+            _te(f"orgs2_{t}.csv", f"name,org_type,country\nGamma {t},prime,AU\nDelta {t},not_a_type,AU\n"),
+        ),
         ("te: client-side type error", _te(f"ev_{t}.csv", f"is_active,name,org_type\nmaybe,E {t},prime\n")),
         ("te: ragged", _te(f"orgs3_{t}.csv", f"name,org_type\nZeta {t},prime,extra\n")),
         ("te: re-upload by the same name", _te(f"orgs_{t}.csv", f"name,org_type,country\nEta {t},academic,AU\n")),
-        ("dynamic: an organisation-shaped dataset", _dyn(f"orgset_{t}.csv", f"name,org_type,country\nTheta {t},prime,AU\n")),
+        (
+            "dynamic: an organisation-shaped dataset",
+            _dyn(f"orgset_{t}.csv", f"name,org_type,country\nTheta {t},prime,AU\n"),
+        ),
         ("te: content already a dataset", _te(f"orgs-te_{t}.csv", f"name,org_type,country\nTheta {t},prime,AU\n")),
         ("te: over the row cap", _te(f"bigte_{t}.csv", "name\n" + "".join(f"n{i}\n" for i in range(60)))),
     ]
@@ -129,9 +152,11 @@ def test_upload_responses_match_the_recorded_ones(caps):
         got, want = json.loads(actual), json.loads(expected)
         first = next((i for i, (a, b) in enumerate(zip(got, want)) if a != b), min(len(got), len(want)))
         case = (want[first] if first < len(want) else got[first])["case"]
-        pytest.fail(f"the upload endpoint answers differently from the recorded responses, first at case "
-                    f"{first + 1} ({case!r}):\n  expected {json.dumps(want[first] if first < len(want) else None)[:600]}"
-                    f"\n  actual   {json.dumps(got[first] if first < len(got) else None)[:600]}")
+        pytest.fail(
+            f"the upload endpoint answers differently from the recorded responses, first at case "
+            f"{first + 1} ({case!r}):\n  expected {json.dumps(want[first] if first < len(want) else None)[:600]}"
+            f"\n  actual   {json.dumps(got[first] if first < len(got) else None)[:600]}"
+        )
 
 
 def test_the_corpus_reaches_every_branch_it_names():

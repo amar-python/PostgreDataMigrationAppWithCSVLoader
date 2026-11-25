@@ -5,9 +5,8 @@ from __future__ import annotations
 import re
 import uuid
 
-from playwright.sync_api import expect
-
 from conftest import react_sign_in
+from playwright.sync_api import expect
 
 
 def _tag() -> str:

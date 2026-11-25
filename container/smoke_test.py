@@ -17,6 +17,7 @@ Environment:
 
 Exits 0 only if every check that ran passed.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,8 +32,9 @@ FRONTEND = os.environ.get("FRONTEND_URL", "http://frontend:8080").rstrip("/")
 TOTAL = 7
 
 
-def call(url: str, *, method: str = "GET", headers: dict | None = None, body: dict | None = None,
-         timeout: float = 15.0) -> tuple[int, str]:
+def call(
+    url: str, *, method: str = "GET", headers: dict | None = None, body: dict | None = None, timeout: float = 15.0
+) -> tuple[int, str]:
     """Return (status, text). An HTTP error is a status, not an exception."""
     if not url.lower().startswith(("http://", "https://")):
         raise ValueError(f"the smoke test only calls http(s) URLs, got {url!r}")  # urlopen would follow file:
@@ -91,8 +93,9 @@ def main() -> int:
     check("API rejects a request without a session", status == 401, f"got HTTP {status}")
 
     if with_login:
-        status, text = call(f"{API}/api/auth/login", method="POST",
-                            body={"tenant": tenant, "username": user, "password": password})
+        status, text = call(
+            f"{API}/api/auth/login", method="POST", body={"tenant": tenant, "username": user, "password": password}
+        )
         token = ""
         try:
             token = json.loads(text).get("token", "") if status == 200 else ""
@@ -102,22 +105,28 @@ def main() -> int:
         auth = {"Authorization": f"Bearer {token}"}
 
         status, text = call(f"{API}/api/auth/me", headers=auth)
-        check("session is tenant_admin", status == 200 and '"role":"tenant_admin"' in compact(text),
-              f"HTTP {status}")
+        check("session is tenant_admin", status == 200 and '"role":"tenant_admin"' in compact(text), f"HTTP {status}")
 
         tag = time.time_ns()  # unique name and content, so the test can be re-run
         name = f"smoke_{tag}.csv"
-        status, text = call(f"{API}/api/csv/upload", method="POST", headers=auth,
-                            body={"fileName": name, "content": f"a,b\n1,{tag}\n2,y\n"})
+        status, text = call(
+            f"{API}/api/csv/upload",
+            method="POST",
+            headers=auth,
+            body={"fileName": name, "content": f"a,b\n1,{tag}\n2,y\n"},
+        )
         check("upload a CSV (2 rows inserted)", '"insertedRows":2' in compact(text), f"HTTP {status}: {text[:200]}")
 
         status, text = call(f"{API}/api/csv/files", headers=auth)
-        check("upload listed with persisted counts", status == 200 and '"total_rows":2' in compact(text),
-              f"HTTP {status}")
+        check(
+            "upload listed with persisted counts", status == 200 and '"total_rows":2' in compact(text), f"HTTP {status}"
+        )
     else:
         # Counted as the four checks it stands for, so the run reports "3 of 7", never a pass.
-        print("FAIL  sign-in, upload and listing checks: set SMOKE_TENANT, SMOKE_USER and SMOKE_PASSWORD "
-              "(the installer's first tenant admin)")
+        print(
+            "FAIL  sign-in, upload and listing checks: set SMOKE_TENANT, SMOKE_USER and SMOKE_PASSWORD "
+            "(the installer's first tenant admin)"
+        )
 
     status, text = call(f"{FRONTEND}/")
     check("frontend serves the app", status == 200 and "<html" in text.lower(), f"HTTP {status}")

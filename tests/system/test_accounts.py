@@ -19,8 +19,10 @@ from api.db import Conn
 from api.main import app
 from api.services import accounts
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
-         "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1.")
+_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
+    "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1."
+)
 _PW = "correct horse battery staple"
 
 
@@ -73,8 +75,10 @@ class _Accounts(unittest.TestCase):
             conn.commit()
 
     def _login(self, tenant=None, username=None, password=_PW):
-        return self.client.post("/api/auth/login", json={
-            "tenant": tenant or self.tenant, "username": username or self.user, "password": password})
+        return self.client.post(
+            "/api/auth/login",
+            json={"tenant": tenant or self.tenant, "username": username or self.user, "password": password},
+        )
 
     def _me(self, token: str):
         return self.client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
@@ -98,8 +102,9 @@ class SignIn(_Accounts):
             "unknown tenant": self._login(tenant="no_such_tenant"),
         }
         for name, res in cases.items():
-            self.assertEqual((res.status_code, res.json()["detail"]),
-                             (401, "Invalid tenant, username or password"), name)
+            self.assertEqual(
+                (res.status_code, res.json()["detail"]), (401, "Invalid tenant, username or password"), name
+            )
 
     def test_inactive_user_cannot_sign_in_and_loses_live_sessions(self):
         token = self._login().json()["token"]
@@ -115,8 +120,7 @@ class SignIn(_Accounts):
 
     def test_expired_session_is_rejected(self):
         token = self._login().json()["token"]
-        self._exec("UPDATE {c}.sessions SET expires_at = now() - interval '1 second' WHERE user_id = %s",
-                   self.user_id)
+        self._exec("UPDATE {c}.sessions SET expires_at = now() - interval '1 second' WHERE user_id = %s", self.user_id)
         self.assertEqual(self._me(token).status_code, 401)
 
     def test_removing_the_membership_ends_the_session(self):
@@ -125,15 +129,23 @@ class SignIn(_Accounts):
         self.assertEqual(self._me(token).status_code, 401)
 
     def test_missing_or_malformed_token_is_401(self):
-        for headers in ({}, {"Authorization": "Bearer "}, {"Authorization": "Basic abc"},
-                        {"Authorization": "Bearer not-a-real-token"}):
+        for headers in (
+            {},
+            {"Authorization": "Bearer "},
+            {"Authorization": "Basic abc"},
+            {"Authorization": "Bearer not-a-real-token"},
+        ):
             self.assertEqual(self.client.get("/api/auth/me", headers=headers).status_code, 401, headers)
 
     def test_tokens_are_stored_only_as_hashes(self):
         token = self._login().json()["token"]
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("SELECT token_hash FROM {c}.sessions WHERE user_id = %s").format(
-                c=sql.Identifier(settings.CONTROL_SCHEMA)), (self.user_id,))
+            cur.execute(
+                sql.SQL("SELECT token_hash FROM {c}.sessions WHERE user_id = %s").format(
+                    c=sql.Identifier(settings.CONTROL_SCHEMA)
+                ),
+                (self.user_id,),
+            )
             stored = [r[0] for r in cur.fetchall()]
         self.assertEqual(len(stored), 1)
         self.assertNotIn(token, stored)
@@ -150,8 +162,7 @@ class Lockout(_Accounts):
     def test_eleventh_attempt_is_refused_even_with_the_right_password(self):
         self._fail(settings.LOGIN_MAX_FAILURES)
         res = self._login()
-        self.assertEqual((res.status_code, res.json()["detail"]),
-                         (401, "Invalid tenant, username or password"))
+        self.assertEqual((res.status_code, res.json()["detail"]), (401, "Invalid tenant, username or password"))
 
     def test_one_short_of_the_limit_still_signs_in_and_resets_the_count(self):
         self._fail(settings.LOGIN_MAX_FAILURES - 1)
@@ -161,13 +172,15 @@ class Lockout(_Accounts):
 
     def test_sign_in_works_again_after_the_lock_expires(self):
         self._fail(settings.LOGIN_MAX_FAILURES)
-        self._exec("UPDATE {c}.users SET locked_until = now() - interval '1 second' WHERE id = %s",
-                   self.user_id)
+        self._exec("UPDATE {c}.users SET locked_until = now() - interval '1 second' WHERE id = %s", self.user_id)
         self.assertEqual(self._login().status_code, 200)
 
     def test_failures_outside_the_window_start_a_new_count(self):
         self._fail(settings.LOGIN_MAX_FAILURES - 1)
-        self._exec("UPDATE {c}.users SET first_failed_at = now() - make_interval(mins => %s) "
-                   "WHERE id = %s", settings.LOGIN_LOCKOUT_MINUTES + 1, self.user_id)
+        self._exec(
+            "UPDATE {c}.users SET first_failed_at = now() - make_interval(mins => %s) WHERE id = %s",
+            settings.LOGIN_LOCKOUT_MINUTES + 1,
+            self.user_id,
+        )
         self._fail(1)
         self.assertEqual(self._login().status_code, 200)

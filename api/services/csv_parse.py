@@ -10,9 +10,9 @@ from __future__ import annotations
 import csv
 import io
 import re
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, Optional
-from collections.abc import Callable
 
 ALLOWED_TYPES = ["int8", "numeric", "date", "timestamptz", "boolean", "text"]
 
@@ -175,9 +175,7 @@ def _base_column_name(header: str, idx: int) -> str:
     return base
 
 
-def apply_header_mapping(
-    headers: list[str], mapping: list[dict[str, Any]] | None
-) -> tuple[list[str], str | None]:
+def apply_header_mapping(headers: list[str], mapping: list[dict[str, Any]] | None) -> tuple[list[str], str | None]:
     """Apply user-confirmed header renames (#186) to the raw header row.
 
     ``mapping`` is a list of ``{"original": ..., "renamed": ...}``. A blank
@@ -206,8 +204,10 @@ def apply_header_mapping(
     for base, idxs in by_base.items():
         if len(idxs) > 1 and renamed_idx.intersection(idxs):
             clash = next(i for i in idxs if i in renamed_idx)
-            return headers, (f'Renaming a column to "{mapped[clash]}" would give two columns the '
-                             f'name "{base}". Choose a different name.')
+            return headers, (
+                f'Renaming a column to "{mapped[clash]}" would give two columns the '
+                f'name "{base}". Choose a different name.'
+            )
     return mapped, None
 
 
@@ -222,8 +222,10 @@ def extra_cells(raw: list[str], width: int) -> list[str]:
 
 
 def ragged_row_reason(raw: list[str], width: int) -> str:
-    return (f"Row has {len(raw)} cells but the header has {width}; "
-            f"the extra value(s) would be lost, so the row was not imported.")
+    return (
+        f"Row has {len(raw)} cells but the header has {width}; "
+        f"the extra value(s) would be lost, so the row was not imported."
+    )
 
 
 def valid_identifier(name: str) -> bool:

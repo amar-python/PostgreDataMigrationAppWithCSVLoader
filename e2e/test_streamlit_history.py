@@ -14,10 +14,9 @@ import re
 import uuid
 
 import pytest
+from conftest import shell_sign_in
 from openpyxl import load_workbook
 from playwright.sync_api import expect
-
-from conftest import shell_sign_in
 from streamlit_helpers import choose_option, click_and_download, idle, open_page
 
 PAYLOADS = ["=1+1", "+cmd|' /C calc'!A0", "-2+3", "@SUM(A1:A2)"]
@@ -43,6 +42,7 @@ def _cells(page) -> str:
 
 
 # ── the history is the tenant's, not the browser's ─────────────────────────────────────────────
+
 
 def test_an_upload_by_one_person_is_in_the_history_of_another_in_a_fresh_browser(page, stack, failing):
     open_page(page, stack, "reviewer", "Import history", "Import history")
@@ -70,9 +70,12 @@ def test_another_tenants_history_is_empty_and_shows_none_of_this_ones(page, stac
 
 # ── filters ────────────────────────────────────────────────────────────────────────────────────
 
+
 def test_the_file_name_and_status_filters_narrow_the_list(page, stack, failing):
     clean = _unique("clean")
-    assert stack.upload("uploader", clean, f"id,name\n1,{clean}\n2,b\n", types=["int8", "text"])["status"] == "ok"  # (identical bytes are a duplicate)
+    assert (
+        stack.upload("uploader", clean, f"id,name\n1,{clean}\n2,b\n", types=["int8", "text"])["status"] == "ok"
+    )  # (identical bytes are a duplicate)
     open_page(page, stack, "reviewer", "Import history", "Import history")
     expect(page.get_by_role("cell", name=clean)).to_be_visible()
     expect(page.get_by_role("cell", name=failing)).to_be_visible()
@@ -94,6 +97,7 @@ def test_the_file_name_and_status_filters_narrow_the_list(page, stack, failing):
 
 
 # ── one import: why rows failed, and the reports ───────────────────────────────────────────────
+
 
 def _open_import(page, stack, failing, who="reviewer"):
     open_page(page, stack, who, "Import history", "Import history")
@@ -143,10 +147,13 @@ def test_the_download_is_named_for_the_file(page, stack, failing):
         page.get_by_role("button", name="Error report (CSV)").click()
 
     stem = re.sub(r"\.csv$", "", failing)
-    assert re.fullmatch(rf"errors-{re.escape(stem)}-\d{{4}}-\d\d-\d\dT\d\d-\d\d-\d\dZ\.csv", taken.value.suggested_filename)
+    assert re.fullmatch(
+        rf"errors-{re.escape(stem)}-\d{{4}}-\d\d-\d\dT\d\d-\d\d-\d\dZ\.csv", taken.value.suggested_filename
+    )
 
 
 # ── a report of the whole filtered list ────────────────────────────────────────────────────────
+
 
 def test_a_report_of_every_matching_import_downloads_as_csv_and_xlsx(page, stack, failing):
     open_page(page, stack, "reviewer", "Import history", "Import history")
@@ -171,6 +178,7 @@ def test_a_report_of_every_matching_import_downloads_as_csv_and_xlsx(page, stack
 
 # ── text from a file is shown as written ───────────────────────────────────────────────────────
 
+
 def test_a_file_name_and_a_cell_that_look_like_links_are_text_not_links(page, stack):
     name = f"**bold**_{uuid.uuid4().hex[:6]}.csv"
     link = "[click here](https://evil.example/login)"
@@ -183,11 +191,13 @@ def test_a_file_name_and_a_cell_that_look_like_links_are_text_not_links(page, st
 
     expect(page.get_by_role("cell", name=link, exact=False).first).to_be_visible()
     assert page.locator('a[href*="evil.example"]').count() == 0, "a cell must not become a link"
-    assert page.locator('[data-testid="stTable"] strong, [data-testid="stHeading"] strong').count() == 0, \
+    assert page.locator('[data-testid="stTable"] strong, [data-testid="stHeading"] strong').count() == 0, (
         "a file name must not become bold"
+    )
 
 
 # ── the server's audit events ──────────────────────────────────────────────────────────────────
+
 
 def test_roles_that_may_not_read_the_audit_log_are_not_offered_it(page, stack, failing):
     open_page(page, stack, "reviewer", "Import history", "Import history")

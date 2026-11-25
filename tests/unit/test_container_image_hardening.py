@@ -15,6 +15,7 @@ No exception for gosu is added to .trivyignore.yaml: the finding is fixed, not a
 
 These read the Dockerfiles as text: the scan itself, in CI, is what proves the findings are gone.
 """
+
 from __future__ import annotations
 
 import re
@@ -70,8 +71,9 @@ def test_the_frontend_image_that_ships_has_no_npm():
     removal = index_of(runtime, "/usr/local/lib/node_modules/npm")
     assert removal != -1, "the runtime stage must remove npm: its bundled packages carry the scan findings"
     assert runtime[removal].upper().startswith("RUN ") and "rm " in runtime[removal]
-    assert "/usr/local/bin/npm" in runtime[removal] and "/usr/local/bin/npx" in runtime[removal], \
+    assert "/usr/local/bin/npm" in runtime[removal] and "/usr/local/bin/npx" in runtime[removal], (
         "remove the npm and npx commands too, not just the library folder"
+    )
     user = index_of(runtime, "USER node")
     assert user != -1 and removal < user, "removing files needs root: it must come before USER node"
 
@@ -89,10 +91,13 @@ def test_nothing_in_the_container_start_up_needs_npm():
     assert "exec node " in code
 
 
-@pytest.mark.parametrize("image, packages", [
-    ("api.Dockerfile", ["zlib1g"]),
-    ("db.Dockerfile", ["zlib1g", "libgssapi-krb5-2", "libkrb5-3", "libk5crypto3", "libkrb5support0"]),
-])
+@pytest.mark.parametrize(
+    "image, packages",
+    [
+        ("api.Dockerfile", ["zlib1g"]),
+        ("db.Dockerfile", ["zlib1g", "libgssapi-krb5-2", "libkrb5-3", "libk5crypto3", "libkrb5support0"]),
+    ],
+)
 def test_the_debian_packages_the_scan_flagged_are_upgraded(image, packages):
     items = joined(dockerfile(image))
     upgrade = [ins for ins in items if ins.upper().startswith("RUN ") and "--only-upgrade" in ins]
@@ -102,8 +107,9 @@ def test_the_debian_packages_the_scan_flagged_are_upgraded(image, packages):
         assert re.search(rf"(?<![\w.+-]){re.escape(package)}(?![\w.+-])", command), f"{image}: {package} not upgraded"
     assert "apt-get update" in command, "the base image keeps no package lists"
     assert "rm -rf /var/lib/apt/lists/*" in command, "do not leave the package lists in the image"
-    assert "apt-get upgrade" not in command and "dist-upgrade" not in command, \
+    assert "apt-get upgrade" not in command and "dist-upgrade" not in command, (
         "upgrade the named packages only: a blanket upgrade could move PostgreSQL or Python itself"
+    )
 
 
 def test_the_api_upgrade_runs_as_root_before_the_app_user():
@@ -129,7 +135,8 @@ def test_gosu_is_built_in_its_own_stage_from_a_go_image_that_has_the_fixes():
     assert len(stage_list) == 2, "db.Dockerfile: one stage that builds gosu, then the PostgreSQL image"
     build = stage_list[0]
     assert re.fullmatch(r"FROM golang:1\.\d+@sha256:[0-9a-f]{64} AS gosu", build[0]), (
-        "build gosu from a pinned golang release line, pinned by digest (#327)")
+        "build gosu from a pinned golang release line, pinned by digest (#327)"
+    )
     arg = next((ins for ins in build if ins.startswith("ARG GO_MINIMUM_VERSION=")), None)
     assert arg, "the stage must state the oldest Go release it accepts"
     minimum = tuple(int(part) for part in arg.split("=", 1)[1].split("."))

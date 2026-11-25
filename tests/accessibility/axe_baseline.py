@@ -15,6 +15,7 @@ fails on a *change*:
 Pure functions, no browser and no Playwright import: tests/unit/test_a11y_baseline.py
 covers them in the free tier.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,10 +32,10 @@ Baseline = dict[tuple[str, str], dict]
 
 @dataclass
 class Outcome:
-    new: list[str] = field(default_factory=list)       # regressions: fail
-    fixed: list[str] = field(default_factory=list)     # stale baseline entries: fail
-    shrunk: list[str] = field(default_factory=list)    # fewer elements than recorded: notice
-    known: list[str] = field(default_factory=list)     # as recorded: notice
+    new: list[str] = field(default_factory=list)  # regressions: fail
+    fixed: list[str] = field(default_factory=list)  # stale baseline entries: fail
+    shrunk: list[str] = field(default_factory=list)  # fewer elements than recorded: notice
+    known: list[str] = field(default_factory=list)  # as recorded: notice
 
     @property
     def ok(self) -> bool:
@@ -60,8 +61,7 @@ def load_baseline(path: Path = BASELINE_PATH) -> Baseline:
 def describe(violation: dict, limit: int = 3) -> str:
     """One violation as a few readable lines: rule, impact, count, and where."""
     nodes = violation["nodes"]
-    lines = [f"{violation['id']} ({violation.get('impact') or 'n/a'}) on {len(nodes)} element(s): "
-             f"{violation['help']}"]
+    lines = [f"{violation['id']} ({violation.get('impact') or 'n/a'}) on {len(nodes)} element(s): {violation['help']}"]
     for node in nodes[:limit]:
         target = " ".join(str(t) for t in node["target"])
         html = " ".join(node.get("html", "").split())
@@ -91,6 +91,8 @@ def compare(scenario: str, violations: list[dict], baseline: Baseline) -> Outcom
 
     for (scen, rule), entry in sorted(baseline.items()):
         if scen == scenario and rule not in found:
-            out.fixed.append(f"{rule} no longer fails here: delete its entry from known_violations.json "
-                             f"(it recorded: {entry['note']})")
+            out.fixed.append(
+                f"{rule} no longer fails here: delete its entry from known_violations.json "
+                f"(it recorded: {entry['note']})"
+            )
     return out

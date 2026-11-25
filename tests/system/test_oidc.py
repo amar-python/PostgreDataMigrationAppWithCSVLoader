@@ -57,8 +57,7 @@ class _Oidc(unittest.TestCase):
     @staticmethod
     def token(username="alice", key=None, kid=_KID, alg="RS256", **overrides) -> str:
         now = int(time.time())
-        claims = {"iss": _ISS, "aud": _AUD, "iat": now, "exp": now + 300,
-                  "sub": "abc", "preferred_username": username}
+        claims = {"iss": _ISS, "aud": _AUD, "iat": now, "exp": now + 300, "sub": "abc", "preferred_username": username}
         claims.update(overrides)
         claims = {k: v for k, v in claims.items() if v is not None}
         return jwt.encode(claims, key or _SIGNER, algorithm=alg, headers={"kid": kid})
@@ -81,7 +80,10 @@ class TokenVerification(_Oidc):
             "no username claim": self.token(username=None),
             "unsigned (alg none)": jwt.encode(
                 {"iss": _ISS, "aud": _AUD, "exp": now + 300, "iat": now, "preferred_username": "alice"},
-                None, algorithm="none", headers={"kid": _KID}),
+                None,
+                algorithm="none",
+                headers={"kid": _KID},
+            ),
             "garbage": "not.a.token",
         }
         for name, tok in cases.items():
@@ -131,8 +133,9 @@ class OidcSignIn(_Oidc):
     def test_inactive_user_is_401(self):
         with Conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(f'UPDATE "{settings.CONTROL_SCHEMA}".users SET is_active = false WHERE id = %s',
-                            (self.user_id,))
+                cur.execute(
+                    f'UPDATE "{settings.CONTROL_SCHEMA}".users SET is_active = false WHERE id = %s', (self.user_id,)
+                )
             conn.commit()
         self.assertEqual(self._post(self.tenant, self.token(self.user)).status_code, 401)
 

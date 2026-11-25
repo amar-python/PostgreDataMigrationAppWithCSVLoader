@@ -21,6 +21,7 @@ list before and after the fix, which is what the daemon-based check would
 observe. On `main` at c7bebd1 the Dockerfile had a single
 `COPY build/ ./build/`, so TestExplicitCopyList fails there.
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -89,16 +90,8 @@ def expand(source: str) -> set[str]:
     """
     if source.endswith("/"):
         base = ROOT / source
-        return {
-            str(p.relative_to(ROOT)).replace("\\", "/")
-            for p in base.rglob("*")
-            if p.is_file()
-        }
-    return {
-        str(p.relative_to(ROOT)).replace("\\", "/")
-        for p in ROOT.glob(source)
-        if p.is_file()
-    }
+        return {str(p.relative_to(ROOT)).replace("\\", "/") for p in base.rglob("*") if p.is_file()}
+    return {str(p.relative_to(ROOT)).replace("\\", "/") for p in ROOT.glob(source) if p.is_file()}
 
 
 def ignore_patterns() -> list[str]:

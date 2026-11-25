@@ -13,10 +13,11 @@ It never runs from a command line: the target schema comes from the caller
 import sys
 from pathlib import Path
 
-from alembic import context
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 from sqlalchemy.pool import NullPool
+
+from alembic import context
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 

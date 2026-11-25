@@ -12,6 +12,7 @@ What must hold, or a test would silently stop running:
   * the recorded durations name files that exist, so the table cannot rot;
   * the durations can be regenerated from a JUnit report.
 """
+
 from __future__ import annotations
 
 import json
@@ -40,6 +41,7 @@ def cli(*args: str) -> subprocess.CompletedProcess:
 
 # -- every test file is in exactly one shard --------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("n", [1, 2, 3, 5, 8])
 def test_the_shards_are_disjoint_and_together_hold_every_file(n):
     files = ci_shards.test_files()
@@ -53,16 +55,36 @@ def test_the_shards_are_disjoint_and_together_hold_every_file(n):
 def test_the_files_the_script_lists_are_the_files_pytest_collects():
     """The strongest guard: the script's idea of 'a test file' is checked against pytest's own collection."""
     # `-o addopts=` because pytest.ini already adds -q, and a second one switches the output to per-file counts.
-    done = subprocess.run([sys.executable, "-m", "pytest", "tests", "-m", "not accessibility", "--collect-only", "-q",
-                           "-o", "addopts=", "-p", "no:cacheprovider"], cwd=ROOT, capture_output=True, text=True,
-                          timeout=300)
+    done = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests",
+            "-m",
+            "not accessibility",
+            "--collect-only",
+            "-q",
+            "-o",
+            "addopts=",
+            "-p",
+            "no:cacheprovider",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
     assert done.returncode == 0, done.stdout[-800:] + done.stderr[-800:]
     collected = {line.split("::")[0] for line in done.stdout.splitlines() if "::" in line}
-    assert len(collected) > 50, f"the collection output was not parsed (got {len(collected)} files): {done.stdout[:300]}"
+    assert len(collected) > 50, (
+        f"the collection output was not parsed (got {len(collected)} files): {done.stdout[:300]}"
+    )
     listed = set(ci_shards.test_files())
     assert collected <= listed, f"collected by pytest but in no shard: {sorted(collected - listed)}"
     assert listed - collected <= {f for f in listed if _nothing_to_collect_here(f)}, (
-        f"listed but pytest collects nothing from them: {sorted(listed - collected)}")
+        f"listed but pytest collects nothing from them: {sorted(listed - collected)}"
+    )
 
 
 def _nothing_to_collect_here(rel: str) -> bool:
@@ -83,6 +105,7 @@ def test_helpers_and_caches_are_not_test_files():
 
 # -- the split ---------------------------------------------------------------------------------------------------------
 
+
 def test_the_split_is_deterministic():
     files, weights = ci_shards.test_files(), ci_shards.load_weights()
     assert ci_shards.assign(files, weights, 3) == ci_shards.assign(list(reversed(files)), weights, 3)
@@ -95,15 +118,24 @@ def test_the_split_is_balanced_by_recorded_duration():
     average = sum(totals) / len(totals)
     biggest_file = max(weights.get(f, ci_shards.DEFAULT_WEIGHT) for f in files)
     assert max(totals) <= max(average * 1.25, average + biggest_file), (
-        f"unbalanced: {totals} (average {average:.0f}s, biggest file {biggest_file:.0f}s)")
+        f"unbalanced: {totals} (average {average:.0f}s, biggest file {biggest_file:.0f}s)"
+    )
     assert all(shard for shard in shards), "no shard may be empty"
 
 
 def test_the_heaviest_files_are_spread_not_piled_into_one_shard():
-    weights = {"tests/a.py": 100, "tests/b.py": 100, "tests/c.py": 100, "tests/d.py": 1, "tests/e.py": 1, "tests/f.py": 1}
+    weights = {
+        "tests/a.py": 100,
+        "tests/b.py": 100,
+        "tests/c.py": 100,
+        "tests/d.py": 1,
+        "tests/e.py": 1,
+        "tests/f.py": 1,
+    }
     shards = ci_shards.assign(sorted(weights), weights, 3)
     assert sorted(sum(weights[f] for f in shard) for shard in shards) == [2, 101, 101] or all(
-        sum(weights[f] for f in shard) >= 100 for shard in shards)
+        sum(weights[f] for f in shard) >= 100 for shard in shards
+    )
     assert all(any(weights[f] == 100 for f in shard) for shard in shards), shards
 
 
@@ -122,6 +154,7 @@ def test_one_shard_is_the_whole_suite():
 
 
 # -- the recorded durations --------------------------------------------------------------------------------------------
+
 
 def test_the_recorded_durations_name_files_that_exist():
     weights = ci_shards.load_weights()
@@ -142,13 +175,15 @@ def test_durations_are_regenerated_from_a_junit_report(tmp_path):
     (tmp_path / "tests" / "unit" / "test_one.py").write_text("def test_a(): pass\n")
     (tmp_path / "tests" / "unit" / "test_two.py").write_text("def test_b(): pass\n")
     xml = tmp_path / "junit.xml"
-    xml.write_text(textwrap.dedent("""\
+    xml.write_text(
+        textwrap.dedent("""\
         <testsuites><testsuite>
           <testcase classname="tests.unit.test_one" name="test_a" time="1.5"/>
           <testcase classname="tests.unit.test_one.TestK" name="test_b" time="2.25"/>
           <testcase classname="tests.unit.test_two" name="test_c" time="10"/>
           <testcase classname="tests.nowhere.test_gone" name="test_d" time="99"/>
-        </testsuite></testsuites>"""))
+        </testsuite></testsuites>""")
+    )
     weights = ci_shards.weights_from_junit(xml, root=tmp_path)
     assert weights == {"tests/unit/test_one.py": 3.75, "tests/unit/test_two.py": 10.0}
 
@@ -158,13 +193,16 @@ def test_a_file_that_took_no_time_still_costs_its_import_and_collection(tmp_path
     (tmp_path / "tests").mkdir()
     (tmp_path / "tests" / "test_quick.py").write_text("def test_a(): pass\n")
     xml = tmp_path / "junit.xml"
-    xml.write_text('<testsuites><testsuite><testcase classname="tests.test_quick" name="test_a" time="0.001"/>'
-                   '</testsuite></testsuites>')
+    xml.write_text(
+        '<testsuites><testsuite><testcase classname="tests.test_quick" name="test_a" time="0.001"/>'
+        "</testsuite></testsuites>"
+    )
     weights = ci_shards.weights_from_junit(xml, root=tmp_path)
     assert weights == {"tests/test_quick.py": ci_shards.MIN_WEIGHT} and ci_shards.MIN_WEIGHT >= 1.0
 
 
 # -- the command line the workflow uses --------------------------------------------------------------------------------
+
 
 def test_the_cli_prints_one_shards_files_one_per_line():
     files, weights = ci_shards.test_files(), ci_shards.load_weights()
@@ -198,8 +236,10 @@ def test_the_cli_plan_prints_every_shard_with_an_estimate():
 
 def test_the_cli_writes_regenerated_durations(tmp_path):
     xml = tmp_path / "junit.xml"
-    xml.write_text('<testsuites><testsuite><testcase classname="tests.unit.test_ci_shards" name="x" time="4"/>'
-                   '</testsuite></testsuites>')
+    xml.write_text(
+        '<testsuites><testsuite><testcase classname="tests.unit.test_ci_shards" name="x" time="4"/>'
+        "</testsuite></testsuites>"
+    )
     out = tmp_path / "weights.json"
     done = cli("update-weights", str(xml), "--output", str(out))
     assert done.returncode == 0, done.stderr
@@ -207,6 +247,7 @@ def test_the_cli_writes_regenerated_durations(tmp_path):
 
 
 # -- the egress job's shards: only the system tests, split on their own ------------------------------------------------
+
 
 def test_only_limits_the_files_to_a_prefix():
     files = ci_shards.test_files(only="tests/system/")

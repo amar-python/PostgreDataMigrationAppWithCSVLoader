@@ -41,8 +41,13 @@ OTHER_PASSWORD = "a completely different passphrase"
 
 
 def _connect():
-    return psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                            password=settings.PG_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
+    return psycopg2.connect(
+        host=settings.PG_HOST,
+        port=settings.PG_PORT,
+        user=settings.PG_USER,
+        password=settings.PG_PASSWORD.get_secret_value(),
+        dbname=settings.PG_DATABASE,
+    )
 
 
 @pytest.mark.integration
@@ -62,14 +67,28 @@ class CreateTenantAdmin(unittest.TestCase):
 
     def run_script(self, *args: str, password: str | None = PASSWORD) -> subprocess.CompletedProcess:
         """No terminal: stdin is closed, and stderr is captured so it is not one either."""
-        return subprocess.run([sys.executable, str(SCRIPT), *args], cwd=ROOT, env=self._env(password),
-                              capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), *args],
+            cwd=ROOT,
+            env=self._env(password),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            stdin=subprocess.DEVNULL,
+        )
 
     def run_interactive(self, *args: str, answer: str, password: str | None = PASSWORD) -> tuple[int, str]:
         """Run the script with a pseudo-terminal and type ``answer`` at it."""
         master, slave = pty.openpty()
-        proc = subprocess.Popen([sys.executable, str(SCRIPT), *args], cwd=ROOT, env=self._env(password),
-                                stdin=slave, stdout=slave, stderr=slave, close_fds=True)
+        proc = subprocess.Popen(
+            [sys.executable, str(SCRIPT), *args],
+            cwd=ROOT,
+            env=self._env(password),
+            stdin=slave,
+            stdout=slave,
+            stderr=slave,
+            close_fds=True,
+        )
         os.close(slave)
         out = b""
         try:
@@ -94,10 +113,19 @@ class CreateTenantAdmin(unittest.TestCase):
             os.close(master)
         return proc.returncode, out.decode("utf-8", errors="replace")
 
-    def create(self, *extra: str, user: str | None = None, tenant: str | None = None,
-               password: str = PASSWORD) -> subprocess.CompletedProcess:
-        res = self.run_script("--tenant", tenant or self.tenant, "--name", "Original name",
-                              "--username", user or self.user, *extra, password=password)
+    def create(
+        self, *extra: str, user: str | None = None, tenant: str | None = None, password: str = PASSWORD
+    ) -> subprocess.CompletedProcess:
+        res = self.run_script(
+            "--tenant",
+            tenant or self.tenant,
+            "--name",
+            "Original name",
+            "--username",
+            user or self.user,
+            *extra,
+            password=password,
+        )
         return res
 
     def _q(self, query: str, *params):
@@ -114,9 +142,12 @@ class CreateTenantAdmin(unittest.TestCase):
         return rows[0][0] if rows else None
 
     def role(self, tenant: str, user: str) -> str | None:
-        rows = self._q("SELECT m.role FROM {c}.memberships m JOIN {c}.users u ON u.id = m.user_id "
-                       "JOIN {c}.tenants t ON t.id = m.tenant_id WHERE t.slug = %s AND u.username = %s",
-                       tenant, user)
+        rows = self._q(
+            "SELECT m.role FROM {c}.memberships m JOIN {c}.users u ON u.id = m.user_id "
+            "JOIN {c}.tenants t ON t.id = m.tenant_id WHERE t.slug = %s AND u.username = %s",
+            tenant,
+            user,
+        )
         return rows[0][0] if rows else None
 
     def tenant_name(self, tenant: str) -> str | None:
@@ -133,16 +164,31 @@ class CreateTenantAdmin(unittest.TestCase):
         try:
             with _connect() as conn, conn.cursor() as cur:
                 names = [self.user, self.new_user]
-                cur.execute(sql.SQL("DELETE FROM {c}.sessions WHERE user_id IN "
-                                    "(SELECT id FROM {c}.users WHERE username = ANY(%s))")
-                            .format(c=sql.Identifier(settings.CONTROL_SCHEMA)), (names,))
-                cur.execute(sql.SQL("DELETE FROM {c}.memberships WHERE user_id IN "
-                                    "(SELECT id FROM {c}.users WHERE username = ANY(%s))")
-                            .format(c=sql.Identifier(settings.CONTROL_SCHEMA)), (names,))
-                cur.execute(sql.SQL("DELETE FROM {c}.users WHERE username = ANY(%s)")
-                            .format(c=sql.Identifier(settings.CONTROL_SCHEMA)), (names,))
-                cur.execute(sql.SQL("DELETE FROM {c}.tenants WHERE slug = %s")
-                            .format(c=sql.Identifier(settings.CONTROL_SCHEMA)), (self.tenant,))
+                cur.execute(
+                    sql.SQL(
+                        "DELETE FROM {c}.sessions WHERE user_id IN (SELECT id FROM {c}.users WHERE username = ANY(%s))"
+                    ).format(c=sql.Identifier(settings.CONTROL_SCHEMA)),
+                    (names,),
+                )
+                cur.execute(
+                    sql.SQL(
+                        "DELETE FROM {c}.memberships WHERE user_id IN "
+                        "(SELECT id FROM {c}.users WHERE username = ANY(%s))"
+                    ).format(c=sql.Identifier(settings.CONTROL_SCHEMA)),
+                    (names,),
+                )
+                cur.execute(
+                    sql.SQL("DELETE FROM {c}.users WHERE username = ANY(%s)").format(
+                        c=sql.Identifier(settings.CONTROL_SCHEMA)
+                    ),
+                    (names,),
+                )
+                cur.execute(
+                    sql.SQL("DELETE FROM {c}.tenants WHERE slug = %s").format(
+                        c=sql.Identifier(settings.CONTROL_SCHEMA)
+                    ),
+                    (self.tenant,),
+                )
                 cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_for(self.tenant))))
         except psycopg2.Error:
             pass  # best effort: a leftover test tenant is harmless, and a failed cleanup must not mask a result
@@ -205,8 +251,9 @@ class CreateTenantAdmin(unittest.TestCase):
         res = self.create(user=self.new_user, password=OTHER_PASSWORD)
         self.assertEqual(res.returncode, 1, res.stderr)
         self.assertIn("--use-existing", res.stderr)
-        self.assertEqual(self.existing(user=self.new_user), accounts.Existing(True, False, False),
-                         "no account was created")
+        self.assertEqual(
+            self.existing(user=self.new_user), accounts.Existing(True, False, False), "no account was created"
+        )
 
     def test_use_existing_does_not_apply_to_a_tenant_that_does_not_exist(self):
         res = self.create("--use-existing")
@@ -242,14 +289,24 @@ class CreateTenantAdmin(unittest.TestCase):
         try:
             with _connect() as conn, conn.cursor() as cur:
                 names = [self.user, self.new_user]
-                for stmt in ("DELETE FROM {c}.sessions WHERE tenant_id IN (SELECT id FROM {c}.tenants WHERE slug = %s)",
-                             "DELETE FROM {c}.memberships WHERE tenant_id IN (SELECT id FROM {c}.tenants WHERE slug = %s)"):
+                for stmt in (
+                    "DELETE FROM {c}.sessions WHERE tenant_id IN (SELECT id FROM {c}.tenants WHERE slug = %s)",
+                    "DELETE FROM {c}.memberships WHERE tenant_id IN (SELECT id FROM {c}.tenants WHERE slug = %s)",
+                ):
                     cur.execute(sql.SQL(stmt).format(c=sql.Identifier(settings.CONTROL_SCHEMA)), (slug,))
-                cur.execute(sql.SQL("DELETE FROM {c}.users WHERE username = ANY(%s) AND NOT EXISTS "
-                                    "(SELECT 1 FROM {c}.memberships m WHERE m.user_id = {c}.users.id)")
-                            .format(c=sql.Identifier(settings.CONTROL_SCHEMA)), (names,))
-                cur.execute(sql.SQL("DELETE FROM {c}.tenants WHERE slug = %s")
-                            .format(c=sql.Identifier(settings.CONTROL_SCHEMA)), (slug,))
+                cur.execute(
+                    sql.SQL(
+                        "DELETE FROM {c}.users WHERE username = ANY(%s) AND NOT EXISTS "
+                        "(SELECT 1 FROM {c}.memberships m WHERE m.user_id = {c}.users.id)"
+                    ).format(c=sql.Identifier(settings.CONTROL_SCHEMA)),
+                    (names,),
+                )
+                cur.execute(
+                    sql.SQL("DELETE FROM {c}.tenants WHERE slug = %s").format(
+                        c=sql.Identifier(settings.CONTROL_SCHEMA)
+                    ),
+                    (slug,),
+                )
                 cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_for(slug))))
         except psycopg2.Error:
             pass
@@ -259,8 +316,9 @@ class CreateTenantAdmin(unittest.TestCase):
     @unittest.skipIf(pty is None, "needs a pseudo-terminal")
     def test_a_person_is_asked_and_y_uses_the_existing_tenant(self):
         before = self.seed()
-        code, out = self.run_interactive("--tenant", self.tenant, "--name", "Original name",
-                                         "--username", self.user, answer="y\n", password=None)
+        code, out = self.run_interactive(
+            "--tenant", self.tenant, "--name", "Original name", "--username", self.user, answer="y\n", password=None
+        )
         self.assertEqual(code, 0, out)
         self.assertIn("already exists", out)
         self.assertIn("[y/N]", out, "the question was asked")
@@ -271,8 +329,16 @@ class CreateTenantAdmin(unittest.TestCase):
     @unittest.skipIf(pty is None, "needs a pseudo-terminal")
     def test_n_changes_nothing(self):
         before = self.seed()
-        code, out = self.run_interactive("--tenant", self.tenant, "--name", "Original name",
-                                         "--username", self.new_user, answer="n\n", password=OTHER_PASSWORD)
+        code, out = self.run_interactive(
+            "--tenant",
+            self.tenant,
+            "--name",
+            "Original name",
+            "--username",
+            self.new_user,
+            answer="n\n",
+            password=OTHER_PASSWORD,
+        )
         self.assertEqual(code, 1, out)
         self.assertIn("[y/N]", out)
         self.assertIn("Nothing was changed", out)
@@ -282,16 +348,32 @@ class CreateTenantAdmin(unittest.TestCase):
     @unittest.skipIf(pty is None, "needs a pseudo-terminal")
     def test_pressing_enter_alone_means_no(self):
         self.seed()
-        code, out = self.run_interactive("--tenant", self.tenant, "--name", "Original name",
-                                         "--username", self.new_user, answer="\n", password=OTHER_PASSWORD)
+        code, out = self.run_interactive(
+            "--tenant",
+            self.tenant,
+            "--name",
+            "Original name",
+            "--username",
+            self.new_user,
+            answer="\n",
+            password=OTHER_PASSWORD,
+        )
         self.assertEqual(code, 1, out)
         self.assertEqual(self.existing(user=self.new_user), accounts.Existing(True, False, False))
 
     @unittest.skipIf(pty is None, "needs a pseudo-terminal")
     def test_y_adds_a_new_admin_to_the_existing_tenant(self):
         self.seed()
-        code, out = self.run_interactive("--tenant", self.tenant, "--name", "Original name",
-                                         "--username", self.new_user, answer="yes\n", password=OTHER_PASSWORD)
+        code, out = self.run_interactive(
+            "--tenant",
+            self.tenant,
+            "--name",
+            "Original name",
+            "--username",
+            self.new_user,
+            answer="yes\n",
+            password=OTHER_PASSWORD,
+        )
         self.assertEqual(code, 0, out)
         self.assertIn("add", out.lower())
         self.assertEqual(self.role(self.tenant, self.new_user), "tenant_admin")
@@ -299,8 +381,9 @@ class CreateTenantAdmin(unittest.TestCase):
 
     @unittest.skipIf(pty is None, "needs a pseudo-terminal")
     def test_a_new_tenant_is_created_without_a_question(self):
-        code, out = self.run_interactive("--tenant", self.tenant, "--name", "Original name",
-                                         "--username", self.user, answer="")
+        code, out = self.run_interactive(
+            "--tenant", self.tenant, "--name", "Original name", "--username", self.user, answer=""
+        )
         self.assertEqual(code, 0, out)
         self.assertNotIn("[y/N]", out)
         self.assertIn(f"Created tenant '{self.tenant}'", out)

@@ -47,6 +47,7 @@ def literal(text: object) -> str:
 
 # ── which uploads ───────────────────────────────────────────────────────────────────────────
 
+
 def needs_attention(status: str) -> bool:
     return status in NEEDS_ATTENTION
 
@@ -72,6 +73,7 @@ def page_count(total: int) -> int:
 
 
 # ── one page of rows ────────────────────────────────────────────────────────────────────────
+
 
 def row_status(row: dict) -> str:
     return "Excluded" if row["decision"] == "exclude" else "Invalid" if row["errors"] else "Included"
@@ -111,11 +113,14 @@ def tint(rows: list[dict], frame: pd.DataFrame, columns: list[str]) -> pd.DataFr
 def summary(data: dict) -> str:
     """The line under the file name (the React screen's wording)."""
     rows = f"{data['total']} row{'' if data['total'] == 1 else 's'}"
-    return (f"{rows} · {data['excludedRows']} excluded · {data['editedRows']} edited. Changes are saved with "
-            "the upload for review. They don't change the imported table.")
+    return (
+        f"{rows} · {data['excludedRows']} excluded · {data['editedRows']} edited. Changes are saved with "
+        "the upload for review. They don't change the imported table."
+    )
 
 
 # ── one row ─────────────────────────────────────────────────────────────────────────────────
+
 
 def error_lines(row: dict) -> list[str]:
     """Every reason the row is invalid. One with no column of the file is the database's own (#190, column
@@ -130,8 +135,11 @@ def decision_line(row: dict) -> str | None:
 
 
 def edit_lines(row: dict, columns: list[str]) -> list[str]:
-    return [f"{literal(columns[i])}: original {literal(row['original'][i] or '(empty)')}, "
-            f"now {literal(row['current'][i] or '(empty)')}" for i in row["editedColumns"]]
+    return [
+        f"{literal(columns[i])}: original {literal(row['original'][i] or '(empty)')}, "
+        f"now {literal(row['current'][i] or '(empty)')}"
+        for i in row["editedColumns"]
+    ]
 
 
 def when(at: str) -> str:
@@ -149,6 +157,8 @@ def history_line(entry: dict) -> str:
     if entry["kind"] == "decision":
         what = f"**{'Excluded' if entry['decision'] == 'exclude' else 'Included'}**"
     else:
-        what = (f"{literal(entry['column'])}: {literal(entry['oldValue'] or '(empty)')} → "
-                f"{literal(entry['newValue'] or '(empty)')}")
+        what = (
+            f"{literal(entry['column'])}: {literal(entry['oldValue'] or '(empty)')} → "
+            f"{literal(entry['newValue'] or '(empty)')}"
+        )
     return f"{when(entry['at'])} · {literal(entry.get('actor') or 'unknown')} · {what}  \n{literal(entry['reason'])}"

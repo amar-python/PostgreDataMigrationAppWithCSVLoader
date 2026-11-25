@@ -4,6 +4,7 @@ The motivating failures: Playwright's Python package expecting a browser build t
 cryptic "Executable doesn't exist" trace), PostgreSQL not running, and a package version read from an
 attribute the package does not have. No Playwright, browser or database is needed here.
 """
+
 import importlib.util
 import sys
 import types
@@ -28,13 +29,13 @@ def _all_fine(tmp_path, monkeypatch, **overrides):
     monkeypatch.setattr(preflight.importlib.metadata, "version", lambda name: "1.0")
     monkeypatch.setattr(preflight.importlib.util, "find_spec", lambda name: object())
     (tmp_path / "csv-table-hub-main" / "node_modules").mkdir(parents=True)
-    args = dict(root=tmp_path, env={}, pg_host="localhost", pg_port=5433, probe=UP, ports=(8000, 8080),
-                is_free=FREE)
+    args = dict(root=tmp_path, env={}, pg_host="localhost", pg_port=5433, probe=UP, ports=(8000, 8080), is_free=FREE)
     args.update(overrides)
     return preflight.problems(**args)
 
 
 # ── Playwright ────────────────────────────────────────────────────────────────────────────
+
 
 def test_a_missing_playwright_says_how_to_install_it(monkeypatch):
     def not_installed(name):
@@ -59,6 +60,7 @@ def test_playwright_is_asked_of_the_package_metadata_not_of_a_version_attribute(
 
 # ── the browser ───────────────────────────────────────────────────────────────────────────
 
+
 def test_an_override_that_points_nowhere_is_reported_with_the_way_out(tmp_path):
     missing = tmp_path / "no" / "chrome"
 
@@ -78,6 +80,7 @@ def test_an_override_that_exists_and_no_override_are_both_fine(tmp_path):
 
 # ── PostgreSQL ────────────────────────────────────────────────────────────────────────────
 
+
 def test_postgresql_not_there_names_where_it_looked_why_and_what_to_do():
     msg = preflight.check_postgres("db.example.test", 6543, lambda h, p: (False, "refused"))
 
@@ -96,6 +99,7 @@ def test_postgresql_there_is_fine():
 
 
 # ── ports, Node, Streamlit ────────────────────────────────────────────────────────────────
+
 
 def test_every_busy_port_is_listed_with_the_remedy():
     msgs = preflight.check_ports((8000, 8080, 8501), lambda p: p == 8080)
@@ -117,6 +121,7 @@ def test_a_missing_streamlit_says_how_to_install_it(monkeypatch):
 
 # ── all together ──────────────────────────────────────────────────────────────────────────
 
+
 def test_nothing_is_reported_when_everything_is_there(tmp_path, monkeypatch):
     assert _all_fine(tmp_path, monkeypatch) == []
 
@@ -127,16 +132,28 @@ def test_every_problem_is_reported_at_once_in_a_stable_order(tmp_path, monkeypat
 
     monkeypatch.setattr(preflight.importlib.metadata, "version", not_installed)
     monkeypatch.setattr(preflight.importlib.util, "find_spec", lambda name: None)  # Streamlit missing too
-    found = preflight.problems(root=tmp_path, env={"E2E_CHROMIUM": str(tmp_path / "gone")}, pg_host="h",
-                               pg_port=1, probe=lambda h, p: (False, "refused"), ports=(8000, 8080),
-                               is_free=lambda p: p != 8080)
+    found = preflight.problems(
+        root=tmp_path,
+        env={"E2E_CHROMIUM": str(tmp_path / "gone")},
+        pg_host="h",
+        pg_port=1,
+        probe=lambda h, p: (False, "refused"),
+        ports=(8000, 8080),
+        is_free=lambda p: p != 8080,
+    )
 
     assert len(found) == 6
     assert [m.split(" ")[0] for m in found][:3] == ["Playwright", "E2E_CHROMIUM", "Streamlit"]
     assert "npm ci" in found[3] and "PostgreSQL" in found[4] and "port 8080" in found[5]
-    assert found == preflight.problems(root=tmp_path, env={"E2E_CHROMIUM": str(tmp_path / "gone")}, pg_host="h",
-                                       pg_port=1, probe=lambda h, p: (False, "refused"), ports=(8000, 8080),
-                                       is_free=lambda p: p != 8080)
+    assert found == preflight.problems(
+        root=tmp_path,
+        env={"E2E_CHROMIUM": str(tmp_path / "gone")},
+        pg_host="h",
+        pg_port=1,
+        probe=lambda h, p: (False, "refused"),
+        ports=(8000, 8080),
+        is_free=lambda p: p != 8080,
+    )
 
 
 def test_the_report_counts_and_lists_each_problem_on_its_own_line():

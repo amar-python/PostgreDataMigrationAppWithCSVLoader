@@ -28,6 +28,7 @@ Run::
 Requires a reachable database; per the repository's no-skip policy a missing
 prerequisite FAILS with remediation text rather than skipping.
 """
+
 from __future__ import annotations
 
 import os
@@ -39,10 +40,12 @@ from fastapi.testclient import TestClient
 from api.config import settings
 from api.main import app
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it. Most often this means "
-         "PGPASSWORD is not set in this shell:\n"
-         "    PowerShell:  $env:PGPASSWORD = '<password>'\n"
-         "    bash:        export PGPASSWORD='<password>'")
+_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it. Most often this means "
+    "PGPASSWORD is not set in this shell:\n"
+    "    PowerShell:  $env:PGPASSWORD = '<password>'\n"
+    "    bash:        export PGPASSWORD='<password>'"
+)
 
 SUMMARY_FIELDS = ("totalRows", "insertedRows", "duplicateRowsSkipped", "failedRows")
 
@@ -107,17 +110,14 @@ class ImportSummaryCounts(unittest.TestCase):
 
     def test_total_rows_counts_data_rows_not_the_header(self):
         body = self._upload(f"col_a\n{self.tag}-1\n{self.tag}-2\n{self.tag}-3\n")
-        self.assertEqual(body["totalRows"], 3,
-                         "header row must not be counted as data")
+        self.assertEqual(body["totalRows"], 3, "header row must not be counted as data")
 
     def test_created_count_matches_rows_actually_inserted(self):
         body = self._upload(f"col_a\n{self.tag}-1\n{self.tag}-2\n")
         self.assertEqual(body["insertedRows"], 2)
 
-        rows = self.client.get(
-            f"/api/csv/tables/{body['tableName']}/rows").json()["rows"]
-        self.assertEqual(len(rows), body["insertedRows"],
-                         "insertedRows must match what is actually in the table")
+        rows = self.client.get(f"/api/csv/tables/{body['tableName']}/rows").json()["rows"]
+        self.assertEqual(len(rows), body["insertedRows"], "insertedRows must match what is actually in the table")
 
     def test_duplicate_count_reflects_repeated_rows_in_the_file(self):
         """Two identical rows plus one distinct: 1 duplicate skipped."""
@@ -138,8 +138,7 @@ class ImportSummaryCounts(unittest.TestCase):
             types=["int8"],
         )
         self.assertEqual(body["status"], "ok", body)
-        self.assertEqual(body["failedRows"], 1,
-                         f"expected 1 uncastable row, got {body['failedRows']}")
+        self.assertEqual(body["failedRows"], 1, f"expected 1 uncastable row, got {body['failedRows']}")
         self.assertEqual(body["insertedRows"], 2)
 
     def test_failed_rows_are_reported_with_detail(self):
@@ -180,7 +179,5 @@ class ImportSummaryCounts(unittest.TestCase):
         first = self._upload(f"col_a\n{self.tag}-a\n", suffix="_first")
         self.assertEqual(first["totalRows"], 1)
 
-        second = self._upload(
-            f"col_a\n{self.tag}-b\n{self.tag}-c\n{self.tag}-d\n", suffix="_second")
-        self.assertEqual(second["totalRows"], 3,
-                         "the summary must describe the current batch only")
+        second = self._upload(f"col_a\n{self.tag}-b\n{self.tag}-c\n{self.tag}-d\n", suffix="_second")
+        self.assertEqual(second["totalRows"], 3, "the summary must describe the current batch only")

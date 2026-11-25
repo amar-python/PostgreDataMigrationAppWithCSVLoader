@@ -76,16 +76,23 @@ def retire_legacy_credentials(env: str) -> str | None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--env", required=True, choices=ENVIRONMENTS,
-                    help="which environment this role serves. Mandatory: it names both the role "
-                         "(te_app_<env>) and the credential file (~/.te-migration/app-db-<env>.env), "
-                         "so two environments on one PostgreSQL cluster never share either (RV-S3, #173).")
-    ap.add_argument("--role", default=None,
-                    help="override the role name. Defaults to te_app_<env>.")
-    ap.add_argument("--env-file", type=Path, default=None,
-                    help="override where the credentials are written. Defaults to "
-                         "~/.te-migration/app-db-<env>.env. Given explicitly, the legacy "
-                         "credential file is left alone.")
+    ap.add_argument(
+        "--env",
+        required=True,
+        choices=ENVIRONMENTS,
+        help="which environment this role serves. Mandatory: it names both the role "
+        "(te_app_<env>) and the credential file (~/.te-migration/app-db-<env>.env), "
+        "so two environments on one PostgreSQL cluster never share either (RV-S3, #173).",
+    )
+    ap.add_argument("--role", default=None, help="override the role name. Defaults to te_app_<env>.")
+    ap.add_argument(
+        "--env-file",
+        type=Path,
+        default=None,
+        help="override where the credentials are written. Defaults to "
+        "~/.te-migration/app-db-<env>.env. Given explicitly, the legacy "
+        "credential file is left alone.",
+    )
     args = ap.parse_args()
 
     role_name = args.role or role_for(args.env)
@@ -99,36 +106,40 @@ def main() -> int:
         role, pw = sql.Identifier(role_name), sql.Literal(password)
         cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role_name,))
         verb = "ALTER" if cur.fetchone() else "CREATE"
-        cur.execute(sql.SQL(verb + " ROLE {} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD {}")
-                    .format(role, pw))
+        cur.execute(sql.SQL(verb + " ROLE {} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD {}").format(role, pw))
         cur.execute(sql.SQL("GRANT {} TO {}").format(role, sql.Identifier(settings.PG_USER)))
-        cur.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
-            sql.Identifier(settings.PG_DATABASE), role))
+        cur.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(sql.Identifier(settings.PG_DATABASE), role))
         conn.commit()
         cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (LEGACY_ROLE,))
         legacy_role_present = cur.fetchone() is not None and role_name != LEGACY_ROLE
 
     settings.APP_DB_USER, settings.APP_DB_PASSWORD = role_name, SecretStr(password)
-    db.bootstrap()   # migrations, then grants on every schema, tenants included
+    db.bootstrap()  # migrations, then grants on every schema, tenants included
 
     env_file.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(env_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(f"APP_DB_USER={role_name}\nAPP_DB_PASSWORD={password}\n")
-    print(f"Role '{role_name}' is ready ({'created' if verb == 'CREATE' else 'new password set'}) "
-          f"for the {args.env} environment. Its settings are in {env_file}; "
-          "start-api.ps1 loads them. Restart the API.")
+    print(
+        f"Role '{role_name}' is ready ({'created' if verb == 'CREATE' else 'new password set'}) "
+        f"for the {args.env} environment. Its settings are in {env_file}; "
+        "start-api.ps1 loads them. Restart the API."
+    )
 
     if args.env_file is None:
         superseded = retire_legacy_credentials(args.env)
         if superseded:
-            print(f"Moved the pre-#173 credential file aside: {superseded}. start-api.ps1 now reads "
-                  f"{env_file} instead, so the API no longer starts on the old cluster-wide role.")
+            print(
+                f"Moved the pre-#173 credential file aside: {superseded}. start-api.ps1 now reads "
+                f"{env_file} instead, so the API no longer starts on the old cluster-wide role."
+            )
     if legacy_role_present:
-        print(f"The pre-#173 cluster-wide role '{LEGACY_ROLE}' still exists on this server. Each "
-              "environment now has its own role, so it is unused once every environment has been "
-              "re-provisioned with --env. Drop it then, as the owner: "
-              f'DROP OWNED BY {LEGACY_ROLE}; DROP ROLE {LEGACY_ROLE};')
+        print(
+            f"The pre-#173 cluster-wide role '{LEGACY_ROLE}' still exists on this server. Each "
+            "environment now has its own role, so it is unused once every environment has been "
+            "re-provisioned with --env. Drop it then, as the owner: "
+            f"DROP OWNED BY {LEGACY_ROLE}; DROP ROLE {LEGACY_ROLE};"
+        )
     return 0
 
 

@@ -24,8 +24,9 @@ Revises: te0001
 Create Date: 2026-11-09
 """
 
-from alembic import op
 from psycopg2 import sql
+
+from alembic import op
 
 revision = "te0002"
 down_revision = "te0001"
@@ -107,8 +108,12 @@ def _tbl(schema: str, table: str) -> sql.Composable:
 
 
 def _has_constraint(cur, schema: str, table: str, name: str) -> bool:
-    cur.execute(sql.SQL("SELECT 1 FROM pg_constraint WHERE conrelid = {}::regclass AND conname = %s").format(
-        sql.Literal(f'"{schema}"."{table}"')), (name,))
+    cur.execute(
+        sql.SQL("SELECT 1 FROM pg_constraint WHERE conrelid = {}::regclass AND conname = %s").format(
+            sql.Literal(f'"{schema}"."{table}"')
+        ),
+        (name,),
+    )
     return cur.fetchone() is not None
 
 
@@ -118,27 +123,43 @@ def _add_constraint(cur, schema: str, table: str, name: str, definition: sql.Com
     if isinstance(definition, str) and definition.startswith("UNIQUE"):
         # A tenant cloned after #177 but before provisioning kept the template's names has this
         # constraint under a default name. Adopt it; a second copy would be a redundant index.
-        cur.execute("SELECT conname FROM pg_constraint WHERE conrelid = %s::regclass AND contype = 'u' "
-                    "AND pg_get_constraintdef(oid) = %s", (f'"{schema}"."{table}"', definition))
+        cur.execute(
+            "SELECT conname FROM pg_constraint WHERE conrelid = %s::regclass AND contype = 'u' "
+            "AND pg_get_constraintdef(oid) = %s",
+            (f'"{schema}"."{table}"', definition),
+        )
         row = cur.fetchone()
         if row:
-            cur.execute(sql.SQL("ALTER TABLE {} RENAME CONSTRAINT {} TO {}").format(
-                _tbl(schema, table), sql.Identifier(row[0]), sql.Identifier(name)))
+            cur.execute(
+                sql.SQL("ALTER TABLE {} RENAME CONSTRAINT {} TO {}").format(
+                    _tbl(schema, table), sql.Identifier(row[0]), sql.Identifier(name)
+                )
+            )
             return
-    cur.execute(sql.SQL("ALTER TABLE {} ADD CONSTRAINT {} {}").format(
-        _tbl(schema, table), sql.Identifier(name),
-        definition if isinstance(definition, sql.Composable) else sql.SQL(definition)))
+    cur.execute(
+        sql.SQL("ALTER TABLE {} ADD CONSTRAINT {} {}").format(
+            _tbl(schema, table),
+            sql.Identifier(name),
+            definition if isinstance(definition, sql.Composable) else sql.SQL(definition),
+        )
+    )
 
 
 def _drop_constraint(cur, schema: str, table: str, name: str, if_exists: bool = False) -> None:
-    cur.execute(sql.SQL("ALTER TABLE {} DROP CONSTRAINT {}{}").format(
-        _tbl(schema, table), sql.SQL("IF EXISTS " if if_exists else ""), sql.Identifier(name)))
+    cur.execute(
+        sql.SQL("ALTER TABLE {} DROP CONSTRAINT {}{}").format(
+            _tbl(schema, table), sql.SQL("IF EXISTS " if if_exists else ""), sql.Identifier(name)
+        )
+    )
 
 
 def _toggle_updated_at(cur, schema: str, tables: tuple[str, ...], action: str) -> None:
     for table in tables:
-        cur.execute(sql.SQL("SELECT 1 FROM pg_trigger WHERE tgrelid = {}::regclass AND tgname = 'trg_updated_at'")
-                    .format(sql.Literal(f'"{schema}"."{table}"')))
+        cur.execute(
+            sql.SQL("SELECT 1 FROM pg_trigger WHERE tgrelid = {}::regclass AND tgname = 'trg_updated_at'").format(
+                sql.Literal(f'"{schema}"."{table}"')
+            )
+        )
         if cur.fetchone():
             statement = sql.SQL("ALTER TABLE {} {} TRIGGER trg_updated_at")
             cur.execute(statement.format(_tbl(schema, table), sql.SQL(action)))
@@ -146,12 +167,25 @@ def _toggle_updated_at(cur, schema: str, tables: tuple[str, ...], action: str) -
 
 def upgrade() -> None:
     schema, cur = _schema(), _cursor()
-    t = {name: _tbl(schema, name) for name in
-         ("test_phases", "requirements", "test_cases", "vcrm_entries", "test_events", "test_results",
-          "defect_reports")}
+    t = {
+        name: _tbl(schema, name)
+        for name in (
+            "test_phases",
+            "requirements",
+            "test_cases",
+            "vcrm_entries",
+            "test_events",
+            "test_results",
+            "defect_reports",
+        )
+    }
 
-    cur.execute(sql.SQL("CREATE OR REPLACE FUNCTION {}.te_fill_program_id() RETURNS TRIGGER LANGUAGE plpgsql AS ")
-                .format(sql.Identifier(schema)) + sql.SQL(_FILL_FUNCTION_BODY))
+    cur.execute(
+        sql.SQL("CREATE OR REPLACE FUNCTION {}.te_fill_program_id() RETURNS TRIGGER LANGUAGE plpgsql AS ").format(
+            sql.Identifier(schema)
+        )
+        + sql.SQL(_FILL_FUNCTION_BODY)
+    )
 
     # 1. program_id columns, nullable until backfilled
     for table in _PROGRAM_TABLES:
@@ -159,17 +193,22 @@ def upgrade() -> None:
 
     # 2. backfill from the parent each row already depends on
     _toggle_updated_at(cur, schema, ("test_cases", "test_events"), "DISABLE")
-    for child, parent, key in (("test_cases", "test_phases", "phase_id"),
-                               ("test_events", "test_phases", "phase_id"),
-                               ("vcrm_entries", "requirements", "req_id"),
-                               ("test_results", "test_events", "event_id")):
-        cur.execute(sql.SQL("UPDATE {c} c SET program_id = p.program_id FROM {p} p "
-                            "WHERE c.{k} = p.{k} AND c.program_id IS NULL").format(
-                                c=t[child], p=t[parent], k=sql.Identifier(key)))
+    for child, parent, key in (
+        ("test_cases", "test_phases", "phase_id"),
+        ("test_events", "test_phases", "phase_id"),
+        ("vcrm_entries", "requirements", "req_id"),
+        ("test_results", "test_events", "event_id"),
+    ):
+        cur.execute(
+            sql.SQL(
+                "UPDATE {c} c SET program_id = p.program_id FROM {p} p WHERE c.{k} = p.{k} AND c.program_id IS NULL"
+            ).format(c=t[child], p=t[parent], k=sql.Identifier(key))
+        )
     _toggle_updated_at(cur, schema, ("test_cases", "test_events"), "ENABLE")
 
     # 3. refuse to constrain data that already violates BR-07, and say which rows to triage
-    cur.execute(sql.SQL("""
+    cur.execute(
+        sql.SQL("""
         SELECT string_agg(msg, E'\\n') FROM (
            SELECT 'vcrm_entries ' || v.vcrm_id || ': requirement in program ' || v.program_id
                   || ', test case in program ' || c.program_id AS msg
@@ -183,11 +222,14 @@ def upgrade() -> None:
                   || ', result in program ' || x.program_id
            FROM {df} d JOIN {rs} x ON x.result_id = d.result_id WHERE x.program_id <> d.program_id
            LIMIT 50
-        ) m""").format(vc=t["vcrm_entries"], tc=t["test_cases"], rs=t["test_results"], df=t["defect_reports"]))
+        ) m""").format(vc=t["vcrm_entries"], tc=t["test_cases"], rs=t["test_results"], df=t["defect_reports"])
+    )
     (bad,) = cur.fetchone()
     if bad:
-        raise RuntimeError(f"Tenant schema {schema!r}: cross-program references found (BR-07). "
-                           f"Nothing was changed. Fix or remove these rows, then re-run:\n{bad}")
+        raise RuntimeError(
+            f"Tenant schema {schema!r}: cross-program references found (BR-07). "
+            f"Nothing was changed. Fix or remove these rows, then re-run:\n{bad}"
+        )
 
     # 4. NOT NULL, composite-key targets, composite FKs
     for table in _PROGRAM_TABLES:
@@ -199,24 +241,34 @@ def upgrade() -> None:
             "SELECT c.conname FROM pg_constraint c JOIN pg_attribute a "
             "ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] "
             "WHERE c.contype = 'f' AND cardinality(c.conkey) = 1 AND c.conrelid = %s::regclass "
-            "AND a.attname = %s", (f'"{schema}"."{table}"', column))
+            "AND a.attname = %s",
+            (f'"{schema}"."{table}"', column),
+        )
         for (conname,) in cur.fetchall():
             _drop_constraint(cur, schema, table, conname)
 
     for table, name, definition in _UNIQUES:
         _add_constraint(cur, schema, table, name, definition)
     for table, name, column, parent, on_delete in _COMPOSITE_FKS:
-        _add_constraint(cur, schema, table, name, sql.SQL(
-            "FOREIGN KEY ({col}, program_id) REFERENCES {parent}({col}, program_id){action}").format(
-                col=sql.Identifier(column), parent=_tbl(schema, parent), action=sql.SQL(on_delete)))
+        _add_constraint(
+            cur,
+            schema,
+            table,
+            name,
+            sql.SQL("FOREIGN KEY ({col}, program_id) REFERENCES {parent}({col}, program_id){action}").format(
+                col=sql.Identifier(column), parent=_tbl(schema, parent), action=sql.SQL(on_delete)
+            ),
+        )
 
     # 5. fill program_id from the parent on INSERT when the caller omitted it
     for table, parent, key, fk in _FILL_TRIGGERS:
         cur.execute(sql.SQL("DROP TRIGGER IF EXISTS trg_fill_program_id ON {}").format(t[table]))
-        cur.execute(sql.SQL("CREATE TRIGGER trg_fill_program_id BEFORE INSERT ON {} FOR EACH ROW "
-                            "EXECUTE FUNCTION {}.te_fill_program_id({}, {}, {})").format(
-                                t[table], sql.Identifier(schema), sql.Literal(parent), sql.Literal(key),
-                                sql.Literal(fk)))
+        cur.execute(
+            sql.SQL(
+                "CREATE TRIGGER trg_fill_program_id BEFORE INSERT ON {} FOR EACH ROW "
+                "EXECUTE FUNCTION {}.te_fill_program_id({}, {}, {})"
+            ).format(t[table], sql.Identifier(schema), sql.Literal(parent), sql.Literal(key), sql.Literal(fk))
+        )
 
 
 def downgrade() -> None:
@@ -227,9 +279,15 @@ def downgrade() -> None:
     for table, name, *_ in _COMPOSITE_FKS:
         _drop_constraint(cur, schema, table, name, if_exists=True)
     for table, column, parent, on_delete in _SINGLE_FKS:
-        cur.execute(sql.SQL("ALTER TABLE {} ADD FOREIGN KEY ({}) REFERENCES {}({}){}").format(
-            _tbl(schema, table), sql.Identifier(column), _tbl(schema, parent), sql.Identifier(column),
-            sql.SQL(on_delete)))
+        cur.execute(
+            sql.SQL("ALTER TABLE {} ADD FOREIGN KEY ({}) REFERENCES {}({}){}").format(
+                _tbl(schema, table),
+                sql.Identifier(column),
+                _tbl(schema, parent),
+                sql.Identifier(column),
+                sql.SQL(on_delete),
+            )
+        )
     for table, name, _definition in _UNIQUES:
         _drop_constraint(cur, schema, table, name, if_exists=True)
     for table in _PROGRAM_TABLES:

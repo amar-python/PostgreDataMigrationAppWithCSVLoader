@@ -1,16 +1,26 @@
 """Shared contract every deployed environment must satisfy."""
+
 from __future__ import annotations
+
 import shutil
 import subprocess  # nosec B404
 
 CORE_TABLES = {
-    "organisations", "personnel", "test_programs", "temp_documents",
-    "test_phases", "requirements", "test_cases", "vcrm_entries",
-    "test_events", "test_results", "defect_reports", "evidence_artifacts",
+    "organisations",
+    "personnel",
+    "test_programs",
+    "temp_documents",
+    "test_phases",
+    "requirements",
+    "test_cases",
+    "vcrm_entries",
+    "test_events",
+    "test_results",
+    "defect_reports",
+    "evidence_artifacts",
 }
 SEEDED_TABLES = ("organisations", "personnel", "requirements")
-HELP = ("Deploy environments first:\n"
-        "    bash scripts/provision_full_test_env.sh")
+HELP = "Deploy environments first:\n    bash scripts/provision_full_test_env.sh"
 
 
 def _psql(db, sql):
@@ -19,7 +29,10 @@ def _psql(db, sql):
     try:
         proc = subprocess.run(  # nosec B603 B607
             ["psql", "-d", db, "-tA", "--no-psqlrc", "-v", "ON_ERROR_STOP=1", "-c", sql],
-            capture_output=True, text=True, timeout=20)
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         return False, str(exc)
     return proc.returncode == 0, proc.stdout.strip()
@@ -45,7 +58,9 @@ class EnvironmentContract:
         self.assertEqual(out, "1")
 
     def test_schema_has_all_core_tables(self):
-        ok, out = _psql(self.DB, f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{self.SCHEMA}'")
+        ok, out = _psql(
+            self.DB, f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{self.SCHEMA}'"
+        )
         self.assertTrue(ok, out)
         missing = sorted(CORE_TABLES - set(out.splitlines()))
         self.assertEqual(missing, [], f"{self.ENV}: missing tables {missing}")

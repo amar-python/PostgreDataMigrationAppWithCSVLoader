@@ -105,9 +105,15 @@ class RequireTypeConfirmation(unittest.TestCase):
 
     def test_on_does_not_touch_te_mode(self):
         settings.REQUIRE_TYPE_CONFIRMATION = True
-        res = self.client.post("/api/csv/upload", json={
-            "fileName": f"req_te_{self.tag}.csv", "mode": "te", "targetTable": "organisations",
-            "content": f"name,org_type,country\nREQ_{self.tag},government,AU\n"})
+        res = self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": f"req_te_{self.tag}.csv",
+                "mode": "te",
+                "targetTable": "organisations",
+                "content": f"name,org_type,country\nREQ_{self.tag},government,AU\n",
+            },
+        )
         self.assertEqual(res.status_code, 200, res.text)
         self.assertEqual(res.json()["status"], "ok", res.text)
 

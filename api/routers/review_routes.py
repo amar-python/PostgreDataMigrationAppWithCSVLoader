@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any, TypeVar
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -9,13 +12,14 @@ from api import policy
 from api.auth import allow, tenant_scope
 from api.db import Conn
 from api.services import review
-from typing import Any
-from collections.abc import Callable
-from typing import TypeVar
 
 T = TypeVar("T")
 
-router = APIRouter(prefix="/api/csv/uploads", tags=["review"], dependencies=[Depends(tenant_scope), Depends(policy.mark_classification)])
+router = APIRouter(
+    prefix="/api/csv/uploads",
+    tags=["review"],
+    dependencies=[Depends(tenant_scope), Depends(policy.mark_classification)],
+)
 
 
 class DecisionRequest(BaseModel):

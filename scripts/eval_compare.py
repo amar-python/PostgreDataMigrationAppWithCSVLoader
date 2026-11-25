@@ -7,6 +7,7 @@ Usage:
     python3 scripts/eval_compare.py                          # auto last 2
     python3 scripts/eval_compare.py <run-id-a> <run-id-b>   # explicit
 """
+
 from __future__ import annotations
 
 import json
@@ -33,27 +34,25 @@ def _load(run_id: str) -> dict:
 
 
 def _scenario_map(summary: dict) -> dict[str, dict]:
-    return {
-        f"{s['tier']}/{s['name']}": s
-        for s in summary.get("scenarios", [])
-    }
+    return {f"{s['tier']}/{s['name']}": s for s in summary.get("scenarios", [])}
 
 
 def main() -> None:
-    runs = sorted(
-        (p for p in REPORTS_DIR.iterdir() if p.is_dir()),
-        key=lambda p: p.name,
-    ) if REPORTS_DIR.exists() else []
+    runs = (
+        sorted(
+            (p for p in REPORTS_DIR.iterdir() if p.is_dir()),
+            key=lambda p: p.name,
+        )
+        if REPORTS_DIR.exists()
+        else []
+    )
 
     if len(sys.argv) == 3:
         id_a, id_b = sys.argv[1], sys.argv[2]
     elif len(runs) >= 2:
         id_a, id_b = runs[-2].name, runs[-1].name
     else:
-        print(
-            f"{YELLOW}Need at least 2 eval runs. "
-            f"Pass run IDs as arguments or run evals first.{NC}"
-        )
+        print(f"{YELLOW}Need at least 2 eval runs. Pass run IDs as arguments or run evals first.{NC}")
         sys.exit(0)
 
     a = _load(id_a)
@@ -68,7 +67,7 @@ def main() -> None:
     print(f"  B: {id_b}")
     print("=" * 65)
     print(f"  {'Scenario':<40}  {'A':>6}  {'B':>6}  Delta")
-    print(f"  {'-'*40}  {'-'*6}  {'-'*6}  -----")
+    print(f"  {'-' * 40}  {'-' * 6}  {'-' * 6}  -----")
 
     regressions = improvements = 0
 
@@ -106,14 +105,8 @@ def main() -> None:
     print()
     ta = a.get("totals", {})
     tb = b.get("totals", {})
-    print(
-        f"  Totals   A: {ta.get('passed', 0)}P/"
-        f"{ta.get('failed', 0)}F/{ta.get('skipped', 0)}S"
-    )
-    print(
-        f"           B: {tb.get('passed', 0)}P/"
-        f"{tb.get('failed', 0)}F/{tb.get('skipped', 0)}S"
-    )
+    print(f"  Totals   A: {ta.get('passed', 0)}P/{ta.get('failed', 0)}F/{ta.get('skipped', 0)}S")
+    print(f"           B: {tb.get('passed', 0)}P/{tb.get('failed', 0)}F/{tb.get('skipped', 0)}S")
     print()
     if regressions:
         print(f"  {RED}{regressions} regression(s) detected{NC}")

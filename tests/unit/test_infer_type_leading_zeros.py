@@ -11,6 +11,7 @@ What must hold:
   * the preview a user confirms shows ``text`` for such a column, so the value loads as it was typed;
   * ``cast_value`` for a text column keeps the original characters.
 """
+
 from __future__ import annotations
 
 import sys
@@ -25,28 +26,34 @@ sys.path.insert(0, str(ROOT))
 from api.services import csv_parse as cp  # noqa: E402
 
 
-@pytest.mark.parametrize("values", [
-    ["007", "012", "100"],            # the leading zero is on some values only
-    ["02134", "90210"],               # US postcode
-    ["0412345678", "0498765432"],     # AU mobile numbers
-    ["000123", "000124"],             # padded account numbers
-    ["00", "01"],
-    ["-007", "5"],                    # a sign does not hide the padding
-    ["007.5", "1.5"],                 # padding before a decimal part is still padding
-])
+@pytest.mark.parametrize(
+    "values",
+    [
+        ["007", "012", "100"],  # the leading zero is on some values only
+        ["02134", "90210"],  # US postcode
+        ["0412345678", "0498765432"],  # AU mobile numbers
+        ["000123", "000124"],  # padded account numbers
+        ["00", "01"],
+        ["-007", "5"],  # a sign does not hide the padding
+        ["007.5", "1.5"],  # padding before a decimal part is still padding
+    ],
+)
 def test_a_zero_padded_whole_number_makes_the_column_text(values):
     assert cp.infer_type(values) == "text", values
 
 
-@pytest.mark.parametrize("values, expected", [
-    (["0"], "int8"),                  # a single zero is a number
-    (["0", "10", "-5"], "int8"),
-    (["10", "100", "1000"], "int8"),  # trailing zeros are not padding
-    (["0.5", "0.25"], "numeric"),     # a zero before a decimal point is not padding
-    (["-0.25", "1.10"], "numeric"),
-    (["1", "2", ""], "int8"),         # blanks are ignored as before
-    ([], "text"),
-])
+@pytest.mark.parametrize(
+    "values, expected",
+    [
+        (["0"], "int8"),  # a single zero is a number
+        (["0", "10", "-5"], "int8"),
+        (["10", "100", "1000"], "int8"),  # trailing zeros are not padding
+        (["0.5", "0.25"], "numeric"),  # a zero before a decimal point is not padding
+        (["-0.25", "1.10"], "numeric"),
+        (["1", "2", ""], "int8"),  # blanks are ignored as before
+        ([], "text"),
+    ],
+)
 def test_ordinary_numbers_are_still_numbers(values, expected):
     assert cp.infer_type(values) == expected, values
 

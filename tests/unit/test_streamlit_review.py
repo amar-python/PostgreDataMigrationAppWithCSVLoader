@@ -8,6 +8,7 @@ reason; other roles can view but not change) and the ones its newer fixes added 
 be read as Markdown, the cached list of uploads must not leak between sessions, and the row-number box must
 survive a change of page. AppTest cannot click a row in the grid; e2e/test_streamlit_review.py does.
 """
+
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -44,8 +45,17 @@ def _later() -> str:
 
 
 def _row(n, cells, **extra):
-    return {"rowNumber": n, "original": list(cells), "current": list(cells), "editedColumns": [],
-            "decision": "include", "decisionReason": None, "duplicateOfEarlierVersion": None, "errors": [], **extra}
+    return {
+        "rowNumber": n,
+        "original": list(cells),
+        "current": list(cells),
+        "editedColumns": [],
+        "decision": "include",
+        "decisionReason": None,
+        "duplicateOfEarlierVersion": None,
+        "errors": [],
+        **extra,
+    }
 
 
 def _people() -> list[dict]:
@@ -53,15 +63,30 @@ def _people() -> list[dict]:
     return [
         _row(1, ["1", "a"], current=["10", "a"], editedColumns=[0]),
         _row(2, ["x", "b"], errors=[{"column": "n", "value": "x", "reason": '"x" is not a whole number'}]),
-        _row(3, ["3", "c"], decision="exclude", decisionReason="duplicate of row 1",
-             errors=[{"column": "(database)", "value": "", "reason": "violates check constraint"}]),
+        _row(
+            3,
+            ["3", "c"],
+            decision="exclude",
+            decisionReason="duplicate of row 1",
+            errors=[{"column": "(database)", "value": "", "reason": "violates check constraint"}],
+        ),
     ]
 
 
 def _attempt(uid, name, status, total=3, failed=0, **extra):
-    return {"id": uid, "file_name": name, "mode": "dynamic", "status": status, "total_rows": total,
-            "imported_rows": (total or 0) - failed, "failed_rows": failed, "uploader": "alice",
-            "uploaded_at": "2026-11-18T01:00:00+00:00", "failure_reason": None, **extra}
+    return {
+        "id": uid,
+        "file_name": name,
+        "mode": "dynamic",
+        "status": status,
+        "total_rows": total,
+        "imported_rows": (total or 0) - failed,
+        "failed_rows": failed,
+        "uploader": "alice",
+        "uploaded_at": "2026-11-18T01:00:00+00:00",
+        "failure_reason": None,
+        **extra,
+    }
 
 
 UPLOADS = [  # newest first, as the API lists them; "7" is the one with rows to look at
@@ -106,11 +131,18 @@ class FakeApi:
 
     def _page(self, uid, offset, limit):
         d = self.data[uid]
-        rows = d["rows"][offset:offset + limit]
-        return {"fileName": next(u["file_name"] for u in self.uploads if u["id"] == uid), "columns": d["columns"],
-                "types": d["types"], "total": len(d["rows"]), "offset": offset, "limit": limit,
-                "excludedRows": sum(r["decision"] == "exclude" for r in d["rows"]),
-                "editedRows": sum(bool(r["editedColumns"]) for r in d["rows"]), "rows": rows}
+        rows = d["rows"][offset : offset + limit]
+        return {
+            "fileName": next(u["file_name"] for u in self.uploads if u["id"] == uid),
+            "columns": d["columns"],
+            "types": d["types"],
+            "total": len(d["rows"]),
+            "offset": offset,
+            "limit": limit,
+            "excludedRows": sum(r["decision"] == "exclude" for r in d["rows"]),
+            "editedRows": sum(bool(r["editedColumns"]) for r in d["rows"]),
+            "rows": rows,
+        }
 
     def _change(self, uid, n, what, body):
         if uid in self.frozen:
@@ -122,14 +154,23 @@ class FakeApi:
         if what == "decision":
             row["decision"], row["decisionReason"] = body["decision"], body["reason"]
             self.history.setdefault((uid, n), []).append(
-                {"kind": "decision", "at": at, "actor": "rita", "reason": body["reason"], "decision": body["decision"]})
+                {"kind": "decision", "at": at, "actor": "rita", "reason": body["reason"], "decision": body["decision"]}
+            )
         else:
             i = int(what.split("/")[1])
             if body["value"] == row["current"][i]:
                 raise api_client.ApiError(422, "The new value is the same as the current one")
             self.history.setdefault((uid, n), []).append(
-                {"kind": "edit", "at": at, "actor": "rita", "reason": body["reason"],
-                 "column": self.data[uid]["columns"][i], "oldValue": row["current"][i], "newValue": body["value"]})
+                {
+                    "kind": "edit",
+                    "at": at,
+                    "actor": "rita",
+                    "reason": body["reason"],
+                    "column": self.data[uid]["columns"][i],
+                    "oldValue": row["current"][i],
+                    "newValue": body["value"],
+                }
+            )
             row["current"][i] = body["value"]
             row["editedColumns"] = sorted({*row["editedColumns"], i})
         return row
@@ -161,8 +202,13 @@ def api(monkeypatch):
 def _screen(api, who="rita", token="tok-1") -> AppTest:
     """The review screen with a session already in place."""
     at = AppTest.from_string(HARNESS.format(app_dir=str(APP_DIR)), default_timeout=30)
-    at.session_state["session"] = {"token": token, "expiresAt": _later(), "username": who, "tenant": "acme",
-                                   "role": ROLES[who]}
+    at.session_state["session"] = {
+        "token": token,
+        "expiresAt": _later(),
+        "username": who,
+        "tenant": "acme",
+        "role": ROLES[who],
+    }
     at.run()
     assert not at.exception, at.exception
     return at
@@ -212,15 +258,18 @@ def _texts(at):
 
 # ── which upload: every attempt, #187 ─────────────────────────────────────────────────────────
 
+
 def test_every_attempt_is_listed_failed_and_partial_ones_included(api):
     at = _screen(api)
 
     options = _upload_box(at).options
-    assert options == ["#7 people.csv · Imported · 3 rows",
-                       "#8 bad.csv · Failed · 5 of 5 rows failed",
-                       "#9 half.csv · Partly imported · 4 of 10 rows failed",
-                       "#10 nope.csv · Rejected · 0 rows",
-                       "#11 same.csv · Duplicate · 3 rows"]
+    assert options == [
+        "#7 people.csv · Imported · 3 rows",
+        "#8 bad.csv · Failed · 5 of 5 rows failed",
+        "#9 half.csv · Partly imported · 4 of 10 rows failed",
+        "#10 nope.csv · Rejected · 0 rows",
+        "#11 same.csv · Duplicate · 3 rows",
+    ]
 
 
 def test_the_failed_or_partial_filter_leaves_the_ones_that_need_attention(api):
@@ -264,6 +313,7 @@ def test_the_chosen_upload_stays_chosen_when_the_list_changes_under_it(api):
 
 # ── every row, with its validation, edits and decision ─────────────────────────────────────────
 
+
 def test_the_page_shows_every_row_with_its_status_and_the_count_line(api):
     at = _pick_upload(_screen(api), "7")
 
@@ -272,8 +322,10 @@ def test_the_page_shows_every_row_with_its_status_and_the_count_line(api):
     assert list(frame["Row status"]) == ["Included", "Invalid", "Excluded"]
     assert list(frame["n"]) == ["10", "x", "3"], "the current values, so the edit shows"
     assert at.subheader[0].value == "` people.csv `"
-    assert at.caption[0].value == ("3 rows · 1 excluded · 1 edited. Changes are saved with the upload for review. "
-                                   "They don't change the imported table.")
+    assert at.caption[0].value == (
+        "3 rows · 1 excluded · 1 edited. Changes are saved with the upload for review. "
+        "They don't change the imported table."
+    )
 
 
 def test_a_row_shows_why_it_is_invalid_what_was_edited_and_the_decision_and_the_database_reason(api):
@@ -300,6 +352,7 @@ def test_no_row_is_shown_until_one_is_chosen(api):
 
 # ── a reviewer excludes a row with a required reason ───────────────────────────────────────────
 
+
 def test_excluding_needs_a_reason_and_sends_the_row_the_decision_and_the_reason(api):
     at = _review(_screen(api), row=2)
     assert [t.label for t in at.tabs] == ["Edit a cell", "Exclude row", "History"]
@@ -312,7 +365,8 @@ def test_excluding_needs_a_reason_and_sends_the_row_the_decision_and_the_reason(
 
     assert not at.exception, at.exception
     assert [(c[0], c[1], c[3]) for c in api.writes()] == [
-        ("PUT", "/api/csv/uploads/7/rows/2/decision", {"decision": "exclude", "reason": "bad row"})]
+        ("PUT", "/api/csv/uploads/7/rows/2/decision", {"decision": "exclude", "reason": "bad row"})
+    ]
     assert [s.value for s in at.success] == ["Saved: row 2 excluded."]
     assert list(at.dataframe[0].value["Row status"]) == ["Included", "Excluded", "Excluded"]
     assert _widget(at.text_input, "Reason to include this row (required)").value == "", "the form starts empty again"
@@ -330,6 +384,7 @@ def test_a_whitespace_only_reason_is_refused_too(api):
 
 # ── a reviewer edits a cell as a new value with a reason ───────────────────────────────────────
 
+
 def test_editing_shows_the_original_and_sends_the_new_value_and_reason_by_column_position(api):
     at = _review(_screen(api), row=2)
 
@@ -341,7 +396,8 @@ def test_editing_shows_the_original_and_sends_the_new_value_and_reason_by_column
 
     assert not at.exception, at.exception
     assert [(c[1], c[3]) for c in api.writes()] == [
-        ("/api/csv/uploads/7/rows/2/cells/0", {"value": "2", "reason": "typo"})]
+        ("/api/csv/uploads/7/rows/2/cells/0", {"value": "2", "reason": "typo"})
+    ]
     assert [s.value for s in at.success] == ["Saved: row 2, ` n `."]
     assert list(at.dataframe[0].value["n"]) == ["10", "2", "3"]
     assert any(c.value == "` n `: original ` x `, now ` 2 `" for c in at.caption)
@@ -383,6 +439,7 @@ def test_the_history_tab_lists_what_was_changed_by_whom_and_why(api):
 
 # ── other roles can view but not change ────────────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize("who", ["alice", "audrey"])
 def test_other_roles_can_look_but_not_change(api, who):
     at = _review(_screen(api, who), row=2)
@@ -401,6 +458,7 @@ def test_a_tenant_admin_can_change_too(api):
 
 
 # ── a session the server has ended, or a server that is down ───────────────────────────────────
+
 
 def test_a_session_the_server_ended_during_a_save_signs_the_person_out_with_a_reason(api):
     at = _review(_screen(api), row=2)
@@ -426,14 +484,20 @@ def test_an_api_that_is_down_says_so_instead_of_failing(api):
     api.down = True
 
     at = AppTest.from_string(HARNESS.format(app_dir=str(APP_DIR)), default_timeout=30)
-    at.session_state["session"] = {"token": "t", "expiresAt": _later(), "username": "rita", "tenant": "acme",
-                                   "role": "reviewer"}
+    at.session_state["session"] = {
+        "token": "t",
+        "expiresAt": _later(),
+        "username": "rita",
+        "tenant": "acme",
+        "role": "reviewer",
+    }
     at.run()
 
     assert not at.exception and "Can't reach the API" in _errors(at)[0]
 
 
 # ── the list of uploads is cached, and never shared between sessions ───────────────────────────
+
 
 def test_the_list_is_fetched_once_for_many_reruns_and_again_on_refresh(api):
     at = _pick_upload(_screen(api), "7")
@@ -447,8 +511,10 @@ def test_the_list_is_fetched_once_for_many_reruns_and_again_on_refresh(api):
 
 
 def test_one_sessions_list_is_never_shown_to_another(api):
-    api.lists_by_token = {"tok-a": [_attempt("1", "acme-secret.csv", "imported")],
-                          "tok-b": [_attempt("2", "zed-plans.csv", "imported")]}
+    api.lists_by_token = {
+        "tok-a": [_attempt("1", "acme-secret.csv", "imported")],
+        "tok-b": [_attempt("2", "zed-plans.csv", "imported")],
+    }
     api.uploads += api.lists_by_token["tok-a"] + api.lists_by_token["tok-b"]  # so the fake can serve their rows
     api.data["1"] = api.data["2"] = api.data["7"]
 
@@ -472,8 +538,9 @@ def test_the_rows_are_never_cached_because_they_change_as_people_review(api):
 
 # ── text from a file is shown as written ───────────────────────────────────────────────────────
 
+
 def test_a_cell_that_looks_like_a_link_or_bold_text_shows_as_written(api):
-    evil = '[click here](https://evil.example/login) **urgent** :warning: $x$ <b>hi</b> user@evil.example'
+    evil = "[click here](https://evil.example/login) **urgent** :warning: $x$ <b>hi</b> user@evil.example"
     api.data["7"]["rows"][1]["errors"] = [{"column": "n", "value": evil, "reason": f'"{evil}" is not a whole number'}]
     api.data["7"]["rows"][1]["original"][1] = evil
     api.data["7"]["rows"][1]["current"][1] = evil
@@ -488,13 +555,21 @@ def test_a_cell_that_looks_like_a_link_or_bold_text_shows_as_written(api):
 
 def test_a_file_name_and_a_reason_in_the_history_show_as_written(api):
     api.uploads[0]["file_name"] = "[a](https://evil.example)**.csv"
-    api.history[("7", 2)] = [{"kind": "decision", "at": "2026-11-18T02:30:00+00:00", "actor": "r[x](y)",
-                              "reason": "see https://evil.example now", "decision": "exclude"}]
+    api.history[("7", 2)] = [
+        {
+            "kind": "decision",
+            "at": "2026-11-18T02:30:00+00:00",
+            "actor": "r[x](y)",
+            "reason": "see https://evil.example now",
+            "decision": "exclude",
+        }
+    ]
     at = _review(_screen(api), row=2)
 
     assert at.subheader[0].value == "` [a](https://evil.example)**.csv `"
     assert [w.value for w in at.markdown if "UTC" in w.value] == [
-        "2026-11-18 02:30 UTC · ` r[x](y) ` · **Excluded**  \n` see https://evil.example now `"]
+        "2026-11-18 02:30 UTC · ` r[x](y) ` · **Excluded**  \n` see https://evil.example now `"
+    ]
 
 
 def test_a_file_with_a_column_called_status_does_not_clash_with_the_status_column(api):
@@ -506,6 +581,7 @@ def test_a_file_with_a_column_called_status_does_not_clash_with_the_status_colum
 
 
 # ── pages ──────────────────────────────────────────────────────────────────────────────────────
+
 
 def _big(api, total=250):
     api.data["7"]["rows"] = [_row(i, [str(i), f"p{i}"]) for i in range(1, total + 1)]
@@ -551,18 +627,25 @@ def test_a_row_chosen_on_a_later_page_is_shown_with_its_own_data(api):
 
 # ── what the model says ────────────────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("text, shown", [
-    ("[a](b)", "` [a](b) `"),
-    ("**x**_y_", "` **x**_y_ `"),
-    ("https://evil.example/x www.evil.example a@evil.example", "` https://evil.example/x www.evil.example a@evil.example `"),
-    ("a`b", "`` a`b ``"),
-    ("``", "``` `` ```"),
-    ("`", "`` ` ``"),
-    ("a\r\nb\tc", "` a b c `"),
-    ("", "`  `"),
-    (None, "` None `"),
-    (5, "` 5 `"),
-])
+
+@pytest.mark.parametrize(
+    "text, shown",
+    [
+        ("[a](b)", "` [a](b) `"),
+        ("**x**_y_", "` **x**_y_ `"),
+        (
+            "https://evil.example/x www.evil.example a@evil.example",
+            "` https://evil.example/x www.evil.example a@evil.example `",
+        ),
+        ("a`b", "`` a`b ``"),
+        ("``", "``` `` ```"),
+        ("`", "`` ` ``"),
+        ("a\r\nb\tc", "` a b c `"),
+        ("", "`  `"),
+        (None, "` None `"),
+        (5, "` 5 `"),
+    ],
+)
 def test_literal_puts_text_in_a_code_span_that_nothing_inside_it_can_end(text, shown):
     assert m.literal(text) == shown
 
@@ -572,9 +655,10 @@ def test_a_literal_is_one_code_span_holding_exactly_the_text(text):
     """The CommonMark rule for a code span: a fence of N backticks ends at the next run of exactly N, so the
     fence must be longer than any run inside, and a single space of padding at each end is not shown."""
     import re
+
     span = m.literal(text)
     fence = re.match(r"`+", span).group()
-    inner = span[len(fence):-len(fence)]
+    inner = span[len(fence) : -len(fence)]
     assert span.endswith(fence) and not span.endswith("`" * (len(fence) + 1))
     assert all(len(run) != len(fence) for run in re.findall(r"`+", inner)), "nothing inside can close the span early"
     assert inner[1:-1] == text, "what is shown is what was in the file"
@@ -588,7 +672,8 @@ def test_needs_attention_is_failed_partial_and_rejected_only():
 def test_attempt_wording_matches_the_react_list():
     assert m.attempt_label(_attempt("1", "a.csv", "imported", total=3)) == "#1 a.csv · Imported · 3 rows"
     assert m.attempt_label(_attempt("1", "a.csv", "partly_imported", total=10, failed=2)).endswith(
-        "Partly imported · 2 of 10 rows failed")
+        "Partly imported · 2 of 10 rows failed"
+    )
     assert m.attempt_label(_attempt("1", "a.csv", "failed", total=None, failed=2)).endswith("2 of ? rows failed")
     assert m.attempt_label(_attempt("1", "a.csv", "mystery", total=0)).endswith("mystery · 0 rows")
     assert m.reviewable(_attempt("1", "a", "failed")) and not m.reviewable(_attempt("1", "a", "rejected"))
@@ -631,6 +716,15 @@ def test_when_gives_utc_takes_a_zoneless_time_as_utc_and_survives_rubbish():
 
 
 def test_a_history_edit_line_shows_both_values_and_an_unknown_actor():
-    line = m.history_line({"kind": "edit", "at": "2026-11-18T02:30:00+00:00", "actor": None, "reason": "typo",
-                           "column": "n", "oldValue": "x", "newValue": "2"})
+    line = m.history_line(
+        {
+            "kind": "edit",
+            "at": "2026-11-18T02:30:00+00:00",
+            "actor": None,
+            "reason": "typo",
+            "column": "n",
+            "oldValue": "x",
+            "newValue": "2",
+        }
+    )
     assert line == "2026-11-18 02:30 UTC · ` unknown ` · ` n `: ` x ` → ` 2 `  \n` typo `"

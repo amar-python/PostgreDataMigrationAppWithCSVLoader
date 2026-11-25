@@ -69,7 +69,9 @@ class ComposeUsesOnlyBundledImages(unittest.TestCase):
         self.assertEqual(sorted(services), sorted(IMAGES))
         for name, svc in services.items():
             with self.subTest(service=name):
-                self.assertNotIn("build", svc, "the installer has no build tools or internet; images come from the bundle")
+                self.assertNotIn(
+                    "build", svc, "the installer has no build tools or internet; images come from the bundle"
+                )
                 self.assertRegex(svc["image"], rf"^te-{name}:\$\{{TE_VERSION")
                 self.assertEqual(svc.get("pull_policy"), "never", "a missing image must be an error, not a download")
 
@@ -81,11 +83,19 @@ class ComposeUsesOnlyBundledImages(unittest.TestCase):
 
     def test_secrets_come_from_variables_not_literals(self):
         services = compose()["services"]
-        for svc, var in (("db", "POSTGRES_PASSWORD"), ("db", "TE_DB_PASSWORD"), ("db", "TE_RUNTIME_PASSWORD"),
-                         ("api", "PGPASSWORD"), ("api", "APP_DB_PASSWORD")):
+        for svc, var in (
+            ("db", "POSTGRES_PASSWORD"),
+            ("db", "TE_DB_PASSWORD"),
+            ("db", "TE_RUNTIME_PASSWORD"),
+            ("api", "PGPASSWORD"),
+            ("api", "APP_DB_PASSWORD"),
+        ):
             with self.subTest(service=svc, variable=var):
-                self.assertRegex(str(services[svc]["environment"][var]), r"^\$\{[A-Z_]+:\?",
-                                 "a secret must be required from .env, never written in the file")
+                self.assertRegex(
+                    str(services[svc]["environment"][var]),
+                    r"^\$\{[A-Z_]+:\?",
+                    "a secret must be required from .env, never written in the file",
+                )
 
     def test_the_installers_look_for_the_volume_compose_creates(self):
         """Compose names the volume <project>_<key>. The installers refuse to reuse an old database volume
@@ -123,8 +133,10 @@ class ComposeUsesOnlyBundledImages(unittest.TestCase):
             test = svc.get("healthcheck", {}).get("test", [])
             if test and test[0] == "CMD":
                 with self.subTest(service=name):
-                    self.assertFalse([a for a in test[1:] if re.search(r"\s", a)],
-                                     "use CMD-SHELL with one string, or put the command in a script")
+                    self.assertFalse(
+                        [a for a in test[1:] if re.search(r"\s", a)],
+                        "use CMD-SHELL with one string, or put the command in a script",
+                    )
 
     def test_the_api_waits_for_a_healthy_database_and_the_web_app_for_the_api(self):
         services = compose()["services"]
@@ -145,22 +157,34 @@ class DockerfilesCopyOnlyWhatExists(unittest.TestCase):
         for img in IMAGES:
             for src in copy_sources(CONTAINER / f"{img}.Dockerfile"):
                 with self.subTest(image=img, source=src):
-                    self.assertTrue((ROOT / src).exists(), f"{src} does not exist; a rename would break the image build")
+                    self.assertTrue(
+                        (ROOT / src).exists(), f"{src} does not exist; a rename would break the image build"
+                    )
                     self.assertNotIn(src.rstrip("/"), SENSITIVE)
-                    self.assertNotEqual(src.rstrip("/"), "build", "copy named files, not the whole build/ tree: it can hold config.local.env")
+                    self.assertNotEqual(
+                        src.rstrip("/"),
+                        "build",
+                        "copy named files, not the whole build/ tree: it can hold config.local.env",
+                    )
 
     def test_no_secret_is_baked_into_an_image(self):
         for img in IMAGES:
             text = (CONTAINER / f"{img}.Dockerfile").read_text(encoding="utf-8")
             with self.subTest(image=img):
-                self.assertNotRegex(text, r"(?im)^\s*(ENV|ARG)\s+\w*(PASSWORD|API_KEY|SECRET)\w*[= ]",
-                                    "credentials arrive as run-time environment variables, never in a layer")
+                self.assertNotRegex(
+                    text,
+                    r"(?im)^\s*(ENV|ARG)\s+\w*(PASSWORD|API_KEY|SECRET)\w*[= ]",
+                    "credentials arrive as run-time environment variables, never in a layer",
+                )
 
 
 @pytest.mark.unit
 class PowerShellInstallerAvoidsWindowsTraps(unittest.TestCase):
-    code = "\n".join(line for line in (CONTAINER / "install.ps1").read_text(encoding="utf-8").splitlines()
-                     if not line.lstrip().startswith("#"))
+    code = "\n".join(
+        line
+        for line in (CONTAINER / "install.ps1").read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("#")
+    )
 
     def test_the_env_file_is_written_without_a_byte_order_mark(self):
         """-Encoding UTF8 adds a BOM in Windows PowerShell 5.1; a .env parser then reads it as part of the first key."""
@@ -185,8 +209,11 @@ class ScriptsParse(unittest.TestCase):
 
     def test_the_installer_uses_nothing_newer_than_bash_3_2(self):
         """macOS ships bash 3.2: no associative arrays, mapfile, or ${var,,} / ${var^^}."""
-        code = "\n".join(line for line in (CONTAINER / "install.sh").read_text(encoding="utf-8").splitlines()
-                         if not line.lstrip().startswith("#"))
+        code = "\n".join(
+            line
+            for line in (CONTAINER / "install.sh").read_text(encoding="utf-8").splitlines()
+            if not line.lstrip().startswith("#")
+        )
         for pattern in (r"declare\s+-A", r"\bmapfile\b", r"\breadarray\b", r"\$\{[A-Za-z_]+(,,|\^\^)\}", r"&>>"):
             with self.subTest(pattern=pattern):
                 self.assertNotRegex(code, pattern)
@@ -258,8 +285,9 @@ class SmokeTestLogic(unittest.TestCase):
         env.update(API_URL=self.url, FRONTEND_URL=self.url)
         if with_login:
             env.update(SMOKE_TENANT="main", SMOKE_USER="admin", SMOKE_PASSWORD="long-enough-password")
-        return subprocess.run([sys.executable, str(CONTAINER / "smoke_test.py")], env=env,
-                              capture_output=True, text=True, timeout=60)
+        return subprocess.run(
+            [sys.executable, str(CONTAINER / "smoke_test.py")], env=env, capture_output=True, text=True, timeout=60
+        )
 
     def test_a_healthy_stack_passes_all_seven(self):
         res = self.run_smoke()
@@ -272,13 +300,17 @@ class SmokeTestLogic(unittest.TestCase):
         res = self.run_smoke(with_login=False)
         self.assertNotEqual(res.returncode, 0, res.stdout + res.stderr)
         self.assertIn("3 of 7 passed", res.stdout)
-        self.assertIn("FAIL  sign-in, upload and listing checks: set SMOKE_TENANT, SMOKE_USER and SMOKE_PASSWORD",
-                      res.stdout)
+        self.assertIn(
+            "FAIL  sign-in, upload and listing checks: set SMOKE_TENANT, SMOKE_USER and SMOKE_PASSWORD", res.stdout
+        )
         self.assertNotIn("SKIP", res.stdout)
 
     def test_each_failure_is_reported_and_fails_the_run(self):
-        for breakage, label in (("no401", "API rejects a request without a session"), ("upload", "upload a CSV"),
-                                ("role", "session is tenant_admin")):
+        for breakage, label in (
+            ("no401", "API rejects a request without a session"),
+            ("upload", "upload a CSV"),
+            ("role", "session is tenant_admin"),
+        ):
             with self.subTest(breakage=breakage):
                 res = self.run_smoke(broken={breakage})
                 self.assertNotEqual(res.returncode, 0, res.stdout)
@@ -293,8 +325,11 @@ class SmokeTestLogic(unittest.TestCase):
 
     def test_the_script_parses_and_defines_seven_checks(self):
         tree = ast.parse((CONTAINER / "smoke_test.py").read_text(encoding="utf-8"))
-        consts = {n.targets[0].id: n.value.value for n in tree.body
-                  if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Constant)}
+        consts = {
+            n.targets[0].id: n.value.value
+            for n in tree.body
+            if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Constant)
+        }
         self.assertEqual(consts.get("TOTAL"), 7)
 
 

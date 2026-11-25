@@ -21,7 +21,15 @@ class WhatIsLocal(unittest.TestCase):
             self.assertTrue(is_local(host), host)
 
     def test_everything_else_is_not(self):
-        for host in ("example.com", "93.184.216.34", "10.0.0.5", "192.168.1.1", "0.0.0.0", "db.internal", "2001:db8::1"):
+        for host in (
+            "example.com",
+            "93.184.216.34",
+            "10.0.0.5",
+            "192.168.1.1",
+            "0.0.0.0",
+            "db.internal",
+            "2001:db8::1",
+        ):
             self.assertFalse(is_local(host), host)
 
     def test_a_remote_database_host_is_refused_up_front(self):
@@ -34,7 +42,7 @@ class WhatIsLocal(unittest.TestCase):
 @pytest.mark.unit
 class GuardBehaviour(unittest.TestCase):
     def setUp(self):
-        self._active = bool(egress_guard._originals)   # already installed by `pytest --block-egress`
+        self._active = bool(egress_guard._originals)  # already installed by `pytest --block-egress`
         egress_guard.uninstall()
         egress_guard.attempts.clear()
         egress_guard.install()
@@ -48,7 +56,7 @@ class GuardBehaviour(unittest.TestCase):
 
     def test_connecting_to_a_public_address_is_blocked_before_any_packet_is_sent(self):
         with self.assertRaises(EgressBlocked):
-            socket.create_connection(("93.184.216.34", 80), timeout=1)   # resolves first, and is stopped there
+            socket.create_connection(("93.184.216.34", 80), timeout=1)  # resolves first, and is stopped there
         self.assertEqual(egress_guard.attempts, ["resolve 93.184.216.34"])
 
     def test_a_direct_connect_is_blocked_too(self):

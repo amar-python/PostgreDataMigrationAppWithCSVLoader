@@ -67,8 +67,9 @@ class _Base(unittest.TestCase):
         cls.auth: dict[str, dict] = {}
         for key, slug in cls.slugs.items():
             for who in roles[key]:
-                res = cls.client.post("/api/auth/login", json={
-                    "tenant": slug, "username": f"{slug}_{who}", "password": _PW})
+                res = cls.client.post(
+                    "/api/auth/login", json={"tenant": slug, "username": f"{slug}_{who}", "password": _PW}
+                )
                 assert res.status_code == 200, res.text
                 cls.auth[f"{key}_{who}"] = {"Authorization": f"Bearer {res.json()['token']}"}
 
@@ -86,7 +87,7 @@ class _Base(unittest.TestCase):
 
     def setUp(self):
         self.tag = uuid.uuid4().hex[:10]
-        self.one = f"k\n{self.tag}\n"   # content no other test stages: the same bytes twice in a tenant are a duplicate
+        self.one = f"k\n{self.tag}\n"  # content no other test stages: the same bytes twice in a tenant are a duplicate
 
     # -- API helpers; ``who`` is a key of cls.auth, or None for no session --------------------
 
@@ -94,8 +95,11 @@ class _Base(unittest.TestCase):
         return self.auth[who] if who else {}
 
     def stage(self, who, name, content, expect=200, **extra):
-        res = self.client.post("/api/csv/uploads", headers=self._h(who),
-                               json={"fileName": f"{self.tag}_{name}", "content": content, **extra})
+        res = self.client.post(
+            "/api/csv/uploads",
+            headers=self._h(who),
+            json={"fileName": f"{self.tag}_{name}", "content": content, **extra},
+        )
         self.assertEqual(res.status_code, expect, res.text)
         return res.json() if expect == 200 else res.json()["detail"]
 
@@ -113,13 +117,19 @@ class _Base(unittest.TestCase):
         return self.client.get(f"/api/csv/uploads/{upload}/workflow", headers=self._h(who)).json()["state"]
 
     def decide(self, who, upload, row, decision="exclude", expect=200):
-        res = self.client.put(f"/api/csv/uploads/{upload}/rows/{row}/decision", headers=self._h(who),
-                              json={"decision": decision, "reason": "test"})
+        res = self.client.put(
+            f"/api/csv/uploads/{upload}/rows/{row}/decision",
+            headers=self._h(who),
+            json={"decision": decision, "reason": "test"},
+        )
         self.assertEqual(res.status_code, expect, res.text)
 
     def edit(self, who, upload, row, column, value, expect=200):
-        res = self.client.put(f"/api/csv/uploads/{upload}/rows/{row}/cells/{column}", headers=self._h(who),
-                              json={"value": value, "reason": "test"})
+        res = self.client.put(
+            f"/api/csv/uploads/{upload}/rows/{row}/cells/{column}",
+            headers=self._h(who),
+            json={"value": value, "reason": "test"},
+        )
         self.assertEqual(res.status_code, expect, res.text)
 
     def approved(self, content, name="a.csv", **extra) -> str:
@@ -149,28 +159,33 @@ class ApprovalWorkflow(_Base):
         up = staged["uploadId"]
         self.assertEqual((staged["status"], staged["state"], staged["totalRows"]), ("staged", "staged", 6))
         self.assertEqual(self.registry("team_up"), [], "staging must not import anything")
-        self.assertEqual(self.team_sql("SELECT count(*) FROM {s}.csv_files WHERE file_name LIKE %s",
-                                       (f"{self.tag}%",))[0][0], 0)
+        self.assertEqual(
+            self.team_sql("SELECT count(*) FROM {s}.csv_files WHERE file_name LIKE %s", (f"{self.tag}%",))[0][0], 0
+        )
 
         self.post("team_up", up, "submit", note="please review")
         self.assertEqual(self.state("team_up", up), "submitted")
         # Row 2 is invalid, so approval is refused until the reviewer deals with it.
         refused = self.post("team_rv", up, "approval", expect=422, decision="approve")
         self.assertEqual((refused["invalidRows"], refused["rowErrors"][0]["rowNumber"]), (1, 2))
-        self.edit("team_rv", up, 2, "k", "2")        # fix an invalid cell
-        self.decide("team_rv", up, 3)                # exclude a row
-        self.edit("team_rv", up, 6, "v", "E")        # change a valid one
+        self.edit("team_rv", up, 2, "k", "2")  # fix an invalid cell
+        self.decide("team_rv", up, 3)  # exclude a row
+        self.edit("team_rv", up, 6, "v", "E")  # change a valid one
         approved = self.post("team_rv", up, "approval", decision="approve")
         self.assertEqual(approved["state"], "approved")
         self.assertEqual(self.registry("team_up"), [], "approving doesn't import either")
 
         result = self.imp("team_up", up)
-        self.assertEqual(result["reconciliation"], {"rowsIn": 6, "excluded": 1, "edited": 2, "duplicate": 1, "imported": 4})
+        self.assertEqual(
+            result["reconciliation"], {"rowsIn": 6, "excluded": 1, "edited": 2, "duplicate": 1, "imported": 4}
+        )
         self.assertEqual(self.state("team_up", up), "imported")
         self.assertEqual((result["dataset"], result["version"]), (staged["dataset"], 1))
 
         # The data: edits applied, exclusion dropped, duplicate skipped; lineage points back to source rows.
-        rows = self.team_sql('SELECT k, v, _source_row_id, _import_id FROM {s}."' + result["tableName"] + '" ORDER BY _id')
+        rows = self.team_sql(
+            'SELECT k, v, _source_row_id, _import_id FROM {s}."' + result["tableName"] + '" ORDER BY _id'
+        )
         self.assertEqual([r[:3] for r in rows], [(1, "a", 1), (2, "b", 2), (4, "d", 4), (6, "E", 6)])
         self.assertEqual({r[3] for r in rows}, {int(result["importId"])})
         # The original is untouched, and the review page still shows both.
@@ -178,25 +193,36 @@ class ApprovalWorkflow(_Base):
         self.assertEqual((page[5]["original"], page[5]["current"]), (["6", "e"], ["6", "E"]))
         # It is registered like any other file, with the uploader known.
         [entry] = self.registry("team_up")
-        self.assertEqual((entry["uploader"], entry["row_count"], entry["total_rows"], entry["duplicate_rows_skipped"]),
-                         (f"{self.slugs['team']}_up", 4, 6, 1))
+        self.assertEqual(
+            (entry["uploader"], entry["row_count"], entry["total_rows"], entry["duplicate_rows_skipped"]),
+            (f"{self.slugs['team']}_up", 4, 6, 1),
+        )
         # Every step is in the audit log, in the same chain.
-        actions = self.team_sql("SELECT action, actor FROM {s}.audit_log WHERE file_name = %s "
-                                "AND action IN ('submit','approve','import') ORDER BY id", (staged_name,))
-        self.assertEqual(actions, [("submit", f"{self.slugs['team']}_up"), ("approve", f"{self.slugs['team']}_rv"),
-                                   ("import", f"{self.slugs['team']}_up")])
+        actions = self.team_sql(
+            "SELECT action, actor FROM {s}.audit_log WHERE file_name = %s "
+            "AND action IN ('submit','approve','import') ORDER BY id",
+            (staged_name,),
+        )
+        self.assertEqual(
+            actions,
+            [
+                ("submit", f"{self.slugs['team']}_up"),
+                ("approve", f"{self.slugs['team']}_rv"),
+                ("import", f"{self.slugs['team']}_up"),
+            ],
+        )
         self.assertTrue(self.client.get("/api/audit/verify", headers=self._h("team_ad")).json()["intact"])
 
     def test_reject_then_resubmit(self):
         up = self.stage("team_up", "rr.csv", "k\n1\nnot a number\n3\n", types=["int8"])["uploadId"]
-        self.post("team_rv", up, "approval", expect=409, decision="approve")      # nothing submitted yet
+        self.post("team_rv", up, "approval", expect=409, decision="approve")  # nothing submitted yet
         self.post("team_up", up, "submit")
-        self.post("team_up", up, "submit", expect=409)                            # already submitted
-        self.post("team_rv", up, "approval", expect=422, decision="reject")       # a reason is required
+        self.post("team_up", up, "submit", expect=409)  # already submitted
+        self.post("team_rv", up, "approval", expect=422, decision="reject")  # a reason is required
         rejected = self.post("team_rv", up, "approval", decision="reject", reason="row 2 is not a number")
         self.assertEqual(rejected["state"], "rejected")
-        self.imp("team_up", up, expect=409)                                       # a rejected upload can't import
-        self.decide("team_rv", up, 2)                                             # review reopens
+        self.imp("team_up", up, expect=409)  # a rejected upload can't import
+        self.decide("team_rv", up, 2)  # review reopens
         self.post("team_up", up, "submit", note="row 2 excluded")
         self.assertEqual(self.state("team_up", up), "submitted")
         self.post("team_rv", up, "approval", decision="approve")
@@ -223,8 +249,11 @@ class ApprovalWorkflow(_Base):
         self.assertEqual(self.registry("team_up"), [])
 
     def test_a_direct_upload_has_no_workflow(self):
-        res = self.client.post("/api/csv/upload", headers=self._h("team_up"),
-                               json={"fileName": f"{self.tag}_legacy.csv", "content": self.one}).json()
+        res = self.client.post(
+            "/api/csv/upload",
+            headers=self._h("team_up"),
+            json={"fileName": f"{self.tag}_legacy.csv", "content": self.one},
+        ).json()
         self.assertEqual(self.state("team_up", res["uploadId"]), "legacy")
         self.post("team_up", res["uploadId"], "submit", expect=409)
         # ...and review of it still works as before M6.
@@ -234,12 +263,16 @@ class ApprovalWorkflow(_Base):
         up = self.stage("team_up", "list.csv", self.one)["uploadId"]
         listing = {u["id"]: u["state"] for u in self.client.get("/api/csv/uploads", headers=self._h("team_up")).json()}
         self.assertEqual(listing[up], "staged")
-        self.assertEqual(self.client.get(f"/api/csv/uploads/{up}", headers=self._h("team_up")).json()["state"], "staged")
+        self.assertEqual(
+            self.client.get(f"/api/csv/uploads/{up}", headers=self._h("team_up")).json()["state"], "staged"
+        )
 
     def test_bad_files_are_recorded_and_refused(self):
         bad = self.stage("team_up", "bad.csv", "only,a,header\n", expect=422)
         self.assertEqual((bad["status"], bad["reason"]), ("invalid_structure", "header_only"))
-        recorded = {u["id"]: u["status"] for u in self.client.get("/api/csv/uploads", headers=self._h("team_up")).json()}
+        recorded = {
+            u["id"]: u["status"] for u in self.client.get("/api/csv/uploads", headers=self._h("team_up")).json()
+        }
         self.assertEqual(recorded[bad["uploadId"]], "rejected", "every attempt gets an uploads row (BR-23)")
         self.stage("team_up", "types.csv", self.one, expect=422, types=["int8", "text"])
 
@@ -257,7 +290,7 @@ class SelfApproval(_Base):
         self.post("team_ad", up, "submit")
         refused = self.post("team_ad", up, "approval", expect=403, decision="approve")
         self.assertIn("another member must approve", refused["message"])
-        self.post("team_rv", up, "approval", decision="approve")      # someone else can
+        self.post("team_rv", up, "approval", decision="approve")  # someone else can
         self.assertEqual(self.state("team_ad", up), "approved")
 
     def test_the_submitter_cannot_approve_even_if_someone_else_uploaded(self):
@@ -303,9 +336,13 @@ class AllOrNothing(_Base):
             "files": self.registry("team_up"),
             "imports": self.team_sql("SELECT count(*) FROM {s}.imports")[0][0],
             "imported_audit": self.team_sql("SELECT count(*) FROM {s}.audit_log WHERE action = 'import'")[0][0],
-            "tables": [r[0] for r in self.team_sql(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = %s AND table_name LIKE %s",
-                (schema_for(self.slugs["team"]), table_like))],
+            "tables": [
+                r[0]
+                for r in self.team_sql(
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema = %s AND table_name LIKE %s",
+                    (schema_for(self.slugs["team"]), table_like),
+                )
+            ],
         }
 
     def test_failure_at_every_step_changes_nothing_and_a_retry_then_succeeds(self):
@@ -321,15 +358,17 @@ class AllOrNothing(_Base):
 
                 with patch.object(staged_import, "_checkpoint", boom):
                     with self.assertRaises(RuntimeError):
-                        self.client.post(f"/api/csv/uploads/{up}/import",
-                                         headers={**self._h("team_up"), "Idempotency-Key": "retry-me"})
+                        self.client.post(
+                            f"/api/csv/uploads/{up}/import",
+                            headers={**self._h("team_up"), "Idempotency-Key": "retry-me"},
+                        )
                 left = self._leftovers(like)
                 self.assertEqual(([f for f in left["files"] if step in f["file_name"]], left["tables"]), ([], []))
                 self.assertEqual(self.state("team_up", up), "approved", "still approved and importable")
                 imports_before = left["imports"]
                 audit_before = left["imported_audit"]
 
-                result = self.imp("team_up", up, key="retry-me")        # the retry, same key
+                result = self.imp("team_up", up, key="retry-me")  # the retry, same key
                 self.assertEqual((result["replayed"], result["reconciliation"]["imported"]), (False, 3))
                 after = self._leftovers(like)
                 self.assertEqual((after["imports"], after["imported_audit"]), (imports_before + 1, audit_before + 1))
@@ -339,8 +378,9 @@ class AllOrNothing(_Base):
         up = self.approved("k\n1\n2\n")
         first = self.imp("team_up", up, key="same")
         again = self.imp("team_up", up, key="same")
-        self.assertEqual((again["replayed"], again["importId"], again["tableName"]),
-                         (True, first["importId"], first["tableName"]))
+        self.assertEqual(
+            (again["replayed"], again["importId"], again["tableName"]), (True, first["importId"], first["tableName"])
+        )
         self.assertEqual(self.team_sql('SELECT count(*) FROM {s}."' + first["tableName"] + '"')[0][0], 2)
         other = self.imp("team_up", up, key="different", expect=409)
         self.assertEqual(other["importId"], first["importId"])
@@ -350,8 +390,9 @@ class AllOrNothing(_Base):
         up = self.approved("k\n1\n2\n3\n")
 
         def run(key):
-            return self.client.post(f"/api/csv/uploads/{up}/import",
-                                    headers={**self._h("team_up"), "Idempotency-Key": key})
+            return self.client.post(
+                f"/api/csv/uploads/{up}/import", headers={**self._h("team_up"), "Idempotency-Key": key}
+            )
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             different = sorted(r.status_code for r in pool.map(run, ["a", "b"]))
@@ -361,15 +402,21 @@ class AllOrNothing(_Base):
 
         up2 = self.approved("k\n7\n8\n", name="same_key.csv")
         with ThreadPoolExecutor(max_workers=2) as pool:
-            results = list(pool.map(lambda _: self.client.post(
-                f"/api/csv/uploads/{up2}/import", headers={**self._h("team_up"), "Idempotency-Key": "z"}), range(2)))
+            results = list(
+                pool.map(
+                    lambda _: self.client.post(
+                        f"/api/csv/uploads/{up2}/import", headers={**self._h("team_up"), "Idempotency-Key": "z"}
+                    ),
+                    range(2),
+                )
+            )
         self.assertEqual([r.status_code for r in results], [200, 200])
         self.assertEqual(sorted(r.json()["replayed"] for r in results), [False, True])
         self.assertEqual(self.team_sql("SELECT count(*) FROM {s}.imports WHERE upload_id = %s", (int(up2),))[0][0], 1)
 
     def test_the_same_bytes_staged_twice_import_once(self):
         first = self.stage("team_up", "twice.csv", "k\nsame\n")["uploadId"]
-        second = self.stage("team_up", "twice_copy.csv", "k\nsame\n")["uploadId"]    # not in the registry yet
+        second = self.stage("team_up", "twice_copy.csv", "k\nsame\n")["uploadId"]  # not in the registry yet
         for up in (first, second):
             self.post("team_up", up, "submit")
             self.post("team_rv", up, "approval", decision="approve")
@@ -406,8 +453,9 @@ class DataFidelityAndVersions(_Base):
         for up in (confirmed, guessed, unsent):
             self.imp("team_up", up, key=f"k{up}")
         found = {f["file_name"].split("_", 1)[1]: f["types_provenance"] for f in self.registry("team_up")}
-        self.assertEqual(found, {"c.csv": "user_confirmed", "g.csv": "inferred_unconfirmed",
-                                 "u.csv": "inferred_unconfirmed"})
+        self.assertEqual(
+            found, {"c.csv": "user_confirmed", "g.csv": "inferred_unconfirmed", "u.csv": "inferred_unconfirmed"}
+        )
         self.stage("team_up", "bad.csv", f"n\n{self.tag}4\n", expect=422, typesConfirmed=True)  # no types sent
 
     def test_a_second_file_with_the_same_name_is_version_two_and_flags_are_known_before_approval(self):
@@ -419,7 +467,7 @@ class DataFidelityAndVersions(_Base):
         self.assertEqual(page[0]["duplicateOfEarlierVersion"]["version"], 1)
         up = staged["uploadId"]
         self.post("team_up", up, "submit")
-        self.decide("team_rv", up, 1)                              # the reviewer drops the repeated row
+        self.decide("team_rv", up, 1)  # the reviewer drops the repeated row
         self.post("team_rv", up, "approval", decision="approve")
         result = self.imp("team_up", up)
         self.assertEqual((result["version"], result["reconciliation"]["imported"]), (2, 1))
@@ -437,9 +485,14 @@ class DataFidelityAndVersions(_Base):
 @pytest.mark.integration
 class BrowserAccess(_Base):
     def test_a_browser_may_send_the_idempotency_key(self):
-        res = self.client.options("/api/csv/uploads/1/import", headers={
-            "Origin": "http://localhost:5173", "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "idempotency-key,authorization,content-type"})
+        res = self.client.options(
+            "/api/csv/uploads/1/import",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "idempotency-key,authorization,content-type",
+            },
+        )
         self.assertEqual(res.status_code, 200, res.text)
         self.assertIn("idempotency-key", res.headers["access-control-allow-headers"].lower())
 
@@ -453,16 +506,23 @@ class WorkflowTablesAreInsertOnly(_Base):
         self.imp("team_up", up)
         schema = sql.Identifier(schema_for(self.slugs["team"]))
         with Conn() as conn, conn.cursor() as cur:
-            for table, update in (("submissions", "note = 'x'"), ("approvals", "reason = 'x'"),
-                                  ("imports", "rows_in = 0")):
-                for statement in (f"UPDATE {{}}.{table} SET {update}", f"DELETE FROM {{}}.{table}",
-                                  f"TRUNCATE {{}}.{table}"):
+            for table, update in (
+                ("submissions", "note = 'x'"),
+                ("approvals", "reason = 'x'"),
+                ("imports", "rows_in = 0"),
+            ):
+                for statement in (
+                    f"UPDATE {{}}.{table} SET {update}",
+                    f"DELETE FROM {{}}.{table}",
+                    f"TRUNCATE {{}}.{table}",
+                ):
                     with self.subTest(statement=statement):
                         # The trigger refuses it; for a table other tables reference, PostgreSQL's own
                         # foreign-key check refuses TRUNCATE first. Either way nothing changes.
                         try:
-                            with self.assertRaises((psycopg2.errors.InsufficientPrivilege,
-                                                    psycopg2.errors.FeatureNotSupported)):
+                            with self.assertRaises(
+                                (psycopg2.errors.InsufficientPrivilege, psycopg2.errors.FeatureNotSupported)
+                            ):
                                 cur.execute(sql.SQL(statement).format(schema))
                         finally:
                             conn.rollback()

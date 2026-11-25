@@ -14,6 +14,7 @@ that holds its callers until released, and the real routes, auth and middleware 
     its load to anyone without a key; the slot comes after the permission check on each route;
   * a preview (no database) is not limited.
 """
+
 from __future__ import annotations
 
 import os
@@ -38,6 +39,7 @@ CSV = {"fileName": "a.csv", "content": "a,b\n1,2\n"}
 
 
 # -- the helper -------------------------------------------------------------------------------------------------------
+
 
 def take(n: int):
     """Hold ``n`` slots, as ``n`` requests in flight would; returns the open dependency generators."""
@@ -84,7 +86,7 @@ def test_it_admits_the_limit_and_refuses_the_next_with_503_and_retry_after():
 def test_a_slot_frees_when_its_request_ends():
     held = take(4)
     held.pop().close()
-    again = take(1)          # does not raise
+    again = take(1)  # does not raise
     release(held + again)
 
 
@@ -116,12 +118,13 @@ def test_the_limit_is_read_when_a_request_arrives(monkeypatch):
 
 def test_lowering_the_limit_while_requests_run_does_not_leak_slots(monkeypatch):
     held = take(3)
-    monkeypatch.setattr(settings, "MAX_CONCURRENT_IMPORTS", 0)    # the 3 were counted; they must still be released
+    monkeypatch.setattr(settings, "MAX_CONCURRENT_IMPORTS", 0)  # the 3 were counted; they must still be released
     release(held)
     assert concurrency.active_imports() == 0
 
 
 # -- the real routes -------------------------------------------------------------------------------------------------
+
 
 class Loader:
     """Stands in for a loader: counts the callers inside it and holds them until released."""
@@ -156,9 +159,9 @@ ROUTES = {
 def loader(monkeypatch):
     """One stand-in behind all three routes (so each test names the route and nothing else)."""
     stand_in = Loader({"status": "staged"})
-    monkeypatch.setattr(staged_import, "import_upload", stand_in)          # POST .../uploads/{id}/import
-    monkeypatch.setattr(import_routes, "_run", stand_in)                   # POST .../uploads (stage)
-    monkeypatch.setattr(csv_routes, "upload_dynamic", stand_in)            # POST .../upload
+    monkeypatch.setattr(staged_import, "import_upload", stand_in)  # POST .../uploads/{id}/import
+    monkeypatch.setattr(import_routes, "_run", stand_in)  # POST .../uploads (stage)
+    monkeypatch.setattr(csv_routes, "upload_dynamic", stand_in)  # POST .../upload
     monkeypatch.setattr(csv_routes, "record_upload", lambda *a, **k: None)
     return stand_in
 
@@ -231,13 +234,14 @@ def test_the_slot_is_taken_after_authentication_and_the_permission_check(path):
     route = next(r for r in routes if "POST" in r.methods and r.path_format == path.replace("/1/", "/{upload_id}/"))
     calls = [d.call for d in route.dependant.dependencies]
     assert concurrency.import_slot in calls, f"{path} is not limited"
-    before = calls[:calls.index(concurrency.import_slot)]
+    before = calls[: calls.index(concurrency.import_slot)]
     assert any(getattr(c, "__name__", "") == "check" for c in before), "the permission check must come first"
 
 
 def test_the_limit_and_the_pool_behaviour_are_documented():
     """BR-58 asks for the pool-exhaustion behaviour to be documented, and an operator must find the setting."""
     from pathlib import Path
+
     text = (Path(__file__).resolve().parents[2] / "docs" / "ENV_VARIABLES.md").read_text(encoding="utf-8")
     row = next((line for line in text.splitlines() if line.startswith("| `API_MAX_CONCURRENT_IMPORTS`")), "")
     assert row, "docs/ENV_VARIABLES.md must document API_MAX_CONCURRENT_IMPORTS"

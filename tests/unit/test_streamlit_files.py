@@ -5,6 +5,7 @@ The React tests this replaces: stored-row-errors.test.tsx (the reasons stored on
 and failedRowsNote / typesProvenanceNote in job-outcome.test.ts. What is new: the list is the tenant's and is never
 shared between sessions, and a stranger's file name or cell must not become a link.
 """
+
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -12,6 +13,7 @@ import pytest
 import streamlit as st
 
 from tests.unit.streamlit_harness import errors, screen, widget
+
 # The imports below need the path the import above sets up, so the import sort must not move them up.
 # isort: split
 
@@ -23,12 +25,24 @@ pytestmark = [pytest.mark.unit, pytest.mark.regression]
 T0 = datetime(2026, 11, 18, 1, 0, tzinfo=timezone.utc)
 
 
-def _file(n, name="people.csv", rows=30, failed=0, total=None, provenance="user_confirmed", upload_id=None, uploader="alice"):
-    return {"id": str(n), "file_name": name, "table_name": f"csv_t{n}_v1", "mode": "dynamic", "row_count": rows,
-            "column_names": ["id", "name"], "created_at": (T0 - timedelta(hours=n)).isoformat(),
-            "total_rows": total if total is not None else rows + failed, "duplicate_rows_skipped": 0,
-            "failed_rows": failed, "uploader": uploader, "upload_id": upload_id or str(100 + n),
-            "types_provenance": provenance}
+def _file(
+    n, name="people.csv", rows=30, failed=0, total=None, provenance="user_confirmed", upload_id=None, uploader="alice"
+):
+    return {
+        "id": str(n),
+        "file_name": name,
+        "table_name": f"csv_t{n}_v1",
+        "mode": "dynamic",
+        "row_count": rows,
+        "column_names": ["id", "name"],
+        "created_at": (T0 - timedelta(hours=n)).isoformat(),
+        "total_rows": total if total is not None else rows + failed,
+        "duplicate_rows_skipped": 0,
+        "failed_rows": failed,
+        "uploader": uploader,
+        "upload_id": upload_id or str(100 + n),
+        "types_provenance": provenance,
+    }
 
 
 class FakeApi:
@@ -91,6 +105,7 @@ def _look(at, fid):
 
 # ── the list ──────────────────────────────────────────────────────────────────────────────
 
+
 def test_the_list_shows_every_imported_file_newest_first(api):
     api.files = [_file(1, "a.csv", rows=3), _file(2, "b.csv", rows=10, failed=4, total=14, uploader=None)]
 
@@ -98,7 +113,11 @@ def test_the_list_shows_every_imported_file_newest_first(api):
 
     frame = at.table[0].value
     assert _names(at) == ["a.csv", "b.csv"] and frame.index.name == "#" and list(frame.index) == [1, 2]
-    assert list(frame["Rows"]) == ["3", "10"] and list(frame["Failed"]) == ["", "4"] and list(frame["Columns"]) == ["2", "2"]
+    assert (
+        list(frame["Rows"]) == ["3", "10"]
+        and list(frame["Failed"]) == ["", "4"]
+        and list(frame["Columns"]) == ["2", "2"]
+    )
     assert list(frame["Table"]) == ["` csv_t1_v1 `", "` csv_t2_v1 `"]
     assert list(frame["Uploaded by"]) == ["` alice `", ""]
     assert list(frame["Uploaded (UTC)"])[0] == "2026-11-18 00:00 UTC"
@@ -125,6 +144,7 @@ def test_the_list_pages_by_fifty(api):
 
 # ── the list is cached and never shared ───────────────────────────────────────────────────
 
+
 def test_the_list_is_fetched_once_for_many_reruns_and_again_on_refresh(api):
     at = _files(api)
     _look(at, "1")
@@ -145,6 +165,7 @@ def test_one_sessions_list_is_never_shown_to_another(api):
 
 
 # ── a look inside (React: PreviewTable) ───────────────────────────────────────────────────
+
 
 def test_choosing_a_file_previews_its_table_up_to_fifty_rows_with_no_guessing_about_types(api):
     api.files = [_file(1, "people.csv", rows=7)]
@@ -187,11 +208,17 @@ def test_rows_that_failed_and_types_nobody_confirmed_are_said_under_the_preview(
 
 # ── why rows failed (React: stored-row-errors.test.tsx) ───────────────────────────────────
 
+
 def test_the_reasons_stored_on_the_server_are_listed_with_an_error_report(api):
     api.files = [_file(1, "p.csv", rows=26, failed=4, upload_id="9")]
-    api.details["9"] = {"id": "9", "failedRows": 4, "rowErrors": [
-        {"rowNumber": 7, "column": "amount", "value": "x", "reason": '"x" is not a whole number'},
-        {"rowNumber": 14, "column": "amount", "value": "y", "reason": '"y" is not a whole number'}]}
+    api.details["9"] = {
+        "id": "9",
+        "failedRows": 4,
+        "rowErrors": [
+            {"rowNumber": 7, "column": "amount", "value": "x", "reason": '"x" is not a whole number'},
+            {"rowNumber": 14, "column": "amount", "value": "y", "reason": '"y" is not a whole number'},
+        ],
+    }
 
     at = _look(_files(api), "1")
 
@@ -219,16 +246,21 @@ def test_a_clean_import_asks_the_server_for_no_reasons(api):
 
 def test_the_server_keeping_fewer_reasons_than_rows_failed_is_said(api):
     api.files = [_file(1, "p.csv", rows=0, failed=351, upload_id="9")]
-    api.details["9"] = {"id": "9", "failedRows": 351, "rowErrors": [
-        {"rowNumber": i, "reason": "bad"} for i in range(1, 201)]}
+    api.details["9"] = {
+        "id": "9",
+        "failedRows": 351,
+        "rowErrors": [{"rowNumber": i, "reason": "bad"} for i in range(1, 201)],
+    }
 
     at = _look(_files(api), "1")
 
     assert "Showing the first 200 of 351 failed rows: the server keeps the reasons for the first 200 only." in [
-        c.value for c in at.caption]
+        c.value for c in at.caption
+    ]
 
 
 # ── sessions and failures ─────────────────────────────────────────────────────────────────
+
 
 def test_a_session_the_server_ended_signs_the_person_out_with_a_reason(api):
     api.dead.add("tok-1")
@@ -257,10 +289,15 @@ def test_an_api_that_is_down_says_so_instead_of_failing(api):
 
 # ── text from a file is shown as written ─────────────────────────────────────────────────
 
+
 def test_a_file_name_and_a_cell_that_look_like_links_show_as_written(api):
     evil = "[click](https://evil.example/x)"
     api.files = [_file(1, f"{evil}.csv", rows=1, failed=1, upload_id="9", uploader=evil)]
-    api.details["9"] = {"id": "9", "failedRows": 1, "rowErrors": [{"rowNumber": 1, "column": evil, "value": evil, "reason": evil}]}
+    api.details["9"] = {
+        "id": "9",
+        "failedRows": 1,
+        "rowErrors": [{"rowNumber": 1, "column": evil, "value": evil, "reason": evil}],
+    }
     api.rows["csv_t1_v1"] = [{"id": evil, "name": evil}]
 
     at = _look(_files(api), "1")
@@ -273,6 +310,7 @@ def test_a_file_name_and_a_cell_that_look_like_links_show_as_written(api):
 
 
 # ── what the model says ───────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.parametrize("total, pages", [(0, 1), (1, 1), (50, 1), (51, 2), (120, 3)])
 def test_page_count(total, pages):
@@ -287,11 +325,16 @@ def test_a_preview_shows_every_value_as_text_and_a_missing_one_as_blank():
 
 def test_the_notes_under_a_preview_say_what_is_shown_what_failed_and_what_nobody_confirmed():
     plain = f.table_notes({"row_count": 5, "failed_rows": 0})
-    both = f.table_notes({"row_count": 5, "failed_rows": 2, "total_rows": 7, "types_provenance": "inferred_unconfirmed"})
+    both = f.table_notes(
+        {"row_count": 5, "failed_rows": 2, "total_rows": 7, "types_provenance": "inferred_unconfirmed"}
+    )
     unknown_total = f.table_notes({"row_count": 5, "failed_rows": 2, "total_rows": None})
 
     assert plain == ["Showing up to 50 rows. The table has 5 rows in all."]
-    assert both[1:] == ["2 of 7 rows failed validation and weren't imported.", "Column types were not confirmed by a person."]
+    assert both[1:] == [
+        "2 of 7 rows failed validation and weren't imported.",
+        "Column types were not confirmed by a person.",
+    ]
     assert unknown_total[1] == "2 rows failed validation and weren't imported."
 
 

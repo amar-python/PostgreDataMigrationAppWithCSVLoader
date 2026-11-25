@@ -10,6 +10,7 @@ Layers:
     preventing CI 'unmet prerequisites must FAIL, not skip' gate failures).
 Verification method (ASDEFCON): Inspection (static), Test (Windows run).
 """
+
 import os
 import re
 import shutil
@@ -33,7 +34,7 @@ def _code_only(text: str) -> str:
     while i < len(text):
         ch = text[i]
         if quote:
-            if quote == '"' and ch == "`":      # backtick escape in "..."
+            if quote == '"' and ch == "`":  # backtick escape in "..."
                 i += 2
                 continue
             if ch == quote:
@@ -44,7 +45,7 @@ def _code_only(text: str) -> str:
         elif ch in ("'", '"'):
             quote = ch
             out.append(ch)
-        elif ch == "#":                           # comment to end of line
+        elif ch == "#":  # comment to end of line
             while i < len(text) and text[i] != "\n":
                 i += 1
             continue
@@ -74,7 +75,11 @@ def _run(args, extra_env=None, drop_env=(), timeout=180):
     env.update(extra_env or {})
     return subprocess.run(
         [WINDOWS_PS, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(SCRIPT), *args],
-        cwd=ROOT, env=env, capture_output=True, text=True, timeout=timeout,
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
     )
 
 
@@ -122,8 +127,7 @@ def test_port_label_is_not_hardcoded(raw):
 @pytest.mark.regression
 def test_connection_defaults_resolved_once_and_reused(code):
     """Defaults live in variables; connection commands must use them."""
-    for var, env in [("pgHost", "PGHOST"), ("pgPort", "PGPORT"),
-                     ("pgUser", "PGUSER"), ("pgDb", "PGDATABASE")]:
+    for var, env in [("pgHost", "PGHOST"), ("pgPort", "PGPORT"), ("pgUser", "PGUSER"), ("pgDb", "PGDATABASE")]:
         assert re.search(rf"\${var}\s*=\s*if\s*\(\$env:{env}\)", code), f"${var} default missing"
     assert re.search(r"Test-NetConnection\s+-ComputerName\s+\$pgHost\s+-Port\s+\$pgPort", code)
     assert re.search(r"psql\s+-h\s+\$pgHost\s+-p\s+\$pgPort\s+-U\s+\$pgUser\s+-d\s+\$pgDb", code)
@@ -158,6 +162,7 @@ def test_exit_code_contract_documented_and_implemented(raw):
 # Conditioned at collection time so non-Windows runners never register or skip
 # these tests, avoiding failure against the zero-skip CI accounting policy.
 if WINDOWS_PS is not None:
+
     @pytest.mark.regression
     def test_parses_under_windows_powershell():
         """Parse with the real PowerShell parser (5.1 on stock Windows)."""
@@ -168,7 +173,10 @@ if WINDOWS_PS is not None:
         )
         r = subprocess.run(
             [WINDOWS_PS, "-NoProfile", "-Command", cmd],
-            env={**os.environ, "PF_PATH": str(SCRIPT)}, capture_output=True, text=True, timeout=60,
+            env={**os.environ, "PF_PATH": str(SCRIPT)},
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         assert r.returncode == 0, f"Parse errors:\n{r.stdout}{r.stderr}"
 
@@ -179,8 +187,9 @@ if WINDOWS_PS is not None:
         assert r.returncode in (0, 1, 2), out
         assert "Summary:" in r.stdout, out
         assert "ParserError" not in out, out
-        assert "PostgreSQL" not in r.stdout.split("Git state")[-1].split("Summary:")[0], \
+        assert "PostgreSQL" not in r.stdout.split("Git state")[-1].split("Summary:")[0], (
             "-SkipPg must skip the PostgreSQL section"
+        )
 
     @pytest.mark.regression
     def test_default_port_label_when_pgport_unset():

@@ -16,6 +16,7 @@ What counts as one assertion, as the framework records it (``tests/framework/tes
 Lines that are SQL comments (``--``) are ignored. The count matched the live run on 24 Nov 2026: 159 assertion rows in
 ``te_test_harness.test_run_results`` on PostgreSQL 16 (153 ``assert_*`` calls and 6 ``tf_record`` names).
 """
+
 from __future__ import annotations
 
 import json
@@ -55,7 +56,8 @@ def test_tier_s_threshold_equals_the_assertions_in_the_suites():
     assert threshold == total, (
         f"{EXPECTED.relative_to(ROOT)} has min_total_assertions {threshold}, but tests/suites/*.sql has {total} "
         f"assertions ({per_suite}). Set the threshold to {total} and update BR-20 in docs/VCRM.md, so the gate "
-        "fails if an assertion disappears.")
+        "fails if an assertion disappears."
+    )
 
 
 def test_the_count_sees_a_removed_assertion():

@@ -15,6 +15,7 @@ itself current: nobody has to maintain a list of "documents tests read".
 When in doubt it runs everything: a push (to main), any event other than a pull request, a diff that cannot be read, an
 empty diff. Skipping is only ever the answer to "every changed file is a document that nothing reads".
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,7 +26,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC_PREFIXES = ("docs/", "DECISIONS/")
-SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", ".pytest_cache", "dist", "build/csv/logs"}
+SKIP_DIRS = {
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".mypy_cache",
+    ".pytest_cache",
+    "dist",
+    "build/csv/logs",
+}
 MAX_BYTES = 2_000_000
 
 
@@ -86,8 +97,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     paths = changed_files(args.base, args.head) if args.event == "pull_request" and args.base and args.head else None
     answer = decide(args.event, paths)
-    why = "not a pull request" if args.event != "pull_request" else (
-        "no readable diff, so everything runs" if not paths else f"{len(paths)} changed file(s)")
+    why = (
+        "not a pull request"
+        if args.event != "pull_request"
+        else ("no readable diff, so everything runs" if not paths else f"{len(paths)} changed file(s)")
+    )
     print(f"{why} -> database jobs {'run' if answer == 'true' else 'skipped (documentation only)'}", file=sys.stderr)
     line = f"code={answer}"
     print(line)

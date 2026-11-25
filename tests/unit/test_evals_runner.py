@@ -6,6 +6,7 @@ availability, and the fail-not-skip exit status. Most tests need no database;
 tier_i fail-on-unreachable behaviour is verified
 by mocking _can_connect_pg.
 """
+
 import importlib.util
 import shutil
 import tempfile
@@ -91,6 +92,7 @@ class EvalsRunnerTests(unittest.TestCase):
 
     def _run_main_with_result(self, *, passed, skipped):
         """Run runner.main() over one tier_p scenario whose result is faked."""
+
         def fake_runner(scenario):
             result = runner.ScenarioResult("p", scenario.name)
             result.passed = passed
@@ -102,10 +104,11 @@ class EvalsRunnerTests(unittest.TestCase):
         reports = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, reports, True)
         scenario = sorted((PROJECT_ROOT / "evals" / "datasets" / "tier_p").iterdir())[0]
-        with mock.patch.object(runner, "REPORTS_DIR", reports), \
-             mock.patch.dict(runner.TIER_RUNNERS, {"p": fake_runner}), \
-             mock.patch.object(runner.sys, "argv",
-                               ["runner.py", "--tiers", "p", "--only", scenario.name]):
+        with (
+            mock.patch.object(runner, "REPORTS_DIR", reports),
+            mock.patch.dict(runner.TIER_RUNNERS, {"p": fake_runner}),
+            mock.patch.object(runner.sys, "argv", ["runner.py", "--tiers", "p", "--only", scenario.name]),
+        ):
             return runner.main()
 
     def test_main_exits_nonzero_when_a_scenario_is_skipped(self):

@@ -8,10 +8,11 @@ own migration state (this matters once there is one schema per tenant).
 import sys
 from pathlib import Path
 
-from alembic import context
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
 from sqlalchemy.pool import NullPool
+
+from alembic import context
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 

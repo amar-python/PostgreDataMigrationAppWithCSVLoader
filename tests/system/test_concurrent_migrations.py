@@ -9,6 +9,7 @@ not show the race) that import everything first, then wait for a shared start ti
 scratch schemas. Asserted: both exit 0 and ``alembic_version`` is head, 10 of 10 trials, on a fresh
 schema and on one a revision behind. Needs a live PostgreSQL, as in CI.
 """
+
 from __future__ import annotations
 
 import os
@@ -53,18 +54,27 @@ def _error_line(result: subprocess.CompletedProcess) -> str:
 
 
 def _connect():
-    return psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                            password=settings.PG_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
+    return psycopg2.connect(
+        host=settings.PG_HOST,
+        port=settings.PG_PORT,
+        user=settings.PG_USER,
+        password=settings.PG_PASSWORD.get_secret_value(),
+        dbname=settings.PG_DATABASE,
+    )
 
 
 @pytest.mark.integration
 class ConcurrentStartupMigrations(unittest.TestCase):
-
     def setUp(self):
         tag = uuid.uuid4().hex[:10]
         self.uploads, self.control = f"mig_cc_{tag}", f"mig_ccc_{tag}"
-        self.env = {**os.environ, "CSV_UPLOADS_SCHEMA": self.uploads, "CONTROL_SCHEMA": self.control,
-                    "ALEMBIC_INI": INI, "PYTHONPATH": str(ROOT)}
+        self.env = {
+            **os.environ,
+            "CSV_UPLOADS_SCHEMA": self.uploads,
+            "CONTROL_SCHEMA": self.control,
+            "ALEMBIC_INI": INI,
+            "PYTHONPATH": str(ROOT),
+        }
         self.conn = _connect()
         self.conn.autocommit = True
 
@@ -79,8 +89,17 @@ class ConcurrentStartupMigrations(unittest.TestCase):
 
     def _run(self, target: str, n: int) -> list[subprocess.CompletedProcess]:
         start_at = f"{time.time() + 2.0:.3f}"
-        procs = [subprocess.Popen([sys.executable, "-c", _WORKER, target, start_at], cwd=ROOT, env=self.env,
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(n)]
+        procs = [
+            subprocess.Popen(
+                [sys.executable, "-c", _WORKER, target, start_at],
+                cwd=ROOT,
+                env=self.env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for _ in range(n)
+        ]
         out = []
         for p in procs:
             stdout, stderr = p.communicate(timeout=120)

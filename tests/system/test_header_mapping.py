@@ -12,8 +12,10 @@ from fastapi.testclient import TestClient
 from api.main import app
 from api.services.csv_parse import apply_header_mapping
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
-         "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1.")
+_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
+    "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1."
+)
 
 
 @pytest.mark.unit
@@ -40,7 +42,8 @@ class ApplyHeaderMapping(unittest.TestCase):
 
     def test_original_listed_twice_is_rejected(self):
         _, err = apply_header_mapping(
-            ["foo"], [{"original": "foo", "renamed": "a"}, {"original": "foo", "renamed": "b"}])
+            ["foo"], [{"original": "foo", "renamed": "a"}, {"original": "foo", "renamed": "b"}]
+        )
         self.assertIn("more than once", err)
 
     def test_rename_colliding_with_an_untouched_column_is_rejected(self):
@@ -54,7 +57,8 @@ class ApplyHeaderMapping(unittest.TestCase):
 
     def test_swapping_two_names_is_allowed(self):
         out, err = apply_header_mapping(
-            ["a", "b"], [{"original": "a", "renamed": "b"}, {"original": "b", "renamed": "a"}])
+            ["a", "b"], [{"original": "a", "renamed": "b"}, {"original": "b", "renamed": "a"}]
+        )
         self.assertEqual((out, err), (["b", "a"], None))
 
 
@@ -118,12 +122,15 @@ class HeaderMappingOverTheApi(unittest.TestCase):
         self.assertEqual((res["status"], res["reason"]), ("error", "invalid_header_mapping"))
 
     def test_te_mode_rejects_a_header_mapping_instead_of_ignoring_it(self):
-        resp = self.client.post("/api/csv/upload", json={
-            "fileName": f"hdrmap_te_{self.tag}.csv",
-            "content": "a,b\n1,2\n",
-            "mode": "te",
-            "targetTable": "organisations",
-            "headerMapping": [{"original": "a", "renamed": "b"}],
-        })
+        resp = self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": f"hdrmap_te_{self.tag}.csv",
+                "content": "a,b\n1,2\n",
+                "mode": "te",
+                "targetTable": "organisations",
+                "headerMapping": [{"original": "a", "renamed": "b"}],
+            },
+        )
         self.assertEqual(resp.status_code, 422)
         self.assertIn("dynamic", resp.json()["detail"])

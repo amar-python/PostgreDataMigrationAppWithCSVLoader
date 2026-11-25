@@ -6,6 +6,7 @@ internal address and MAX_UPLOAD_BYTES matches the API's; the registry, Key Vault
 the existing ones. These read the Terraform and the Dockerfile as text. `terraform validate` was run by hand
 (it needs the providers, which CI does not download); nothing here is applied to Azure.
 """
+
 from __future__ import annotations
 
 import re
@@ -91,7 +92,9 @@ def test_streamlit_scales_by_the_variable_and_has_sticky_sessions():
 
 def test_streamlit_calls_the_api_at_its_internal_address():
     assert env_value(ST, "API_URL") == "value=local.api_internal_url"
-    assert re.search(r'api_internal_url\s*=\s*.*"https://\$\{azurerm_container_app\.api\[0\]\.ingress\[0\]\.fqdn\}"', MAIN)
+    assert re.search(
+        r'api_internal_url\s*=\s*.*"https://\$\{azurerm_container_app\.api\[0\]\.ingress\[0\]\.fqdn\}"', MAIN
+    )
 
 
 def test_both_apps_get_one_upload_limit():
@@ -138,7 +141,8 @@ def test_the_vnet_can_resolve_the_apps():
     assert 'name                = "*"' in record
     assert "records             = [azurerm_container_app_environment.env.static_ip_address]" in record
     assert "virtual_network_id    = azurerm_virtual_network.vnet.id" in resource(
-        "azurerm_private_dns_zone_virtual_network_link", "cae")
+        "azurerm_private_dns_zone_virtual_network_link", "cae"
+    )
 
 
 def test_the_outputs_name_the_streamlit_address():
@@ -153,6 +157,7 @@ def test_the_apps_can_be_left_out_of_the_bootstrap_apply():
 
 
 # --- container/streamlit.Dockerfile -------------------------------------
+
 
 def test_the_image_runs_streamlit_from_streamlit_app_as_a_non_root_user():
     assert re.search(r"(?m)^FROM python:3\.12-slim@sha256:[0-9a-f]{64}$", DOCKERFILE)  # pinned by digest (#327)

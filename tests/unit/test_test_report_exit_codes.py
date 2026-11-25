@@ -5,6 +5,7 @@ collected exits 5, an internal error exits 3, and none of them put a test in the
 RESULT: PASS with 0 executed. For the browser job that meant a failed Playwright install would show a green check with
 no test run. Only exit codes 0 (all passed) and 1 (some failed) mean tests ran, and a pass needs at least one executed.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -74,7 +75,13 @@ def test_the_real_script_fails_when_a_conftest_cannot_be_imported(tmp_path):
     """The case that slipped through: no mocks, the real script and the real pytest on a folder whose conftest raises."""
     (tmp_path / "conftest.py").write_text("import a_module_that_does_not_exist_273\n", encoding="utf-8")
     (tmp_path / "test_x.py").write_text("def test_x():\n    assert True\n", encoding="utf-8")
-    result = subprocess.run([sys.executable, "scripts/test_report.py", "--paths", str(tmp_path), "--strict"], cwd=ROOT,
-                            capture_output=True, text=True, timeout=120, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    result = subprocess.run(
+        [sys.executable, "scripts/test_report.py", "--paths", str(tmp_path), "--strict"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
     assert result.returncode == 1, result.stdout[-600:]
     assert "RESULT: FAIL" in result.stdout

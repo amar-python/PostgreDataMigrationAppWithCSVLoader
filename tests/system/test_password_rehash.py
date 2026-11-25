@@ -8,6 +8,7 @@ database in ``tests/unit/test_password_hash_cost.py``. Here the real API and the
   * a wrong password leaves the old hash alone;
   * the upgrade is conditional on the hash that was checked, so a password changed in between is not undone.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -31,8 +32,12 @@ def old_hash(password: str, n: int = 2**14) -> str:
 class HashUpgradeAtSignIn(_Accounts):
     def _stored(self) -> str:
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("SELECT password_hash FROM {c}.users WHERE id = %s")
-                        .format(c=sql.Identifier(settings.CONTROL_SCHEMA)), (self.user_id,))
+            cur.execute(
+                sql.SQL("SELECT password_hash FROM {c}.users WHERE id = %s").format(
+                    c=sql.Identifier(settings.CONTROL_SCHEMA)
+                ),
+                (self.user_id,),
+            )
             return cur.fetchone()[0]
 
     def _store(self, value: str) -> None:
@@ -65,7 +70,7 @@ class HashUpgradeAtSignIn(_Accounts):
     def test_a_password_changed_meanwhile_is_not_undone_by_the_upgrade(self):
         legacy = old_hash(_PW)
         changed = accounts.hash_password("a different passphrase")
-        self._store(changed)             # changed after the sign-in read `legacy`
+        self._store(changed)  # changed after the sign-in read `legacy`
         with Conn() as conn:
             with conn.cursor() as cur:
                 self.assertFalse(accounts._upgrade_hash(cur, self.user_id, legacy, _PW))

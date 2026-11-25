@@ -68,8 +68,9 @@ class OfflineInstallProcedureIsConsistent(unittest.TestCase):
         # smoke_test.sh is excluded on purpose: it counts PASS/FAIL checks and exits non-zero at the end.
         for name in ("build_bundle.sh", "install.sh"):
             with self.subTest(script=name):
-                self.assertRegex((ROOT / "scripts/offline" / name).read_text(encoding="utf-8"),
-                                 r"(?m)^set -euo pipefail")
+                self.assertRegex(
+                    (ROOT / "scripts/offline" / name).read_text(encoding="utf-8"), r"(?m)^set -euo pipefail"
+                )
 
     def test_the_guide_names_the_scripts_it_relies_on(self):
         for name in ("build_bundle.sh", "install.sh"):

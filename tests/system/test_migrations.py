@@ -16,26 +16,33 @@ from pathlib import Path
 import psycopg2
 import psycopg2.errors
 import pytest
-from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 
+from alembic import command
 from api.config import settings
 from api.db import Conn
 from api.main import app
 from api.services.dynamic_loader import upload_dynamic
 from api.services.te_loader import upload_te
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
-         "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1.")
+_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
+    "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1."
+)
 _ALEMBIC_INI = str(Path(__file__).resolve().parents[2] / "alembic.ini")
 
 
 def _connect():
     try:
-        return psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                                password=settings.PG_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
+        return psycopg2.connect(
+            host=settings.PG_HOST,
+            port=settings.PG_PORT,
+            user=settings.PG_USER,
+            password=settings.PG_PASSWORD.get_secret_value(),
+            dbname=settings.PG_DATABASE,
+        )
     except psycopg2.OperationalError as exc:
         raise AssertionError(f"Database unreachable: {exc}\n{_HELP}") from None
 
@@ -54,7 +61,7 @@ class MigrationsOnScratchSchema(unittest.TestCase):
         self.original = (settings.UPLOADS_SCHEMA, settings.CONTROL_SCHEMA)
         tag = uuid.uuid4().hex[:10]
         settings.UPLOADS_SCHEMA = f"mig_test_{tag}"
-        settings.CONTROL_SCHEMA = f"mig_ctl_{tag}"   # never touch the live control schema
+        settings.CONTROL_SCHEMA = f"mig_ctl_{tag}"  # never touch the live control schema
         self.cfg = Config(_ALEMBIC_INI)
         self.conn = _connect()
         self.conn.autocommit = True
@@ -70,27 +77,38 @@ class MigrationsOnScratchSchema(unittest.TestCase):
         with self.conn.cursor() as cur:
             cur.execute(
                 "SELECT conname FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace "
-                "WHERE n.nspname = %s AND c.contype = 'u'", (settings.UPLOADS_SCHEMA,))
+                "WHERE n.nspname = %s AND c.contype = 'u'",
+                (settings.UPLOADS_SCHEMA,),
+            )
             return {r[0] for r in cur.fetchall()}
 
     def _tables(self) -> set[str]:
         with self.conn.cursor() as cur:
-            cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = %s",
-                        (settings.UPLOADS_SCHEMA,))
+            cur.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = %s", (settings.UPLOADS_SCHEMA,)
+            )
             return {r[0] for r in cur.fetchall()}
 
     def test_upgrade_head_creates_tables_and_unique_constraints(self):
         command.upgrade(self.cfg, "head")
         self.assertTrue({"csv_files", "audit_log", "alembic_version"} <= self._tables())
-        self.assertEqual(self._constraints(), {
-            "csv_files_file_hash_key", "csv_files_dataset_version_key",
-            "approvals_submission_id_key", "imports_upload_id_key", "imports_approval_id_key"})
+        self.assertEqual(
+            self._constraints(),
+            {
+                "csv_files_file_hash_key",
+                "csv_files_dataset_version_key",
+                "approvals_submission_id_key",
+                "imports_upload_id_key",
+                "imports_approval_id_key",
+            },
+        )
 
     def test_control_schema_is_created_and_removed(self):
         command.upgrade(self.cfg, "head")
         with self.conn.cursor() as cur:
-            cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = %s",
-                        (settings.CONTROL_SCHEMA,))
+            cur.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = %s", (settings.CONTROL_SCHEMA,)
+            )
             self.assertEqual({r[0] for r in cur.fetchall()}, {"tenants", "users", "memberships", "sessions"})
         command.downgrade(self.cfg, "0003")
         with self.conn.cursor() as cur:
@@ -110,32 +128,48 @@ class MigrationsOnScratchSchema(unittest.TestCase):
         # the tables. Upgrading must adopt them, not fail on CREATE TABLE.
         with self.conn.cursor() as cur:
             cur.execute(f'CREATE SCHEMA "{settings.UPLOADS_SCHEMA}"')
-            cur.execute(f'CREATE TABLE "{settings.UPLOADS_SCHEMA}".csv_files (id BIGSERIAL PRIMARY KEY, '
-                        "file_name TEXT NOT NULL, file_hash TEXT NOT NULL, table_name TEXT NOT NULL, "
-                        "mode TEXT NOT NULL, row_count INTEGER NOT NULL DEFAULT 0, "
-                        "column_names TEXT[] NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT now())")
+            cur.execute(
+                f'CREATE TABLE "{settings.UPLOADS_SCHEMA}".csv_files (id BIGSERIAL PRIMARY KEY, '
+                "file_name TEXT NOT NULL, file_hash TEXT NOT NULL, table_name TEXT NOT NULL, "
+                "mode TEXT NOT NULL, row_count INTEGER NOT NULL DEFAULT 0, "
+                "column_names TEXT[] NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT now())"
+            )
         command.upgrade(self.cfg, "head")
         self.assertIn("csv_files_file_hash_key", self._constraints())
 
     def _seed_registry(self, rows):
         with self.conn.cursor() as cur:
             for i, (name, mode) in enumerate(rows):
-                cur.execute(f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files '
-                            "(file_name, file_hash, table_name, mode) VALUES (%s, %s, %s, %s)",
-                            (name, f"hash{i}", f"csv_legacy{i}", mode))
+                cur.execute(
+                    f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files '
+                    "(file_name, file_hash, table_name, mode) VALUES (%s, %s, %s, %s)",
+                    (name, f"hash{i}", f"csv_legacy{i}", mode),
+                )
 
     def test_0010_backfills_dataset_and_version_oldest_first_and_leaves_te_rows_alone(self):
         command.upgrade(self.cfg, "0009")
-        self._seed_registry([("Sales Report.csv", "dynamic"), ("other.csv", "dynamic"),
-                             ("sales_report.csv", "dynamic"), ("loaded.csv", "te")])
+        self._seed_registry(
+            [
+                ("Sales Report.csv", "dynamic"),
+                ("other.csv", "dynamic"),
+                ("sales_report.csv", "dynamic"),
+                ("loaded.csv", "te"),
+            ]
+        )
         command.upgrade(self.cfg, "0010")
         with self.conn.cursor() as cur:
-            cur.execute(f'SELECT file_name, dataset, version, table_name FROM "{settings.UPLOADS_SCHEMA}".csv_files ORDER BY id')
-            self.assertEqual(cur.fetchall(), [
-                ("Sales Report.csv", "sales_report", 1, "csv_legacy0"),   # tables are kept as they were
-                ("other.csv", "other", 1, "csv_legacy1"),
-                ("sales_report.csv", "sales_report", 2, "csv_legacy2"),
-                ("loaded.csv", None, None, "csv_legacy3")])
+            cur.execute(
+                f'SELECT file_name, dataset, version, table_name FROM "{settings.UPLOADS_SCHEMA}".csv_files ORDER BY id'
+            )
+            self.assertEqual(
+                cur.fetchall(),
+                [
+                    ("Sales Report.csv", "sales_report", 1, "csv_legacy0"),  # tables are kept as they were
+                    ("other.csv", "other", 1, "csv_legacy1"),
+                    ("sales_report.csv", "sales_report", 2, "csv_legacy2"),
+                    ("loaded.csv", None, None, "csv_legacy3"),
+                ],
+            )
 
     def test_0010_sql_slug_agrees_with_the_loaders_slug(self):
         from api.services.dynamic_loader import dataset_slug
@@ -150,41 +184,48 @@ class MigrationsOnScratchSchema(unittest.TestCase):
 
     def test_0010_keeps_one_te_row_per_file_name_but_allows_dataset_versions(self):
         command.upgrade(self.cfg, "head")
-        insert = (f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode, dataset, version) '
-                  "VALUES (%s, %s, 't', %s, %s, %s)")
+        insert = (
+            f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode, dataset, version) '
+            "VALUES (%s, %s, 't', %s, %s, %s)"
+        )
         with self.conn.cursor() as cur:
             cur.execute(insert, ("same.csv", "h1", "dynamic", "same", 1))
-            cur.execute(insert, ("same.csv", "h2", "dynamic", "same", 2))        # versions share a name
+            cur.execute(insert, ("same.csv", "h2", "dynamic", "same", 2))  # versions share a name
             cur.execute(insert, ("same.csv", "h3", "te", None, None))
-            with self.assertRaises(psycopg2.errors.UniqueViolation):             # T&E race guard is intact
+            with self.assertRaises(psycopg2.errors.UniqueViolation):  # T&E race guard is intact
                 cur.execute(insert, ("same.csv", "h4", "te", None, None))
         with self.conn.cursor() as cur:
-            with self.assertRaises(psycopg2.errors.UniqueViolation):             # a version number is used once
+            with self.assertRaises(psycopg2.errors.UniqueViolation):  # a version number is used once
                 cur.execute(insert, ("same.csv", "h5", "dynamic", "same", 2))
 
     def test_0010_downgrade_refuses_while_versions_share_a_name_then_restores_the_constraint(self):
         command.upgrade(self.cfg, "head")
         self._seed_registry([("same.csv", "te")])
         with self.conn.cursor() as cur:
-            cur.execute(f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode, dataset, version) '
-                        "VALUES ('same.csv', 'hx', 't', 'dynamic', 'same', 1)")
+            cur.execute(
+                f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode, dataset, version) '
+                "VALUES ('same.csv', 'hx', 't', 'dynamic', 'same', 1)"
+            )
         with self.assertRaisesRegex(RuntimeError, "versioned datasets share a file name.*same.csv"):
             command.downgrade(self.cfg, "0009")
         with self.conn.cursor() as cur:
-            cur.execute(f'DELETE FROM "{settings.UPLOADS_SCHEMA}".csv_files WHERE mode = \'dynamic\'')
+            cur.execute(f"DELETE FROM \"{settings.UPLOADS_SCHEMA}\".csv_files WHERE mode = 'dynamic'")
         command.downgrade(self.cfg, "0009")
         self.assertIn("csv_files_file_name_key", self._constraints())
 
     def _provenance_by_file(self) -> list[tuple]:
         with self.conn.cursor() as cur:
-            cur.execute(f'SELECT file_name, types_provenance FROM "{settings.UPLOADS_SCHEMA}".csv_files '
-                        "ORDER BY file_name")
+            cur.execute(
+                f'SELECT file_name, types_provenance FROM "{settings.UPLOADS_SCHEMA}".csv_files ORDER BY file_name'
+            )
             return cur.fetchall()
 
     def test_type_provenance_marks_old_dynamic_rows_unconfirmed_and_leaves_te_null(self):
         command.upgrade(self.cfg, "0008")
-        insert = (f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode) '
-                  "VALUES (%s, %s, 't', %s)")
+        insert = (
+            f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode) '
+            "VALUES (%s, %s, 't', %s)"
+        )
         with self.conn.cursor() as cur:
             cur.execute(insert, ("d.csv", "h_dyn", "dynamic"))
             cur.execute(insert, ("t.csv", "h_te", "te"))
@@ -195,32 +236,42 @@ class MigrationsOnScratchSchema(unittest.TestCase):
         command.upgrade(self.cfg, "head")
         with self.conn.cursor() as cur:
             with self.assertRaises(psycopg2.errors.CheckViolation):
-                cur.execute(f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files '
-                            "(file_name, file_hash, table_name, mode, types_provenance) "
-                            "VALUES ('x.csv', 'hx', 't', 'dynamic', 'bogus')")
+                cur.execute(
+                    f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files '
+                    "(file_name, file_hash, table_name, mode, types_provenance) "
+                    "VALUES ('x.csv', 'hx', 't', 'dynamic', 'bogus')"
+                )
 
     def test_type_provenance_downgrade_drops_the_column(self):
         command.upgrade(self.cfg, "head")
         command.downgrade(self.cfg, "0008")
         with self.conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM information_schema.columns WHERE table_schema = %s "
-                        "AND table_name = 'csv_files' AND column_name = 'types_provenance'",
-                        (settings.UPLOADS_SCHEMA,))
+            cur.execute(
+                "SELECT 1 FROM information_schema.columns WHERE table_schema = %s "
+                "AND table_name = 'csv_files' AND column_name = 'types_provenance'",
+                (settings.UPLOADS_SCHEMA,),
+            )
             self.assertIsNone(cur.fetchone())
 
     def _insert_upload(self, cur, status: str) -> int:
-        cur.execute(f'INSERT INTO "{settings.UPLOADS_SCHEMA}".uploads (file_name, sha256, byte_size, mode, status) '
-                    "VALUES ('u.csv', 'sha', 1, 'dynamic', %s) RETURNING id", (status,))
+        cur.execute(
+            f'INSERT INTO "{settings.UPLOADS_SCHEMA}".uploads (file_name, sha256, byte_size, mode, status) '
+            "VALUES ('u.csv', 'sha', 1, 'dynamic', %s) RETURNING id",
+            (status,),
+        )
         return cur.fetchone()[0]
 
     def test_0011_adds_the_workflow_tables_and_the_tenant_setting(self):
         command.upgrade(self.cfg, "head")
         self.assertTrue({"submissions", "approvals", "imports"} <= self._tables())
         with self.conn.cursor() as cur:
-            cur.execute("SELECT column_default FROM information_schema.columns WHERE table_schema = %s "
-                        "AND table_name = 'tenants' AND column_name = 'allow_self_approval'", (settings.CONTROL_SCHEMA,))
+            cur.execute(
+                "SELECT column_default FROM information_schema.columns WHERE table_schema = %s "
+                "AND table_name = 'tenants' AND column_name = 'allow_self_approval'",
+                (settings.CONTROL_SCHEMA,),
+            )
             self.assertEqual(cur.fetchone()[0], "false", "self-approval is off unless a tenant turns it on")
-            self._insert_upload(cur, "staged")   # the new status is accepted
+            self._insert_upload(cur, "staged")  # the new status is accepted
 
     def test_0011_the_database_checks_that_import_counts_reconcile(self):
         command.upgrade(self.cfg, "head")
@@ -229,15 +280,20 @@ class MigrationsOnScratchSchema(unittest.TestCase):
             up = self._insert_upload(cur, "staged")
             cur.execute(f'INSERT INTO "{schema}".submissions (upload_id) VALUES (%s) RETURNING id', (up,))
             sub = cur.fetchone()[0]
-            cur.execute(f'INSERT INTO "{schema}".approvals (submission_id, upload_id, decision, decisions_upto, edits_upto) '
-                        "VALUES (%s, %s, 'approve', 0, 0) RETURNING id", (sub, up))
+            cur.execute(
+                f'INSERT INTO "{schema}".approvals (submission_id, upload_id, decision, decisions_upto, edits_upto) '
+                "VALUES (%s, %s, 'approve', 0, 0) RETURNING id",
+                (sub, up),
+            )
             appr = cur.fetchone()[0]
-            insert = (f'INSERT INTO "{schema}".imports (upload_id, approval_id, idempotency_key, rows_in, rows_excluded, '
-                      "rows_edited, rows_duplicate, rows_imported, csv_file_id, table_name) "
-                      "VALUES (%s, %s, 'k', %s, 1, 0, 1, %s, 1, 't')")
+            insert = (
+                f'INSERT INTO "{schema}".imports (upload_id, approval_id, idempotency_key, rows_in, rows_excluded, '
+                "rows_edited, rows_duplicate, rows_imported, csv_file_id, table_name) "
+                "VALUES (%s, %s, 'k', %s, 1, 0, 1, %s, 1, 't')"
+            )
             with self.assertRaises(psycopg2.errors.CheckViolation):
-                cur.execute(insert, (up, appr, 10, 7))     # 10 != 1 + 1 + 7
-            cur.execute(insert, (up, appr, 10, 8))         # 10 == 1 + 1 + 8
+                cur.execute(insert, (up, appr, 10, 7))  # 10 != 1 + 1 + 7
+            cur.execute(insert, (up, appr, 10, 8))  # 10 == 1 + 1 + 8
 
     def test_0011_a_rejection_needs_a_reason_but_an_approval_does_not(self):
         command.upgrade(self.cfg, "head")
@@ -248,8 +304,10 @@ class MigrationsOnScratchSchema(unittest.TestCase):
             for _ in range(3):
                 cur.execute(f'INSERT INTO "{schema}".submissions (upload_id) VALUES (%s) RETURNING id', (up,))
                 ids.append(cur.fetchone()[0])
-            insert = (f'INSERT INTO "{schema}".approvals (submission_id, upload_id, decision, reason, decisions_upto, '
-                      "edits_upto) VALUES (%s, %s, %s, %s, 0, 0)")
+            insert = (
+                f'INSERT INTO "{schema}".approvals (submission_id, upload_id, decision, reason, decisions_upto, '
+                "edits_upto) VALUES (%s, %s, %s, %s, 0, 0)"
+            )
             cur.execute(insert, (ids[0], up, "approve", None))
             with self.assertRaises(psycopg2.errors.CheckViolation):
                 cur.execute(insert, (ids[1], up, "reject", "   "))
@@ -270,26 +328,33 @@ class MigrationsOnScratchSchema(unittest.TestCase):
         with self.conn.cursor() as cur:
             with self.assertRaises(psycopg2.errors.CheckViolation):
                 self._insert_upload(cur, "staged")
-            cur.execute("SELECT 1 FROM information_schema.columns WHERE table_schema = %s "
-                        "AND table_name = 'tenants' AND column_name = 'allow_self_approval'", (settings.CONTROL_SCHEMA,))
+            cur.execute(
+                "SELECT 1 FROM information_schema.columns WHERE table_schema = %s "
+                "AND table_name = 'tenants' AND column_name = 'allow_self_approval'",
+                (settings.CONTROL_SCHEMA,),
+            )
             self.assertIsNone(cur.fetchone())
 
     def _session_columns(self) -> dict[str, tuple[str, str, str | None]]:
         with self.conn.cursor() as cur:
-            cur.execute("SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns "
-                        "WHERE table_schema = %s AND table_name = 'sessions'", (settings.CONTROL_SCHEMA,))
+            cur.execute(
+                "SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = 'sessions'",
+                (settings.CONTROL_SCHEMA,),
+            )
             return {r[0]: (r[1], r[2], r[3]) for r in cur.fetchall()}
 
     def _session_indexes(self) -> set[str]:
         with self.conn.cursor() as cur:
-            cur.execute("SELECT indexname FROM pg_indexes WHERE schemaname = %s AND tablename = 'sessions'",
-                        (settings.CONTROL_SCHEMA,))
+            cur.execute(
+                "SELECT indexname FROM pg_indexes WHERE schemaname = %s AND tablename = 'sessions'",
+                (settings.CONTROL_SCHEMA,),
+            )
             return {r[0] for r in cur.fetchall()}
 
     def test_0012_adds_last_seen_and_the_purge_indexes(self):
         command.upgrade(self.cfg, "head")
-        self.assertEqual(self._session_columns()["last_seen_at"],
-                         ("timestamp with time zone", "NO", "now()"))
+        self.assertEqual(self._session_columns()["last_seen_at"], ("timestamp with time zone", "NO", "now()"))
         self.assertTrue({"sessions_expires_at_idx", "sessions_revoked_at_idx"} <= self._session_indexes())
 
     def test_0012_existing_sessions_start_with_a_current_last_seen_so_nobody_is_signed_out(self):
@@ -300,12 +365,16 @@ class MigrationsOnScratchSchema(unittest.TestCase):
             tid = cur.fetchone()[0]
             cur.execute(f'INSERT INTO "{ctl}".users (username, password_hash) VALUES (%s, %s) RETURNING id', ("u", "x"))
             uid = cur.fetchone()[0]
-            cur.execute(f'INSERT INTO "{ctl}".sessions (token_hash, user_id, tenant_id, expires_at) '
-                        "VALUES ('h', %s, %s, now() + interval '1 hour')", (uid, tid))
+            cur.execute(
+                f'INSERT INTO "{ctl}".sessions (token_hash, user_id, tenant_id, expires_at) '
+                "VALUES ('h', %s, %s, now() + interval '1 hour')",
+                (uid, tid),
+            )
         command.upgrade(self.cfg, "head")
         with self.conn.cursor() as cur:
-            cur.execute(f'SELECT extract(epoch FROM now() - last_seen_at) FROM "{ctl}".sessions WHERE token_hash = %s',
-                        ("h",))
+            cur.execute(
+                f'SELECT extract(epoch FROM now() - last_seen_at) FROM "{ctl}".sessions WHERE token_hash = %s', ("h",)
+            )
             self.assertLess(cur.fetchone()[0], 120, "an existing session must not look idle after the upgrade")
 
     def test_0012_downgrade_removes_the_column_and_the_indexes(self):
@@ -319,9 +388,11 @@ class MigrationsOnScratchSchema(unittest.TestCase):
         command.upgrade(self.cfg, "0001")
         with self.conn.cursor() as cur:
             for name in ("a.csv", "b.csv"):
-                cur.execute(f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files '
-                            "(file_name, file_hash, table_name, mode) VALUES (%s, 'samehash', 't', 'dynamic')",
-                            (name,))
+                cur.execute(
+                    f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files '
+                    "(file_name, file_hash, table_name, mode) VALUES (%s, 'samehash', 't', 'dynamic')",
+                    (name,),
+                )
         with self.assertRaisesRegex(RuntimeError, "duplicated value.*samehash"):
             command.upgrade(self.cfg, "head")
         self.assertEqual(self._constraints(), set())
@@ -352,8 +423,10 @@ class RegistryUniqueness(unittest.TestCase):
             self.assertEqual(cur.fetchone()[0], ScriptDirectory.from_config(Config(_ALEMBIC_INI)).get_current_head())
 
     def test_duplicate_hash_is_rejected_by_the_database(self):
-        insert = (f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode) '
-                  "VALUES (%s, %s, 't', 'dynamic')")
+        insert = (
+            f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files (file_name, file_hash, table_name, mode) '
+            "VALUES (%s, %s, 't', 'dynamic')"
+        )
         with Conn() as conn, conn.cursor() as cur:
             cur.execute(insert, (f"a_{self.tag}.csv", f"h_{self.tag}"))
             with self.assertRaises(psycopg2.errors.UniqueViolation):
@@ -370,9 +443,11 @@ class RegistryUniqueness(unittest.TestCase):
         result: dict = {}
         try:
             with competitor.cursor() as cur:
-                cur.execute(f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files '
-                            "(file_name, file_hash, table_name, mode) VALUES (%s, %s, %s, %s)",
-                            (name, file_hash, table, mode))
+                cur.execute(
+                    f'INSERT INTO "{settings.UPLOADS_SCHEMA}".csv_files '
+                    "(file_name, file_hash, table_name, mode) VALUES (%s, %s, %s, %s)",
+                    (name, file_hash, table, mode),
+                )
             worker = threading.Thread(target=lambda: result.update(fn()))
             worker.start()
             watcher = _connect()
@@ -402,7 +477,8 @@ class RegistryUniqueness(unittest.TestCase):
         content = f"a,b\n1,{self.tag}\n2,{self.tag}\n"
         table = f"csv_{hashlib.sha256(content.encode()).hexdigest()[:16]}"
         result = self._against_uncommitted_competitor(
-            lambda: upload_dynamic(name, content, None, False), name, content, table, "dynamic")
+            lambda: upload_dynamic(name, content, None, False), name, content, table, "dynamic"
+        )
         self.assertEqual(result["status"], "duplicate_file")
         with Conn() as conn, conn.cursor() as cur:
             cur.execute("SELECT to_regclass(%s)", (f'"{settings.UPLOADS_SCHEMA}".{table}',))
@@ -410,13 +486,17 @@ class RegistryUniqueness(unittest.TestCase):
 
     def test_te_load_losing_the_race_reports_error_and_rolls_back_rows(self):
         name = f"race_te_{self.tag}.csv"
-        content = "name,org_type,country\n" + "\n".join(
-            f"RACE_{self.tag}_{i},government,AU" for i in range(20)) + "\n"
+        content = "name,org_type,country\n" + "\n".join(f"RACE_{self.tag}_{i},government,AU" for i in range(20)) + "\n"
         result = self._against_uncommitted_competitor(
-            lambda: upload_te(name, content, "organisations"), name, content,
-            f"{settings.TE_SCHEMA}.organisations", "te")
+            lambda: upload_te(name, content, "organisations"),
+            name,
+            content,
+            f"{settings.TE_SCHEMA}.organisations",
+            "te",
+        )
         self.assertEqual(result["status"], "error")
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(f'SELECT count(*) FROM "{settings.TE_SCHEMA}".organisations WHERE name LIKE %s',
-                        (f"RACE_{self.tag}_%",))
+            cur.execute(
+                f'SELECT count(*) FROM "{settings.TE_SCHEMA}".organisations WHERE name LIKE %s', (f"RACE_{self.tag}_%",)
+            )
             self.assertEqual(cur.fetchone()[0], 0, "the losing load must roll back its rows")

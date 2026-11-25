@@ -12,6 +12,7 @@ import re
 import uuid
 
 import pytest
+from conftest import PASSWORD, shell_sign_in
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 from psycopg2 import sql
@@ -19,7 +20,6 @@ from psycopg2 import sql
 from api import db  # noqa: F401  (the stack fixture has opened the pool)
 from api.config import settings
 from api.db import Conn
-from conftest import PASSWORD, shell_sign_in
 
 # 30 rows; every seventh amount is "x", so rows 7, 14, 21 and 28 fail the int8 type.
 ROWS = "".join(f"{i},person{i},{'x' if i % 7 == 0 else i * 10}\n" for i in range(1, 31))
@@ -118,6 +118,7 @@ def _type_row_number(page, n: int) -> None:
 
 # ── what the old spike's tests checked, on the real screen ─────────────────────────────────────────
 
+
 def test_an_uploader_can_look_but_not_change(page, stack, upload):
     _open_review(page, stack, "uploader", upload)
     expect(page.get_by_text("Only reviewers and tenant admins can make changes.")).to_be_visible()
@@ -181,6 +182,7 @@ def test_signing_out_leaves_nothing_for_the_next_tenant(page, stack, upload):
 
 # ── new with this screen ────────────────────────────────────────────────────────────────────────────
 
+
 def test_the_grid_and_the_row_number_box_stay_in_step(page, stack, upload):
     _open_review(page, stack, "reviewer", upload)
     box = _row_number_box(page)
@@ -199,8 +201,9 @@ def test_the_grid_and_the_row_number_box_stay_in_step(page, stack, upload):
 
 def test_a_row_chosen_on_one_page_does_not_break_the_next(page, stack):
     name = _unique("long")
-    res = stack.upload("admin", name, "id,name\n" + "".join(f"{i},p{i}\n" for i in range(1, 251)),
-                       types=["int8", "text"])
+    res = stack.upload(
+        "admin", name, "id,name\n" + "".join(f"{i},p{i}\n" for i in range(1, 251)), types=["int8", "text"]
+    )
     assert res["status"] == "ok", res
     _open_review(page, stack, "admin", name)
     expect(page.get_by_label("Page (of 3)")).to_be_visible()
@@ -219,7 +222,9 @@ def test_a_row_chosen_on_one_page_does_not_break_the_next(page, stack):
 
 def test_the_list_offers_every_attempt_and_can_be_cut_to_the_failed_and_partial_ones(page, stack, upload):
     clean = _unique("clean")
-    assert stack.upload("admin", clean, f"id,name\n1,{clean}\n2,b\n", types=["int8", "text"])["status"] == "ok"  # (identical bytes are a duplicate)
+    assert (
+        stack.upload("admin", clean, f"id,name\n1,{clean}\n2,b\n", types=["int8", "text"])["status"] == "ok"
+    )  # (identical bytes are a duplicate)
     _open_review(page, stack, "admin")
 
     # The tenant's other tests upload files too, so the list is long: type to narrow it, as a person would.
@@ -230,7 +235,9 @@ def test_the_list_offers_every_attempt_and_can_be_cut_to_the_failed_and_partial_
         return page.get_by_role("option", name=option)
 
     expect(offered(clean[:14], re.compile(re.escape(clean) + " · Imported"))).to_be_visible()
-    expect(offered(upload[:14], re.compile(re.escape(upload) + r" · Partly imported · 4 of 30 rows failed"))).to_be_visible()
+    expect(
+        offered(upload[:14], re.compile(re.escape(upload) + r" · Partly imported · 4 of 30 rows failed"))
+    ).to_be_visible()
     page.keyboard.press("Escape")
 
     page.get_by_text("Only failed or partly failed uploads").click()
@@ -261,9 +268,13 @@ def test_a_session_the_server_ended_sends_the_next_save_back_to_sign_in(page, st
     page.get_by_role("tab", name="Exclude row").click()
 
     with Conn() as conn, conn.cursor() as cur:  # as the API does when a password is reset: revoke the user's sessions
-        cur.execute(sql.SQL("UPDATE {c}.sessions SET revoked_at = now() WHERE user_id = "
-                            "(SELECT id FROM {c}.users WHERE username = %s)").format(
-                                c=sql.Identifier(settings.CONTROL_SCHEMA)), (a.username,))
+        cur.execute(
+            sql.SQL(
+                "UPDATE {c}.sessions SET revoked_at = now() WHERE user_id = "
+                "(SELECT id FROM {c}.users WHERE username = %s)"
+            ).format(c=sql.Identifier(settings.CONTROL_SCHEMA)),
+            (a.username,),
+        )
         conn.commit()
     page.get_by_label("Reason to exclude this row (required)").fill("too late")
     page.get_by_role("button", name="Exclude this row").click()

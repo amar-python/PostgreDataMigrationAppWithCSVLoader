@@ -6,6 +6,7 @@ the repository or production.
 
 No database required; all tests are purely static (file-read) checks.
 """
+
 import re
 import unittest
 from pathlib import Path
@@ -24,18 +25,19 @@ PY_SOURCE = [
 ]
 
 # ── Shell scripts to scan ─────────────────────────────────────────────────────
-SHELL_SCRIPTS = list((ROOT / "build" / "adapters").glob("adapter_*.sh")) + \
-                list((ROOT / "build" / "csv").glob("loader_*.sh")) + [
-                    ROOT / "build" / "deploy_all.sh",
-                    ROOT / "build" / "setup.sh",
-                    ROOT / "build" / "csv_loader.sh",
-                ]
+SHELL_SCRIPTS = (
+    list((ROOT / "build" / "adapters").glob("adapter_*.sh"))
+    + list((ROOT / "build" / "csv").glob("loader_*.sh"))
+    + [
+        ROOT / "build" / "deploy_all.sh",
+        ROOT / "build" / "setup.sh",
+        ROOT / "build" / "csv_loader.sh",
+    ]
+)
 
 # ── Patterns that must NOT appear in source ───────────────────────────────────
 # Matches a password-like variable assigned a non-empty literal value
-_HARDCODED_PASSWORD = re.compile(
-    r'(?i)(password|passwd|secret|pg_password)\s*[=:]\s*["\'][^"\']{3,}["\']'
-)
+_HARDCODED_PASSWORD = re.compile(r'(?i)(password|passwd|secret|pg_password)\s*[=:]\s*["\'][^"\']{3,}["\']')
 
 # f-string containing what looks like a SQL keyword — SQL must never be built
 # with f-strings; use psycopg2.sql.Identifier / parameterised queries.
@@ -106,8 +108,7 @@ class TestConfigEnvExample(unittest.TestCase):
                 self.assertRegex(
                     stripped,
                     r'^PG_PASSWORD\s*=\s*(["\'][\s]*["\']|)(\s*#.*)?$',
-                    "PG_PASSWORD in config.env.example must be empty — "
-                    "do not commit real credentials.",
+                    "PG_PASSWORD in config.env.example must be empty — do not commit real credentials.",
                 )
                 return
         # If PG_PASSWORD line is absent entirely that is also fine
@@ -122,7 +123,7 @@ class TestShellScriptsNoPrintedPasswords(unittest.TestCase):
     """
 
     _ECHO_PASSWORD = re.compile(
-        r'\becho\b.*\$(PG_?PASSWORD|PGPASSWORD)',
+        r"\becho\b.*\$(PG_?PASSWORD|PGPASSWORD)",
         re.IGNORECASE,
     )
 
@@ -131,20 +132,14 @@ class TestShellScriptsNoPrintedPasswords(unittest.TestCase):
             text = script.read_text(encoding="utf-8", errors="replace")
             for i, line in enumerate(text.splitlines(), 1):
                 if self._ECHO_PASSWORD.search(line) and not line.strip().startswith("#"):
-                    self.fail(
-                        f"Password may be echoed to stdout in "
-                        f"{script.relative_to(ROOT)}:{i}:\n  {line.strip()}"
-                    )
+                    self.fail(f"Password may be echoed to stdout in {script.relative_to(ROOT)}:{i}:\n  {line.strip()}")
 
     def test_no_echo_password_in_loaders(self):
         for script in (ROOT / "build" / "csv").glob("loader_*.sh"):
             text = script.read_text(encoding="utf-8", errors="replace")
             for i, line in enumerate(text.splitlines(), 1):
                 if self._ECHO_PASSWORD.search(line) and not line.strip().startswith("#"):
-                    self.fail(
-                        f"Password may be echoed to stdout in "
-                        f"{script.relative_to(ROOT)}:{i}:\n  {line.strip()}"
-                    )
+                    self.fail(f"Password may be echoed to stdout in {script.relative_to(ROOT)}:{i}:\n  {line.strip()}")
 
 
 class TestSqlFilesNoInlineCredentials(unittest.TestCase):
@@ -168,8 +163,7 @@ class TestSqlFilesNoInlineCredentials(unittest.TestCase):
                     continue
                 if self._SQL_PASSWORD.search(line) and not line.strip().startswith("--"):
                     self.fail(
-                        f"Possible hardcoded password in SQL file "
-                        f"{sql_file.relative_to(ROOT)}:{i}:\n  {line.strip()}"
+                        f"Possible hardcoded password in SQL file {sql_file.relative_to(ROOT)}:{i}:\n  {line.strip()}"
                     )
 
 

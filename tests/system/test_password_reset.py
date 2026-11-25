@@ -31,8 +31,9 @@ def _bearer(token: str) -> dict:
 @pytest.mark.integration
 class ChangeOwnPassword(_Accounts):
     def _change(self, token: str, current=_PW, new=_NEW):
-        return self.client.post("/api/auth/password", headers=_bearer(token),
-                                json={"currentPassword": current, "newPassword": new})
+        return self.client.post(
+            "/api/auth/password", headers=_bearer(token), json={"currentPassword": current, "newPassword": new}
+        )
 
     def test_new_password_works_old_does_not_and_other_sessions_end(self):
         mine, other = self._login().json()["token"], self._login().json()["token"]
@@ -48,8 +49,12 @@ class ChangeOwnPassword(_Accounts):
         self.assertEqual((res.status_code, res.json()["detail"]), (400, "Current password is incorrect"))
         self.assertEqual(self._me(token).status_code, 200)
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("SELECT failed_logins FROM {}.users WHERE id = %s").format(
-                sql.Identifier(settings.CONTROL_SCHEMA)), (self.user_id,))
+            cur.execute(
+                sql.SQL("SELECT failed_logins FROM {}.users WHERE id = %s").format(
+                    sql.Identifier(settings.CONTROL_SCHEMA)
+                ),
+                (self.user_id,),
+            )
             self.assertEqual(cur.fetchone()[0], 1)
         self.assertEqual(self._login().status_code, 200, "password unchanged")
 
@@ -70,11 +75,14 @@ class AdminReset(_Accounts):
         self.admin = f"admin_{uuid.uuid4().hex[:8]}"
         with Conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(sql.SQL("SELECT id FROM {}.tenants WHERE slug = %s").format(
-                    sql.Identifier(settings.CONTROL_SCHEMA)), (self.tenant,))
+                cur.execute(
+                    sql.SQL("SELECT id FROM {}.tenants WHERE slug = %s").format(
+                        sql.Identifier(settings.CONTROL_SCHEMA)
+                    ),
+                    (self.tenant,),
+                )
                 self.tenant_id = cur.fetchone()[0]
-                accounts.add_membership(cur, accounts.create_user(cur, self.admin, _PW),
-                                        self.tenant_id, "tenant_admin")
+                accounts.add_membership(cur, accounts.create_user(cur, self.admin, _PW), self.tenant_id, "tenant_admin")
             conn.commit()
         migrate_tenant(self.tenant)  # real tenants always have their schema (audit_log lives there)
         self.admin_token = self._login(username=self.admin).json()["token"]
@@ -82,13 +90,15 @@ class AdminReset(_Accounts):
     def tearDown(self):
         with Conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
-                    sql.Identifier(schema_for(self.tenant))))
+                cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_for(self.tenant))))
             conn.commit()
 
     def _reset(self, username: str, token: str | None = None):
-        return self.client.post(f"/api/auth/users/{username}/password",
-                                headers=_bearer(token or self.admin_token), json={"newPassword": _NEW})
+        return self.client.post(
+            f"/api/auth/users/{username}/password",
+            headers=_bearer(token or self.admin_token),
+            json={"newPassword": _NEW},
+        )
 
     def test_admin_reset_sets_password_unlocks_and_ends_the_users_sessions(self):
         user_token = self._login().json()["token"]
@@ -101,8 +111,11 @@ class AdminReset(_Accounts):
     def test_reset_is_written_to_the_tenants_audit_log(self):
         self.assertEqual(self._reset(self.user).status_code, 200)
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("SELECT action, file_name, mode, actor FROM {}.audit_log").format(
-                sql.Identifier(schema_for(self.tenant))))
+            cur.execute(
+                sql.SQL("SELECT action, file_name, mode, actor FROM {}.audit_log").format(
+                    sql.Identifier(schema_for(self.tenant))
+                )
+            )
             self.assertEqual(cur.fetchall(), [("password_reset", self.user, None, self.admin)])
 
     def test_non_admin_cannot_reset(self):
@@ -114,8 +127,12 @@ class AdminReset(_Accounts):
         outsider = f"out_{uuid.uuid4().hex[:8]}"
         with Conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(sql.SQL("SELECT id FROM {}.tenants WHERE slug = %s").format(
-                    sql.Identifier(settings.CONTROL_SCHEMA)), (self.other,))
+                cur.execute(
+                    sql.SQL("SELECT id FROM {}.tenants WHERE slug = %s").format(
+                        sql.Identifier(settings.CONTROL_SCHEMA)
+                    ),
+                    (self.other,),
+                )
                 tid = cur.fetchone()[0]
                 accounts.add_membership(cur, accounts.create_user(cur, outsider, _PW), tid, "uploader")
             conn.commit()
@@ -125,8 +142,12 @@ class AdminReset(_Accounts):
     def test_user_who_is_also_in_another_tenant_is_refused(self):
         with Conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(sql.SQL("SELECT id FROM {}.tenants WHERE slug = %s").format(
-                    sql.Identifier(settings.CONTROL_SCHEMA)), (self.other,))
+                cur.execute(
+                    sql.SQL("SELECT id FROM {}.tenants WHERE slug = %s").format(
+                        sql.Identifier(settings.CONTROL_SCHEMA)
+                    ),
+                    (self.other,),
+                )
                 accounts.add_membership(cur, self.user_id, cur.fetchone()[0], "uploader")
             conn.commit()
         self.assertEqual(self._reset(self.user).status_code, 409)
@@ -136,9 +157,14 @@ class AdminReset(_Accounts):
 @pytest.mark.integration
 class BreakGlassReset(_Accounts):
     def _run(self, username: str, password: str = _NEW) -> subprocess.CompletedProcess:
-        return subprocess.run([sys.executable, "scripts/reset_password.py", "--username", username],
-                              cwd=_ROOT, env={**os.environ, "TE_NEW_PASSWORD": password},
-                              capture_output=True, text=True, timeout=60)
+        return subprocess.run(
+            [sys.executable, "scripts/reset_password.py", "--username", username],
+            cwd=_ROOT,
+            env={**os.environ, "TE_NEW_PASSWORD": password},
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
 
     def test_resets_password_clears_lockout_and_ends_sessions(self):
         token = self._login().json()["token"]

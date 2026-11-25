@@ -6,6 +6,7 @@ stored reasons a failed import shows and the note when none were kept; and the s
 their filters. Those are here, against the server's own list, plus what the move to the server brings: the
 list belongs to the tenant, so it must never be shared between sessions, and file text must not become a link.
 """
+
 import re
 from datetime import date, datetime, timedelta, timezone
 
@@ -13,6 +14,7 @@ import pytest
 import streamlit as st
 
 from tests.unit.streamlit_harness import errors, screen, widget
+
 # The imports below need the path the import above sets up, so the import sort must not move them up.
 # isort: split
 
@@ -24,12 +26,25 @@ pytestmark = [pytest.mark.unit, pytest.mark.regression]
 T0 = datetime(2026, 11, 18, 1, 0, tzinfo=timezone.utc)
 
 
-def _upload(n, name="people.csv", status="imported", total=30, failed=0, uploader="alice", mode="dynamic",
-            reason=None, at=None):
-    return {"id": str(n), "file_name": name, "sha256": "ab" * 32, "byte_size": 100, "uploader": uploader,
-            "mode": mode, "status": status, "total_rows": total, "imported_rows": (total or 0) - failed,
-            "failed_rows": failed, "csv_file_id": None, "uploaded_at": (at or T0 - timedelta(hours=n)).isoformat(),
-            "failure_reason": reason, "state": "imported"}
+def _upload(
+    n, name="people.csv", status="imported", total=30, failed=0, uploader="alice", mode="dynamic", reason=None, at=None
+):
+    return {
+        "id": str(n),
+        "file_name": name,
+        "sha256": "ab" * 32,
+        "byte_size": 100,
+        "uploader": uploader,
+        "mode": mode,
+        "status": status,
+        "total_rows": total,
+        "imported_rows": (total or 0) - failed,
+        "failed_rows": failed,
+        "csv_file_id": None,
+        "uploaded_at": (at or T0 - timedelta(hours=n)).isoformat(),
+        "failure_reason": reason,
+        "state": "imported",
+    }
 
 
 class FakeApi:
@@ -73,9 +88,18 @@ class FakeApi:
 
     def _default_detail(self, uid):
         u = next(u for u in self.uploads if u["id"] == uid)
-        return {"id": uid, "fileName": u["file_name"], "status": u["status"], "totalRows": u["total_rows"],
-                "importedRows": u["imported_rows"], "failedRows": u["failed_rows"], "rowErrors": [], "logs": [],
-                "uploader": u["uploader"], "state": u["state"]}
+        return {
+            "id": uid,
+            "fileName": u["file_name"],
+            "status": u["status"],
+            "totalRows": u["total_rows"],
+            "importedRows": u["imported_rows"],
+            "failedRows": u["failed_rows"],
+            "rowErrors": [],
+            "logs": [],
+            "uploader": u["uploader"],
+            "state": u["state"],
+        }
 
     @staticmethod
     def _when(text):
@@ -95,17 +119,26 @@ class FakeApi:
             if "to" in p and self._when(u["uploaded_at"]) >= self._when(p["to"]):
                 continue
             out.append(u)
-        return out[p.get("offset", 0):p.get("offset", 0) + min(p.get("limit", 100), 500)]
+        return out[p.get("offset", 0) : p.get("offset", 0) + min(p.get("limit", 100), 500)]
 
     def _events(self, p):
-        rows = [e for e in self.events
-                if ("actor" not in p or e["actor"] == p["actor"]) and ("action" not in p or e["action"] == p["action"])
-                and ("file" not in p or p["file"].lower() in (e["fileName"] or "").lower())
-                and ("from" not in p or self._when(e["performedAt"]) >= self._when(p["from"]))
-                and ("to" not in p or self._when(e["performedAt"]) < self._when(p["to"]))]
+        rows = [
+            e
+            for e in self.events
+            if ("actor" not in p or e["actor"] == p["actor"])
+            and ("action" not in p or e["action"] == p["action"])
+            and ("file" not in p or p["file"].lower() in (e["fileName"] or "").lower())
+            and ("from" not in p or self._when(e["performedAt"]) >= self._when(p["from"]))
+            and ("to" not in p or self._when(e["performedAt"]) < self._when(p["to"]))
+        ]
         limit, offset = p.get("limit", 100), p.get("offset", 0)
-        return {"classification": self.classification, "total": len(rows), "limit": limit, "offset": offset,
-                "entries": rows[offset:offset + limit]}
+        return {
+            "classification": self.classification,
+            "total": len(rows),
+            "limit": limit,
+            "offset": offset,
+            "entries": rows[offset : offset + limit],
+        }
 
     def list_calls(self):
         return [c for c in self.calls if c[1] == "/api/csv/uploads"]
@@ -136,10 +169,21 @@ def _history(api, who="rita", **kw):
 def _apply(at, **fields):
     """Fill the filter form and press Apply."""
     for label, value in fields.items():
-        el = widget(at.text_input if label in ("File name contains", "Uploaded by", "Actor", "File") else
-                    at.selectbox if label in ("Status", "Action") else at.date_input, label)
-        (el.input if label in ("File name contains", "Uploaded by", "Actor", "File") else
-         el.select if label in ("Status", "Action") else el.set_value)(value)
+        el = widget(
+            at.text_input
+            if label in ("File name contains", "Uploaded by", "Actor", "File")
+            else at.selectbox
+            if label in ("Status", "Action")
+            else at.date_input,
+            label,
+        )
+        (
+            el.input
+            if label in ("File name contains", "Uploaded by", "Actor", "File")
+            else el.select
+            if label in ("Status", "Action")
+            else el.set_value
+        )(value)
     widget(at.button, "Apply").click().run()
     assert not at.exception, at.exception
     return at
@@ -160,10 +204,15 @@ def _last_list(api):
 
 # ── the list ──────────────────────────────────────────────────────────────────────────────
 
+
 def test_the_list_shows_every_import_newest_first_with_how_each_ended(api):
-    api.uploads = [_upload(1, "a.csv", "imported", total=3), _upload(2, "b.csv", "partly_imported", total=10, failed=4),
-                   _upload(3, "c.csv", "failed", total=5, failed=5), _upload(4, "d.csv", "rejected", total=None),
-                   _upload(5, "e.csv", "duplicate")]
+    api.uploads = [
+        _upload(1, "a.csv", "imported", total=3),
+        _upload(2, "b.csv", "partly_imported", total=10, failed=4),
+        _upload(3, "c.csv", "failed", total=5, failed=5),
+        _upload(4, "d.csv", "rejected", total=None),
+        _upload(5, "e.csv", "duplicate"),
+    ]
 
     at = _history(api)
 
@@ -184,6 +233,7 @@ def test_a_tenant_with_no_imports_is_told_so(api):
 
 # ── filters (React: audit-filters.test.ts) ────────────────────────────────────────────────
 
+
 def test_the_file_name_filter_is_sent_trimmed_and_matches_ignoring_case(api):
     api.uploads = [_upload(1, "Sales_2026.csv"), _upload(2, "people.csv")]
     at = _history(api)
@@ -195,7 +245,11 @@ def test_the_file_name_filter_is_sent_trimmed_and_matches_ignoring_case(api):
 
 
 def test_the_status_filter_asks_for_that_status_only(api):
-    api.uploads = [_upload(1, status="imported"), _upload(2, status="failed", failed=30), _upload(3, status="duplicate")]
+    api.uploads = [
+        _upload(1, status="imported"),
+        _upload(2, status="failed", failed=30),
+        _upload(3, status="duplicate"),
+    ]
     at = _history(api)
 
     _apply(at, Status="failed")
@@ -213,10 +267,12 @@ def test_the_uploader_filter(api):
 
 def test_the_date_range_includes_the_whole_of_the_last_day_and_nothing_after_it(api):
     day = date(2026, 11, 18)
-    api.uploads = [_upload(1, "late.csv", at=datetime(2026, 11, 18, 23, 59, tzinfo=timezone.utc)),
-                   _upload(2, "next.csv", at=datetime(2026, 11, 19, 0, 0, tzinfo=timezone.utc)),
-                   _upload(3, "early.csv", at=datetime(2026, 11, 17, 0, 0, tzinfo=timezone.utc)),
-                   _upload(4, "before.csv", at=datetime(2026, 11, 16, 23, 59, tzinfo=timezone.utc))]
+    api.uploads = [
+        _upload(1, "late.csv", at=datetime(2026, 11, 18, 23, 59, tzinfo=timezone.utc)),
+        _upload(2, "next.csv", at=datetime(2026, 11, 19, 0, 0, tzinfo=timezone.utc)),
+        _upload(3, "early.csv", at=datetime(2026, 11, 17, 0, 0, tzinfo=timezone.utc)),
+        _upload(4, "before.csv", at=datetime(2026, 11, 16, 23, 59, tzinfo=timezone.utc)),
+    ]
     at = _history(api)
 
     _apply(at, From=date(2026, 11, 17), To=day)
@@ -232,11 +288,13 @@ def test_filters_that_match_nothing_say_so_and_blank_filters_are_not_sent(api):
 
     at = _apply(at, **{"File name contains": "   "})
     assert len(_frame(at)) == 3, "blank again: everything is back"
-    assert all(c[3].get("file") == "no such file" or "file" not in c[3] for c in api.list_calls()), \
+    assert all(c[3].get("file") == "no such file" or "file" not in c[3] for c in api.list_calls()), (
         "a blank filter is never sent"
+    )
 
 
 # ── pages ─────────────────────────────────────────────────────────────────────────────────
+
 
 def test_the_list_pages_by_twenty_five_and_knows_there_is_a_next_page_without_a_count(api):
     api.uploads = [_upload(i, f"f{i:02}.csv") for i in range(1, 31)]
@@ -267,14 +325,32 @@ def test_applying_a_filter_goes_back_to_the_first_page(api):
 
 # ── one import: why rows failed (React: stored-row-errors.test.tsx) ───────────────────────
 
+
 def _failed_import(api, errors, failed=None, **extra):
-    api.uploads = [_upload(1, "bad.csv", "partly_imported", total=300, failed=failed or len(errors),
-                           reason="2 rows failed")]
-    api.details["1"] = {"id": "1", "fileName": "bad.csv", "status": "partly_imported", "totalRows": 300,
-                        "importedRows": 298, "failedRows": failed or len(errors), "rowErrors": errors,
-                        "logs": [{"ts": 1_795_000_000_123, "step": "cast_rows", "level": "warn",
-                                  "message": "2 rows failed validation", "count": 2}],
-                        "uploader": "alice", "state": "imported", **extra}
+    api.uploads = [
+        _upload(1, "bad.csv", "partly_imported", total=300, failed=failed or len(errors), reason="2 rows failed")
+    ]
+    api.details["1"] = {
+        "id": "1",
+        "fileName": "bad.csv",
+        "status": "partly_imported",
+        "totalRows": 300,
+        "importedRows": 298,
+        "failedRows": failed or len(errors),
+        "rowErrors": errors,
+        "logs": [
+            {
+                "ts": 1_795_000_000_123,
+                "step": "cast_rows",
+                "level": "warn",
+                "message": "2 rows failed validation",
+                "count": 2,
+            }
+        ],
+        "uploader": "alice",
+        "state": "imported",
+        **extra,
+    }
 
 
 def _open(at, uid="1"):
@@ -284,13 +360,20 @@ def _open(at, uid="1"):
 
 
 def test_choosing_an_import_lists_the_reasons_the_server_stored(api):
-    _failed_import(api, [{"rowNumber": 7, "column": "amount", "value": "x", "reason": '"x" is not a whole number'},
-                         {"rowNumber": 14, "column": "amount", "value": "y", "reason": '"y" is not a whole number'}])
+    _failed_import(
+        api,
+        [
+            {"rowNumber": 7, "column": "amount", "value": "x", "reason": '"x" is not a whole number'},
+            {"rowNumber": 14, "column": "amount", "value": "y", "reason": '"y" is not a whole number'},
+        ],
+    )
 
     at = _open(_history(api))
 
     assert at.subheader[0].value == "` bad.csv `"
-    assert "Partly imported · 2 of 300 rows failed · uploaded by alice · 2026-11-18 00:00 UTC" in [c.value for c in at.caption]
+    assert "Partly imported · 2 of 300 rows failed · uploaded by alice · 2026-11-18 00:00 UTC" in [
+        c.value for c in at.caption
+    ]
     assert [i.value for i in at.info] == ["Why: ` 2 rows failed `"]
     frame = at.table[1].value
     assert frame.index.name == "Row" and list(frame.columns) == ["Column", "Value", "Reason"]
@@ -300,13 +383,16 @@ def test_choosing_an_import_lists_the_reasons_the_server_stored(api):
 
 
 def test_it_says_so_when_the_server_kept_fewer_reasons_than_rows_failed(api):
-    _failed_import(api, [{"rowNumber": i, "column": "a", "value": "x", "reason": "bad"} for i in range(1, 201)], failed=351)
+    _failed_import(
+        api, [{"rowNumber": i, "column": "a", "value": "x", "reason": "bad"} for i in range(1, 201)], failed=351
+    )
 
     at = _open(_history(api))
 
     assert len(at.table[1].value) == 200
     assert "Showing the first 200 of 351 failed rows: the server keeps the reasons for the first 200 only." in [
-        c.value for c in at.caption]
+        c.value for c in at.caption
+    ]
 
 
 def test_it_says_so_when_no_reasons_were_stored(api):
@@ -321,6 +407,7 @@ def test_it_says_so_when_no_reasons_were_stored(api):
 
 def test_the_step_log_is_shown_in_utc_whatever_the_servers_own_zone(api, monkeypatch):
     import time
+
     monkeypatch.setenv("TZ", "Australia/Sydney")  # ten hours from UTC: local time would show
     if hasattr(time, "tzset"):  # not on Windows, where the zone cannot be changed from inside the process
         time.tzset()
@@ -348,8 +435,17 @@ def test_an_import_with_no_step_log_says_so(api):
 
 def test_a_rejected_import_offers_its_reason_as_a_report_even_with_no_row_errors(api):
     api.uploads = [_upload(1, "nope.csv", "rejected", total=None, reason="The file has no header row")]
-    api.details["1"] = {"id": "1", "fileName": "nope.csv", "status": "rejected", "totalRows": None, "failedRows": 0,
-                        "rowErrors": [], "logs": [], "uploader": "alice", "state": "rejected"}
+    api.details["1"] = {
+        "id": "1",
+        "fileName": "nope.csv",
+        "status": "rejected",
+        "totalRows": None,
+        "failedRows": 0,
+        "rowErrors": [],
+        "logs": [],
+        "uploader": "alice",
+        "state": "rejected",
+    }
 
     at = _open(_history(api))
 
@@ -374,6 +470,7 @@ def test_the_error_report_downloads_are_named_for_the_file(api):
 
 
 # ── a report of the whole filtered list ───────────────────────────────────────────────────
+
 
 def test_a_report_collects_every_matching_import_not_only_the_page(api):
     api.uploads = [_upload(i, f"f{i:04}.csv") for i in range(1, 1201)]
@@ -422,6 +519,7 @@ def test_the_report_asks_for_what_the_filters_ask_for(api):
 
 # ── the list is cached and never shared ───────────────────────────────────────────────────
 
+
 def test_the_list_is_fetched_once_for_many_reruns_and_again_on_refresh(api):
     at = _history(api)
     _open(at)
@@ -444,6 +542,7 @@ def test_one_sessions_list_is_never_shown_to_another(api):
 
 
 # ── a session the server ended, a server that is down ────────────────────────────────────
+
 
 def test_a_session_the_server_ended_signs_the_person_out_with_a_reason(api):
     api.dead.add("tok-1")
@@ -472,11 +571,21 @@ def test_an_api_that_is_down_says_so_instead_of_failing(api):
 
 # ── text from a file is shown as written ─────────────────────────────────────────────────
 
+
 def test_a_file_name_and_a_reason_that_look_like_links_show_as_written(api):
     evil = "[click](https://evil.example/login)"
     api.uploads = [_upload(1, f"{evil}.csv", "failed", failed=30, reason=f"see {evil}")]
-    api.details["1"] = {"id": "1", "fileName": f"{evil}.csv", "status": "failed", "totalRows": 30, "failedRows": 30,
-                        "rowErrors": [], "logs": [], "uploader": "alice", "state": "rejected"}
+    api.details["1"] = {
+        "id": "1",
+        "fileName": f"{evil}.csv",
+        "status": "failed",
+        "totalRows": 30,
+        "failedRows": 30,
+        "rowErrors": [],
+        "logs": [],
+        "uploader": "alice",
+        "state": "rejected",
+    }
 
     at = _open(_history(api))
 
@@ -486,10 +595,23 @@ def test_a_file_name_and_a_reason_that_look_like_links_show_as_written(api):
 
 # ── the server's audit events ────────────────────────────────────────────────────────────
 
+
 def _events(n=3):
-    return [{"id": str(i), "performedAt": (T0 - timedelta(minutes=i)).isoformat(), "actor": "rita" if i % 2 else "ada",
-             "action": "upload" if i % 2 else "import", "fileId": None, "fileName": f"f{i}.csv", "tableName": f"t{i}",
-             "mode": "dynamic", "before": None, "after": None} for i in range(1, n + 1)]
+    return [
+        {
+            "id": str(i),
+            "performedAt": (T0 - timedelta(minutes=i)).isoformat(),
+            "actor": "rita" if i % 2 else "ada",
+            "action": "upload" if i % 2 else "import",
+            "fileId": None,
+            "fileName": f"f{i}.csv",
+            "tableName": f"t{i}",
+            "mode": "dynamic",
+            "before": None,
+            "after": None,
+        }
+        for i in range(1, n + 1)
+    ]
 
 
 def _show_events(api, who="ada", n=3):
@@ -523,8 +645,15 @@ def test_the_events_filters_are_sent_as_the_react_panel_sent_them(api):
 
     _apply(at, Actor=" rita ", Action="upload", File="f1", From=date(2026, 11, 18), To=date(2026, 11, 18))
 
-    assert api.event_calls()[-1][3] == {"limit": 100, "offset": 0, "actor": "rita", "action": "upload", "file": "f1",
-                                        "from": "2026-11-18T00:00:00+00:00", "to": "2026-11-19T00:00:00+00:00"}
+    assert api.event_calls()[-1][3] == {
+        "limit": 100,
+        "offset": 0,
+        "actor": "rita",
+        "action": "upload",
+        "file": "f1",
+        "from": "2026-11-18T00:00:00+00:00",
+        "to": "2026-11-19T00:00:00+00:00",
+    }
     assert list(at.table[0].value["File"]) == ["` f1.csv `"]
     assert "1 event · OFFICIAL: Sensitive" in [c.value for c in at.caption]
 
@@ -587,16 +716,29 @@ def test_a_session_that_ends_while_reading_events_signs_out(api):
 
 # ── what the model asks and says ─────────────────────────────────────────────────────────
 
+
 def test_day_start_is_midnight_utc():
     assert h.day_start(date(2026, 3, 1)) == "2026-03-01T00:00:00+00:00"
 
 
 def test_params_leave_out_blank_filters_and_the_to_day_runs_to_the_next_midnight():
     assert h.uploads_params() == {"limit": 26, "offset": 0}
-    assert h.uploads_params(file=" a ", status="failed", uploader="", date_from=date(2026, 12, 31),
-                            date_to=date(2026, 12, 31), limit=5, offset=10) == {
-        "limit": 5, "offset": 10, "file": "a", "status": "failed", "from": "2026-12-31T00:00:00+00:00",
-        "to": "2027-01-01T00:00:00+00:00"}
+    assert h.uploads_params(
+        file=" a ",
+        status="failed",
+        uploader="",
+        date_from=date(2026, 12, 31),
+        date_to=date(2026, 12, 31),
+        limit=5,
+        offset=10,
+    ) == {
+        "limit": 5,
+        "offset": 10,
+        "file": "a",
+        "status": "failed",
+        "from": "2026-12-31T00:00:00+00:00",
+        "to": "2027-01-01T00:00:00+00:00",
+    }
 
 
 def test_an_events_download_is_not_paged():
@@ -610,14 +752,19 @@ def test_page_of_keeps_a_page_and_says_whether_more_follow():
     assert h.page_of([]) == ([], False)
 
 
-@pytest.mark.parametrize("have, cap, page, expect_rows, expect_capped, expect_calls", [
-    (0, 10, 4, 0, False, [(4, 0)]),
-    (7, 10, 4, 7, False, [(4, 0), (4, 4)]),
-    (10, 10, 4, 10, False, [(4, 0), (4, 4), (3, 8)]),   # exactly the cap: nothing more, so not cut short
-    (11, 10, 4, 10, True, [(4, 0), (4, 4), (3, 8)]),    # one more than the cap: cut short
-    (50, 10, 4, 10, True, [(4, 0), (4, 4), (3, 8)]),
-])
-def test_collect_stops_at_the_cap_and_knows_if_there_was_more(have, cap, page, expect_rows, expect_capped, expect_calls):
+@pytest.mark.parametrize(
+    "have, cap, page, expect_rows, expect_capped, expect_calls",
+    [
+        (0, 10, 4, 0, False, [(4, 0)]),
+        (7, 10, 4, 7, False, [(4, 0), (4, 4)]),
+        (10, 10, 4, 10, False, [(4, 0), (4, 4), (3, 8)]),  # exactly the cap: nothing more, so not cut short
+        (11, 10, 4, 10, True, [(4, 0), (4, 4), (3, 8)]),  # one more than the cap: cut short
+        (50, 10, 4, 10, True, [(4, 0), (4, 4), (3, 8)]),
+    ],
+)
+def test_collect_stops_at_the_cap_and_knows_if_there_was_more(
+    have, cap, page, expect_rows, expect_capped, expect_calls
+):
     calls = []
 
     def fetch(limit, offset):
@@ -631,11 +778,13 @@ def test_collect_stops_at_the_cap_and_knows_if_there_was_more(have, cap, page, e
 
 def test_the_statuses_offered_are_the_ones_the_api_knows():
     from api.routers.csv_routes import _UPLOAD_STATUSES
+
     assert {s for s, _ in h.STATUSES if s} == set(_UPLOAD_STATUSES)
 
 
 def test_the_actions_offered_are_the_ones_the_api_records():
     from api.services.audit import VALID_ACTIONS
+
     assert set(h.AUDIT_ACTIONS) == set(VALID_ACTIONS)
 
 
@@ -643,8 +792,11 @@ def test_outcome_line_covers_a_clean_a_partial_and_a_rejected_import():
     up = _upload(1)
     assert h.outcome_line(up, {"status": "imported", "totalRows": 1, "failedRows": 0}).startswith("Imported · 1 row · ")
     assert h.outcome_line(up, {"status": "partly_imported", "totalRows": None, "failedRows": 2}).startswith(
-        "Partly imported · 2 of ? rows failed")
-    assert h.outcome_line(_upload(1, status="rejected", uploader=None), {"status": "rejected"}).startswith("Rejected · ")
+        "Partly imported · 2 of ? rows failed"
+    )
+    assert h.outcome_line(_upload(1, status="rejected", uploader=None), {"status": "rejected"}).startswith(
+        "Rejected · "
+    )
 
 
 def test_errors_note_only_when_the_server_kept_fewer_than_failed():

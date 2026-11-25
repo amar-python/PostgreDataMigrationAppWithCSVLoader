@@ -10,6 +10,7 @@ What the scripts must do, checked from the repository (the clean-VM dry run, #60
 * smoke_test.sh checks /_stcore/health, and a Streamlit that does not answer "ok" is a FAIL;
 * docs/offline-install.md lists exactly the PASS lines the smoke test prints.
 """
+
 from __future__ import annotations
 
 import os
@@ -53,9 +54,14 @@ class BundleCarriesTheStreamlitWheels(unittest.TestCase):
 
     def test_the_flags_pin_cpython_312_manylinux_x86_64_binary_only(self):
         flags = re.search(r"WHEEL_FLAGS=\((.*?)\)", BUILD, re.S).group(1)
-        for flag in ("--only-binary=:all:", "--python-version 3.12", "--implementation cp",
-                     "--platform manylinux2014_x86_64", "--platform manylinux_2_17_x86_64",
-                     "--platform manylinux_2_28_x86_64"):
+        for flag in (
+            "--only-binary=:all:",
+            "--python-version 3.12",
+            "--implementation cp",
+            "--platform manylinux2014_x86_64",
+            "--platform manylinux_2_17_x86_64",
+            "--platform manylinux_2_28_x86_64",
+        ):
             with self.subTest(flag=flag):
                 self.assertIn(flag, flags)
 
@@ -72,9 +78,12 @@ class InstallAddsTheStreamlitService(unittest.TestCase):
     API_ENV = heredoc(INSTALL, '"$DEST/env"')
 
     def test_the_venv_is_built_offline_from_the_bundle(self):
-        self.assertRegex(INSTALL, r'streamlit-venv/bin/pip" install -q --no-index --find-links "\$BUNDLE/wheels" '
-                                  r'--require-hashes --no-deps \\\n'
-                                  r'\s+-r "\$DEST/app/streamlit_app/requirements\.lock"')
+        self.assertRegex(
+            INSTALL,
+            r'streamlit-venv/bin/pip" install -q --no-index --find-links "\$BUNDLE/wheels" '
+            r"--require-hashes --no-deps \\\n"
+            r'\s+-r "\$DEST/app/streamlit_app/requirements\.lock"',
+        )
 
     def test_the_unit_runs_streamlit_from_streamlit_app(self):
         self.assertRegex(self.UNIT, r"(?m)^ExecStart=\$DEST/streamlit-venv/bin/python -m streamlit run app\.py ")
@@ -139,10 +148,16 @@ esac
 class SmokeTestChecksStreamlit(unittest.TestCase):
     def _run(self, st_health: str) -> subprocess.CompletedProcess:
         with tempfile.TemporaryDirectory() as d:
-            env = {**os.environ, "PATH": f"{_fake_bin(Path(d), st_health)}:{os.environ['PATH']}",
-                   "SMOKE_TENANT": "main", "SMOKE_USER": "admin", "SMOKE_PASSWORD": "pw"}
-            return subprocess.run(["bash", str(OFFLINE / "smoke_test.sh")], capture_output=True, text=True,
-                                  env=env, timeout=60)
+            env = {
+                **os.environ,
+                "PATH": f"{_fake_bin(Path(d), st_health)}:{os.environ['PATH']}",
+                "SMOKE_TENANT": "main",
+                "SMOKE_USER": "admin",
+                "SMOKE_PASSWORD": "pw",
+            }
+            return subprocess.run(
+                ["bash", str(OFFLINE / "smoke_test.sh")], capture_output=True, text=True, env=env, timeout=60
+            )
 
     def test_a_healthy_streamlit_passes(self):
         res = self._run("ok")
@@ -166,7 +181,7 @@ class GuideMatchesTheSmokeTest(unittest.TestCase):
     def test_the_guide_lists_exactly_the_pass_lines_the_smoke_test_prints(self):
         printed = re.findall(r'pass "([^"]+)"', SMOKE)
         block = re.search(r"```\n(PASS  .*?)\n```", GUIDE, re.S).group(1)
-        self.assertEqual([ln[len("PASS  "):] for ln in block.splitlines()], printed)
+        self.assertEqual([ln[len("PASS  ") :] for ln in block.splitlines()], printed)
 
     def test_the_guide_gives_the_number_of_pass_lines(self):
         n = len(re.findall(r'pass "([^"]+)"', SMOKE))

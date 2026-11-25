@@ -61,19 +61,25 @@ def confirm(question: str) -> bool:
 def refusal(username: str, found: accounts.Existing) -> str | None:
     """Why this admin can never be created here, even by using an existing tenant."""
     if found.user and not found.member:
-        return (f"The username '{username}' is already in use (usernames are unique across all tenants), "
-                "so it was not created again. Nothing was changed.\n"
-                "Choose a different --username.")
+        return (
+            f"The username '{username}' is already in use (usernames are unique across all tenants), "
+            "so it was not created again. Nothing was changed.\n"
+            "Choose a different --username."
+        )
     return None
 
 
 def describe_existing(tenant: str, username: str, found: accounts.Existing) -> tuple[str, str]:
     """(what already exists, the question to ask) when the tenant is already there."""
     if found.member:
-        return (f"Tenant '{tenant}' already exists, and '{username}' is already a member of it.",
-                f"Use the existing tenant '{tenant}' as it is? (nothing will be created)")
-    return (f"Tenant '{tenant}' already exists, and '{username}' is not in it yet.",
-            f"Use the existing tenant '{tenant}' and add '{username}' as a tenant admin?")
+        return (
+            f"Tenant '{tenant}' already exists, and '{username}' is already a member of it.",
+            f"Use the existing tenant '{tenant}' as it is? (nothing will be created)",
+        )
+    return (
+        f"Tenant '{tenant}' already exists, and '{username}' is not in it yet.",
+        f"Use the existing tenant '{tenant}' and add '{username}' as a tenant admin?",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -81,10 +87,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--tenant", required=True, help="tenant slug: lowercase letters, digits, underscore")
     ap.add_argument("--name", required=True, help="tenant display name (ignored if the tenant already exists)")
     ap.add_argument("--username", required=True)
-    ap.add_argument("--allow-self-approval", action="store_true",
-                    help="let members approve data they uploaded or submitted (for a tenant with a single user)")
-    ap.add_argument("--use-existing", action="store_true",
-                    help="if the tenant already exists, use it without asking")
+    ap.add_argument(
+        "--allow-self-approval",
+        action="store_true",
+        help="let members approve data they uploaded or submitted (for a tenant with a single user)",
+    )
+    ap.add_argument("--use-existing", action="store_true", help="if the tenant already exists, use it without asking")
     args = ap.parse_args(argv)
     too_short = f"Password must be at least {accounts.MIN_PASSWORD} characters."
     env_password = os.environ.get("TE_ADMIN_PASSWORD")
@@ -107,8 +115,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(what, file=sys.stderr)
                 if not args.use_existing:
                     if not interactive():
-                        print("Nothing was changed. To use the existing tenant without being asked, "
-                              "run again with --use-existing.", file=sys.stderr)
+                        print(
+                            "Nothing was changed. To use the existing tenant without being asked, "
+                            "run again with --use-existing.",
+                            file=sys.stderr,
+                        )
                         return 1
                     if not confirm(question):
                         print("Nothing was changed.", file=sys.stderr)
@@ -136,8 +147,11 @@ def main(argv: list[str] | None = None) -> int:
             except psycopg2.errors.UniqueViolation:
                 # The checks above passed, then someone else created the same tenant or user.
                 conn.rollback()
-                print(f"Tenant '{args.tenant}' or username '{args.username}' was created by someone else "
-                      "while this ran. Nothing was changed.", file=sys.stderr)
+                print(
+                    f"Tenant '{args.tenant}' or username '{args.username}' was created by someone else "
+                    "while this ran. Nothing was changed.",
+                    file=sys.stderr,
+                )
                 return 1
         migrate_tenant(args.tenant)
     finally:
@@ -146,10 +160,12 @@ def main(argv: list[str] | None = None) -> int:
     if not found.tenant:
         print(f"Created tenant '{args.tenant}' (schema {schema}) with tenant admin '{args.username}'.")
     elif found.member:
-        print(f"Using the existing tenant '{args.tenant}' (schema {schema}). Nothing was created: "
-              f"'{args.username}' is already a member.\n"
-              f"To set a new password for '{args.username}': "
-              f"python scripts/reset_password.py --username {args.username}")
+        print(
+            f"Using the existing tenant '{args.tenant}' (schema {schema}). Nothing was created: "
+            f"'{args.username}' is already a member.\n"
+            f"To set a new password for '{args.username}': "
+            f"python scripts/reset_password.py --username {args.username}"
+        )
     else:
         print(f"Added tenant admin '{args.username}' to the existing tenant '{args.tenant}' (schema {schema}).")
     return 0

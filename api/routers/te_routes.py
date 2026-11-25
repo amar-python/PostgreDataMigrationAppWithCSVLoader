@@ -1,13 +1,14 @@
 """T&E schema endpoints — table list with row counts for the fixed 12 tables."""
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from api import policy
 from api.auth import allow, tenant_scope
 from api.config import TE_TABLES
-from api.tenancy import te_schema
 from api.db import Conn
-from typing import Any
+from api.tenancy import te_schema
 
 # BUG-035: auth is applied per-router (see csv_routes.py for the rationale).
 router = APIRouter(

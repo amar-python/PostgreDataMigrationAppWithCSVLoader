@@ -29,8 +29,14 @@ UPLOAD_TIMEOUT_SECONDS = 600  # an import of a big file takes a while; the shell
 
 # api/services/csv_parse.py ALLOWED_TYPES (a test fails if they drift), with the React app's labels.
 ALLOWED_TYPES = ("int8", "numeric", "date", "timestamptz", "boolean", "text")
-TYPE_LABELS = {"int8": "Whole number", "numeric": "Number", "date": "Date", "timestamptz": "Timestamp",
-               "boolean": "True/False", "text": "Text"}
+TYPE_LABELS = {
+    "int8": "Whole number",
+    "numeric": "Number",
+    "date": "Date",
+    "timestamptz": "Timestamp",
+    "boolean": "True/False",
+    "text": "Text",
+}
 
 DYNAMIC, TE = "dynamic", "te"
 MODE_LABELS = {DYNAMIC: "New table from this file", TE: "Test and Evaluation table"}
@@ -77,12 +83,17 @@ def prepare(name: str, raw: bytes, limit: int | None = None) -> Prepared:
         raise Refused(name, "is empty.")
     size = len(raw) - (3 if raw.startswith(b"\xef\xbb\xbf") else 0)  # what the API counts: the text, as UTF-8
     if size > limit:
-        raise Refused(name, f"is {format_bytes(size)}, over the {format_bytes(limit)} limit. Split it into smaller files.")
+        raise Refused(
+            name, f"is {format_bytes(size)}, over the {format_bytes(limit)} limit. Split it into smaller files."
+        )
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as e:
-        raise Refused(name, f"is not UTF-8 text: the byte at position {e.start} cannot be read. Save the file as "
-                            "UTF-8 and choose it again.") from None
+        raise Refused(
+            name,
+            f"is not UTF-8 text: the byte at position {e.start} cannot be read. Save the file as "
+            "UTF-8 and choose it again.",
+        ) from None
     return Prepared(name, raw, text, hashlib.sha256(raw).hexdigest()[:12])
 
 
@@ -94,7 +105,7 @@ def preview_text(prepared: Prepared, limit: int | None = None) -> tuple[str, boo
         return prepared.text, False
     cut = body[:limit]
     end = cut.rfind(b"\n")
-    cut = cut[:end + 1] if end > 0 else cut
+    cut = cut[: end + 1] if end > 0 else cut
     return cut.decode("utf-8", errors="ignore"), True
 
 
@@ -120,12 +131,24 @@ def ready(mode: str, confirmed: bool, target: str | None) -> bool:
     return bool(target) if mode == TE else bool(confirmed)
 
 
-def build_payload(prepared: Prepared, mode: str, *, types: list[str] | None = None, renames: list[str] | None = None,
-                  headers: list[str] | None = None, confirmed: bool = False, target: str | None = None) -> dict:
+def build_payload(
+    prepared: Prepared,
+    mode: str,
+    *,
+    types: list[str] | None = None,
+    renames: list[str] | None = None,
+    headers: list[str] | None = None,
+    confirmed: bool = False,
+    target: str | None = None,
+) -> dict:
     """The body of POST /api/csv/upload. A T&E load sends no types, no renames and no confirmation: the API refuses
     a header mapping or `typesConfirmed` there (422), because a T&E table has fixed columns."""
-    body: dict[str, object] = {"fileName": prepared.name, "content": prepared.text,
-                               "contentBase64": base64.b64encode(prepared.raw).decode("ascii"), "mode": mode}
+    body: dict[str, object] = {
+        "fileName": prepared.name,
+        "content": prepared.text,
+        "contentBase64": base64.b64encode(prepared.raw).decode("ascii"),
+        "mode": mode,
+    }
     if mode == TE:
         body["targetTable"] = target
         return body
@@ -159,8 +182,10 @@ def chosen_once(files: list[tuple[str, bytes]]) -> tuple[list[tuple[str, bytes]]
 def sample_frame(preview: dict) -> pd.DataFrame:
     """The server's sample rows as a table to show. `st.table` reads a cell, and a column heading, as Markdown, and
     this is a stranger's file: every text goes in a code span."""
-    frame = pd.DataFrame([[m.literal(c) if c else "" for c in row] for row in preview["sampleRows"]],
-                         columns=[m.literal(c) for c in preview["columns"]])
+    frame = pd.DataFrame(
+        [[m.literal(c) if c else "" for c in row] for row in preview["sampleRows"]],
+        columns=[m.literal(c) for c in preview["columns"]],
+    )
     frame.index = range(1, len(frame) + 1)
     return frame
 

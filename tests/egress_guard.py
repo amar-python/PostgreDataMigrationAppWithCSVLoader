@@ -29,7 +29,7 @@ def is_local(host) -> bool:
     if isinstance(host, bytes):
         host = host.decode("ascii", "replace")
     host = host.strip("[]")
-    if host == "localhost" or host.startswith("/"):   # a Unix socket directory, as libpq takes it
+    if host == "localhost" or host.startswith("/"):  # a Unix socket directory, as libpq takes it
         return True
     try:
         return ipaddress.ip_address(host).is_loopback
@@ -40,7 +40,9 @@ def is_local(host) -> bool:
 def check_local_database(host: str) -> None:
     """libpq's connection can't be intercepted from Python, so refuse a remote database host outright."""
     if not is_local(host):
-        raise EgressBlocked(f"The database host {host!r} is not on this machine; an egress-blocked run needs a local one.")
+        raise EgressBlocked(
+            f"The database host {host!r} is not on this machine; an egress-blocked run needs a local one."
+        )
 
 
 def _blocked(what: str) -> EgressBlocked:
@@ -51,10 +53,11 @@ def _blocked(what: str) -> EgressBlocked:
 def install() -> None:
     if _originals:
         return
-    _originals.update(connect=socket.socket.connect, connect_ex=socket.socket.connect_ex,
-                      getaddrinfo=socket.getaddrinfo)
+    _originals.update(
+        connect=socket.socket.connect, connect_ex=socket.socket.connect_ex, getaddrinfo=socket.getaddrinfo
+    )
 
-    unix = getattr(socket, "AF_UNIX", None)   # Windows' Python has none
+    unix = getattr(socket, "AF_UNIX", None)  # Windows' Python has none
 
     def check_address(sock, address, what):
         if (unix is not None and sock.family == unix) or not isinstance(address, tuple) or is_local(address[0]):
@@ -80,5 +83,8 @@ def install() -> None:
 def uninstall() -> None:
     if _originals:
         socket.socket.connect, socket.socket.connect_ex, socket.getaddrinfo = (
-            _originals["connect"], _originals["connect_ex"], _originals["getaddrinfo"])
+            _originals["connect"],
+            _originals["connect_ex"],
+            _originals["getaddrinfo"],
+        )
         _originals.clear()

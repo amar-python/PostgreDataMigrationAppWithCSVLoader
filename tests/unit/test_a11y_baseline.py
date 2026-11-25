@@ -3,6 +3,7 @@
 No browser: tests/accessibility/axe_baseline.py is pure. The scans themselves are in
 tests/accessibility/test_accessibility.py and run only in the accessibility CI job.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,8 +19,13 @@ pytestmark = pytest.mark.unit
 
 
 def _violation(rule: str, count: int, impact: str = "serious") -> dict:
-    return {"id": rule, "impact": impact, "help": f"help for {rule}", "helpUrl": f"https://axe/{rule}",
-            "nodes": [{"target": [f".n{i}"], "html": f"<b class='n{i}'>x</b>"} for i in range(count)]}
+    return {
+        "id": rule,
+        "impact": impact,
+        "help": f"help for {rule}",
+        "helpUrl": f"https://axe/{rule}",
+        "nodes": [{"target": [f".n{i}"], "html": f"<b class='n{i}'>x</b>"} for i in range(count)],
+    }
 
 
 def _entry(scenario: str, rule: str, nodes: int, note: str = "known") -> dict:

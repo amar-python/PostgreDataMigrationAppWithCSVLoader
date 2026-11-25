@@ -4,10 +4,12 @@ The line that matters most: a request that was sent and not answered in time (an
 not be reported as "can't reach the API". That wording would send a person to re-upload a file the server is
 still importing.
 """
+
 import pytest
 import requests
 
 from tests.unit import streamlit_harness  # noqa: F401  (puts streamlit_app on the path)
+
 # The imports below need the path the import above sets up, so the import sort must not move them up.
 # isort: split
 
@@ -89,12 +91,15 @@ def test_a_401_is_unauthorized_in_both_ways_of_calling(sent):
         api_client.download("GET", "/x", token="t")
 
 
-@pytest.mark.parametrize("reply, message", [
-    (Reply(413, {"detail": "File too large"}, reason="Payload Too Large"), "File too large"),
-    (Reply(500, None, reason="Internal Server Error"), "Internal Server Error"),
-    (Reply(422, {"detail": ["not", "a", "string"]}, reason="Unprocessable"), "Unprocessable"),
-    (Reply(502, {"detail": ""}, reason=""), "HTTP 502"),
-])
+@pytest.mark.parametrize(
+    "reply, message",
+    [
+        (Reply(413, {"detail": "File too large"}, reason="Payload Too Large"), "File too large"),
+        (Reply(500, None, reason="Internal Server Error"), "Internal Server Error"),
+        (Reply(422, {"detail": ["not", "a", "string"]}, reason="Unprocessable"), "Unprocessable"),
+        (Reply(502, {"detail": ""}, reason=""), "HTTP 502"),
+    ],
+)
 def test_an_error_says_what_the_api_said_or_a_plain_fallback(sent, reply, message):
     _, outcome = sent
     outcome["reply"] = reply

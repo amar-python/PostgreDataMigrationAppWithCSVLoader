@@ -9,6 +9,7 @@ These run the real assemble step on fake tarballs in a scratch copy of container
 repository's dist/. `tooling` only: they need bash, and the Windows job selects unit/regression (on its runner `bash`
 is WSL's, with no distribution installed).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -59,8 +60,14 @@ def assemble(repo: Path, *tars: str, require: bool = False) -> subprocess.Comple
     env.pop("TE_REQUIRE_SBOM", None)
     if require:
         env["TE_REQUIRE_SBOM"] = "1"
-    return subprocess.run(["bash", str(repo / "container" / "build_bundle.sh"), "assemble", *tars], cwd=repo, env=env,
-                          capture_output=True, text=True, timeout=120)
+    return subprocess.run(
+        ["bash", str(repo / "container" / "build_bundle.sh"), "assemble", *tars],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
 
 
 def bundle(repo: Path) -> Path:
@@ -86,8 +93,10 @@ def checksums_verify(folder: Path) -> list[str]:
 
 
 def listed(repo: Path) -> list[str]:
-    return [line.split(None, 1)[1].lstrip("*").strip()
-            for line in (bundle(repo) / "SHA256SUMS").read_text(encoding="utf-8").splitlines()]
+    return [
+        line.split(None, 1)[1].lstrip("*").strip()
+        for line in (bundle(repo) / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
+    ]
 
 
 def test_a_bundle_with_no_sbom_builds_as_it_always_did(repo):

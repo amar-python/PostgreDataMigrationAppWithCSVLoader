@@ -18,15 +18,15 @@ import hashlib
 import logging
 
 from psycopg2 import sql
+from psycopg2.extensions import cursor
 from psycopg2.extras import Json, execute_values
 
 from api.config import settings
 from api.db import Conn, fetch_one
 from api.services.audit import coerce_file_id, current_actor
 from api.services.csv_parse import parse_csv
-from api.tenancy import uploads_schema
-from psycopg2.extensions import cursor
 from api.services.results import DuplicateFlag, LoadResult
+from api.tenancy import uploads_schema
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,16 @@ def outcome(result: LoadResult) -> str:
     return _STATUS.get(str(status), "failed")
 
 
-def store_upload(cur: cursor, file_name: str, content: str, mode: str, result: LoadResult, *,
-                 original: bytes | None = None, flags: list[DuplicateFlag] | None = None) -> int:
+def store_upload(
+    cur: cursor,
+    file_name: str,
+    content: str,
+    mode: str,
+    result: LoadResult,
+    *,
+    original: bytes | None = None,
+    flags: list[DuplicateFlag] | None = None,
+) -> int:
     """Insert the upload, its bytes, its parsed rows and any row flags using the caller's cursor.
 
     Raises on failure and doesn't commit: the staged flow (M6) treats a failed store as a failed
@@ -58,34 +66,76 @@ def store_upload(cur: cursor, file_name: str, content: str, mode: str, result: L
     # Keep the reason a rejected or failed attempt was given, so reports can say why (M7, BR-35).
     if result.get("message") and not ok and not any(entry.get("message") == result["message"] for entry in logs):
         logs.append({"step": "result", "level": "error", "message": result["message"]})
-    cur.execute(sql.SQL(
-        "INSERT INTO {}.uploads (file_name, sha256, byte_size, uploader, mode, status, "
-        "total_rows, imported_rows, failed_rows, csv_file_id, row_errors, logs, columns, column_types, "
-        "types_provenance) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id").format(s),
-        (file_name, hashlib.sha256(data).hexdigest(), len(data), current_actor(), mode,
-         outcome(result), result.get("totalRows"), result.get("insertedRows"),
-         result.get("failedRows"), coerce_file_id(result.get("fileId")) if ok else None,
-         Json((result.get("rowErrors") or [])[:settings.MAX_ROW_ERRORS_REPORTED]),
-         Json(logs), result.get("columns"), result.get("types"), result.get("typesProvenance")))
+    cur.execute(
+        sql.SQL(
+            "INSERT INTO {}.uploads (file_name, sha256, byte_size, uploader, mode, status, "
+            "total_rows, imported_rows, failed_rows, csv_file_id, row_errors, logs, columns, column_types, "
+            "types_provenance) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id"
+        ).format(s),
+        (
+            file_name,
+            hashlib.sha256(data).hexdigest(),
+            len(data),
+            current_actor(),
+            mode,
+            outcome(result),
+            result.get("totalRows"),
+            result.get("insertedRows"),
+            result.get("failedRows"),
+            coerce_file_id(result.get("fileId")) if ok else None,
+            Json((result.get("rowErrors") or [])[: settings.MAX_ROW_ERRORS_REPORTED]),
+            Json(logs),
+            result.get("columns"),
+            result.get("types"),
+            result.get("typesProvenance"),
+        ),
+    )
     upload_id = int(fetch_one(cur)[0])
-    cur.execute(sql.SQL("INSERT INTO {}.upload_blobs (upload_id, content) VALUES (%s, %s)").format(s),
-                (upload_id, data))
+    cur.execute(
+        sql.SQL("INSERT INTO {}.upload_blobs (upload_id, content) VALUES (%s, %s)").format(s), (upload_id, data)
+    )
     rows = parse_csv(content)  # ponytail: second parse after the loader's; share it if uploads get slow
     if rows:
-        execute_values(cur, sql.SQL("INSERT INTO {}.source_rows (upload_id, row_number, cells) VALUES %s")
-                       .format(s).as_string(cur), [(upload_id, n, r) for n, r in enumerate(rows)],
-                       page_size=1000)
+        execute_values(
+            cur,
+            sql.SQL("INSERT INTO {}.source_rows (upload_id, row_number, cells) VALUES %s").format(s).as_string(cur),
+            [(upload_id, n, r) for n, r in enumerate(rows)],
+            page_size=1000,
+        )
     if flags:
-        execute_values(cur, sql.SQL("INSERT INTO {}.row_flags (upload_id, row_number, kind, "
-                                    "matched_file_id, matched_file_name, matched_version) VALUES %s")
-                       .format(s).as_string(cur),
-                       [(upload_id, f["rowNumber"], "duplicate_of_earlier_version", int(f["matchedFileId"]),
-                         f["matchedFileName"], f["matchedVersion"]) for f in flags], page_size=1000)
+        execute_values(
+            cur,
+            sql.SQL(
+                "INSERT INTO {}.row_flags (upload_id, row_number, kind, "
+                "matched_file_id, matched_file_name, matched_version) VALUES %s"
+            )
+            .format(s)
+            .as_string(cur),
+            [
+                (
+                    upload_id,
+                    f["rowNumber"],
+                    "duplicate_of_earlier_version",
+                    int(f["matchedFileId"]),
+                    f["matchedFileName"],
+                    f["matchedVersion"],
+                )
+                for f in flags
+            ],
+            page_size=1000,
+        )
     return upload_id
 
 
-def record_upload(file_name: str, content: str, mode: str, result: LoadResult, *,
-                  original: bytes | None = None, flags: list[DuplicateFlag] | None = None) -> int | None:
+def record_upload(
+    file_name: str,
+    content: str,
+    mode: str,
+    result: LoadResult,
+    *,
+    original: bytes | None = None,
+    flags: list[DuplicateFlag] | None = None,
+) -> int | None:
     """Record an attempt that loaded nothing, in its own transaction. Returns the upload id, or None on failure."""
     try:
         with Conn() as conn:

@@ -18,6 +18,7 @@ Run::
 Requires a provisioned dev environment:
     bash scripts/provision_full_test_env.sh
 """
+
 from __future__ import annotations
 
 import os
@@ -72,16 +73,18 @@ class TeUploadOrganisations(unittest.TestCase):
         # so the suite does not pollute the dev seed data
         if cls._inserted:
             try:
-                from api.db import Conn
                 from psycopg2 import sql
+
                 from api.config import settings
+                from api.db import Conn
+
                 with Conn() as conn:
                     with conn.cursor() as cur:
                         for name in cls._inserted:
                             cur.execute(
-                                sql.SQL(
-                                    "DELETE FROM {}.organisations WHERE name = %s"
-                                ).format(sql.Identifier(settings.TE_SCHEMA)),
+                                sql.SQL("DELETE FROM {}.organisations WHERE name = %s").format(
+                                    sql.Identifier(settings.TE_SCHEMA)
+                                ),
                                 (name,),
                             )
                     conn.commit()
@@ -91,19 +94,16 @@ class TeUploadOrganisations(unittest.TestCase):
 
     def _make_csv(self, n_rows: int = 1) -> tuple[str, list[str]]:
         """Return (csv_content, list_of_inserted_names)."""
-        names = [f"TE_TEST_{os.getpid()}_{i}_{self._testMethodName[:20]}"
-                 for i in range(n_rows)]
+        names = [f"TE_TEST_{os.getpid()}_{i}_{self._testMethodName[:20]}" for i in range(n_rows)]
         rows = "\n".join(f"{n},government,AU" for n in names)
         content = f"{ORG_HEADER}\n{rows}\n"
         return content, names
 
-    def _upload_te(self, content: str, target: str = TARGET,
-                   file_name: str | None = None) -> dict:
+    def _upload_te(self, content: str, target: str = TARGET, file_name: str | None = None) -> dict:
         name = file_name or f"te_{os.getpid()}_{self._testMethodName[:30]}.csv"
         r = self.client.post(
             "/api/csv/upload",
-            json={"fileName": name, "content": content,
-                  "mode": "te", "targetTable": target},
+            json={"fileName": name, "content": content, "mode": "te", "targetTable": target},
         )
         self.assertEqual(r.status_code, 200, r.text[:300])
         return r.json()
@@ -132,10 +132,10 @@ class TeUploadOrganisations(unittest.TestCase):
         self.__class__._inserted.extend(names)
         body = self._upload_te(content)
         self.assertEqual(body["status"], "ok", body)
-        self.assertIn(".", body.get("tableName", ""),
-                      "tableName must be schema-qualified")
-        self.assertTrue(body["tableName"].endswith(f".{TARGET}"),
-                        f"tableName should end with .{TARGET}, got {body['tableName']}")
+        self.assertIn(".", body.get("tableName", ""), "tableName must be schema-qualified")
+        self.assertTrue(
+            body["tableName"].endswith(f".{TARGET}"), f"tableName should end with .{TARGET}, got {body['tableName']}"
+        )
 
     def test_rows_are_queryable_after_upload(self):
         """Inserted rows must appear in the T&E table row count."""
@@ -146,10 +146,8 @@ class TeUploadOrganisations(unittest.TestCase):
         te_r = self.client.get("/api/te/tables")
         self.assertEqual(te_r.status_code, 200, te_r.text[:200])
         tables = {row["table"]: row for row in te_r.json()}
-        self.assertIn(TARGET, tables,
-                      f"'{TARGET}' not in /api/te/tables response")
-        self.assertGreater(tables[TARGET]["rowCount"], 0,
-                           f"T&E table '{TARGET}' has 0 rows after upload")
+        self.assertIn(TARGET, tables, f"'{TARGET}' not in /api/te/tables response")
+        self.assertGreater(tables[TARGET]["rowCount"], 0, f"T&E table '{TARGET}' has 0 rows after upload")
 
     def test_core_te_tables_undisturbed_after_upload(self):
         """A T&E upload must not drop or alter the other 11 core tables."""
@@ -162,8 +160,7 @@ class TeUploadOrganisations(unittest.TestCase):
         tables = {t["table"]: t for t in te_r.json()}
         for tbl in ["requirements", "test_cases", "defect_reports"]:
             self.assertIn(tbl, tables, f"Core table '{tbl}' missing after T&E upload")
-            self.assertTrue(tables[tbl]["exists"],
-                            f"Core table '{tbl}' no longer exists after T&E upload")
+            self.assertTrue(tables[tbl]["exists"], f"Core table '{tbl}' no longer exists after T&E upload")
 
     # ── cleanup on re-upload ──────────────────────────────────────────────
 
@@ -178,18 +175,15 @@ class TeUploadOrganisations(unittest.TestCase):
         content_v2 = content.replace(names[0], names[0] + "_v2")
         self.__class__._inserted.append(names[0] + "_v2")
 
-        first  = self._upload_te(content, file_name=fname)
+        first = self._upload_te(content, file_name=fname)
         second = self._upload_te(content_v2, file_name=fname)
 
-        self.assertEqual(first["status"],  "ok", first)
+        self.assertEqual(first["status"], "ok", first)
         self.assertEqual(second["status"], "ok", second)
 
         files = self.client.get("/api/csv/files").json()
         matches = [f for f in files if f["file_name"] == fname]
-        self.assertLessEqual(
-            len(matches), 1,
-            f"Re-upload left {len(matches)} registry entries for the same file"
-        )
+        self.assertLessEqual(len(matches), 1, f"Re-upload left {len(matches)} registry entries for the same file")
 
     # ── guard rails ───────────────────────────────────────────────────────
 
@@ -202,9 +196,10 @@ class TeUploadOrganisations(unittest.TestCase):
 
     def test_empty_file_is_rejected(self):
         """Empty CSV is rejected — 422 from Pydantic min_length or status=error."""
-        r = self.client.post("/api/csv/upload", json={
-            "fileName": f"te_{os.getpid()}_empty.csv",
-            "content": "", "mode": "te", "targetTable": TARGET})
+        r = self.client.post(
+            "/api/csv/upload",
+            json={"fileName": f"te_{os.getpid()}_empty.csv", "content": "", "mode": "te", "targetTable": TARGET},
+        )
         if r.status_code == 422:
             pass  # Pydantic min_length=1 guard — valid rejection
         else:
@@ -226,9 +221,11 @@ class TeUploadOrganisations(unittest.TestCase):
         """mode=te with no targetTable must return 422 from the API layer."""
         r = self.client.post(
             "/api/csv/upload",
-            json={"fileName": f"te_{os.getpid()}.csv",
-                  "content": f"{ORG_HEADER}\n{ORG_ROW_TPL.format(pid=os.getpid(), n=0)}\n",
-                  "mode": "te"},
+            json={
+                "fileName": f"te_{os.getpid()}.csv",
+                "content": f"{ORG_HEADER}\n{ORG_ROW_TPL.format(pid=os.getpid(), n=0)}\n",
+                "mode": "te",
+            },
         )
         self.assertEqual(r.status_code, 422, r.text[:200])
 
@@ -264,15 +261,17 @@ class DynamicOverwriteOfTeOriginFile(unittest.TestCase):
     def tearDownClass(cls):
         if cls._inserted:
             try:
-                from api.db import Conn
                 from psycopg2 import sql
+
+                from api.db import Conn
+
                 with Conn() as conn:
                     with conn.cursor() as cur:
                         for name in cls._inserted:
                             cur.execute(
-                                sql.SQL(
-                                    "DELETE FROM {}.organisations WHERE name = %s"
-                                ).format(sql.Identifier(settings.TE_SCHEMA)),
+                                sql.SQL("DELETE FROM {}.organisations WHERE name = %s").format(
+                                    sql.Identifier(settings.TE_SCHEMA)
+                                ),
                                 (name,),
                             )
                     conn.commit()
@@ -309,7 +308,8 @@ class DynamicOverwriteOfTeOriginFile(unittest.TestCase):
             },
         ).json()
         self.assertEqual(
-            dynamic_body["status"], "ok",
+            dynamic_body["status"],
+            "ok",
             f"dynamic-mode overwrite of a TE-origin file must succeed: {dynamic_body}",
         )
         self.assertTrue(dynamic_body["tableName"].startswith("csv_"), dynamic_body)
@@ -317,7 +317,8 @@ class DynamicOverwriteOfTeOriginFile(unittest.TestCase):
         files = self.client.get("/api/csv/files").json()
         matches = [f for f in files if f["file_name"] == fname]
         self.assertEqual(
-            sorted(m["mode"] for m in matches), ["dynamic", "te"],
+            sorted(m["mode"] for m in matches),
+            ["dynamic", "te"],
             f"expected the T&E entry and the new dynamic dataset for {fname!r}, found {matches}",
         )
 

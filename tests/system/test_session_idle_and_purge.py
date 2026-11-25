@@ -13,6 +13,7 @@ without one):
   * ``scripts/purge_sessions.py`` does the same from the command line, and the API purges once at start-up without a
     purge failure ever stopping it from starting.
 """
+
 from __future__ import annotations
 
 import logging
@@ -52,8 +53,11 @@ class _Sessions(_Accounts):
     def _set(self, token: str, **ages) -> None:
         """Move columns of one session into the past: ``last_seen_at=timedelta`` style, given as SQL intervals."""
         for column, interval in ages.items():
-            self._exec(f"UPDATE {{c}}.sessions SET {column} = now() - %s::interval WHERE token_hash = %s",
-                       interval, accounts._token_hash(token))
+            self._exec(
+                f"UPDATE {{c}}.sessions SET {column} = now() - %s::interval WHERE token_hash = %s",
+                interval,
+                accounts._token_hash(token),
+            )
 
     def _gone(self, token: str) -> bool:
         return not self._fetch("SELECT 1 FROM {c}.sessions WHERE token_hash = %s", accounts._token_hash(token))
@@ -75,7 +79,7 @@ class IdleTimeout(_Sessions):
         self.assertEqual((res.status_code, res.json()["detail"]), (401, UNAUTHORISED))
 
     def test_a_session_idle_past_the_limit_is_refused_on_a_data_route_too(self):
-        migrate_tenant(self.tenant)    # real tenants always have their schema; the data route reads from it
+        migrate_tenant(self.tenant)  # real tenants always have their schema; the data route reads from it
         token = self._token()
         self.assertEqual(self._files(token).status_code, 200, "an active session reaches the route")
         self._set(token, last_seen_at="31 minutes")
@@ -102,16 +106,20 @@ class IdleTimeout(_Sessions):
 
     def test_the_absolute_expiry_still_applies_to_an_active_session(self):
         token = self._token()
-        self._exec("UPDATE {c}.sessions SET expires_at = now() - interval '1 second' WHERE token_hash = %s",
-                   accounts._token_hash(token))
+        self._exec(
+            "UPDATE {c}.sessions SET expires_at = now() - interval '1 second' WHERE token_hash = %s",
+            accounts._token_hash(token),
+        )
         self.assertEqual(self._me(token).status_code, 401)
 
     def test_activity_refreshes_last_seen_and_it_is_committed(self):
         token = self._token()
         self._set(token, last_seen_at="10 minutes")
         self.assertEqual(self._me(token).status_code, 200)
-        (age,), = self._fetch("SELECT extract(epoch FROM now() - last_seen_at) FROM {c}.sessions WHERE token_hash = %s",
-                              accounts._token_hash(token))   # a different connection: only a commit shows
+        ((age,),) = self._fetch(
+            "SELECT extract(epoch FROM now() - last_seen_at) FROM {c}.sessions WHERE token_hash = %s",
+            accounts._token_hash(token),
+        )  # a different connection: only a commit shows
         self.assertLess(age, 60, f"last_seen_at was not refreshed (still {age:.0f} s old)")
 
     def test_a_request_inside_the_throttle_does_not_write(self):
@@ -140,9 +148,18 @@ class Purge(_Sessions):
 
     def _kinds(self) -> dict[str, str]:
         """One session of each kind, for the same user: name -> token."""
-        kinds = {name: self._token() for name in (
-            "live", "expired_long_ago", "expired_recently", "revoked_long_ago", "revoked_recently",
-            "idle_long_ago", "idle_recently")}
+        kinds = {
+            name: self._token()
+            for name in (
+                "live",
+                "expired_long_ago",
+                "expired_recently",
+                "revoked_long_ago",
+                "revoked_recently",
+                "idle_long_ago",
+                "idle_recently",
+            )
+        }
         self._set(kinds["expired_long_ago"], expires_at="2 days")
         self._set(kinds["expired_recently"], expires_at="1 hour")
         self._set(kinds["revoked_long_ago"], revoked_at="2 days")
@@ -164,8 +181,14 @@ class Purge(_Sessions):
         kinds = self._kinds()
         with mock.patch.object(settings, "SESSION_PURGE_GRACE_DAYS", 0):
             self._purge()
-        for name in ("expired_long_ago", "expired_recently", "revoked_long_ago", "revoked_recently",
-                     "idle_long_ago", "idle_recently"):
+        for name in (
+            "expired_long_ago",
+            "expired_recently",
+            "revoked_long_ago",
+            "revoked_recently",
+            "idle_long_ago",
+            "idle_recently",
+        ):
             self.assertTrue(self._gone(kinds[name]), f"{name} should have been purged with no grace")
         self.assertFalse(self._gone(kinds["live"]))
 
@@ -196,8 +219,14 @@ class PurgeScript(_Sessions):
     def test_the_script_purges_and_reports(self):
         old, live = self._token(), self._token()
         self._set(old, expires_at="3 days")
-        done = subprocess.run([sys.executable, "scripts/purge_sessions.py"], cwd=ROOT, env={**os.environ},
-                              capture_output=True, text=True, timeout=120)
+        done = subprocess.run(
+            [sys.executable, "scripts/purge_sessions.py"],
+            cwd=ROOT,
+            env={**os.environ},
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertRegex(done.stdout, r"Purged \d+ session")
         self.assertTrue(self._gone(old))
@@ -215,23 +244,31 @@ class StartUp(unittest.TestCase):
                 tid = accounts.create_tenant(cur, f"su_{tag}", "Startup tenant")
                 uid = accounts.create_user(cur, f"su_user_{tag}", _PW)
                 accounts.add_membership(cur, uid, tid, "uploader")
-                cur.execute(sql.SQL("INSERT INTO {c}.sessions (token_hash, user_id, tenant_id, expires_at) "
-                                    "VALUES (%s, %s, %s, now() - interval '5 days')")
-                            .format(c=sql.Identifier(settings.CONTROL_SCHEMA)), (f"th_{tag}", uid, tid))
+                cur.execute(
+                    sql.SQL(
+                        "INSERT INTO {c}.sessions (token_hash, user_id, tenant_id, expires_at) "
+                        "VALUES (%s, %s, %s, now() - interval '5 days')"
+                    ).format(c=sql.Identifier(settings.CONTROL_SCHEMA)),
+                    (f"th_{tag}", uid, tid),
+                )
             conn.commit()
         return f"th_{tag}"
 
     def _exists(self, token_hash: str) -> bool:
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("SELECT 1 FROM {c}.sessions WHERE token_hash = %s")
-                        .format(c=sql.Identifier(settings.CONTROL_SCHEMA)), (token_hash,))
+            cur.execute(
+                sql.SQL("SELECT 1 FROM {c}.sessions WHERE token_hash = %s").format(
+                    c=sql.Identifier(settings.CONTROL_SCHEMA)
+                ),
+                (token_hash,),
+            )
             return cur.fetchone() is not None
 
     def test_start_up_removes_old_sessions(self):
-        with TestClient(app):          # the pool is open only while a client is; leaving it closes the pool
+        with TestClient(app):  # the pool is open only while a client is; leaving it closes the pool
             token_hash = self._make_expired_session()
             self.assertTrue(self._exists(token_hash))
-        with TestClient(app):          # starting again purges
+        with TestClient(app):  # starting again purges
             self.assertFalse(self._exists(token_hash), "the API did not purge on start-up")
 
     def test_a_purge_failure_does_not_stop_start_up(self):

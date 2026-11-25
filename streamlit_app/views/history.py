@@ -65,8 +65,11 @@ def render() -> None:
     st.title("Import history")
     st.caption("Every upload in this tenant, from the server, whoever made it and from whichever browser.")
     views = VIEWS if auth.can("read_audit") else VIEWS[:1]
-    view = st.radio("Show", views, horizontal=True, label_visibility="collapsed", key="history_view") \
-        if len(views) > 1 else views[0]
+    view = (
+        st.radio("Show", views, horizontal=True, label_visibility="collapsed", key="history_view")
+        if len(views) > 1
+        else views[0]
+    )
     if view == VIEWS[0]:
         _imports(auth.current()["token"])
     else:
@@ -74,6 +77,7 @@ def render() -> None:
 
 
 # ── the imports ─────────────────────────────────────────────────────────────────────────────
+
 
 def _move(key: str, step: int) -> None:
     st.session_state[key] = max(0, st.session_state.get(key, 0) + step)
@@ -89,8 +93,13 @@ def _imports(token: str) -> None:
         date_to = right.date_input("To", value=None)
         applied = st.form_submit_button("Apply")
     if applied:
-        st.session_state[FILTERS] = {"file": file, "status": status, "uploader": uploader,
-                                     "date_from": date_from, "date_to": date_to}
+        st.session_state[FILTERS] = {
+            "file": file,
+            "status": status,
+            "uploader": uploader,
+            "date_from": date_from,
+            "date_to": date_to,
+        }
         st.session_state[PAGE] = 0
     filters = st.session_state.get(FILTERS, {})
     page = st.session_state.get(PAGE, 0)
@@ -116,8 +125,13 @@ def _imports(token: str) -> None:
 
     st.divider()
     labels = {u["id"]: h.import_label(u) for u in uploads}
-    chosen = st.selectbox("Details of an import", list(labels), index=None, format_func=labels.__getitem__,
-                          placeholder="Choose an import to see why rows failed")
+    chosen = st.selectbox(
+        "Details of an import",
+        list(labels),
+        index=None,
+        format_func=labels.__getitem__,
+        placeholder="Choose an import to see why rows failed",
+    )
     if chosen is not None:
         _detail(next(u for u in uploads if u["id"] == chosen))
 
@@ -127,12 +141,19 @@ def _history_report(filters: dict) -> None:
     key = repr(sorted((k, str(v)) for k, v in filters.items()))
     prepared = st.session_state.get(PREPARED)
     if st.button("Prepare a report of all matching imports"):
-        rows, capped = h.collect(lambda limit, offset: _read(
-            "GET", "/api/csv/uploads", params=h.uploads_params(**filters, limit=limit, offset=offset)))
+        rows, capped = h.collect(
+            lambda limit, offset: _read(
+                "GET", "/api/csv/uploads", params=h.uploads_params(**filters, limit=limit, offset=offset)
+            )
+        )
         report = exports.history_rows(rows)
-        prepared = {"key": key, "count": len(rows), "capped": capped,
-                    "csv": exports.to_csv(exports.HISTORY_HEADERS, report),
-                    "xlsx": exports.to_xlsx("History", exports.HISTORY_HEADERS, report)}
+        prepared = {
+            "key": key,
+            "count": len(rows),
+            "capped": capped,
+            "csv": exports.to_csv(exports.HISTORY_HEADERS, report),
+            "xlsx": exports.to_xlsx("History", exports.HISTORY_HEADERS, report),
+        }
         st.session_state[PREPARED] = prepared
     if prepared and prepared["key"] == key:
         n = prepared["count"]
@@ -140,7 +161,9 @@ def _history_report(filters: dict) -> None:
         st.caption(f"Report of {n} import{'' if n == 1 else 's'}" + cut_short)
         one, two, _ = st.columns([1, 1, 4])
         one.download_button("Download CSV", prepared["csv"], exports.report_name("history", "csv"), exports.CSV_TYPE)
-        two.download_button("Download XLSX", prepared["xlsx"], exports.report_name("history", "xlsx"), exports.XLSX_TYPE)
+        two.download_button(
+            "Download XLSX", prepared["xlsx"], exports.report_name("history", "xlsx"), exports.XLSX_TYPE
+        )
 
 
 def _detail(upload: dict) -> None:
@@ -154,7 +177,7 @@ def _detail(upload: dict) -> None:
     errors = detail.get("rowErrors") or []
     if errors:
         st.markdown("**Rows that failed**")
-        st.table(h.errors_frame(errors[:h.ERROR_ROWS_SHOWN]))
+        st.table(h.errors_frame(errors[: h.ERROR_ROWS_SHOWN]))
         note = h.errors_note(min(len(errors), h.ERROR_ROWS_SHOWN), detail.get("failedRows"))
         if note:
             st.caption(note)
@@ -163,12 +186,20 @@ def _detail(upload: dict) -> None:
     report = exports.error_rows(detail["fileName"], errors, reason if not errors else None)
     if report:
         one, two, _ = st.columns([1, 1, 4])
-        one.download_button("Error report (CSV)", exports.to_csv(exports.ERROR_HEADERS, report),
-                            exports.report_name("errors", "csv", detail["fileName"]), exports.CSV_TYPE,
-                            key=f"history_errors_csv_{uid}")
-        two.download_button("Error report (XLSX)", exports.to_xlsx("Errors", exports.ERROR_HEADERS, report),
-                            exports.report_name("errors", "xlsx", detail["fileName"]), exports.XLSX_TYPE,
-                            key=f"history_errors_xlsx_{uid}")
+        one.download_button(
+            "Error report (CSV)",
+            exports.to_csv(exports.ERROR_HEADERS, report),
+            exports.report_name("errors", "csv", detail["fileName"]),
+            exports.CSV_TYPE,
+            key=f"history_errors_csv_{uid}",
+        )
+        two.download_button(
+            "Error report (XLSX)",
+            exports.to_xlsx("Errors", exports.ERROR_HEADERS, report),
+            exports.report_name("errors", "xlsx", detail["fileName"]),
+            exports.XLSX_TYPE,
+            key=f"history_errors_xlsx_{uid}",
+        )
     with st.expander("What the server did, step by step"):
         logs = detail.get("logs") or []
         if logs:
@@ -180,6 +211,7 @@ def _detail(upload: dict) -> None:
 
 # ── the server's audit events ───────────────────────────────────────────────────────────────
 
+
 def _events() -> None:
     with st.form("history_events"):
         left, right = st.columns(2)
@@ -190,8 +222,13 @@ def _events() -> None:
         date_to = right.date_input("To", value=None)
         applied = st.form_submit_button("Apply")
     if applied:
-        st.session_state[EVENT_FILTERS] = {"actor": actor, "action": action, "file": file, "date_from": date_from,
-                                           "date_to": date_to}
+        st.session_state[EVENT_FILTERS] = {
+            "actor": actor,
+            "action": action,
+            "file": file,
+            "date_from": date_from,
+            "date_to": date_to,
+        }
         st.session_state[EVENT_PAGE] = 0
     filters = st.session_state.get(EVENT_FILTERS, {})
     page = st.session_state.get(EVENT_PAGE, 0)
@@ -204,8 +241,9 @@ def _events() -> None:
         st.info("No events match the filters.")
     before, after, _ = st.columns([1, 1, 4])
     before.button("Previous events", on_click=_move, args=(EVENT_PAGE, -1), disabled=page == 0)
-    after.button("Next events", on_click=_move, args=(EVENT_PAGE, 1),
-                 disabled=(page + 1) * data["limit"] >= data["total"])
+    after.button(
+        "Next events", on_click=_move, args=(EVENT_PAGE, 1), disabled=(page + 1) * data["limit"] >= data["total"]
+    )
 
     key = repr(sorted((k, str(v)) for k, v in filters.items()))
     prepared = st.session_state.get(EVENT_PREPARED)
@@ -214,8 +252,9 @@ def _events() -> None:
         prepared = {"key": key, "csv": body}
         st.session_state[EVENT_PREPARED] = prepared
     if prepared and prepared["key"] == key:
-        st.download_button("Download CSV", prepared["csv"], "audit-events.csv", exports.CSV_TYPE,
-                           key="history_events_csv")
+        st.download_button(
+            "Download CSV", prepared["csv"], "audit-events.csv", exports.CSV_TYPE, key="history_events_csv"
+        )
         st.caption("The server has already neutralised spreadsheet formulas in this file.")
 
 

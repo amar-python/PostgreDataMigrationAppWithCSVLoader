@@ -16,6 +16,7 @@ next time they sign in with the right password. Asserted here, with no database 
     failed sign-in having paid for one current-cost hash, and the dummy hash has the current cost;
   * at most ``MAX_CONCURRENT_HASHES`` hashes are computed at once, so a burst of sign-ins cannot hold 128 MiB each.
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -49,6 +50,7 @@ def params(stored: str) -> tuple[int, int, int]:
 
 # -- the cost, and what still verifies --------------------------------------------------------------------------------
 
+
 def test_new_hashes_use_the_current_cost():
     stored = accounts.hash_password(PW)
     assert stored.startswith("scrypt$131072$8$1$"), stored
@@ -80,6 +82,7 @@ def test_a_stored_hash_asking_for_too_much_memory_is_refused_at_once():
 
 # -- needs_rehash -----------------------------------------------------------------------------------------------------
 
+
 def test_needs_rehash_is_true_for_a_weaker_hash():
     assert accounts.needs_rehash(legacy_hash()) is True
     assert accounts.needs_rehash(legacy_hash(n=2**16)) is True
@@ -94,6 +97,7 @@ def test_needs_rehash_is_false_for_a_current_or_stronger_hash_and_for_junk():
 
 
 # -- login, with a fake cursor ----------------------------------------------------------------------------------------
+
 
 class FakeCursor:
     """Answers the queries ``accounts.login`` runs and records every statement and its parameters."""
@@ -155,7 +159,8 @@ def test_the_upgrade_only_applies_if_the_stored_hash_is_still_the_one_checked(sc
     accounts.login(cur, "acme", "alice", PW)
     sql, _ = cur.password_updates()[0]
     assert "password_hash = %s" in sql and sql.count("password_hash") >= 2, (
-        "UPDATE ... WHERE id = %s AND password_hash = %s, so a password changed meanwhile is not undone: " + sql)
+        "UPDATE ... WHERE id = %s AND password_hash = %s, so a password changed meanwhile is not undone: " + sql
+    )
 
 
 def test_signing_in_with_a_current_hash_stores_nothing(scrypt_costs):
@@ -164,12 +169,15 @@ def test_signing_in_with_a_current_hash_stores_nothing(scrypt_costs):
     assert cur.password_updates() == []
 
 
-@pytest.mark.parametrize("case, row_kw, password", [
-    ("wrong password", {}, "not the password"),
-    ("inactive user", {"active": False}, PW),
-    ("not a member", {"role": None}, PW),
-    ("locked account", {"locked": True}, PW),
-])
+@pytest.mark.parametrize(
+    "case, row_kw, password",
+    [
+        ("wrong password", {}, "not the password"),
+        ("inactive user", {"active": False}, PW),
+        ("not a member", {"role": None}, PW),
+        ("locked account", {"locked": True}, PW),
+    ],
+)
 def test_a_refused_sign_in_never_upgrades_a_hash(scrypt_costs, case, row_kw, password):
     cur = FakeCursor(user_row(legacy_hash(), **row_kw))
     assert accounts.login(cur, "acme", "alice", password) is None, case
@@ -177,6 +185,7 @@ def test_a_refused_sign_in_never_upgrades_a_hash(scrypt_costs, case, row_kw, pas
 
 
 # -- no new timing oracle ---------------------------------------------------------------------------------------------
+
 
 def failed_sign_in_costs(scrypt_costs, row) -> list[int]:
     scrypt_costs.clear()
@@ -192,10 +201,12 @@ def test_a_failed_sign_in_pays_one_current_cost_hash_whoever_the_user_is(scrypt_
     assert current_user == [CURRENT[0]], current_user
     assert CURRENT[0] in old_user, (
         "a user whose hash is old must not fail faster than an unknown one (that tells an attacker the name exists): "
-        f"{old_user}")
+        f"{old_user}"
+    )
 
 
 # -- bounded memory ---------------------------------------------------------------------------------------------------
+
 
 def test_no_more_than_the_limit_of_hashes_run_at_once(monkeypatch):
     active = peak = 0

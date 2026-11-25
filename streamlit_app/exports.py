@@ -29,8 +29,19 @@ XLSX_CELL_LIMIT = 32_767  # the most characters Excel keeps in one cell; a longe
 XLSX_SHEET_LIMIT = 31
 
 ERROR_HEADERS = ["file", "row_number", "column", "value", "reason", "plain_english", "header_mapping"]
-HISTORY_HEADERS = ["file", "status", "uploaded_at", "uploader", "mode", "state", "total_rows", "imported_rows",
-                   "failed_rows", "reason", "upload_id"]
+HISTORY_HEADERS = [
+    "file",
+    "status",
+    "uploaded_at",
+    "uploader",
+    "mode",
+    "state",
+    "total_rows",
+    "imported_rows",
+    "failed_rows",
+    "reason",
+    "upload_id",
+]
 
 CSV_TYPE = "text/csv"
 XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -52,6 +63,7 @@ def _cell(value: object) -> object:
 
 # ── files ───────────────────────────────────────────────────────────────────────────────────
 
+
 def to_csv(headers: list[str], rows: list[dict]) -> bytes:
     """The rows as CSV, UTF-8, a line feed after each line (as the React export does). Quoted only where needed."""
     out = io.StringIO()
@@ -64,7 +76,7 @@ def to_csv(headers: list[str], rows: list[dict]) -> bytes:
 
 def _xlsx_text(text: str) -> str:
     text = ILLEGAL_CHARACTERS_RE.sub("\ufffd", text)
-    return text if len(text) <= XLSX_CELL_LIMIT else text[:XLSX_CELL_LIMIT - 1] + "\u2026"
+    return text if len(text) <= XLSX_CELL_LIMIT else text[: XLSX_CELL_LIMIT - 1] + "\u2026"
 
 
 def to_xlsx(sheet: str, headers: list[str], rows: list[dict]) -> bytes:
@@ -94,6 +106,7 @@ def report_name(kind: str, ext: str, file_name: str | None = None, now: datetime
 
 # ── what goes in them ───────────────────────────────────────────────────────────────────────
 
+
 def mapping_summary(mapping: list[dict] | None) -> str:
     """'a→b, c→d' for the renamed columns, '(no renames)' if none was renamed, '' if there was no mapping."""
     if not mapping:
@@ -102,25 +115,54 @@ def mapping_summary(mapping: list[dict] | None) -> str:
     return ", ".join(renames) if renames else "(no renames)"
 
 
-def error_rows(file_name: str, row_errors: list[dict], message: str | None = None,
-               mapping: list[dict] | None = None) -> list[dict]:
+def error_rows(
+    file_name: str, row_errors: list[dict], message: str | None = None, mapping: list[dict] | None = None
+) -> list[dict]:
     """One report row per row error. An import that failed as a whole, with no row errors, gets one row for its message."""
     summary = mapping_summary(mapping)
     rows = []
     if message and not row_errors:
-        rows.append({"file": file_name, "row_number": 0, "column": "", "value": "", "reason": message,
-                     "plain_english": message, "header_mapping": summary})
+        rows.append(
+            {
+                "file": file_name,
+                "row_number": 0,
+                "column": "",
+                "value": "",
+                "reason": message,
+                "plain_english": message,
+                "header_mapping": summary,
+            }
+        )
     for e in row_errors:
-        rows.append({"file": file_name, "row_number": e.get("rowNumber"), "column": e.get("column") or "",
-                     "value": e.get("value") or "", "reason": e["reason"], "plain_english": e["reason"],
-                     "header_mapping": summary})
+        rows.append(
+            {
+                "file": file_name,
+                "row_number": e.get("rowNumber"),
+                "column": e.get("column") or "",
+                "value": e.get("value") or "",
+                "reason": e["reason"],
+                "plain_english": e["reason"],
+                "header_mapping": summary,
+            }
+        )
     return rows
 
 
 def history_rows(uploads: list[dict]) -> list[dict]:
     """The import history as report rows: one per upload attempt, from `GET /api/csv/uploads`."""
-    return [{"file": u["file_name"], "status": u["status"], "uploaded_at": u["uploaded_at"],
-             "uploader": u.get("uploader") or "", "mode": u.get("mode") or "", "state": u.get("state") or "",
-             "total_rows": u.get("total_rows"), "imported_rows": u.get("imported_rows"),
-             "failed_rows": u.get("failed_rows"), "reason": u.get("failure_reason") or "", "upload_id": u["id"]}
-            for u in uploads]
+    return [
+        {
+            "file": u["file_name"],
+            "status": u["status"],
+            "uploaded_at": u["uploaded_at"],
+            "uploader": u.get("uploader") or "",
+            "mode": u.get("mode") or "",
+            "state": u.get("state") or "",
+            "total_rows": u.get("total_rows"),
+            "imported_rows": u.get("imported_rows"),
+            "failed_rows": u.get("failed_rows"),
+            "reason": u.get("failure_reason") or "",
+            "upload_id": u["id"],
+        }
+        for u in uploads
+    ]

@@ -7,6 +7,7 @@ while the earlier load's rows stayed in the table.
 
 Needs a live PostgreSQL with the dev schema deployed (see tests/test_api_integration.py).
 """
+
 from __future__ import annotations
 
 import os
@@ -55,9 +56,15 @@ class TeReuploadRegistry(unittest.TestCase):
     # -- helpers -------------------------------------------------------------
 
     def _upload_te(self, content: str):
-        return self.client.post("/api/csv/upload", json={
-            "fileName": self.file_name, "content": content, "mode": "te", "targetTable": "organisations",
-        }).json()
+        return self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": self.file_name,
+                "content": content,
+                "mode": "te",
+                "targetTable": "organisations",
+            },
+        ).json()
 
     def _registry(self) -> list[dict]:
         return [f for f in self.client.get("/api/csv/files").json() if f["file_name"] == self.file_name]
@@ -65,8 +72,9 @@ class TeReuploadRegistry(unittest.TestCase):
     def _loaded_orgs(self) -> int:
         with Conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(f"SELECT count(*) FROM {settings.TE_SCHEMA}.organisations WHERE name LIKE %s",
-                            (self.tag + "%",))
+                cur.execute(
+                    f"SELECT count(*) FROM {settings.TE_SCHEMA}.organisations WHERE name LIKE %s", (self.tag + "%",)
+                )
                 return cur.fetchone()[0]
 
     # -- the bug -------------------------------------------------------------
@@ -86,9 +94,11 @@ class TeReuploadRegistry(unittest.TestCase):
         self.assertEqual(second["insertedRows"], 0, second)
 
         after = self._registry()
-        self.assertEqual([(r["id"], r["row_count"], r["failed_rows"]) for r in after],
-                         [(before[0]["id"], 2, 0)],
-                         "the earlier load's registry record must survive an all-failed re-upload")
+        self.assertEqual(
+            [(r["id"], r["row_count"], r["failed_rows"]) for r in after],
+            [(before[0]["id"], 2, 0)],
+            "the earlier load's registry record must survive an all-failed re-upload",
+        )
         self.assertEqual(self._loaded_orgs(), 2, "registry and table must still agree")
 
     # -- guard against over-correcting ---------------------------------------
@@ -111,9 +121,14 @@ class TeReuploadRegistry(unittest.TestCase):
 
     def test_all_failed_te_upload_keeps_a_prior_dynamic_table_of_the_same_name(self):
         """An all-failed T&E upload does not drop a dynamic table registered under the same filename (#170)."""
-        dyn = self.client.post("/api/csv/upload", json={
-            "fileName": self.file_name, "content": "col_a,col_b\n1,2\n", "mode": "dynamic",
-        }).json()
+        dyn = self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": self.file_name,
+                "content": "col_a,col_b\n1,2\n",
+                "mode": "dynamic",
+            },
+        ).json()
         self.assertEqual(dyn["status"], "ok", dyn)
         table = dyn["tableName"]
 
@@ -122,5 +137,8 @@ class TeReuploadRegistry(unittest.TestCase):
 
         reg = self._registry()
         self.assertEqual([(r["mode"], r["table_name"]) for r in reg], [("dynamic", table)])
-        self.assertEqual(self.client.get(f"/api/csv/tables/{table}/rows").status_code, 200,
-                         "the prior dynamic table must not have been dropped")
+        self.assertEqual(
+            self.client.get(f"/api/csv/tables/{table}/rows").status_code,
+            200,
+            "the prior dynamic table must not have been dropped",
+        )

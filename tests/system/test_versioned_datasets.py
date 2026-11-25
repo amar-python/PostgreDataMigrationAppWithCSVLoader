@@ -80,8 +80,11 @@ class VersionedDatasets(unittest.TestCase):
                 self.client.delete(f"/api/csv/files/{f['id']}", headers=self.headers)
 
     def up(self, name: str, content: str, **extra) -> dict:
-        res = self.client.post("/api/csv/upload", headers=self.headers,
-                               json={"fileName": f"{self.tag}_{name}", "content": content, **extra})
+        res = self.client.post(
+            "/api/csv/upload",
+            headers=self.headers,
+            json={"fileName": f"{self.tag}_{name}", "content": content, **extra},
+        )
         self.assertEqual(res.status_code, 200, res.text)
         return res.json()
 
@@ -115,8 +118,11 @@ class VersionedDatasets(unittest.TestCase):
         self.assertEqual([r["status"] for r in (v1, v2, v3)], ["ok"] * 3)
         self.assertEqual([r["version"] for r in (v1, v2, v3)], [1, 2, 3])
         self.assertEqual(v2["tableName"], f"csv_{dataset_slug(self.tag + '_sales.csv')}_v2")
-        self.assertEqual([self.rows(r["tableName"])[0]["v"] for r in (v1, v2, v3)], ["a", "b", "c"],
-                         "an earlier version's rows must be exactly what was uploaded")
+        self.assertEqual(
+            [self.rows(r["tableName"])[0]["v"] for r in (v1, v2, v3)],
+            ["a", "b", "c"],
+            "an earlier version's rows must be exactly what was uploaded",
+        )
         self.assertEqual(len(self.files()), 3)
 
     def test_overwrite_is_never_honoured(self):
@@ -134,8 +140,9 @@ class VersionedDatasets(unittest.TestCase):
 
     def test_a_filename_cannot_name_a_registry_table(self):
         # A bare slug would collide with the uploads registry; the csv_ prefix and _v<n> suffix prevent it.
-        res = self.client.post("/api/csv/upload", headers=self.headers,
-                               json={"fileName": "uploads.csv", "content": f"k\n{self.tag}\n"})
+        res = self.client.post(
+            "/api/csv/upload", headers=self.headers, json={"fileName": "uploads.csv", "content": f"k\n{self.tag}\n"}
+        )
         body = res.json()
         self.assertEqual(body["status"], "ok", body)
         self.addCleanup(self.client.delete, f"/api/csv/files/{body['fileId']}", headers=self.headers)
@@ -203,8 +210,11 @@ class VersionedDatasets(unittest.TestCase):
         self.assertEqual(before[0]["duplicateOfEarlierVersion"]["version"], 1)
         self.assertIsNone(before[1]["duplicateOfEarlierVersion"])
         self.assertEqual(before[0]["decision"], "include", "a flag does not decide anything by itself")
-        res = self.client.put(f"{review[:-5]}/rows/1/decision", headers=self.headers,
-                              json={"decision": "exclude", "reason": "already loaded in v1"})
+        res = self.client.put(
+            f"{review[:-5]}/rows/1/decision",
+            headers=self.headers,
+            json={"decision": "exclude", "reason": "already loaded in v1"},
+        )
         self.assertEqual(res.status_code, 200, res.text)
         after = self.client.get(review, headers=self.headers).json()["rows"][0]
         self.assertEqual(after["decision"], "exclude")
@@ -214,10 +224,14 @@ class VersionedDatasets(unittest.TestCase):
         self.up("io.csv", "k\n1\n")
         v2 = self.up("io.csv", "k\n1\n2\n")
         with Conn() as conn, conn.cursor() as cur:
-            for statement in ("UPDATE {}.row_flags SET matched_version = 9 WHERE upload_id = %s",
-                              "DELETE FROM {}.row_flags WHERE upload_id = %s"):
+            for statement in (
+                "UPDATE {}.row_flags SET matched_version = 9 WHERE upload_id = %s",
+                "DELETE FROM {}.row_flags WHERE upload_id = %s",
+            ):
                 with self.assertRaises(psycopg2.errors.InsufficientPrivilege):
-                    cur.execute(sql.SQL(statement).format(sql.Identifier(settings.UPLOADS_SCHEMA)), (int(v2["uploadId"]),))
+                    cur.execute(
+                        sql.SQL(statement).format(sql.Identifier(settings.UPLOADS_SCHEMA)), (int(v2["uploadId"]),)
+                    )
                 conn.rollback()
 
     # -- T&E loads share the registry ------------------------------------------
@@ -226,9 +240,16 @@ class VersionedDatasets(unittest.TestCase):
         v1 = self.up("t.csv", "k\n1\n")
         v2 = self.up("t.csv", "k\n2\n")
         org = f"{self.tag}_org"
-        te = self.client.post("/api/csv/upload", headers=self.headers, json={
-            "fileName": f"{self.tag}_t.csv", "mode": "te", "targetTable": "organisations",
-            "content": f"name,org_type,country\n{org},government,AU\n"}).json()
+        te = self.client.post(
+            "/api/csv/upload",
+            headers=self.headers,
+            json={
+                "fileName": f"{self.tag}_t.csv",
+                "mode": "te",
+                "targetTable": "organisations",
+                "content": f"name,org_type,country\n{org},government,AU\n",
+            },
+        ).json()
         self.assertEqual(te["status"], "ok", te)
         self.addCleanup(self._drop_org, org)
         self.assertEqual(sorted(f["mode"] for f in self.files()), ["dynamic", "dynamic", "te"])
@@ -237,8 +258,10 @@ class VersionedDatasets(unittest.TestCase):
 
     def _drop_org(self, name: str) -> None:
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("DELETE FROM {}.organisations WHERE name = %s").format(
-                sql.Identifier(settings.TE_SCHEMA)), (name,))
+            cur.execute(
+                sql.SQL("DELETE FROM {}.organisations WHERE name = %s").format(sql.Identifier(settings.TE_SCHEMA)),
+                (name,),
+            )
             conn.commit()
 
 
@@ -263,7 +286,9 @@ class VersionsArePerTenant(unittest.TestCase):
             accounts.add_membership(cur, uid, tid, "tenant_admin")
             conn.commit()
         migrate_tenant(cls.slug)
-        res = cls.client.post("/api/auth/login", json={"tenant": cls.slug, "username": f"{cls.slug}_user", "password": pw})
+        res = cls.client.post(
+            "/api/auth/login", json={"tenant": cls.slug, "username": f"{cls.slug}_user", "password": pw}
+        )
         assert res.status_code == 200, res.text
         cls.auth = {"Authorization": f"Bearer {res.json()['token']}"}
 
@@ -279,8 +304,9 @@ class VersionsArePerTenant(unittest.TestCase):
         cls.ctx.__exit__(None, None, None)
 
     def up(self, name: str, content: str, auth: bool) -> dict:
-        res = self.client.post("/api/csv/upload", headers=self.auth if auth else {},
-                               json={"fileName": name, "content": content})
+        res = self.client.post(
+            "/api/csv/upload", headers=self.auth if auth else {}, json={"fileName": name, "content": content}
+        )
         self.assertEqual(res.status_code, 200, res.text)
         return res.json()
 

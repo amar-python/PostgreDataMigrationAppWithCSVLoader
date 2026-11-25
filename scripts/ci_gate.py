@@ -14,6 +14,7 @@ happens in several jobs. This script turns their results into one answer:
 
 Exit status 0 for pass, 1 for fail. The message names every job and what it did.
 """
+
 from __future__ import annotations
 
 import sys

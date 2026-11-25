@@ -3,6 +3,7 @@
 AppTest cannot switch to a page registered with st.navigation, so a screen is run by itself, as app.py runs it:
 only for someone signed in, so a 401 that ends the session ends the run cleanly instead of failing.
 """
+
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -33,8 +34,13 @@ def later(hours: float = 8) -> str:
 def screen(view: str, who: str = "rita", token: str = "tok-1", tenant: str = "acme", timeout: int = 30) -> AppTest:
     """One screen (the module name in streamlit_app/views) with a session already in place, run once."""
     at = AppTest.from_string(HARNESS.format(app_dir=str(APP_DIR), view=view), default_timeout=timeout)
-    at.session_state["session"] = {"token": token, "expiresAt": later(), "username": who, "tenant": tenant,
-                                   "role": ROLES[who]}
+    at.session_state["session"] = {
+        "token": token,
+        "expiresAt": later(),
+        "username": who,
+        "tenant": tenant,
+        "role": ROLES[who],
+    }
     at.run()
     assert not at.exception, at.exception
     return at

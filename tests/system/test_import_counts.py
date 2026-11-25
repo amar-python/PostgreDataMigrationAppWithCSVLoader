@@ -14,8 +14,10 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
-         "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1.")
+_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
+    "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1."
+)
 
 
 @pytest.mark.integration
@@ -50,21 +52,32 @@ class ImportCountsArePersisted(unittest.TestCase):
     def test_dynamic_import_persists_all_four_counts(self):
         # 5 data rows: 2 valid distinct, 1 in-file duplicate, 2 that fail the int8 cast.
         content = f"n,t\n1,{self.tag}\n2,{self.tag}\n1,{self.tag}\nx,{self.tag}\ny,{self.tag}\n"
-        res = self.client.post("/api/csv/upload", json={
-            "fileName": f"counts_{self.tag}.csv", "content": content, "types": ["int8", "text"],
-        }).json()
+        res = self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": f"counts_{self.tag}.csv",
+                "content": content,
+                "types": ["int8", "text"],
+            },
+        ).json()
         self.assertEqual(res["status"], "ok", res)
         entry = self._assert_persisted_matches_response(res)
-        self.assertEqual((entry["total_rows"], entry["row_count"], entry["duplicate_rows_skipped"],
-                          entry["failed_rows"]), (5, 2, 1, 2))
+        self.assertEqual(
+            (entry["total_rows"], entry["row_count"], entry["duplicate_rows_skipped"], entry["failed_rows"]),
+            (5, 2, 1, 2),
+        )
 
     def test_te_import_persists_counts(self):
-        content = (f"name,org_type,country\nCNT_{self.tag}_1,government,AU\n"
-                   f"CNT_{self.tag}_2,government,AU\n")
-        res = self.client.post("/api/csv/upload", json={
-            "fileName": f"counts_te_{self.tag}.csv", "content": content,
-            "mode": "te", "targetTable": "organisations",
-        }).json()
+        content = f"name,org_type,country\nCNT_{self.tag}_1,government,AU\nCNT_{self.tag}_2,government,AU\n"
+        res = self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": f"counts_te_{self.tag}.csv",
+                "content": content,
+                "mode": "te",
+                "targetTable": "organisations",
+            },
+        ).json()
         self.assertEqual(res["status"], "ok", res)
         entry = self._assert_persisted_matches_response(res)
         self.assertEqual((entry["total_rows"], entry["row_count"], entry["failed_rows"]), (2, 2, 0))

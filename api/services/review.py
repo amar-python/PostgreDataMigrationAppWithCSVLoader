@@ -8,15 +8,16 @@ applied by M6's staged import, not to the table imported at upload time
 
 from __future__ import annotations
 
+from typing import Any
+
 from psycopg2 import sql
+from psycopg2.extensions import cursor
 
 from api.db import fetch_one
 from api.services.audit import current_actor, write_audit
 from api.services.csv_parse import cast_value, extra_cells, ragged_row_reason, sanitize_columns
 from api.services.staged_import import state_of
 from api.tenancy import uploads_schema
-from typing import Any
-from psycopg2.extensions import cursor
 
 MAX_PAGE = 500
 
@@ -34,11 +35,15 @@ def _s() -> sql.Identifier:
 
 
 def _upload(cur: cursor, upload_id: int) -> dict[str, Any]:
-    cur.execute(sql.SQL(
-        "SELECT u.file_name, u.columns, u.column_types, h.cells, u.mode, u.row_errors, "
-        "  (SELECT count(*) FROM {s}.source_rows r WHERE r.upload_id = u.id AND r.row_number > 0) "
-        "FROM {s}.uploads u LEFT JOIN {s}.source_rows h ON h.upload_id = u.id AND h.row_number = 0 "
-        "WHERE u.id = %s").format(s=_s()), (upload_id,))
+    cur.execute(
+        sql.SQL(
+            "SELECT u.file_name, u.columns, u.column_types, h.cells, u.mode, u.row_errors, "
+            "  (SELECT count(*) FROM {s}.source_rows r WHERE r.upload_id = u.id AND r.row_number > 0) "
+            "FROM {s}.uploads u LEFT JOIN {s}.source_rows h ON h.upload_id = u.id AND h.row_number = 0 "
+            "WHERE u.id = %s"
+        ).format(s=_s()),
+        (upload_id,),
+    )
     row = cur.fetchone()
     if row is None:
         raise ReviewError(404, "No such upload")
@@ -50,24 +55,36 @@ def _upload(cur: cursor, upload_id: int) -> dict[str, Any]:
     # type failures, which _validate finds again; these carry only the database's reason.
     # ponytail: stored list is capped at MAX_ROW_ERRORS_REPORTED, rows past the cap show no
     # database reason; edited rows aren't re-checked against constraints until M6's import.
-    db_errors = {e["rowNumber"]: e["reason"] for e in (stored_errors or [])
-                 if mode == "te" and "column" not in e and "rowNumber" in e}
+    db_errors = {
+        e["rowNumber"]: e["reason"]
+        for e in (stored_errors or [])
+        if mode == "te" and "column" not in e and "rowNumber" in e
+    }
     return {"fileName": name, "columns": columns, "types": types, "total": total, "_dbErrors": db_errors}
 
 
 def _flags(cur: cursor, upload_id: int, numbers: list[int]) -> dict[str, Any]:
     """Rows that duplicate an earlier version of the dataset (M5, BR-29); the user decides per row."""
-    cur.execute(sql.SQL(
-        "SELECT row_number, matched_file_name, matched_version FROM {}.row_flags "
-        "WHERE upload_id = %s AND row_number = ANY(%s)").format(_s()), (upload_id, numbers))
+    cur.execute(
+        sql.SQL(
+            "SELECT row_number, matched_file_name, matched_version FROM {}.row_flags "
+            "WHERE upload_id = %s AND row_number = ANY(%s)"
+        ).format(_s()),
+        (upload_id, numbers),
+    )
     return {n: {"fileName": f, "version": v} for n, f, v in cur.fetchall()}
 
 
 def _validate(cells: list[str], raw: list[str], columns: list[str], types: list[str]) -> list[dict[str, Any]]:
     errors: list[dict[str, Any]] = []
     if extra_cells(raw, len(columns)):
-        errors.append({"column": "(beyond header)", "value": extra_cells(raw, len(columns))[0],
-                       "reason": ragged_row_reason(raw, len(columns))})
+        errors.append(
+            {
+                "column": "(beyond header)",
+                "value": extra_cells(raw, len(columns))[0],
+                "reason": ragged_row_reason(raw, len(columns)),
+            }
+        )
     for name, value, col_type in zip(columns, cells, types):
         ok, _, reason = cast_value(value, col_type)
         if not ok:
@@ -75,34 +92,56 @@ def _validate(cells: list[str], raw: list[str], columns: list[str], types: list[
     return errors
 
 
-def _latest(cur: cursor, upload_id: int,
-            numbers: list[int]) -> tuple[dict[int, dict[str, Any]], dict[int, dict[int, str]]]:
+def _latest(
+    cur: cursor, upload_id: int, numbers: list[int]
+) -> tuple[dict[int, dict[str, Any]], dict[int, dict[int, str]]]:
     """The current decision per row and the current value per edited cell."""
-    cur.execute(sql.SQL(
-        "SELECT DISTINCT ON (row_number) row_number, decision, reason, actor FROM {}.row_decisions "
-        "WHERE upload_id = %s AND row_number = ANY(%s) ORDER BY row_number, id DESC").format(_s()),
-        (upload_id, numbers))
+    cur.execute(
+        sql.SQL(
+            "SELECT DISTINCT ON (row_number) row_number, decision, reason, actor FROM {}.row_decisions "
+            "WHERE upload_id = %s AND row_number = ANY(%s) ORDER BY row_number, id DESC"
+        ).format(_s()),
+        (upload_id, numbers),
+    )
     decisions = {n: {"decision": d, "reason": r, "actor": a} for n, d, r, a in cur.fetchall()}
-    cur.execute(sql.SQL(
-        "SELECT DISTINCT ON (row_number, column_index) row_number, column_index, new_value "
-        "FROM {}.cell_edits WHERE upload_id = %s AND row_number = ANY(%s) "
-        "ORDER BY row_number, column_index, id DESC").format(_s()), (upload_id, numbers))
+    cur.execute(
+        sql.SQL(
+            "SELECT DISTINCT ON (row_number, column_index) row_number, column_index, new_value "
+            "FROM {}.cell_edits WHERE upload_id = %s AND row_number = ANY(%s) "
+            "ORDER BY row_number, column_index, id DESC"
+        ).format(_s()),
+        (upload_id, numbers),
+    )
     edits: dict[int, dict[int, str]] = {}
     for n, c, v in cur.fetchall():
         edits.setdefault(n, {})[c] = v
     return decisions, edits
 
 
-def _rows(cur: cursor, upload_id: int, meta: dict[str, Any], numbers: list[int] | None = None,
-          offset: int = 0, limit: int = 100) -> list[dict[str, Any]]:
+def _rows(
+    cur: cursor,
+    upload_id: int,
+    meta: dict[str, Any],
+    numbers: list[int] | None = None,
+    offset: int = 0,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
     if numbers is None:
-        cur.execute(sql.SQL(
-            "SELECT row_number, cells FROM {}.source_rows WHERE upload_id = %s AND row_number > 0 "
-            "ORDER BY row_number OFFSET %s LIMIT %s").format(_s()), (upload_id, offset, limit))
+        cur.execute(
+            sql.SQL(
+                "SELECT row_number, cells FROM {}.source_rows WHERE upload_id = %s AND row_number > 0 "
+                "ORDER BY row_number OFFSET %s LIMIT %s"
+            ).format(_s()),
+            (upload_id, offset, limit),
+        )
     else:
-        cur.execute(sql.SQL(
-            "SELECT row_number, cells FROM {}.source_rows WHERE upload_id = %s AND row_number = ANY(%s) "
-            "ORDER BY row_number").format(_s()), (upload_id, numbers))
+        cur.execute(
+            sql.SQL(
+                "SELECT row_number, cells FROM {}.source_rows WHERE upload_id = %s AND row_number = ANY(%s) "
+                "ORDER BY row_number"
+            ).format(_s()),
+            (upload_id, numbers),
+        )
     source = cur.fetchall()
     decisions, edits = _latest(cur, upload_id, [n for n, _ in source])
     duplicates = _flags(cur, upload_id, [n for n, _ in source])
@@ -115,29 +154,42 @@ def _rows(cur: cursor, upload_id: int, meta: dict[str, Any], numbers: list[int] 
         errors = _validate(current, raw, meta["columns"], meta["types"])
         if n in meta["_dbErrors"] and n not in edits:
             errors.append({"column": "(database)", "value": "", "reason": meta["_dbErrors"][n]})
-        out.append({
-            "rowNumber": n, "original": original, "current": current,
-            "editedColumns": sorted(edits.get(n, {})),
-            "decision": decision["decision"] if decision else "include",
-            "decisionReason": decision["reason"] if decision else None,
-            "duplicateOfEarlierVersion": duplicates.get(n),
-            "errors": errors,
-        })
+        out.append(
+            {
+                "rowNumber": n,
+                "original": original,
+                "current": current,
+                "editedColumns": sorted(edits.get(n, {})),
+                "decision": decision["decision"] if decision else "include",
+                "decisionReason": decision["reason"] if decision else None,
+                "duplicateOfEarlierVersion": duplicates.get(n),
+                "errors": errors,
+            }
+        )
     return out
 
 
 def page(cur: cursor, upload_id: int, offset: int, limit: int) -> dict[str, Any]:
     meta = _upload(cur, upload_id)
     offset, limit = max(0, offset), max(1, min(limit, MAX_PAGE))
-    cur.execute(sql.SQL(
-        "SELECT (SELECT count(*) FROM (SELECT DISTINCT ON (row_number) decision FROM {s}.row_decisions "
-        "        WHERE upload_id = %s ORDER BY row_number, id DESC) d WHERE decision = 'exclude'), "
-        "       (SELECT count(DISTINCT row_number) FROM {s}.cell_edits WHERE upload_id = %s)").format(s=_s()),
-        (upload_id, upload_id))
+    cur.execute(
+        sql.SQL(
+            "SELECT (SELECT count(*) FROM (SELECT DISTINCT ON (row_number) decision FROM {s}.row_decisions "
+            "        WHERE upload_id = %s ORDER BY row_number, id DESC) d WHERE decision = 'exclude'), "
+            "       (SELECT count(DISTINCT row_number) FROM {s}.cell_edits WHERE upload_id = %s)"
+        ).format(s=_s()),
+        (upload_id, upload_id),
+    )
     excluded, edited = fetch_one(cur)
     public = {k: v for k, v in meta.items() if k != "_dbErrors"}
-    return {**public, "offset": offset, "limit": limit, "excludedRows": excluded, "editedRows": edited,
-            "rows": _rows(cur, upload_id, meta, offset=offset, limit=limit)}
+    return {
+        **public,
+        "offset": offset,
+        "limit": limit,
+        "excludedRows": excluded,
+        "editedRows": edited,
+        "rows": _rows(cur, upload_id, meta, offset=offset, limit=limit),
+    }
 
 
 def _check_row(meta: dict[str, Any], row_number: int) -> None:
@@ -167,12 +219,22 @@ def decide(cur: cursor, upload_id: int, row_number: int, decision: str, reason: 
         raise ReviewError(422, "decision must be 'include' or 'exclude'")
     reason = _reason(reason)
     [before] = _rows(cur, upload_id, meta, numbers=[row_number])
-    cur.execute(sql.SQL("INSERT INTO {}.row_decisions (upload_id, row_number, decision, reason, actor) "
-                        "VALUES (%s, %s, %s, %s, %s)").format(_s()),
-                (upload_id, row_number, decision, reason, current_actor()))
-    write_audit(cur, "row_decision", None, meta["fileName"], None, None,
-                before={"upload": upload_id, "row": row_number, "decision": before["decision"]},
-                after={"upload": upload_id, "row": row_number, "decision": decision, "reason": reason})
+    cur.execute(
+        sql.SQL(
+            "INSERT INTO {}.row_decisions (upload_id, row_number, decision, reason, actor) VALUES (%s, %s, %s, %s, %s)"
+        ).format(_s()),
+        (upload_id, row_number, decision, reason, current_actor()),
+    )
+    write_audit(
+        cur,
+        "row_decision",
+        None,
+        meta["fileName"],
+        None,
+        None,
+        before={"upload": upload_id, "row": row_number, "decision": before["decision"]},
+        after={"upload": upload_id, "row": row_number, "decision": decision, "reason": reason},
+    )
     [after] = _rows(cur, upload_id, meta, numbers=[row_number])
     return after
 
@@ -191,12 +253,24 @@ def edit(cur: cursor, upload_id: int, row_number: int, column: str, value: str, 
     old = before["current"][index]
     if value == old:
         raise ReviewError(422, "The new value is the same as the current one")
-    cur.execute(sql.SQL("INSERT INTO {}.cell_edits (upload_id, row_number, column_index, old_value, new_value, "
-                        "reason, actor) VALUES (%s, %s, %s, %s, %s, %s, %s)").format(_s()),
-                (upload_id, row_number, index, old, value, reason, current_actor()))
+    cur.execute(
+        sql.SQL(
+            "INSERT INTO {}.cell_edits (upload_id, row_number, column_index, old_value, new_value, "
+            "reason, actor) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+        ).format(_s()),
+        (upload_id, row_number, index, old, value, reason, current_actor()),
+    )
     cell = {"upload": upload_id, "row": row_number, "column": names[index]}
-    write_audit(cur, "cell_edit", None, meta["fileName"], None, None,
-                before={**cell, "value": old}, after={**cell, "value": value, "reason": reason})
+    write_audit(
+        cur,
+        "cell_edit",
+        None,
+        meta["fileName"],
+        None,
+        None,
+        before={**cell, "value": old},
+        after={**cell, "value": value, "reason": reason},
+    )
     [after] = _rows(cur, upload_id, meta, numbers=[row_number])
     return after
 
@@ -205,12 +279,15 @@ def history(cur: cursor, upload_id: int, row_number: int) -> list[dict[str, Any]
     """Every decision and edit on one row, oldest first."""
     meta = _upload(cur, upload_id)
     _check_row(meta, row_number)
-    cur.execute(sql.SQL(
-        "SELECT 'decision', decided_at, actor, reason, decision, NULL::int, NULL, NULL FROM {s}.row_decisions "
-        "  WHERE upload_id = %s AND row_number = %s "
-        "UNION ALL SELECT 'edit', edited_at, actor, reason, NULL, column_index, old_value, new_value "
-        "  FROM {s}.cell_edits WHERE upload_id = %s AND row_number = %s ORDER BY 2").format(s=_s()),
-        (upload_id, row_number, upload_id, row_number))
+    cur.execute(
+        sql.SQL(
+            "SELECT 'decision', decided_at, actor, reason, decision, NULL::int, NULL, NULL FROM {s}.row_decisions "
+            "  WHERE upload_id = %s AND row_number = %s "
+            "UNION ALL SELECT 'edit', edited_at, actor, reason, NULL, column_index, old_value, new_value "
+            "  FROM {s}.cell_edits WHERE upload_id = %s AND row_number = %s ORDER BY 2"
+        ).format(s=_s()),
+        (upload_id, row_number, upload_id, row_number),
+    )
     out = []
     for kind, at, actor, reason, decision, index, old, new in cur.fetchall():
         entry = {"kind": kind, "at": at.isoformat(), "actor": actor, "reason": reason}

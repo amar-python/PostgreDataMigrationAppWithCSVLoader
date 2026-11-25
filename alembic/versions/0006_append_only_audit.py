@@ -21,7 +21,6 @@ Create Date: 2026-10-28
 """
 
 from alembic import op
-
 from api.config import settings
 
 revision = "0006"
@@ -98,12 +97,15 @@ def upgrade() -> None:
         END $$""")
     # The trigger takes the id under its lock; the column default would take a second one.
     op.execute(f"ALTER TABLE {t} ALTER COLUMN id DROP DEFAULT")
-    op.execute(f"CREATE TRIGGER audit_chain BEFORE INSERT ON {t} "
-               f"FOR EACH ROW EXECUTE FUNCTION {s}.audit_chain()")
-    op.execute(f"CREATE TRIGGER audit_no_change BEFORE UPDATE OR DELETE ON {t} "
-               f"FOR EACH ROW EXECUTE FUNCTION {s}.audit_reject_change()")
-    op.execute(f"CREATE TRIGGER audit_no_truncate BEFORE TRUNCATE ON {t} "
-               f"FOR EACH STATEMENT EXECUTE FUNCTION {s}.audit_reject_change()")
+    op.execute(f"CREATE TRIGGER audit_chain BEFORE INSERT ON {t} FOR EACH ROW EXECUTE FUNCTION {s}.audit_chain()")
+    op.execute(
+        f"CREATE TRIGGER audit_no_change BEFORE UPDATE OR DELETE ON {t} "
+        f"FOR EACH ROW EXECUTE FUNCTION {s}.audit_reject_change()"
+    )
+    op.execute(
+        f"CREATE TRIGGER audit_no_truncate BEFORE TRUNCATE ON {t} "
+        f"FOR EACH STATEMENT EXECUTE FUNCTION {s}.audit_reject_change()"
+    )
 
 
 def downgrade() -> None:

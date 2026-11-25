@@ -25,9 +25,9 @@ Revises: 0009
 Create Date: 2026-11-09
 """
 
-from alembic import op
 from sqlalchemy import text
 
+from alembic import op
 from api.config import settings
 
 revision = "0010"
@@ -35,8 +35,10 @@ down_revision = "0009"
 branch_labels = None
 depends_on = None
 
-_SLUG = ("COALESCE(NULLIF(trim(both '_' from left(trim(both '_' from regexp_replace("
-         "lower(regexp_replace(file_name, '\\.csv$', '', 'i')), '[^a-z0-9]+', '_', 'g')), 40)), ''), 'dataset')")
+_SLUG = (
+    "COALESCE(NULLIF(trim(both '_' from left(trim(both '_' from regexp_replace("
+    "lower(regexp_replace(file_name, '\\.csv$', '', 'i')), '[^a-z0-9]+', '_', 'g')), 40)), ''), 'dataset')"
+)
 
 
 def _schema() -> str:
@@ -54,8 +56,9 @@ def upgrade() -> None:
         WHERE f.id = n.id""")  # nosec B608
     op.execute(f"ALTER TABLE {s}.csv_files ADD CONSTRAINT csv_files_dataset_version_key UNIQUE (dataset, version)")
     op.execute(f"ALTER TABLE {s}.csv_files DROP CONSTRAINT csv_files_file_name_key")
-    op.execute(f"CREATE UNIQUE INDEX csv_files_non_dynamic_file_name ON {s}.csv_files (file_name) "
-               "WHERE mode <> 'dynamic'")
+    op.execute(
+        f"CREATE UNIQUE INDEX csv_files_non_dynamic_file_name ON {s}.csv_files (file_name) WHERE mode <> 'dynamic'"
+    )
     op.execute(f"""CREATE TABLE {s}.row_flags (
         upload_id BIGINT NOT NULL REFERENCES {s}.uploads (id),
         row_number INTEGER NOT NULL CHECK (row_number > 0),
@@ -64,22 +67,33 @@ def upgrade() -> None:
         matched_file_name TEXT NOT NULL,
         matched_version INTEGER NOT NULL,
         PRIMARY KEY (upload_id, row_number, kind))""")
-    op.execute(f"CREATE TRIGGER row_flags_no_change BEFORE UPDATE OR DELETE ON {s}.row_flags "
-               f"FOR EACH ROW EXECUTE FUNCTION {s}.audit_reject_change()")
-    op.execute(f"CREATE TRIGGER row_flags_no_truncate BEFORE TRUNCATE ON {s}.row_flags "
-               f"FOR EACH STATEMENT EXECUTE FUNCTION {s}.audit_reject_change()")
+    op.execute(
+        f"CREATE TRIGGER row_flags_no_change BEFORE UPDATE OR DELETE ON {s}.row_flags "
+        f"FOR EACH ROW EXECUTE FUNCTION {s}.audit_reject_change()"
+    )
+    op.execute(
+        f"CREATE TRIGGER row_flags_no_truncate BEFORE TRUNCATE ON {s}.row_flags "
+        f"FOR EACH STATEMENT EXECUTE FUNCTION {s}.audit_reject_change()"
+    )
 
 
 def downgrade() -> None:
     s = _schema()
-    dupes = op.get_bind().execute(text(
-        f"SELECT file_name, count(*) FROM {s}.csv_files GROUP BY file_name HAVING count(*) > 1"  # nosec B608
-    )).fetchall()
+    dupes = (
+        op.get_bind()
+        .execute(
+            text(
+                f"SELECT file_name, count(*) FROM {s}.csv_files GROUP BY file_name HAVING count(*) > 1"  # nosec B608
+            )
+        )
+        .fetchall()
+    )
     if dupes:
         listed = ", ".join(f"{name!r} x{count}" for name, count in dupes[:10])
         raise RuntimeError(
             f"Cannot restore UNIQUE (file_name) on {settings.UPLOADS_SCHEMA}.csv_files: versioned datasets "
-            f"share a file name ({listed}). Delete the older versions first, then downgrade.")
+            f"share a file name ({listed}). Delete the older versions first, then downgrade."
+        )
     op.execute(f"DROP TABLE IF EXISTS {s}.row_flags")
     op.execute(f"DROP INDEX IF EXISTS {s}.csv_files_non_dynamic_file_name")
     op.execute(f"ALTER TABLE {s}.csv_files ADD CONSTRAINT csv_files_file_name_key UNIQUE (file_name)")

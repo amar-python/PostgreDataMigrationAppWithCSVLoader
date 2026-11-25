@@ -9,6 +9,7 @@ Asserted here for both callers, with the flag off: the dataset's table, rows and
 and the T&E upload changes nothing (no T&E rows land, no T&E registry row). Needs a live PostgreSQL with
 the dev schema deployed, as in CI.
 """
+
 from __future__ import annotations
 
 import unittest
@@ -47,14 +48,17 @@ class _SameBytesBothModes:
 
     def _te_rows(self, org: str) -> int:
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("SELECT count(*) FROM {}.organisations WHERE name = %s").format(
-                sql.Identifier(self.te_schema)), (org,))
+            cur.execute(
+                sql.SQL("SELECT count(*) FROM {}.organisations WHERE name = %s").format(sql.Identifier(self.te_schema)),
+                (org,),
+            )
             return cur.fetchone()[0]
 
     def _drop_org(self, org: str) -> None:
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("DELETE FROM {}.organisations WHERE name = %s").format(
-                sql.Identifier(self.te_schema)), (org,))
+            cur.execute(
+                sql.SQL("DELETE FROM {}.organisations WHERE name = %s").format(sql.Identifier(self.te_schema)), (org,)
+            )
             conn.commit()
 
     def check_te_upload_of_a_datasets_bytes_leaves_the_dataset_alone(self):
@@ -72,8 +76,9 @@ class _SameBytesBothModes:
 
         self.assertTrue(self._table_exists(table), f"the dataset's table was dropped: {res.status_code} {res.text}")
         registered = [(f["mode"], f["table_name"]) for f in self._files() if tag in f["file_name"]]
-        self.assertEqual(registered, [("dynamic", table)],
-                         "the dataset's registry row must survive and no T&E row may replace it")
+        self.assertEqual(
+            registered, [("dynamic", table)], "the dataset's registry row must survive and no T&E row may replace it"
+        )
         self.assertEqual(self._te_rows(org), 0, "a refused T&E upload must not leave rows behind")
         self.assertIn(res.status_code, (200, 403, 409), res.text)
         if res.status_code == 200:
@@ -117,6 +122,7 @@ class SignedInTeUploadCannotDropADataset(_SameBytesBothModes, UploadPaths):
         cls.role_headers = cls.headers
         cls.headers = cls.role_headers["tenant_admin"]
         from api.tenancy import schema_for
+
         cls.schema = cls.te_schema = schema_for(cls.slug)
 
     @classmethod

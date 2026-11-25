@@ -17,6 +17,7 @@ Three more cover the registers that are not a copy of VCRM.md (GAP_ANALYSIS, ENG
 
 All read the Markdown or the DDL as text; no database or network.
 """
+
 from __future__ import annotations
 
 import re
@@ -58,8 +59,11 @@ def statuses() -> dict[str, str]:
             continue
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         # The first rows put the status after the test-coverage columns; the later (ART) rows put it second.
-        symbol = cells[1] if len(cells) > 1 and _SYMBOLS.match(cells[1]) else next(
-            (c for c in cells[3:] if _SYMBOLS.match(c)), "")
+        symbol = (
+            cells[1]
+            if len(cells) > 1 and _SYMBOLS.match(cells[1])
+            else next((c for c in cells[3:] if _SYMBOLS.match(c)), "")
+        )
         text = " ".join(cells[1:])
         if symbol.startswith("✅"):
             found[m.group(1)] = "verified"
@@ -77,8 +81,11 @@ def statuses() -> dict[str, str]:
 def latest_headline() -> tuple[int, int, int, int]:
     """(total, verified, deferred, open) from the newest '**Headline (date):**' paragraph."""
     text = VCRM.read_text(encoding="utf-8")
-    m = re.search(r"\*\*Headline \(\d{4}-\d{2}-\d{2}\):\*\*.*?\*\*(\d+) of (\d+) \(\d+ %\)\*\* are verified, "
-                  r"(\d+) are deferred by decision, and the other (\d+) are partial or not started", text)
+    m = re.search(
+        r"\*\*Headline \(\d{4}-\d{2}-\d{2}\):\*\*.*?\*\*(\d+) of (\d+) \(\d+ %\)\*\* are verified, "
+        r"(\d+) are deferred by decision, and the other (\d+) are partial or not started",
+        text,
+    )
     assert m, "VCRM.md has no headline in the expected shape"
     verified, total, deferred, still_open = (int(g) for g in m.groups())
     return total, verified, deferred, still_open
@@ -93,9 +100,14 @@ def test_vcrm_agrees_with_its_own_headline():
     counts = Counter(statuses().values())
     total, verified, deferred, still_open = latest_headline()
     assert (len(statuses()), counts["verified"], counts["deferred"], counts["partial"] + counts["not started"]) == (
-        total, verified, deferred, still_open), (
+        total,
+        verified,
+        deferred,
+        still_open,
+    ), (
         f"VCRM.md's table says {dict(counts)} but its latest headline says {verified} verified, {deferred} deferred, "
-        f"{still_open} open of {total}: update one of them")
+        f"{still_open} open of {total}: update one of them"
+    )
 
 
 def test_vcrm_gaps_lists_what_vcrm_calls_not_verified_or_says_it_is_superseded():
@@ -107,10 +119,12 @@ def test_vcrm_gaps_lists_what_vcrm_calls_not_verified_or_says_it_is_superseded()
     assert listed == not_verified, (
         "docs/VCRM_GAPS.md says it lists the requirements that are not fully verified, but VCRM.md disagrees. "
         f"Only in VCRM_GAPS.md (now verified): {sorted(listed - not_verified)}. "
-        f"Only in VCRM.md (not verified, missing from VCRM_GAPS.md): {sorted(not_verified - listed)}.")
+        f"Only in VCRM.md (not verified, missing from VCRM_GAPS.md): {sorted(not_verified - listed)}."
+    )
 
 
 # --- the registers that are not a copy of VCRM.md ---------------------------------------------------------------
+
 
 def banner(path: Path) -> str:
     return "\n".join(path.read_text(encoding="utf-8").splitlines()[:BANNER_LINES])
@@ -121,9 +135,11 @@ def test_register_opens_with_a_pointer_to_the_document_that_owns_the_status(regi
     head = banner(register)
     assert "VCRM.md" in head, (
         f"{register.name} does not name docs/VCRM.md in its first {BANNER_LINES} lines. A reader cannot tell which "
-        "document to trust for requirement status: add a banner that says VCRM.md is the authority.")
+        "document to trust for requirement status: add a banner that says VCRM.md is the authority."
+    )
     assert re.search(r"authoritative|superseded|point-in-time|snapshot", head, re.I), (
-        f"{register.name} names VCRM.md but does not say how the two relate (authoritative / superseded / snapshot).")
+        f"{register.name} names VCRM.md but does not say how the two relate (authoritative / superseded / snapshot)."
+    )
 
 
 @pytest.mark.parametrize("register", REGISTERS, ids=lambda p: p.name)
@@ -167,7 +183,10 @@ def ddl_table_count(engine: str) -> int:
 def test_engine_table_counts_in_engine_parity_todo_match_the_ddl():
     rows = dict(re.findall(r"^\| \*\*(\w+)\*\* \| (\d+) \|", ENGINE_PARITY.read_text(encoding="utf-8"), re.M))
     assert {"postgresql", "sqlite", "mariadb", "teradata"} <= set(rows), (
-        f"ENGINE_PARITY_TODO.md's 'Measured state' table lost an engine row: {sorted(rows)}")
+        f"ENGINE_PARITY_TODO.md's 'Measured state' table lost an engine row: {sorted(rows)}"
+    )
     wrong = {e: (int(n), ddl_table_count(e)) for e, n in rows.items() if int(n) != ddl_table_count(e)}
-    assert wrong == {}, (f"engine: (count in ENGINE_PARITY_TODO.md, CREATE TABLE statements in the DDL) = {wrong}. "
-                         "Count with 'CREATE SET TABLE' as well as 'CREATE TABLE', and skip comment lines.")
+    assert wrong == {}, (
+        f"engine: (count in ENGINE_PARITY_TODO.md, CREATE TABLE statements in the DDL) = {wrong}. "
+        "Count with 'CREATE SET TABLE' as well as 'CREATE TABLE', and skip comment lines."
+    )

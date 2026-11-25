@@ -40,7 +40,7 @@ TIMEOUT = 10
 @dataclass
 class Result:
     step: str
-    status: str        # "ok", "warn" (worth a look, doesn't fail the run) or "fail"
+    status: str  # "ok", "warn" (worth a look, doesn't fail the run) or "fail"
     detail: str
 
 
@@ -64,8 +64,12 @@ def check_config() -> Result:
         return Result("config", "fail", str(exc))
     if not settings.OIDC_JWKS_URL.startswith("https://"):
         return Result("config", "warn", "OIDC_JWKS_URL is not https://, so the https key fetch isn't being checked")
-    return Result("config", "ok", f"issuer {settings.OIDC_ISSUER}, audience {settings.OIDC_AUDIENCE}, "
-                                  f"keys {settings.OIDC_JWKS_URL}, username claim {settings.OIDC_USERNAME_CLAIM!r}")
+    return Result(
+        "config",
+        "ok",
+        f"issuer {settings.OIDC_ISSUER}, audience {settings.OIDC_AUDIENCE}, "
+        f"keys {settings.OIDC_JWKS_URL}, username claim {settings.OIDC_USERNAME_CLAIM!r}",
+    )
 
 
 def check_discovery() -> Result:
@@ -76,11 +80,19 @@ def check_discovery() -> Result:
         return Result("discovery", "warn", f"could not read {url}: {exc}. Not required; the other checks still run")
     problems = []
     if doc.get("issuer") != settings.OIDC_ISSUER:
-        problems.append(f"the IdP says its issuer is {doc.get('issuer')!r}, but OIDC_ISSUER is {settings.OIDC_ISSUER!r}"
-                        " (a trailing slash or the wrong tenant id are the usual causes)")
+        problems.append(
+            f"the IdP says its issuer is {doc.get('issuer')!r}, but OIDC_ISSUER is {settings.OIDC_ISSUER!r}"
+            " (a trailing slash or the wrong tenant id are the usual causes)"
+        )
     if doc.get("jwks_uri") != settings.OIDC_JWKS_URL:
-        problems.append(f"the IdP publishes its keys at {doc.get('jwks_uri')!r}, not OIDC_JWKS_URL {settings.OIDC_JWKS_URL!r}")
-    return Result("discovery", "warn" if problems else "ok", "; ".join(problems) or "issuer and key URL match what the IdP publishes")
+        problems.append(
+            f"the IdP publishes its keys at {doc.get('jwks_uri')!r}, not OIDC_JWKS_URL {settings.OIDC_JWKS_URL!r}"
+        )
+    return Result(
+        "discovery",
+        "warn" if problems else "ok",
+        "; ".join(problems) or "issuer and key URL match what the IdP publishes",
+    )
 
 
 def check_keys() -> Result:
@@ -90,11 +102,15 @@ def check_keys() -> Result:
     except Exception as exc:  # noqa: BLE001 — any failure here is what the operator needs to see
         hint = ""
         if "CERTIFICATE_VERIFY_FAILED" in str(exc) or "SSL" in str(exc):
-            hint = (" The host doesn't trust the IdP's certificate. For a private CA, point SSL_CERT_FILE at the CA bundle "
-                    "(PEM) in the API's environment.")
+            hint = (
+                " The host doesn't trust the IdP's certificate. For a private CA, point SSL_CERT_FILE at the CA bundle "
+                "(PEM) in the API's environment."
+            )
         return Result("keys", "fail", f"{type(exc).__name__}: {exc}.{hint}")
     summary = ", ".join(f"{k.key_id or '(no kid)'} [{k.key_type}]" for k in keys)
-    return Result("keys", "ok" if keys else "fail", f"{len(keys)} signing key(s): {summary}" if keys else "the key set is empty")
+    return Result(
+        "keys", "ok" if keys else "fail", f"{len(keys)} signing key(s): {summary}" if keys else "the key set is empty"
+    )
 
 
 _HINTS = {
@@ -116,38 +132,60 @@ def check_token(token: str) -> Result:
     except jwt.PyJWTError as exc:
         return Result("token", "fail", f"{type(exc).__name__}: {exc}. {_HINTS['DecodeError']}")
     username_claim = settings.OIDC_USERNAME_CLAIM
-    shown = (f"alg {header.get('alg')}, kid {header.get('kid')}, iss {claims.get('iss')}, aud {claims.get('aud')}, "
-             f"expires in {int(claims.get('exp', 0) - time.time())} s, {username_claim} = {claims.get(username_claim)!r}")
+    shown = (
+        f"alg {header.get('alg')}, kid {header.get('kid')}, iss {claims.get('iss')}, aud {claims.get('aud')}, "
+        f"expires in {int(claims.get('exp', 0) - time.time())} s, {username_claim} = {claims.get(username_claim)!r}"
+    )
     try:
         verified = oidc.verify(token)
     except jwt.PyJWTError as exc:
-        return Result("token", "fail", f"{shown}. Rejected: {type(exc).__name__}: {exc}. {_HINTS.get(type(exc).__name__, '')}".rstrip())
+        return Result(
+            "token",
+            "fail",
+            f"{shown}. Rejected: {type(exc).__name__}: {exc}. {_HINTS.get(type(exc).__name__, '')}".rstrip(),
+        )
     username = verified.get(username_claim)
     if not isinstance(username, str) or not username:
-        return Result("token", "fail", f"{shown}. Valid, but it has no {username_claim!r} claim, so no user can be named. "
-                                       "Set OIDC_USERNAME_CLAIM to the claim that holds the username "
-                                       "(Entra ID: preferred_username, or upn in v1 tokens)")
+        return Result(
+            "token",
+            "fail",
+            f"{shown}. Valid, but it has no {username_claim!r} claim, so no user can be named. "
+            "Set OIDC_USERNAME_CLAIM to the claim that holds the username "
+            "(Entra ID: preferred_username, or upn in v1 tokens)",
+        )
     return Result("token", "ok", f"{shown}. Signature, issuer, audience and expiry verified")
 
 
 def check_api(api_url: str, tenant: str, token: str) -> Result:
     url = api_url.rstrip("/") + "/api/auth/oidc"
-    request = urllib.request.Request(url, data=json.dumps({"tenant": tenant, "idToken": token}).encode(),
-                                     headers={"Content-Type": "application/json"}, method="POST")
+    request = urllib.request.Request(
+        url,
+        data=json.dumps({"tenant": tenant, "idToken": token}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     try:
         with _open(request) as res:
             session = json.loads(res.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        hint = {401: "the token verified here but the API refused it, or that user isn't a member of the tenant",
-                404: "the API has OIDC switched off: it needs OIDC_ISSUER set in its own environment"}.get(exc.code, "")
+        hint = {
+            401: "the token verified here but the API refused it, or that user isn't a member of the tenant",
+            404: "the API has OIDC switched off: it needs OIDC_ISSUER set in its own environment",
+        }.get(exc.code, "")
         return Result("sign-in", "fail", f"POST {url} gave {exc.code}. {hint}".rstrip())
     except (urllib.error.URLError, OSError) as exc:
         return Result("sign-in", "fail", f"could not reach {url}: {exc}")
-    return Result("sign-in", "ok", f"200: signed in as {session.get('username')!r} to tenant {session.get('tenant')!r} "
-                                   f"with role {session.get('role')!r}; session expires {session.get('expiresAt')}")
+    return Result(
+        "sign-in",
+        "ok",
+        f"200: signed in as {session.get('username')!r} to tenant {session.get('tenant')!r} "
+        f"with role {session.get('role')!r}; session expires {session.get('expiresAt')}",
+    )
 
 
-def run_checks(token: str, api_url: str | None = None, tenant: str | None = None, discovery: bool = True) -> list[Result]:
+def run_checks(
+    token: str, api_url: str | None = None, tenant: str | None = None, discovery: bool = True
+) -> list[Result]:
     results = [check_config()]
     if results[0].status == "fail":
         return results
@@ -170,7 +208,9 @@ def read_token(args) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--token-env", default="ID_TOKEN", help="environment variable holding the ID token (default ID_TOKEN)")
+    ap.add_argument(
+        "--token-env", default="ID_TOKEN", help="environment variable holding the ID token (default ID_TOKEN)"
+    )
     ap.add_argument("--token-file", help="a file holding the ID token")
     ap.add_argument("--token-stdin", action="store_true", help="read the ID token from standard input")
     ap.add_argument("--api", help="also sign in through a running API, e.g. http://localhost:8000")
@@ -189,9 +229,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{r.status.upper():<5} {r.step:<{width}}  {r.detail}")
     failed = [r.step for r in results if r.status == "fail"]
     ran_api = any(r.step == "sign-in" for r in results)
-    print("\nFAILED: " + ", ".join(failed) if failed else
-          "\nOK: " + ("sign-in works end to end." if ran_api else
-                      "the token verifies. Add --api and --tenant to check the sign-in itself."))
+    print(
+        "\nFAILED: " + ", ".join(failed)
+        if failed
+        else "\nOK: "
+        + (
+            "sign-in works end to end."
+            if ran_api
+            else "the token verifies. Add --api and --tenant to check the sign-in itself."
+        )
+    )
     return 1 if failed else 0
 
 

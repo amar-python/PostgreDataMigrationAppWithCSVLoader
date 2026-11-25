@@ -4,6 +4,7 @@ Public access is opened only for the bootstrap apply, through `bootstrap_public_
 defaults to false in every environment. A literal `public_network_access_enabled = true` would
 leave the secrets store or registry internet-reachable if the manual flip were forgotten.
 """
+
 import re
 from pathlib import Path
 
@@ -16,10 +17,12 @@ pytestmark = [pytest.mark.unit, pytest.mark.security]
 
 
 def test_no_terraform_file_hardcodes_public_network_access():
-    offenders = [f"{p.relative_to(ROOT)}:{n}"
-                 for p in (ROOT / "infra").rglob("*.tf")
-                 for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
-                 if re.search(r"public_network_access_enabled\s*=\s*true\b", line)]
+    offenders = [
+        f"{p.relative_to(ROOT)}:{n}"
+        for p in (ROOT / "infra").rglob("*.tf")
+        for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
+        if re.search(r"public_network_access_enabled\s*=\s*true\b", line)
+    ]
     assert offenders == []
 
 

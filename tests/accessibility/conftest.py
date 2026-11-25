@@ -16,21 +16,22 @@ A11Y_BASE_URL       scan an already running frontend instead of starting ``npm r
 A11Y_CHROMIUM_PATH  use this Chromium instead of the one ``playwright install`` fetched
 A11Y_REPORT_DIR     write one JSON file per scenario with every violation axe found
 """
+
 from __future__ import annotations
 
 import json
 import os
-import sys
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import shutil
 import signal
 import socket
 import subprocess
+import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -39,7 +40,7 @@ from tests.accessibility import axe_baseline, stub_api
 
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND = ROOT / "csv-table-hub-main"
-STARTUP_TIMEOUT_S = 180   # first start also pre-bundles dependencies
+STARTUP_TIMEOUT_S = 180  # first start also pre-bundles dependencies
 
 
 def _fail(message: str):
@@ -56,8 +57,10 @@ def _wait_until_serving(url: str, proc: subprocess.Popen | None, log: Path) -> N
     deadline = time.monotonic() + STARTUP_TIMEOUT_S
     while time.monotonic() < deadline:
         if proc is not None and proc.poll() is not None:
-            _fail(f"The frontend dev server exited with code {proc.returncode} before serving.\n"
-                  f"{log.read_text(errors='replace')[-2000:]}")
+            _fail(
+                f"The frontend dev server exited with code {proc.returncode} before serving.\n"
+                f"{log.read_text(errors='replace')[-2000:]}"
+            )
         try:
             with urllib.request.urlopen(f"{url}/auth", timeout=5) as res:
                 if res.status == 200:
@@ -65,8 +68,10 @@ def _wait_until_serving(url: str, proc: subprocess.Popen | None, log: Path) -> N
         except (urllib.error.URLError, OSError):
             pass
         time.sleep(1)
-    _fail(f"The frontend did not serve {url}/auth within {STARTUP_TIMEOUT_S}s.\n"
-          f"{log.read_text(errors='replace')[-2000:] if log.exists() else ''}")
+    _fail(
+        f"The frontend did not serve {url}/auth within {STARTUP_TIMEOUT_S}s.\n"
+        f"{log.read_text(errors='replace')[-2000:] if log.exists() else ''}"
+    )
 
 
 @pytest.fixture(scope="session")
@@ -90,7 +95,9 @@ def app_url():
     with log.open("wb") as out:
         proc = subprocess.Popen(
             [npm, "run", "dev", "--", "--host", "127.0.0.1", "--port", str(port), "--strictPort"],
-            cwd=FRONTEND, stdout=out, stderr=subprocess.STDOUT,
+            cwd=FRONTEND,
+            stdout=out,
+            stderr=subprocess.STDOUT,
             # An empty API base makes the app call /api on its own origin, where the
             # stub answers. A new session lets teardown stop npm, vite and their children.
             env={**os.environ, "VITE_API_BASE": "", "BROWSER": "none"},
@@ -119,8 +126,10 @@ def chromium():
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        _fail("Playwright is not installed. Run: pip install -r requirements-a11y.txt "
-              "&& python -m playwright install chromium")
+        _fail(
+            "Playwright is not installed. Run: pip install -r requirements-a11y.txt "
+            "&& python -m playwright install chromium"
+        )
     pw = sync_playwright().start()
     try:
         launch = {}
@@ -165,10 +174,17 @@ def open_page(a11y_browser, app_url, request):
     contexts = []
     unstubbed: list[str] = []
 
-    def _open(path: str, *, signed_in: bool = True, jobs: list[dict] | None = None,
-              responses: stub_api.Responses | None = None):
+    def _open(
+        path: str,
+        *,
+        signed_in: bool = True,
+        jobs: list[dict] | None = None,
+        responses: stub_api.Responses | None = None,
+    ):
         context = a11y_browser.new_context(
-            viewport={"width": 1280, "height": 900}, locale="en-AU", timezone_id="UTC",
+            viewport={"width": 1280, "height": 900},
+            locale="en-AU",
+            timezone_id="UTC",
             color_scheme="light",
             # Animations change what is on screen mid-scan (and what contrast is measured on).
             reduced_motion="reduce",
@@ -177,8 +193,7 @@ def open_page(a11y_browser, app_url, request):
         script = stub_api.seed_script(stub_api.SESSION if signed_in else None, jobs)
         if script:
             context.add_init_script(script)
-        context.route("**/api/**", stub_api.handler({**stub_api.default_responses(), **(responses or {})},
-                                                    unstubbed))
+        context.route("**/api/**", stub_api.handler({**stub_api.default_responses(), **(responses or {})}, unstubbed))
         page = context.new_page()
         page.goto(app_url + path, wait_until="networkidle", timeout=60_000)
         return page
@@ -214,9 +229,18 @@ def scan():
         if report_dir:
             Path(report_dir).mkdir(parents=True, exist_ok=True)
             (Path(report_dir) / f"{scenario}.json").write_text(
-                json.dumps({"scenario": scenario, "url": page.url, "violations": violations,
-                            "known": outcome.known, "shrunk": outcome.shrunk}, indent=2),
-                encoding="utf-8")
+                json.dumps(
+                    {
+                        "scenario": scenario,
+                        "url": page.url,
+                        "violations": violations,
+                        "known": outcome.known,
+                        "shrunk": outcome.shrunk,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
 
         for line in outcome.known + outcome.shrunk:
             print(f"[a11y {scenario}] {line}")
@@ -243,8 +267,11 @@ def stub_api_url():
         def _answer(self):
             body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
             path = self.path.split("?")[0]
-            if self.command == "POST" and path == "/api/auth/login" \
-                    and json.loads(body or b"{}").get("password") == stub_api.STREAMLIT_PASSWORD:
+            if (
+                self.command == "POST"
+                and path == "/api/auth/login"
+                and json.loads(body or b"{}").get("password") == stub_api.STREAMLIT_PASSWORD
+            ):
                 status, payload = 200, stub_api.STREAMLIT_SESSION
             else:
                 status, payload = stub_api.respond(path, responses)
@@ -277,18 +304,34 @@ def streamlit_url(stub_api_url):
     log = Path(tempfile.mkdtemp(prefix="a11y-streamlit-")) / "streamlit.log"
     with log.open("wb") as out:
         proc = subprocess.Popen(
-            [sys.executable, "-m", "streamlit", "run", "app.py", "--server.port", str(port),
-             "--server.address", "127.0.0.1", "--server.headless", "true"],
-            cwd=STREAMLIT_APP, stdout=out, stderr=subprocess.STDOUT,
-            env={**os.environ, "API_URL": stub_api_url}, start_new_session=(os.name == "posix"),
+            [
+                sys.executable,
+                "-m",
+                "streamlit",
+                "run",
+                "app.py",
+                "--server.port",
+                str(port),
+                "--server.address",
+                "127.0.0.1",
+                "--server.headless",
+                "true",
+            ],
+            cwd=STREAMLIT_APP,
+            stdout=out,
+            stderr=subprocess.STDOUT,
+            env={**os.environ, "API_URL": stub_api_url},
+            start_new_session=(os.name == "posix"),
         )
     url = f"http://127.0.0.1:{port}"
     try:
         deadline = time.monotonic() + 60
         while True:
             if proc.poll() is not None:
-                _fail(f"Streamlit exited with code {proc.returncode} before serving.\n"
-                      f"{log.read_text(errors='replace')[-2000:]}")
+                _fail(
+                    f"Streamlit exited with code {proc.returncode} before serving.\n"
+                    f"{log.read_text(errors='replace')[-2000:]}"
+                )
             try:
                 with urllib.request.urlopen(f"{url}/_stcore/health", timeout=5) as res:
                     if res.read().strip() == b"ok":
@@ -296,7 +339,9 @@ def streamlit_url(stub_api_url):
             except (urllib.error.URLError, OSError):
                 pass
             if time.monotonic() > deadline:
-                _fail(f"Streamlit did not report healthy at {url} within 60s.\n{log.read_text(errors='replace')[-2000:]}")
+                _fail(
+                    f"Streamlit did not report healthy at {url} within 60s.\n{log.read_text(errors='replace')[-2000:]}"
+                )
             time.sleep(0.5)
         yield url
     finally:
@@ -311,8 +356,13 @@ def streamlit_url(stub_api_url):
 @pytest.fixture
 def streamlit_page(streamlit_url, chromium):
     """``streamlit_page(sign_in=True)`` -> a Page on the Streamlit app, signed in through the real form unless told not to."""
-    context = chromium.new_context(viewport={"width": 1280, "height": 900}, locale="en-AU",
-                                   timezone_id="UTC", color_scheme="light", reduced_motion="reduce")
+    context = chromium.new_context(
+        viewport={"width": 1280, "height": 900},
+        locale="en-AU",
+        timezone_id="UTC",
+        color_scheme="light",
+        reduced_motion="reduce",
+    )
 
     def _open(*, sign_in: bool = True):
         page = context.new_page()

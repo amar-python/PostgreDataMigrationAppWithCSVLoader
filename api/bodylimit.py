@@ -14,10 +14,12 @@ The cap is just under twice ``MAX_UPLOAD_BYTES``. A text file travels inside JSO
 breaks (a fully quoted CSV is about 1.7 times its size), and base64 adds a third, so a tighter cap would refuse files
 that are within the file limit. The routes keep their own exact checks on the decoded file as a second line of defence.
 """
+
 from __future__ import annotations
 
-from api.config import settings
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from api.config import settings
 
 _REFUSAL = b'{"detail":"Request body too large"}'
 
@@ -40,12 +42,17 @@ def _declared_length(scope: Scope) -> int | None:
 
 
 async def _refuse(send: Send) -> None:
-    await send({
-        "type": "http.response.start",
-        "status": 413,
-        "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(_REFUSAL)).encode()),
-                    (b"connection", b"close")],
-    })
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 413,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(_REFUSAL)).encode()),
+                (b"connection", b"close"),
+            ],
+        }
+    )
     await send({"type": "http.response.body", "body": _REFUSAL})
 
 

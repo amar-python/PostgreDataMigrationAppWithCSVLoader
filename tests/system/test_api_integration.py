@@ -1,6 +1,7 @@
 """API integration tests — require a live PostgreSQL database.
 Database-free tests live in test_api_unit.py.
 """
+
 from __future__ import annotations
 
 import os
@@ -13,11 +14,13 @@ from api.main import app
 
 client = TestClient(app)
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it. Most often this means "
-         "PGPASSWORD is not set in this shell:\n"
-         "    PowerShell:  $env:PGPASSWORD = '<password>'\n"
-         "    bash:        export PGPASSWORD='<password>'\n"
-         "Defaults come from api/config.py; see scripts/start-api.ps1.")
+_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it. Most often this means "
+    "PGPASSWORD is not set in this shell:\n"
+    "    PowerShell:  $env:PGPASSWORD = '<password>'\n"
+    "    bash:        export PGPASSWORD='<password>'\n"
+    "Defaults come from api/config.py; see scripts/start-api.ps1."
+)
 
 SMALL_CSV = "col_a,col_b\n1,2\n3,4\n"
 
@@ -116,15 +119,13 @@ class CsvPipelineWithDatabase(unittest.TestCase):
                 self.client.delete(f"/api/csv/files/{f['id']}")
 
     def test_preview_reports_columns(self):
-        r = self.client.post("/api/csv/preview",
-                             json={"fileName": self.name, "content": self.content})
+        r = self.client.post("/api/csv/preview", json={"fileName": self.name, "content": self.content})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json().get("status"), "ok", r.text[:300])
         self.assertEqual(r.json()["columns"], ["col_a", "col_b"])
 
     def test_upload_then_list_then_read_rows(self):
-        up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+        up = self.client.post("/api/csv/upload", json={"fileName": self.name, "content": self.content})
         self.assertEqual(up.status_code, 200)
         body = up.json()
         self.assertEqual(body["status"], "ok", body)
@@ -140,19 +141,15 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         self.assertEqual(len(rows.json()["rows"]), 1)
 
     def test_reupload_of_identical_content_is_refused(self):
-        first = self.client.post("/api/csv/upload",
-                                 json={"fileName": self.name, "content": self.content})
+        first = self.client.post("/api/csv/upload", json={"fileName": self.name, "content": self.content})
         self.assertEqual(first.json()["status"], "ok")
 
-        again = self.client.post("/api/csv/upload",
-                                 json={"fileName": self.name, "content": self.content})
-        self.assertEqual(again.json()["status"], "duplicate_file",
-                         "re-uploading identical content should be refused")
+        again = self.client.post("/api/csv/upload", json={"fileName": self.name, "content": self.content})
+        self.assertEqual(again.json()["status"], "duplicate_file", "re-uploading identical content should be refused")
 
     def test_in_file_duplicate_rows_are_skipped(self):
         dupes = f"col_a,col_b\n{os.getpid()},x\n{os.getpid()},x\n"
-        r = self.client.post("/api/csv/upload",
-                             json={"fileName": self.name, "content": dupes})
+        r = self.client.post("/api/csv/upload", json={"fileName": self.name, "content": dupes})
         body = r.json()
         self.assertEqual(body["status"], "ok", body)
         self.assertEqual(body["insertedRows"], 1)
@@ -165,11 +162,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         rows and both land in the table.
         """
         pid = os.getpid()
-        content = (
-            "col_a,col_b\n"
-            f"{pid}ab,cd\n"
-            f"{pid}a,bcd\n"
-        )
+        content = f"col_a,col_b\n{pid}ab,cd\n{pid}a,bcd\n"
         r = self.client.post(
             "/api/csv/upload",
             json={"fileName": self.name, "content": content},
@@ -177,7 +170,8 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         body = r.json()
         self.assertEqual(body["status"], "ok", body)
         self.assertEqual(
-            body["insertedRows"], 2,
+            body["insertedRows"],
+            2,
             "BUG-022 regression: split-boundary rows were deduplicated",
         )
         self.assertEqual(body["duplicateRowsSkipped"], 0)
@@ -200,11 +194,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         intended dedup — two byte-identical rows still count as one insert.
         """
         pid = os.getpid()
-        content = (
-            "col_a,col_b\n"
-            f"{pid}xy,{pid}z\n"
-            f"{pid}xy,{pid}z\n"
-        )
+        content = f"col_a,col_b\n{pid}xy,{pid}z\n{pid}xy,{pid}z\n"
         r = self.client.post(
             "/api/csv/upload",
             json={"fileName": self.name, "content": content},
@@ -223,8 +213,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         for name in ("csv_a; DROP TABLE personnel", "csv_a'--"):
             with self.subTest(table=name):
                 r = self.client.get(f"/api/csv/tables/{name}/rows")
-                self.assertEqual(r.status_code, 404,
-                                 f"unregistered name was served: {name}")
+                self.assertEqual(r.status_code, 404, f"unregistered name was served: {name}")
 
     def test_core_te_tables_are_intact(self):
         """A CSV upload must never disturb the 12 tables the SQL suite asserts."""
@@ -239,8 +228,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
 
     def test_audit_record_contains_required_fields(self):
         """BR-15: GET /api/csv/files must return all required audit fields."""
-        up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+        up = self.client.post("/api/csv/upload", json={"fileName": self.name, "content": self.content})
         self.assertEqual(up.json()["status"], "ok")
 
         files = self.client.get("/api/csv/files").json()
@@ -254,34 +242,33 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         """BR-15: persisted row_count must match what the upload response reported."""
         content = f"col_a,col_b\n{os.getpid()}_audit,1\n{os.getpid()}_audit,2\n"
         name = f"br15_rowcount_{os.getpid()}.csv"
-        up = self.client.post("/api/csv/upload",
-                              json={"fileName": name, "content": content})
+        up = self.client.post("/api/csv/upload", json={"fileName": name, "content": content})
         body = up.json()
         self.assertEqual(body["status"], "ok")
 
         files = self.client.get("/api/csv/files").json()
         record = next((f for f in files if f["file_name"] == name), None)
         self.assertIsNotNone(record)
-        self.assertEqual(record["row_count"], body["insertedRows"],
-                         "Persisted row_count must match insertedRows in upload response")
+        self.assertEqual(
+            record["row_count"], body["insertedRows"], "Persisted row_count must match insertedRows in upload response"
+        )
 
     def test_audit_record_table_name_matches_upload_response(self):
         """BR-15: persisted table_name must match what the upload response reported."""
-        up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+        up = self.client.post("/api/csv/upload", json={"fileName": self.name, "content": self.content})
         body = up.json()
         self.assertEqual(body["status"], "ok")
 
         files = self.client.get("/api/csv/files").json()
         record = next((f for f in files if f["file_name"] == self.name), None)
         self.assertIsNotNone(record)
-        self.assertEqual(record["table_name"], body["tableName"],
-                         "Persisted table_name must match tableName in upload response")
+        self.assertEqual(
+            record["table_name"], body["tableName"], "Persisted table_name must match tableName in upload response"
+        )
 
     def test_audit_record_has_iso_timestamp(self):
         """BR-15: created_at must be a non-empty ISO timestamp."""
-        up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+        up = self.client.post("/api/csv/upload", json={"fileName": self.name, "content": self.content})
         self.assertEqual(up.json()["status"], "ok")
 
         files = self.client.get("/api/csv/files").json()
@@ -289,6 +276,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
         self.assertIsNotNone(record)
         self.assertTrue(record.get("created_at", ""), "created_at must not be empty")
         from datetime import datetime
+
         try:
             datetime.fromisoformat(record["created_at"].replace("Z", "+00:00"))
         except ValueError:
@@ -297,8 +285,7 @@ class CsvPipelineWithDatabase(unittest.TestCase):
     def test_failed_upload_leaves_no_audit_record(self):
         """BR-15: a structurally invalid file must not create a registry entry."""
         bad_name = f"br15_fail_{os.getpid()}.csv"
-        up = self.client.post("/api/csv/upload",
-                              json={"fileName": bad_name, "content": "col_a\n"})
+        up = self.client.post("/api/csv/upload", json={"fileName": bad_name, "content": "col_a\n"})
         self.assertIn(up.json()["status"], ("invalid_structure", "error"))
 
         files = self.client.get("/api/csv/files").json()
@@ -331,6 +318,7 @@ class AuditLogTrail(unittest.TestCase):
         # trail could not be tested, and tearDown's cleanup would silently 403
         # and leave rows behind for the next run to trip over.
         from api.config import settings as _settings
+
         cls._settings = _settings
         cls._orig_allow_destructive = _settings.allow_destructive
         _settings.allow_destructive = True
@@ -380,13 +368,13 @@ class AuditLogTrail(unittest.TestCase):
 
     def test_successful_upload_writes_an_audit_row(self):
         """O-04: the gap this closes — a load used to leave no audit trace."""
-        up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+        up = self.client.post("/api/csv/upload", json={"fileName": self.name, "content": self.content})
         self.assertEqual(up.json()["status"], "ok", up.text)
 
         uploads = [e for e in self._entries_for(self.name) if e["action"] == "upload"]
         self.assertEqual(
-            len(uploads), 1,
+            len(uploads),
+            1,
             f"expected exactly one 'upload' audit row for {self.name}, got {len(uploads)}",
         )
 
@@ -394,8 +382,7 @@ class AuditLogTrail(unittest.TestCase):
         """The row must identify what was loaded and where, not merely that
         something happened — an audit trail that cannot be tied back to the
         artefact it describes is not evidence."""
-        up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+        up = self.client.post("/api/csv/upload", json={"fileName": self.name, "content": self.content})
         body = up.json()
         self.assertEqual(body["status"], "ok", up.text)
 
@@ -408,8 +395,7 @@ class AuditLogTrail(unittest.TestCase):
 
     def test_audit_row_names_the_actor_and_the_chain_verifies(self):
         """M3a (#107): who acted is recorded, and the hash chain checks out."""
-        up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+        up = self.client.post("/api/csv/upload", json={"fileName": self.name, "content": self.content})
         self.assertEqual(up.json()["status"], "ok", up.text)
         row = next(e for e in self._entries_for(self.name) if e["action"] == "upload")
         self.assertEqual(row["actor"], "anonymous")
@@ -420,17 +406,16 @@ class AuditLogTrail(unittest.TestCase):
     def test_upload_then_delete_leaves_both_rows(self):
         """The full lifecycle. Before O-04 only the second half was recorded,
         so a table could be seen to vanish with no record of its arrival."""
-        up = self.client.post("/api/csv/upload",
-                              json={"fileName": self.name, "content": self.content})
+        up = self.client.post("/api/csv/upload", json={"fileName": self.name, "content": self.content})
         self.assertEqual(up.json()["status"], "ok", up.text)
 
-        file_id = next(f["id"] for f in self.client.get("/api/csv/files").json()
-                       if f["file_name"] == self.name)
+        file_id = next(f["id"] for f in self.client.get("/api/csv/files").json() if f["file_name"] == self.name)
         delete = self.client.delete(f"/api/csv/files/{file_id}")
         # setUpClass enables API_ALLOW_DESTRUCTIVE for this class, so a 403 here
         # means the gate itself changed, not that the environment is misconfigured.
         self.assertEqual(
-            delete.status_code, 200,
+            delete.status_code,
+            200,
             f"delete was refused despite the class enabling it: {delete.text}",
         )
 
@@ -441,17 +426,16 @@ class AuditLogTrail(unittest.TestCase):
     def test_duplicate_upload_writes_no_second_audit_row(self):
         """Only a genuine load is audited. A refused duplicate changed nothing,
         so logging it would make the trail read as if data had landed twice."""
-        first = self.client.post("/api/csv/upload",
-                                 json={"fileName": self.name, "content": self.content})
+        first = self.client.post("/api/csv/upload", json={"fileName": self.name, "content": self.content})
         self.assertEqual(first.json()["status"], "ok", first.text)
 
-        second = self.client.post("/api/csv/upload",
-                                  json={"fileName": self.name, "content": self.content})
+        second = self.client.post("/api/csv/upload", json={"fileName": self.name, "content": self.content})
         self.assertEqual(second.json()["status"], "duplicate_file", second.text)
 
         uploads = [e for e in self._entries_for(self.name) if e["action"] == "upload"]
         self.assertEqual(
-            len(uploads), 1,
+            len(uploads),
+            1,
             "a refused duplicate must not add a second 'upload' row",
         )
 
@@ -459,18 +443,17 @@ class AuditLogTrail(unittest.TestCase):
         """A header-only file is rejected before any rows land, so there is
         nothing to audit."""
         bad = f"audit_fail_{os.getpid()}.csv"
-        resp = self.client.post("/api/csv/upload",
-                                json={"fileName": bad, "content": "col_a\n"})
+        resp = self.client.post("/api/csv/upload", json={"fileName": bad, "content": "col_a\n"})
         self.assertIn(resp.json()["status"], ("invalid_structure", "error"))
         self.assertEqual(
-            self._entries_for(bad), [],
+            self._entries_for(bad),
+            [],
             "a failed upload must not leave an audit row",
         )
 
     def test_audit_endpoint_reports_a_total_and_respects_limit(self):
         """Pagination contract, so a grower table stays consultable."""
-        self.client.post("/api/csv/upload",
-                         json={"fileName": self.name, "content": self.content})
+        self.client.post("/api/csv/upload", json={"fileName": self.name, "content": self.content})
         body = self.client.get("/api/audit/log", params={"limit": 1}).json()
         self.assertGreaterEqual(body["total"], 1)
         self.assertEqual(body["limit"], 1)
@@ -491,18 +474,24 @@ class PoolTimeout(unittest.TestCase):
     def setUpClass(cls):
         # Save the original pool so we can restore it after the test.
         from api import db
+
         cls.db = db
         cls.orig_pool = db._pool
         cls.orig_executor = db._getconn_executor
         cls.orig_timeout = db.settings.POOL_GETCONN_TIMEOUT
 
-        import psycopg2.pool
         from concurrent.futures import ThreadPoolExecutor
+
+        import psycopg2.pool
+
         try:
             db._pool = psycopg2.pool.ThreadedConnectionPool(
-                minconn=1, maxconn=2,
-                host=db.settings.PG_HOST, port=db.settings.PG_PORT,
-                user=db.settings.PG_USER, password=db.settings.PG_PASSWORD.get_secret_value(),
+                minconn=1,
+                maxconn=2,
+                host=db.settings.PG_HOST,
+                port=db.settings.PG_PORT,
+                user=db.settings.PG_USER,
+                password=db.settings.PG_PASSWORD.get_secret_value(),
                 dbname=db.settings.PG_DATABASE,
             )
         except Exception as exc:  # noqa: BLE001
@@ -511,9 +500,7 @@ class PoolTimeout(unittest.TestCase):
                 f"  {type(exc).__name__}: {str(exc).strip().splitlines()[0]}\n"
                 f"{_HELP}"
             ) from None
-        db._getconn_executor = ThreadPoolExecutor(
-            max_workers=4, thread_name_prefix="test-pool-getconn"
-        )
+        db._getconn_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="test-pool-getconn")
         db.settings.POOL_GETCONN_TIMEOUT = 0.5  # keep the test fast
 
     @classmethod
@@ -533,7 +520,9 @@ class PoolTimeout(unittest.TestCase):
         behaviour, not a regression.
         """
         import time
+
         import psycopg2.pool
+
         # Borrow both slots and hold them.
         c1 = self.db._pool.getconn()
         c2 = self.db._pool.getconn()
@@ -546,9 +535,10 @@ class PoolTimeout(unittest.TestCase):
             # started blocking (a bug or a future psycopg2 change) and our
             # timeout wrapper failed to fire — exactly what BUG-030 guards.
             self.assertLess(
-                elapsed, 3.0,
-                f"BUG-030 regression: getconn blocked {elapsed:.2f}s "
-                f"instead of raising within POOL_GETCONN_TIMEOUT")
+                elapsed,
+                3.0,
+                f"BUG-030 regression: getconn blocked {elapsed:.2f}s instead of raising within POOL_GETCONN_TIMEOUT",
+            )
             self.assertIn("pool", str(ctx.exception).lower())
         finally:
             self.db._pool.putconn(c1)

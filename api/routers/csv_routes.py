@@ -6,29 +6,29 @@ import base64
 import binascii
 import logging
 from datetime import datetime
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from psycopg2 import sql
+from psycopg2.extensions import cursor
 from pydantic import BaseModel, Field
 
 from api import policy
 from api.auth import allow, tenant_scope
 from api.concurrency import import_slot
 from api.config import settings
-from api.tenancy import uploads_schema
 from api.db import Conn
 from api.services.audit import coerce_file_id, write_audit
 from api.services.csv_parse import build_preview
 from api.services.dynamic_loader import upload_dynamic
 from api.services.originals import record_upload, store_upload
-from api.services.type_confirmation import require_confirmed_types
 from api.services.reports import like_pattern
+from api.services.results import LoadResult
 from api.services.staged_import import derive_state, state_columns, state_join
 from api.services.te_loader import match_te_table, upload_te
-from typing import Any
-from psycopg2.extensions import cursor
-from api.services.results import LoadResult
+from api.services.type_confirmation import require_confirmed_types
+from api.tenancy import uploads_schema
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +66,9 @@ class UploadRequest(BaseModel):
     typesConfirmed: bool = Field(
         default=False,
         description="A person confirmed `types` (#195); the registry records `user_confirmed`, else `inferred_unconfirmed`. "
-                    "A server started with API_REQUIRE_TYPE_CONFIRMATION=true answers 422 to a dynamic upload "
-                    "unless this is true and `types` is sent (#242).")
+        "A server started with API_REQUIRE_TYPE_CONFIRMATION=true answers 422 to a dynamic upload "
+        "unless this is true and `types` is sent (#242).",
+    )
 
 
 @router.post("/preview", dependencies=[Depends(allow("preview"))])
@@ -124,10 +125,12 @@ def upload(req: UploadRequest, session: dict[str, Any] | None = Depends(tenant_s
         # Any failure rolls the load back; wrapping it keeps it out of the loaders' psycopg2 handlers.
         try:
             flags = result.pop("_duplicateFlags", None)
-            recorded["uploadId"] = store_upload(cur, req.fileName, req.content, req.mode, result,
-                                                original=original, flags=flags)
-            write_audit(cur, "upload", coerce_file_id(result.get("fileId")), req.fileName,
-                        result.get("tableName"), req.mode)
+            recorded["uploadId"] = store_upload(
+                cur, req.fileName, req.content, req.mode, result, original=original, flags=flags
+            )
+            write_audit(
+                cur, "upload", coerce_file_id(result.get("fileId")), req.fileName, result.get("tableName"), req.mode
+            )
         except Exception as exc:  # noqa: BLE001 — any failure here must undo the load
             raise RecordFailed(str(exc)) from exc
 
@@ -151,9 +154,16 @@ def upload(req: UploadRequest, session: dict[str, Any] | None = Depends(tenant_s
         mapping = [m.model_dump() for m in req.headerMapping] if req.headerMapping else None
 
         def load() -> LoadResult:
-            return upload_dynamic(req.fileName, req.content, req.types, req.overwrite, session=session,
-                                  header_mapping=mapping, types_confirmed=req.typesConfirmed,
-                                  on_commit=record_with_load)
+            return upload_dynamic(
+                req.fileName,
+                req.content,
+                req.types,
+                req.overwrite,
+                session=session,
+                header_mapping=mapping,
+                types_confirmed=req.typesConfirmed,
+                on_commit=record_with_load,
+            )
     else:
         raise HTTPException(422, f"Unknown mode '{req.mode}' — use 'dynamic' or 'te'")
 
@@ -166,7 +176,7 @@ def upload(req: UploadRequest, session: dict[str, Any] | None = Depends(tenant_s
             "status": "error",
             "reason": "record_failed",
             "message": "The upload couldn't be recorded, so nothing was imported. Try again; "
-                       "if it keeps failing, contact your administrator.",
+            "if it keeps failing, contact your administrator.",
             "logs": [],
         }
 
@@ -244,22 +254,47 @@ def list_uploads(
         raise HTTPException(422, f"Unknown status {status!r}; expected one of {list(_UPLOAD_STATUSES)}")
     where: list[sql.Composable] = []
     params: list[object] = []
-    for clause, value in (("u.status = %s", status), ("u.uploader = %s", uploader),
-                          ("u.file_name ILIKE %s ESCAPE '\\'", None if file is None else like_pattern(file)),
-                          ("u.uploaded_at >= %s", date_from), ("u.uploaded_at < %s", date_to)):
+    for clause, value in (
+        ("u.status = %s", status),
+        ("u.uploader = %s", uploader),
+        ("u.file_name ILIKE %s ESCAPE '\\'", None if file is None else like_pattern(file)),
+        ("u.uploaded_at >= %s", date_from),
+        ("u.uploaded_at < %s", date_to),
+    ):
         if value is not None:
             where.append(sql.SQL(clause))
             params.append(value)
     where_sql = sql.SQL(" WHERE ") + sql.SQL(" AND ").join(where) if where else sql.SQL("")
     with Conn() as conn, conn.cursor() as cur:
-        cur.execute(sql.SQL(
-            "SELECT u.id, u.file_name, u.sha256, u.byte_size, u.uploader, u.mode, u.status, u.total_rows, "
-            "u.imported_rows, u.failed_rows, u.csv_file_id, u.uploaded_at, {reason}, {cols} "
-            "FROM {s}.uploads u {join}{where} ORDER BY u.id DESC LIMIT %s OFFSET %s"
-        ).format(reason=sql.SQL(_FAILURE_REASON), cols=state_columns(), s=sql.Identifier(uploads_schema()),
-                 join=state_join(), where=where_sql), [*params, max(1, min(limit, 500)), max(0, offset)])
-        keys = ("id", "file_name", "sha256", "byte_size", "uploader", "mode", "status", "total_rows",
-                "imported_rows", "failed_rows", "csv_file_id", "uploaded_at", "failure_reason")
+        cur.execute(
+            sql.SQL(
+                "SELECT u.id, u.file_name, u.sha256, u.byte_size, u.uploader, u.mode, u.status, u.total_rows, "
+                "u.imported_rows, u.failed_rows, u.csv_file_id, u.uploaded_at, {reason}, {cols} "
+                "FROM {s}.uploads u {join}{where} ORDER BY u.id DESC LIMIT %s OFFSET %s"
+            ).format(
+                reason=sql.SQL(_FAILURE_REASON),
+                cols=state_columns(),
+                s=sql.Identifier(uploads_schema()),
+                join=state_join(),
+                where=where_sql,
+            ),
+            [*params, max(1, min(limit, 500)), max(0, offset)],
+        )
+        keys = (
+            "id",
+            "file_name",
+            "sha256",
+            "byte_size",
+            "uploader",
+            "mode",
+            "status",
+            "total_rows",
+            "imported_rows",
+            "failed_rows",
+            "csv_file_id",
+            "uploaded_at",
+            "failure_reason",
+        )
         out = []
         for r in cur.fetchall():
             u = dict(zip(keys, r[:13]))
@@ -277,10 +312,13 @@ def upload_detail(upload_id: int) -> dict[str, Any]:
     """One upload's outcome, why its rows failed, and its step log (M3c, #107).
     Stored on the server, so any session in the tenant can read them."""
     with Conn() as conn, conn.cursor() as cur:
-        cur.execute(sql.SQL(
-            "SELECT u.status, u.total_rows, u.imported_rows, u.failed_rows, u.row_errors, u.logs, u.uploader, "
-            "u.file_name, {cols} FROM {s}.uploads u {join} WHERE u.id = %s"
-        ).format(cols=state_columns(), s=sql.Identifier(uploads_schema()), join=state_join()), (upload_id,))
+        cur.execute(
+            sql.SQL(
+                "SELECT u.status, u.total_rows, u.imported_rows, u.failed_rows, u.row_errors, u.logs, u.uploader, "
+                "u.file_name, {cols} FROM {s}.uploads u {join} WHERE u.id = %s"
+            ).format(cols=state_columns(), s=sql.Identifier(uploads_schema()), join=state_join()),
+            (upload_id,),
+        )
         row = cur.fetchone()
     if row is None:
         raise HTTPException(404, "No such upload")
@@ -292,17 +330,26 @@ def upload_detail(upload_id: int) -> dict[str, Any]:
 def upload_original(upload_id: int) -> Response:
     """The file exactly as it was uploaded (M3b; BR-24)."""
     with Conn() as conn, conn.cursor() as cur:
-        cur.execute(sql.SQL(
-            "SELECT u.file_name, u.sha256, b.content FROM {s}.uploads u "
-            "JOIN {s}.upload_blobs b ON b.upload_id = u.id WHERE u.id = %s"
-        ).format(s=sql.Identifier(uploads_schema())), (upload_id,))
+        cur.execute(
+            sql.SQL(
+                "SELECT u.file_name, u.sha256, b.content FROM {s}.uploads u "
+                "JOIN {s}.upload_blobs b ON b.upload_id = u.id WHERE u.id = %s"
+            ).format(s=sql.Identifier(uploads_schema())),
+            (upload_id,),
+        )
         row = cur.fetchone()
     if row is None:
         raise HTTPException(404, "No such upload")
     name, digest, content = row
-    return Response(bytes(content), media_type="text/csv", headers={
-        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}",
-        "X-Content-SHA256": digest, policy.HEADER: settings.DATA_CLASSIFICATION})
+    return Response(
+        bytes(content),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}",
+            "X-Content-SHA256": digest,
+            policy.HEADER: settings.DATA_CLASSIFICATION,
+        },
+    )
 
 
 @router.get("/tables/{table_name}/rows", dependencies=[Depends(allow("read_rows"))])
@@ -314,9 +361,7 @@ def table_rows(table_name: str, limit: int = 50) -> dict[str, Any]:
         with conn.cursor() as cur:
             # Only serve tables that are registered uploads
             cur.execute(
-                sql.SQL("SELECT 1 FROM {}.csv_files WHERE table_name = %s").format(
-                    sql.Identifier(uploads_schema())
-                ),
+                sql.SQL("SELECT 1 FROM {}.csv_files WHERE table_name = %s").format(sql.Identifier(uploads_schema())),
                 (table_name,),
             )
             if cur.fetchone() is None:
@@ -343,15 +388,14 @@ def delete_file(file_id: int) -> dict[str, Any]:
     if not settings.allow_destructive:
         raise HTTPException(
             403,
-            "Destructive operations are disabled. "
-            "Set API_ALLOW_DESTRUCTIVE=true to enable DELETE.",
+            "Destructive operations are disabled. Set API_ALLOW_DESTRUCTIVE=true to enable DELETE.",
         )
     with Conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                sql.SQL(
-                    "SELECT table_name, mode, file_name FROM {}.csv_files WHERE id = %s"
-                ).format(sql.Identifier(uploads_schema())),
+                sql.SQL("SELECT table_name, mode, file_name FROM {}.csv_files WHERE id = %s").format(
+                    sql.Identifier(uploads_schema())
+                ),
                 (file_id,),
             )
             row = cur.fetchone()
@@ -375,9 +419,7 @@ def delete_file(file_id: int) -> dict[str, Any]:
                         )
                     )
             cur.execute(
-                sql.SQL("DELETE FROM {}.csv_files WHERE id = %s").format(
-                    sql.Identifier(uploads_schema())
-                ),
+                sql.SQL("DELETE FROM {}.csv_files WHERE id = %s").format(sql.Identifier(uploads_schema())),
                 (file_id,),
             )
             # Persist audit record so deletions are traceable after the table is

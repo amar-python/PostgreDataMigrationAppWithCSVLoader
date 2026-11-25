@@ -12,6 +12,7 @@ best-effort record of the failed attempt fails too, which exercises that path's 
 
 Integration: needs a live PostgreSQL with the dev schema deployed, as in CI.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -66,8 +67,7 @@ class DirectUploadRecordsAreAtomic(unittest.TestCase):
 
     def _q(self, query: str, *params):
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL(query).format(s=sql.Identifier(self.schema), t=sql.Identifier(self.te_schema)),
-                        params)
+            cur.execute(sql.SQL(query).format(s=sql.Identifier(self.schema), t=sql.Identifier(self.te_schema)), params)
             return cur.fetchall()
 
     def _registry(self):
@@ -77,12 +77,14 @@ class DirectUploadRecordsAreAtomic(unittest.TestCase):
         return self._q("SELECT status, csv_file_id FROM {s}.uploads WHERE file_name = %s ORDER BY id", self.name)
 
     def _upload_audit(self):
-        return self._q("SELECT file_id, table_name FROM {s}.audit_log WHERE action = 'upload' AND file_name = %s",
-                       self.name)
+        return self._q(
+            "SELECT file_id, table_name FROM {s}.audit_log WHERE action = 'upload' AND file_name = %s", self.name
+        )
 
     def _dataset_tables(self) -> int:
-        return self._q("SELECT count(*) FROM pg_tables WHERE schemaname = %s AND tablename LIKE 'csv\\_%%'",
-                       self.schema)[0][0]
+        return self._q(
+            "SELECT count(*) FROM pg_tables WHERE schemaname = %s AND tablename LIKE 'csv\\_%%'", self.schema
+        )[0][0]
 
     def _te_rows(self, org: str) -> int:
         return self._q("SELECT count(*) FROM {t}.organisations WHERE name = %s", org)[0][0]
@@ -94,32 +96,52 @@ class DirectUploadRecordsAreAtomic(unittest.TestCase):
                     self.client.delete(f"/api/csv/files/{f['id']}")
         with Conn() as conn, conn.cursor() as cur:
             if org:
-                cur.execute(sql.SQL("DELETE FROM {}.organisations WHERE name = %s").format(
-                    sql.Identifier(self.te_schema)), (org,))
-            cur.execute(sql.SQL("DELETE FROM {}.csv_files WHERE file_name = %s AND mode = 'te'").format(
-                sql.Identifier(self.schema)), (self.name,))
+                cur.execute(
+                    sql.SQL("DELETE FROM {}.organisations WHERE name = %s").format(sql.Identifier(self.te_schema)),
+                    (org,),
+                )
+            cur.execute(
+                sql.SQL("DELETE FROM {}.csv_files WHERE file_name = %s AND mode = 'te'").format(
+                    sql.Identifier(self.schema)
+                ),
+                (self.name,),
+            )
             conn.commit()
 
     def _dynamic(self):
-        return self.client.post("/api/csv/upload", json={
-            "fileName": self.name, "content": f"k,v\n{self.tag},1\nsecond,2\n", "mode": "dynamic"})
+        return self.client.post(
+            "/api/csv/upload",
+            json={"fileName": self.name, "content": f"k,v\n{self.tag},1\nsecond,2\n", "mode": "dynamic"},
+        )
 
     def _te(self, org: str):
-        return self.client.post("/api/csv/upload", json={
-            "fileName": self.name, "content": f"name,org_type,country\n{org},government,AU\n",
-            "mode": "te", "targetTable": "organisations"})
+        return self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": self.name,
+                "content": f"name,org_type,country\n{org},government,AU\n",
+                "mode": "te",
+                "targetTable": "organisations",
+            },
+        )
 
     def _assert_nothing_committed(self, res, tables_before: int, org: str | None = None):
         body = res.json() if res.headers.get("content-type", "").startswith("application/json") else {}
-        self.assertFalse(res.status_code == 200 and body.get("status") == "ok",
-                         f"a load whose records could not be written must not report success: {res.status_code} {res.text}")
+        self.assertFalse(
+            res.status_code == 200 and body.get("status") == "ok",
+            f"a load whose records could not be written must not report success: {res.status_code} {res.text}",
+        )
         self.assertEqual(self._registry(), [], "the load's registry row committed without its records")
-        self.assertEqual(self._dataset_tables(), tables_before, "the load's dataset table committed without its records")
+        self.assertEqual(
+            self._dataset_tables(), tables_before, "the load's dataset table committed without its records"
+        )
         if org:
             self.assertEqual(self._te_rows(org), 0, "the load's T&E rows committed without its records")
         self.assertEqual(self._upload_audit(), [], "no upload audit row may exist for a load that did not commit")
-        self.assertTrue(all(status == "failed" and file_id is None for status, file_id in self._uploads()),
-                        f"only a failed attempt may be recorded: {self._uploads()}")
+        self.assertTrue(
+            all(status == "failed" and file_id is None for status, file_id in self._uploads()),
+            f"only a failed attempt may be recorded: {self._uploads()}",
+        )
 
     # -- faults ----------------------------------------------------------------------------------
 

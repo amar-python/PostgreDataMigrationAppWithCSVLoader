@@ -8,6 +8,7 @@ nothing about anonymous access.
 
 Asserted by running the real ``lifespan``. No database is needed: the pool and bootstrap are replaced.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -52,8 +53,9 @@ def test_a_leftover_key_is_reported_as_unused(monkeypatch, caplog):
 
 def test_no_part_of_a_leftover_key_is_in_the_startup_log(monkeypatch, caplog):
     logged = run_startup(monkeypatch, caplog, key=KEY)
-    leaked = [KEY[i:i + n] for n in range(4, len(KEY) + 1) for i in range(len(KEY) - n + 1)
-              if KEY[i:i + n] in logged]
+    leaked = [
+        KEY[i : i + n] for n in range(4, len(KEY) + 1) for i in range(len(KEY) - n + 1) if KEY[i : i + n] in logged
+    ]
     assert leaked == [], f"parts of the key are in the log: {leaked[:5]}"
 
 
@@ -63,7 +65,9 @@ def test_no_key_no_key_message(monkeypatch, caplog):
 
 def test_anonymous_access_is_announced_loudly(monkeypatch, caplog):
     run_startup(monkeypatch, caplog, anonymous=True)
-    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING and "ANONYMOUS ACCESS IS ON" in r.getMessage()]
+    warnings = [
+        r for r in caplog.records if r.levelno >= logging.WARNING and "ANONYMOUS ACCESS IS ON" in r.getMessage()
+    ]
     assert warnings, "the opt-in must produce a WARNING at start-up"
 
 

@@ -20,8 +20,10 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
-         "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1.")
+_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
+    "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1."
+)
 
 
 def _browser_decode(raw: bytes) -> str:
@@ -90,12 +92,15 @@ class OriginalBytesAreKept(unittest.TestCase):
 
     def test_without_contentbase64_the_utf8_encoding_of_content_is_kept_as_before(self):
         content = f"a,b\n1,{self.tag}\n"
-        res = self.client.post("/api/csv/upload", json={
-            "fileName": f"bytes_plain_{self.tag}.csv", "content": content}).json()
+        res = self.client.post(
+            "/api/csv/upload", json={"fileName": f"bytes_plain_{self.tag}.csv", "content": content}
+        ).json()
         self._assert_round_trips(content.encode(), res)
 
     def test_invalid_base64_is_rejected_before_anything_loads(self):
-        resp = self.client.post("/api/csv/upload", json={
-            "fileName": f"bytes_bad_{self.tag}.csv", "content": "a\n1\n", "contentBase64": "not base64!!"})
+        resp = self.client.post(
+            "/api/csv/upload",
+            json={"fileName": f"bytes_bad_{self.tag}.csv", "content": "a\n1\n", "contentBase64": "not base64!!"},
+        )
         self.assertEqual(resp.status_code, 422)
         self.assertIn("base64", resp.json()["detail"])

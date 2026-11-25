@@ -26,14 +26,23 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from alembic import command
 from alembic.script import ScriptDirectory
 from psycopg2 import sql
 
+from alembic import command
 from api.config import TE_TABLES, settings
 from api.db import APPEND_ONLY, owner_connect
-from api.tenancy import (TE_BASELINE, TE_VERSION_TABLE, _te_config, migrate_te_schema, migrate_tenant,
-                         provision_te_tables, schema_for, te_head, template_te_version)
+from api.tenancy import (
+    TE_BASELINE,
+    TE_VERSION_TABLE,
+    _te_config,
+    migrate_te_schema,
+    migrate_tenant,
+    provision_te_tables,
+    schema_for,
+    te_head,
+    template_te_version,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 _PROGRAM_TABLES = ("test_cases", "test_events", "vcrm_entries", "test_results")
@@ -49,8 +58,11 @@ class TheChain(unittest.TestCase):
     def test_both_copies_of_the_schema_file_stamp_the_head(self):
         for path in ("build/te_core_schema.sql", "build/schema/postgresql/te_core_schema.sql"):
             text = (ROOT / path).read_text(encoding="utf-8")
-            self.assertIn(f"IS 'te_schema_version={te_head()}'", text,
-                          f"{path} must stamp the newest migration; bump it with the migration")
+            self.assertIn(
+                f"IS 'te_schema_version={te_head()}'",
+                text,
+                f"{path} must stamp the newest migration; bump it with the migration",
+            )
 
     def test_the_runtime_role_cannot_rewrite_the_version_table(self):
         self.assertIn(TE_VERSION_TABLE, APPEND_ONLY)
@@ -58,28 +70,41 @@ class TheChain(unittest.TestCase):
 
 def signature(cur, schema: str) -> dict[str, list]:
     """Everything about a schema's T&E tables that a migration could change, with its own name removed."""
+
     def norm(text):
         return None if text is None else re.sub(rf'(?<![\w"]){re.escape(schema)}\.', "<S>.", text)
 
     sig: dict[str, list] = {}
-    cur.execute("SELECT table_name, column_name, data_type, is_nullable, column_default "
-                "FROM information_schema.columns WHERE table_schema = %s AND table_name = ANY(%s)",
-                (schema, TE_TABLES))
+    cur.execute(
+        "SELECT table_name, column_name, data_type, is_nullable, column_default "
+        "FROM information_schema.columns WHERE table_schema = %s AND table_name = ANY(%s)",
+        (schema, TE_TABLES),
+    )
     sig["columns"] = sorted((t, c, d, n, norm(df)) for t, c, d, n, df in cur.fetchall())
-    cur.execute("SELECT r.relname, c.conname, c.contype, pg_get_constraintdef(c.oid) FROM pg_constraint c "
-                "JOIN pg_class r ON r.oid = c.conrelid WHERE r.relnamespace = %s::regnamespace "
-                "AND r.relname = ANY(%s)", (schema, TE_TABLES))
+    cur.execute(
+        "SELECT r.relname, c.conname, c.contype, pg_get_constraintdef(c.oid) FROM pg_constraint c "
+        "JOIN pg_class r ON r.oid = c.conrelid WHERE r.relnamespace = %s::regnamespace "
+        "AND r.relname = ANY(%s)",
+        (schema, TE_TABLES),
+    )
     sig["constraints"] = sorted((t, n, k, norm(d)) for t, n, k, d in cur.fetchall())
-    cur.execute("SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname = %s "
-                "AND tablename = ANY(%s)", (schema, TE_TABLES))
+    cur.execute(
+        "SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname = %s AND tablename = ANY(%s)",
+        (schema, TE_TABLES),
+    )
     sig["indexes"] = sorted((t, n, norm(d)) for t, n, d in cur.fetchall())
-    cur.execute("SELECT r.relname, t.tgname, pg_get_triggerdef(t.oid) FROM pg_trigger t "
-                "JOIN pg_class r ON r.oid = t.tgrelid WHERE r.relnamespace = %s::regnamespace "
-                "AND r.relname = ANY(%s) AND NOT t.tgisinternal", (schema, TE_TABLES))
+    cur.execute(
+        "SELECT r.relname, t.tgname, pg_get_triggerdef(t.oid) FROM pg_trigger t "
+        "JOIN pg_class r ON r.oid = t.tgrelid WHERE r.relnamespace = %s::regnamespace "
+        "AND r.relname = ANY(%s) AND NOT t.tgisinternal",
+        (schema, TE_TABLES),
+    )
     sig["triggers"] = sorted((t, n, norm(d)) for t, n, d in cur.fetchall())
-    cur.execute("SELECT p.proname, pg_get_functiondef(p.oid) FROM pg_proc p WHERE "
-                "p.pronamespace = %s::regnamespace AND p.proname IN ('set_updated_at', 'te_fill_program_id')",
-                (schema,))
+    cur.execute(
+        "SELECT p.proname, pg_get_functiondef(p.oid) FROM pg_proc p WHERE "
+        "p.pronamespace = %s::regnamespace AND p.proname IN ('set_updated_at', 'te_fill_program_id')",
+        (schema,),
+    )
     sig["functions"] = sorted((n, norm(d)) for n, d in cur.fetchall())
     return sig
 
@@ -118,16 +143,22 @@ class TenantTeSchemaUpgrades(unittest.TestCase):
             return signature(cur, schema or self.schema)
 
     def _version(self) -> str | None:
-        rows = self._q(sql.SQL("SELECT version_num FROM {}.{}").format(
-            sql.Identifier(self.schema), sql.Identifier(TE_VERSION_TABLE)))
+        rows = self._q(
+            sql.SQL("SELECT version_num FROM {}.{}").format(
+                sql.Identifier(self.schema), sql.Identifier(TE_VERSION_TABLE)
+            )
+        )
         return rows[0][0] if rows else None
 
     def _assert_matches_template(self, schema=None):
         actual = self._signature(schema)
         for part, expected in self.template_sig.items():
             missing, extra = sorted(set(expected) - set(actual[part])), sorted(set(actual[part]) - set(expected))
-            self.assertEqual((missing, extra), ([], []),
-                             f"{part}: the tenant lacks the first list and has the second beyond the template")
+            self.assertEqual(
+                (missing, extra),
+                ([], []),
+                f"{part}: the tenant lacks the first list and has the second beyond the template",
+            )
 
     def _migrate(self) -> str:
         with owner_connect() as conn, conn.cursor() as cur:
@@ -138,23 +169,38 @@ class TenantTeSchemaUpgrades(unittest.TestCase):
         migrate_tenant(self.slug)
         command.downgrade(_te_config(self.schema), TE_BASELINE)
         with owner_connect() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("DROP TABLE {}.{}").format(sql.Identifier(self.schema),
-                                                           sql.Identifier(TE_VERSION_TABLE)))
+            cur.execute(
+                sql.SQL("DROP TABLE {}.{}").format(sql.Identifier(self.schema), sql.Identifier(TE_VERSION_TABLE))
+            )
             for table in TE_TABLES:
-                cur.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = %s "
-                            "AND table_name = %s", (self.schema, table))
+                cur.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema = %s AND table_name = %s",
+                    (self.schema, table),
+                )
                 mine = {r[0] for r in cur.fetchall()}
-                cur.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = %s "
-                            "AND table_name = %s", (self._template, table))
+                cur.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema = %s AND table_name = %s",
+                    (self._template, table),
+                )
                 cols = sql.SQL(", ").join(sql.Identifier(c) for c in sorted(mine & {r[0] for r in cur.fetchall()}))
-                cur.execute(sql.SQL("INSERT INTO {s}.{t} ({c}) SELECT {c} FROM {tpl}.{t}").format(
-                    s=sql.Identifier(self.schema), t=sql.Identifier(table), c=cols,
-                    tpl=sql.Identifier(self._template)))
+                cur.execute(
+                    sql.SQL("INSERT INTO {s}.{t} ({c}) SELECT {c} FROM {tpl}.{t}").format(
+                        s=sql.Identifier(self.schema),
+                        t=sql.Identifier(table),
+                        c=cols,
+                        tpl=sql.Identifier(self._template),
+                    )
+                )
             conn.commit()
-        seeded = self._q(sql.SQL("SELECT (SELECT count(*) FROM {t}.test_programs), (SELECT count(*) FROM {t}.vcrm_entries)")
-                         .format(t=sql.Identifier(self._template)))[0]
-        self.assertTrue(seeded[0] >= 2 and seeded[1] >= 1,
-                        f"the template needs seed rows for two programs and a VCRM entry (SEED_DEV=true); has {seeded}")
+        seeded = self._q(
+            sql.SQL("SELECT (SELECT count(*) FROM {t}.test_programs), (SELECT count(*) FROM {t}.vcrm_entries)").format(
+                t=sql.Identifier(self._template)
+            )
+        )[0]
+        self.assertTrue(
+            seeded[0] >= 2 and seeded[1] >= 1,
+            f"the template needs seed rows for two programs and a VCRM entry (SEED_DEV=true); has {seeded}",
+        )
 
     # -- paths to the template's shape -----------------------------------------------------
 
@@ -189,35 +235,61 @@ class TenantTeSchemaUpgrades(unittest.TestCase):
 
     def test_a_tenant_from_before_versioning_is_adopted_and_keeps_its_data(self):
         self._make_old_shape_tenant()
-        updated_before = self._q(sql.SQL("SELECT tc_id, updated_at FROM {}.test_cases ORDER BY tc_id").format(
-            sql.Identifier(self.schema)))
+        updated_before = self._q(
+            sql.SQL("SELECT tc_id, updated_at FROM {}.test_cases ORDER BY tc_id").format(sql.Identifier(self.schema))
+        )
         self.assertTrue(updated_before)
         self.assertEqual(self._migrate(), "adopted")
         self.assertEqual(self._version(), te_head())
         self._assert_matches_template()
         # program_id came from each row's parent, so it equals the template's value for the same row
-        for table, key in (("test_cases", "tc_id"), ("test_events", "event_id"),
-                           ("vcrm_entries", "vcrm_id"), ("test_results", "result_id")):
-            mine = self._q(sql.SQL("SELECT {k}, program_id FROM {}.{} ORDER BY {k}").format(
-                sql.Identifier(self.schema), sql.Identifier(table), k=sql.Identifier(key)))
-            theirs = self._q(sql.SQL("SELECT {k}, program_id FROM {}.{} WHERE {k} = ANY(%s::uuid[]) ORDER BY {k}").format(
-                sql.Identifier(self._template), sql.Identifier(table), k=sql.Identifier(key)),
-                ([r[0] for r in mine],))
+        for table, key in (
+            ("test_cases", "tc_id"),
+            ("test_events", "event_id"),
+            ("vcrm_entries", "vcrm_id"),
+            ("test_results", "result_id"),
+        ):
+            mine = self._q(
+                sql.SQL("SELECT {k}, program_id FROM {}.{} ORDER BY {k}").format(
+                    sql.Identifier(self.schema), sql.Identifier(table), k=sql.Identifier(key)
+                )
+            )
+            theirs = self._q(
+                sql.SQL("SELECT {k}, program_id FROM {}.{} WHERE {k} = ANY(%s::uuid[]) ORDER BY {k}").format(
+                    sql.Identifier(self._template), sql.Identifier(table), k=sql.Identifier(key)
+                ),
+                ([r[0] for r in mine],),
+            )
             self.assertEqual(mine, theirs, table)
-        self.assertEqual(self._q(sql.SQL("SELECT tc_id, updated_at FROM {}.test_cases ORDER BY tc_id").format(
-            sql.Identifier(self.schema))), updated_before, "the backfill must not look like an edit")
+        self.assertEqual(
+            self._q(
+                sql.SQL("SELECT tc_id, updated_at FROM {}.test_cases ORDER BY tc_id").format(
+                    sql.Identifier(self.schema)
+                )
+            ),
+            updated_before,
+            "the backfill must not look like an edit",
+        )
 
     def test_a_tenant_cloned_after_177_with_default_constraint_names_is_adopted_without_duplicates(self):
         migrate_tenant(self.slug)
         s = sql.Identifier(self.schema)
-        self._q(sql.SQL("ALTER TABLE {}.test_phases RENAME CONSTRAINT uq_phases_id_program "
-                        "TO test_phases_phase_id_program_id_key").format(s))
+        self._q(
+            sql.SQL(
+                "ALTER TABLE {}.test_phases RENAME CONSTRAINT uq_phases_id_program "
+                "TO test_phases_phase_id_program_id_key"
+            ).format(s)
+        )
         self._q(sql.SQL("DROP TABLE {}.{}").format(s, sql.Identifier(TE_VERSION_TABLE)))
         self.assertEqual(self._migrate(), "adopted")
         self._assert_matches_template()
-        unique_on_phases = self._q(sql.SQL(
-            "SELECT count(*) FROM pg_constraint WHERE conrelid = %s::regclass AND contype = 'u' "
-            "AND pg_get_constraintdef(oid) = 'UNIQUE (phase_id, program_id)'"), (f'"{self.schema}".test_phases',))
+        unique_on_phases = self._q(
+            sql.SQL(
+                "SELECT count(*) FROM pg_constraint WHERE conrelid = %s::regclass AND contype = 'u' "
+                "AND pg_get_constraintdef(oid) = 'UNIQUE (phase_id, program_id)'"
+            ),
+            (f'"{self.schema}".test_phases',),
+        )
         self.assertEqual(unique_on_phases[0][0], 1, "an equivalent constraint must be renamed, not duplicated")
 
     def test_a_clone_carries_the_templates_index_and_constraint_names(self):
@@ -225,17 +297,21 @@ class TenantTeSchemaUpgrades(unittest.TestCase):
         names = {n for _, n, *_ in self._signature()["indexes"]}
         self.assertLessEqual({"idx_testcases_phase", "uq_phases_id_program", "idx_personnel_email_trgm"}, names)
         # what LIKE ... INCLUDING ALL would have called the same objects
-        self.assertTrue(names.isdisjoint({"test_cases_phase_id_idx", "test_phases_phase_id_program_id_key",
-                                          "personnel_email_idx"}))
+        self.assertTrue(
+            names.isdisjoint({"test_cases_phase_id_idx", "test_phases_phase_id_program_id_key", "personnel_email_idx"})
+        )
 
     def test_cross_program_rows_stop_the_upgrade_name_the_rows_and_change_nothing(self):
         self._make_old_shape_tenant()
         s = sql.Identifier(self.schema)
         # old shape: a VCRM entry may name a requirement from one program and a test case from another
-        (vcrm_id, other_req), = self._q(sql.SQL(
-            "SELECT v.vcrm_id, r.req_id FROM {s}.vcrm_entries v "
-            "JOIN {s}.test_cases c ON c.tc_id = v.tc_id JOIN {s}.test_phases ph ON ph.phase_id = c.phase_id "
-            "JOIN {s}.requirements r ON r.program_id <> ph.program_id LIMIT 1").format(s=s))
+        ((vcrm_id, other_req),) = self._q(
+            sql.SQL(
+                "SELECT v.vcrm_id, r.req_id FROM {s}.vcrm_entries v "
+                "JOIN {s}.test_cases c ON c.tc_id = v.tc_id JOIN {s}.test_phases ph ON ph.phase_id = c.phase_id "
+                "JOIN {s}.requirements r ON r.program_id <> ph.program_id LIMIT 1"
+            ).format(s=s)
+        )
         self._q(sql.SQL("UPDATE {}.vcrm_entries SET req_id = %s WHERE vcrm_id = %s").format(s), (other_req, vcrm_id))
         before = self._signature()
         with self.assertRaises(RuntimeError) as ctx:
@@ -255,8 +331,9 @@ class TenantTeSchemaUpgrades(unittest.TestCase):
             conn.commit()
         command.stamp(_te_config(scratch), te_head())
         command.downgrade(_te_config(scratch), TE_BASELINE)
-        self._q(sql.SQL("COMMENT ON SCHEMA {} IS %s").format(sql.Identifier(scratch)),
-                (f"te_schema_version={TE_BASELINE}",))
+        self._q(
+            sql.SQL("COMMENT ON SCHEMA {} IS %s").format(sql.Identifier(scratch)), (f"te_schema_version={TE_BASELINE}",)
+        )
         settings.TE_SCHEMA = scratch
         try:
             self.assertEqual(self._migrate_new(), "provisioned")
@@ -280,14 +357,17 @@ class TenantTeSchemaUpgrades(unittest.TestCase):
         migrate_tenant(existing)
         chain = Path(tempfile.mkdtemp(prefix="alembic_te_next_"))
         try:
-            shutil.copytree(ROOT / "alembic_te", chain, dirs_exist_ok=True,
-                            ignore=shutil.ignore_patterns("__pycache__"))
+            shutil.copytree(
+                ROOT / "alembic_te", chain, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__")
+            )
             (chain / "versions" / "te9001_demo.py").write_text(
                 'from alembic import op\nrevision = "te9001"\ndown_revision = "te0002"\n'
                 "branch_labels = None\ndepends_on = None\n\n\ndef upgrade():\n"
                 '    schema = op.get_context().opts["version_table_schema"]\n'
-                '    op.execute(f\'ALTER TABLE "{schema}".organisations ADD COLUMN demo_note TEXT\')\n\n\n'
-                "def downgrade():\n    pass\n", encoding="utf-8")
+                "    op.execute(f'ALTER TABLE \"{schema}\".organisations ADD COLUMN demo_note TEXT')\n\n\n"
+                "def downgrade():\n    pass\n",
+                encoding="utf-8",
+            )
 
             def config_with_next_change(schema):
                 cfg = _te_config(schema)
@@ -295,8 +375,13 @@ class TenantTeSchemaUpgrades(unittest.TestCase):
                 return cfg
 
             def has_demo_note(schema):
-                return bool(self._q("SELECT 1 FROM information_schema.columns WHERE table_schema = %s "
-                                    "AND table_name = 'organisations' AND column_name = 'demo_note'", (schema,)))
+                return bool(
+                    self._q(
+                        "SELECT 1 FROM information_schema.columns WHERE table_schema = %s "
+                        "AND table_name = 'organisations' AND column_name = 'demo_note'",
+                        (schema,),
+                    )
+                )
 
             with mock.patch("api.tenancy._te_config", side_effect=config_with_next_change):
                 self.assertFalse(has_demo_note(self.schema))
@@ -338,7 +423,9 @@ class TenantTeSchemaUpgrades(unittest.TestCase):
             self._migrate_new()
 
     def test_two_workers_starting_together_leave_one_correct_tenant(self):
-        self._q(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(self.schema)))  # the T&E tables are what both race to build
+        self._q(
+            sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(self.schema))
+        )  # the T&E tables are what both race to build
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = [f.result() for f in [pool.submit(self._migrate_new) for _ in range(2)]]
         self.assertEqual(sorted(results), ["provisioned", "upgraded"])

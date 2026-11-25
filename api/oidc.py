@@ -10,13 +10,13 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
 import jwt
 
 from api.config import settings
-from typing import Any
 
 ALGORITHMS = ["RS256", "ES256"]
 # Seconds to wait for the IdP's key set. PyJWT's default is 30, which would hold a request thread that long for
@@ -73,8 +73,14 @@ def verify(id_token: str) -> dict[str, Any]:
     ``username_from`` hides the reason; this keeps it, for scripts/check_oidc.py.
     """
     key = _signing_key(id_token)
-    return jwt.decode(id_token, key, algorithms=ALGORITHMS, audience=settings.OIDC_AUDIENCE,
-                      issuer=settings.OIDC_ISSUER, options={"require": ["exp", "iat", "iss", "aud"]})
+    return jwt.decode(
+        id_token,
+        key,
+        algorithms=ALGORITHMS,
+        audience=settings.OIDC_AUDIENCE,
+        issuer=settings.OIDC_ISSUER,
+        options={"require": ["exp", "iat", "iss", "aud"]},
+    )
 
 
 def username_from(id_token: str) -> str | None:

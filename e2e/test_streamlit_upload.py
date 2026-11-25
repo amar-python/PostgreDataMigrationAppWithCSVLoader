@@ -15,13 +15,13 @@ import re
 import uuid
 
 import requests
+from conftest import ROOT
 from openpyxl import load_workbook
 from playwright.sync_api import expect
+from streamlit_helpers import choose_option, click_and_download, idle, open_page
 
 from api.db import Conn
 from api.tenancy import schema_for
-from conftest import ROOT
-from streamlit_helpers import choose_option, click_and_download, idle, open_page
 
 NO_CANCEL = "Sent to the server; it can't be stopped now"
 CONFIRM = "I have checked the column names and types"
@@ -67,8 +67,10 @@ def _file_row(stack, name: str) -> dict | None:
 def _column_types(stack, table: str) -> dict[str, str]:
     """What the database itself says the columns are (not what the API says it did)."""
     with Conn() as conn, conn.cursor() as cur:
-        cur.execute("SELECT column_name, data_type FROM information_schema.columns "
-                    "WHERE table_schema = %s AND table_name = %s", (schema_for(stack.accounts["uploader"].tenant), table))
+        cur.execute(
+            "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = %s AND table_name = %s",
+            (schema_for(stack.accounts["uploader"].tenant), table),
+        )
         return dict(cur.fetchall())
 
 
@@ -88,6 +90,7 @@ def _confirm_and_upload(page, name: str):
 
 # ── the size limit (spike Q1) ──────────────────────────────────────────────────────────────
 
+
 def test_a_file_in_the_band_streamlit_would_have_refused_but_the_api_takes_is_previewed(page, stack, tmp_path):
     """The #254 finding: Streamlit counts a megabyte as 1,000,000 bytes, so with its limit at 50 a file of 51,000,000 bytes
     was refused though the API takes up to 50 MiB (52,428,800). Streamlit's limit is now 53 and the app checks the API's."""
@@ -102,9 +105,13 @@ def test_a_file_in_the_band_streamlit_would_have_refused_but_the_api_takes_is_pr
     expect(page.get_by_text("about", exact=False).first).to_be_visible()  # a big file is previewed from its start
 
 
-def test_a_file_over_the_apis_limit_is_refused_by_the_app_in_its_own_words_before_anything_is_sent(page, stack, tmp_path):
+def test_a_file_over_the_apis_limit_is_refused_by_the_app_in_its_own_words_before_anything_is_sent(
+    page, stack, tmp_path
+):
     _open(page, stack)
-    over = _sized_csv(tmp_path, _unique("too_big"), 52_900_000)  # over the API's 52,428,800, under Streamlit's 53,000,000
+    over = _sized_csv(
+        tmp_path, _unique("too_big"), 52_900_000
+    )  # over the API's 52,428,800, under Streamlit's 53,000,000
 
     _choose(page, over)
 
@@ -127,13 +134,15 @@ def test_the_api_refuses_just_over_its_limit_whatever_the_front_end_does(stack):
     headers = {"Authorization": f"Bearer {stack.token('uploader')}"}
     over = "a,b\n" + "x,y\n" * ((50 * MIB) // 4 + 10)
 
-    res = requests.post(f"{stack.api}/api/csv/preview", headers=headers, timeout=120,
-                        json={"fileName": "over.csv", "content": over})
+    res = requests.post(
+        f"{stack.api}/api/csv/preview", headers=headers, timeout=120, json={"fileName": "over.csv", "content": over}
+    )
 
     assert res.status_code == 413 and "too large" in res.text.lower(), (res.status_code, res.text[:200])
 
 
 # ── renaming headers and choosing types (Q2) ───────────────────────────────────────────────
+
 
 def test_renaming_and_retyping_with_ordinary_widgets_is_stored_exactly_as_chosen(page, stack):
     name, body = _unique("widgets"), _people()
@@ -172,6 +181,7 @@ def test_a_rename_that_collides_is_refused_by_the_api_and_said_in_its_words_with
 
 # ── no cancel (Q3) ─────────────────────────────────────────────────────────────────────────
 
+
 def test_it_says_before_and_during_that_the_import_cannot_be_stopped_and_there_is_no_stop_button(page, stack):
     name = _unique("slow")
     _open(page, stack)
@@ -187,6 +197,7 @@ def test_it_says_before_and_during_that_the_import_cannot_be_stopped_and_there_i
 
 
 # ── several files (Q4) ─────────────────────────────────────────────────────────────────────
+
 
 def test_several_files_are_previewed_and_uploaded_in_turn(page, stack):
     names = [_unique(f"multi{i}") for i in range(3)]
@@ -224,6 +235,7 @@ def test_two_copies_of_the_same_bytes_are_two_files_and_the_page_does_not_crash(
 
 # ── Test and Evaluation mode (Q5) ──────────────────────────────────────────────────────────
 
+
 def test_te_mode_is_suggested_for_a_te_shaped_file_and_hides_the_mapping(page, stack):
     _open(page, stack)
 
@@ -236,6 +248,7 @@ def test_te_mode_is_suggested_for_a_te_shaped_file_and_hides_the_mapping(page, s
 
 
 # ── results (Q6) ───────────────────────────────────────────────────────────────────────────
+
 
 def test_failed_rows_are_listed_with_their_reasons_and_can_be_downloaded_as_reports(page, stack):
     name = _unique("orgs_fail")
@@ -290,6 +303,7 @@ def test_the_same_file_again_is_reported_as_already_imported_and_a_changed_one_i
 
 # ── files the screen will not send, or sends differently ───────────────────────────────────
 
+
 def test_a_file_that_is_not_utf8_is_refused_with_the_reason_and_nothing_is_imported(page, stack):
     name = _unique("latin")
     _open(page, stack)
@@ -317,6 +331,7 @@ def test_a_file_with_a_byte_order_mark_loads_with_clean_headers_and_keeps_its_or
 
 # ── what other screens see, at once ────────────────────────────────────────────────────────
 
+
 def test_a_new_import_is_in_the_history_and_the_files_list_at_once_even_though_both_are_cached(page, stack):
     name = _unique("fresh")
     open_page(page, stack, "uploader", "Import history", "Import history")  # fetches (and caches) the history
@@ -338,7 +353,9 @@ def test_the_imported_files_page_previews_the_table_and_says_why_rows_failed(pag
     name = _unique("lookinside")
     _open(page, stack)
     _choose(page, _csv(name, "id,name,amount\n1,ann,10\n2,bob,x\n3,cy,30\n"))
-    choose_option(page, "Type of column 3", "Whole number")  # the preview saw an "x" and guessed text: the person knows better
+    choose_option(
+        page, "Type of column 3", "Whole number"
+    )  # the preview saw an "x" and guessed text: the person knows better
     page.get_by_text(CONFIRM).click()
     page.get_by_role("button", name=f"Upload {name}").click()
     expect(page.get_by_text("2 of 3 rows imported")).to_be_visible()
@@ -355,6 +372,7 @@ def test_the_imported_files_page_previews_the_table_and_says_why_rows_failed(pag
 
 
 # ── text from a file is shown as written ───────────────────────────────────────────────────
+
 
 def test_a_file_name_a_header_and_a_cell_that_look_like_links_are_text_not_links(page, stack):
     link = "[click here](https://evil.example/login)"
@@ -373,6 +391,7 @@ def test_a_file_name_a_header_and_a_cell_that_look_like_links_are_text_not_links
 
 
 # ── who sees the page ──────────────────────────────────────────────────────────────────────
+
 
 def test_a_role_that_may_not_upload_is_not_offered_the_page_but_may_see_the_files(page, stack):
     open_page(page, stack, "reviewer", "Imported files", "Imported files")

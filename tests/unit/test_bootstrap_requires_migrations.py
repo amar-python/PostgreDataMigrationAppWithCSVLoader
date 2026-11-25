@@ -11,6 +11,7 @@ triggers, so a deployment with a packaging slip would run, silently, without the
 
 No database is needed: the fallback and the pool are replaced.
 """
+
 from __future__ import annotations
 
 import asyncio

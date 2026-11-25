@@ -37,20 +37,30 @@ def classify(name: str, res: dict) -> Outcome:
     status = res.get("status")
     if status == "ok":
         failed = res.get("failedRows") or 0
-        line = (f"{file}: {'overwrote · ' if res.get('overwritten') else ''}{res.get('insertedRows', 0)} of "
-                f"{res.get('totalRows', 0)} rows imported" + (f" · {failed} failed" if failed else ""))
+        line = (
+            f"{file}: {'overwrote · ' if res.get('overwritten') else ''}{res.get('insertedRows', 0)} of "
+            f"{res.get('totalRows', 0)} rows imported" + (f" · {failed} failed" if failed else "")
+        )
         return Outcome("done", "warning" if failed else "success", line)
     if status == "duplicate_file":
         if res.get("reason") == "name":
-            return Outcome("duplicate", "warning", f"{file}: a file with this name is already imported with different contents.")
+            return Outcome(
+                "duplicate", "warning", f"{file}: a file with this name is already imported with different contents."
+            )
         existing = res.get("existingFileName")
         as_ = f" as {m.literal(existing)}" if existing else " earlier"
         return Outcome("duplicate", "warning", f"{file}: already imported{as_}. Nothing was changed.")
     if status == "invalid_structure":
         said = res.get("message")
-        text = m.literal(said) if said else STRUCTURE_REASONS.get(str(res.get("reason")), "The file has no usable structure.")
+        text = (
+            m.literal(said)
+            if said
+            else STRUCTURE_REASONS.get(str(res.get("reason")), "The file has no usable structure.")
+        )
         return Outcome("error", "error", f"{file}: {text}")
-    return Outcome("error", "error", f"{file}: {m.literal(res['message']) if res.get('message') else 'The import failed.'}")
+    return Outcome(
+        "error", "error", f"{file}: {m.literal(res['message']) if res.get('message') else 'The import failed.'}"
+    )
 
 
 def classify_error(name: str, err: Exception) -> Outcome:
@@ -74,15 +84,20 @@ def result_notes(res: dict) -> list[str]:
         prev = f" (version {earlier['version']})" if earlier.get("version") else ""
         if check.get("compatible"):
             added = check.get("added") or []
-            notes.append("Columns match the previous version" + prev + (
-                f", with {len(added)} new: {', '.join(m.literal(c) for c in added)}." if added else "."))
+            notes.append(
+                "Columns match the previous version"
+                + prev
+                + (f", with {len(added)} new: {', '.join(m.literal(c) for c in added)}." if added else ".")
+            )
         else:
             parts = []
             if check.get("removed"):
                 parts.append("removed " + ", ".join(m.literal(c) for c in check["removed"]))
             if check.get("changed"):
-                parts.append("retyped " + ", ".join(
-                    f"{m.literal(c['column'])} ({c['was']} → {c['now']})" for c in check["changed"]))
+                parts.append(
+                    "retyped "
+                    + ", ".join(f"{m.literal(c['column'])} ({c['was']} → {c['now']})" for c in check["changed"])
+                )
             if check.get("added"):
                 parts.append("new " + ", ".join(m.literal(c) for c in check["added"]))
             notes.append("Columns differ from the previous version" + prev + ": " + "; ".join(parts) + ".")
@@ -91,7 +106,9 @@ def result_notes(res: dict) -> list[str]:
         notes.append(f"{dupes} row{'' if dupes == 1 else 's'} already appear in an earlier version of this dataset.")
     skipped = res.get("duplicateRowsSkipped")
     if skipped:
-        notes.append(f"{skipped} duplicate row{'' if skipped == 1 else 's'} in the file {'was' if skipped == 1 else 'were'} skipped.")
+        notes.append(
+            f"{skipped} duplicate row{'' if skipped == 1 else 's'} in the file {'was' if skipped == 1 else 'were'} skipped."
+        )
     return notes
 
 

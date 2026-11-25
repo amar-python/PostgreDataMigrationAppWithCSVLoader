@@ -23,13 +23,42 @@ _LOCAL = {"localhost", "127.0.0.1"}
 _FRONTEND_ALLOWED = _LOCAL | {"www.w3.org"}
 # Modules that make outbound requests. The API imports none. Its one external call, the OIDC key fetch,
 # is made by PyJWT and only when OIDC_ISSUER is set, to an IdP the deployment controls (api/oidc.py).
-_HTTP_MODULES = {"requests", "httpx", "aiohttp", "urllib3", "urllib.request", "http.client", "ftplib", "smtplib",
-                 "telnetlib", "xmlrpc.client", "websockets", "boto3", "botocore"}
+_HTTP_MODULES = {
+    "requests",
+    "httpx",
+    "aiohttp",
+    "urllib3",
+    "urllib.request",
+    "http.client",
+    "ftplib",
+    "smtplib",
+    "telnetlib",
+    "xmlrpc.client",
+    "websockets",
+    "boto3",
+    "botocore",
+}
 # urllib.request names that only convert between paths and URLs.
 _URL_PATH_HELPERS = {"url2pathname", "pathname2url"}
 # npm packages that phone home to a third party.
-_TELEMETRY = ("sentry", "posthog", "mixpanel", "segment", "amplitude", "datadog", "newrelic", "hotjar", "logrocket",
-              "fullstory", "bugsnag", "rollbar", "analytics", "gtag", "heap", "intercom")
+_TELEMETRY = (
+    "sentry",
+    "posthog",
+    "mixpanel",
+    "segment",
+    "amplitude",
+    "datadog",
+    "newrelic",
+    "hotjar",
+    "logrocket",
+    "fullstory",
+    "bugsnag",
+    "rollbar",
+    "analytics",
+    "gtag",
+    "heap",
+    "intercom",
+)
 
 
 def _hosts(path: Path) -> set[str]:
@@ -38,8 +67,11 @@ def _hosts(path: Path) -> set[str]:
 
 def _frontend_sources() -> list[Path]:
     src = _ROOT / "csv-table-hub-main" / "src"
-    files = [p for p in src.rglob("*") if p.suffix in {".ts", ".tsx", ".js", ".jsx", ".css", ".html", ".svg", ".json"}
-             and "__tests__" not in p.parts]
+    files = [
+        p
+        for p in src.rglob("*")
+        if p.suffix in {".ts", ".tsx", ".js", ".jsx", ".css", ".html", ".svg", ".json"} and "__tests__" not in p.parts
+    ]
     public = _ROOT / "csv-table-hub-main" / "public"
     return files + (list(public.rglob("*")) if public.exists() else [])
 
@@ -50,13 +82,24 @@ class ApiMakesNoOutboundCalls(unittest.TestCase):
         found = []
         for path in (_ROOT / "api").rglob("*.py"):
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-                if isinstance(node, ast.ImportFrom) and node.module == "urllib.request" and \
-                        {a.name for a in node.names} <= _URL_PATH_HELPERS:
-                    continue   # url2pathname turns a file:// URL into a path; it opens nothing
-                names = ([a.name for a in node.names] if isinstance(node, ast.Import)
-                         else [node.module or ""] if isinstance(node, ast.ImportFrom) else [])
-                found += [f"{path.relative_to(_ROOT)}: {n}" for n in names
-                          if n in _HTTP_MODULES or n.split(".")[0] in _HTTP_MODULES]
+                if (
+                    isinstance(node, ast.ImportFrom)
+                    and node.module == "urllib.request"
+                    and {a.name for a in node.names} <= _URL_PATH_HELPERS
+                ):
+                    continue  # url2pathname turns a file:// URL into a path; it opens nothing
+                names = (
+                    [a.name for a in node.names]
+                    if isinstance(node, ast.Import)
+                    else [node.module or ""]
+                    if isinstance(node, ast.ImportFrom)
+                    else []
+                )
+                found += [
+                    f"{path.relative_to(_ROOT)}: {n}"
+                    for n in names
+                    if n in _HTTP_MODULES or n.split(".")[0] in _HTTP_MODULES
+                ]
         self.assertEqual(found, [])
 
     def test_the_scan_catches_a_network_capable_urllib_import(self):
@@ -88,14 +131,18 @@ class FrontendReachesNoThirdParty(unittest.TestCase):
         for page in (_ROOT / "csv-table-hub-main").rglob("*.html"):
             if "node_modules" in page.parts or "dist" in page.parts:
                 continue
-            offenders += re.findall(r"""(?:src|href)\s*=\s*["']((?:https?:)?//[^"']+)""", page.read_text(errors="ignore"))
+            offenders += re.findall(
+                r"""(?:src|href)\s*=\s*["']((?:https?:)?//[^"']+)""", page.read_text(errors="ignore")
+            )
         self.assertEqual(offenders, [])
 
     def test_the_scan_would_catch_a_cdn(self):
         # The check isn't vacuous: it flags the hosts a real violation would use.
         sample = 'import "https://cdn.jsdelivr.net/npm/x"; fetch("https://www.google-analytics.com/collect")'
-        self.assertEqual({h.lower() for h in _HOST.findall(sample)} - _FRONTEND_ALLOWED,
-                         {"cdn.jsdelivr.net", "www.google-analytics.com"})
+        self.assertEqual(
+            {h.lower() for h in _HOST.findall(sample)} - _FRONTEND_ALLOWED,
+            {"cdn.jsdelivr.net", "www.google-analytics.com"},
+        )
 
 
 def _checker():
@@ -116,28 +163,42 @@ class BundleChecker(unittest.TestCase):
             return _checker().scan(Path(tmp))
 
     def test_namespaces_documentation_links_and_new_url_are_not_load_paths(self):
-        found = self.scan({"app.js": 'const ns = "http://www.w3.org/2000/svg"; new URL("https://exa\\nmple.com");'
-                                     ' // https://react.dev/errors/418', "a.css": "a { color: red }"})
+        found = self.scan(
+            {
+                "app.js": 'const ns = "http://www.w3.org/2000/svg"; new URL("https://exa\\nmple.com");'
+                " // https://react.dev/errors/418",
+                "a.css": "a { color: red }",
+            }
+        )
         self.assertEqual((found["loads"], found["banned"]), ([], []))
         self.assertIn("www.w3.org", found["other"])
 
     def test_external_markup_resources_are_load_paths(self):
-        for name, text in (("index.html", '<script src="https://cdn.example.org/x.js"></script>'),
-                           ("index.html", '<link rel="stylesheet" href="//fonts.example.org/f.css">'),
-                           ("a.css", '@import url("https://fonts.example.org/f.css");'),
-                           ("a.css", "a { background: url(https://img.example.org/b.png) }")):
+        for name, text in (
+            ("index.html", '<script src="https://cdn.example.org/x.js"></script>'),
+            ("index.html", '<link rel="stylesheet" href="//fonts.example.org/f.css">'),
+            ("a.css", '@import url("https://fonts.example.org/f.css");'),
+            ("a.css", "a { background: url(https://img.example.org/b.png) }"),
+        ):
             self.assertEqual(len(self.scan({name: text})["loads"]), 1, text)
 
     def test_literal_external_requests_in_scripts_are_load_paths(self):
-        for text in ('fetch("https://api.example.org/x")', 'x.open("GET", "https://api.example.org/x")',
-                     'navigator.sendBeacon("https://t.example.org/c")', 'new WebSocket("wss://ws.example.org")',
-                     'import("https://esm.example.org/m.js")'):
+        for text in (
+            'fetch("https://api.example.org/x")',
+            'x.open("GET", "https://api.example.org/x")',
+            'navigator.sendBeacon("https://t.example.org/c")',
+            'new WebSocket("wss://ws.example.org")',
+            'import("https://esm.example.org/m.js")',
+        ):
             self.assertEqual(len(self.scan({"app.js": text})["loads"]), 1, text)
 
     def test_requests_to_this_machine_are_fine(self):
         self.assertEqual(self.scan({"app.js": 'fetch("http://localhost:8000/api/x")'})["loads"], [])
 
     def test_analytics_and_cdn_hosts_fail_wherever_they_appear(self):
-        found = self.scan({"app.js": 'const a = "https://www.google-analytics.com/collect"; // https://cdn.jsdelivr.net/x'})
-        self.assertEqual(sorted(h.split(": ")[1] for h in found["banned"]),
-                         ["cdn.jsdelivr.net", "www.google-analytics.com"])
+        found = self.scan(
+            {"app.js": 'const a = "https://www.google-analytics.com/collect"; // https://cdn.jsdelivr.net/x'}
+        )
+        self.assertEqual(
+            sorted(h.split(": ")[1] for h in found["banned"]), ["cdn.jsdelivr.net", "www.google-analytics.com"]
+        )

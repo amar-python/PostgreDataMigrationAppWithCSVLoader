@@ -21,12 +21,15 @@ pytestmark = pytest.mark.unit
 
 # ── load_common ─────────────────────────────────────────────────────────────────────────────────────────────────
 
+
 def test_log_adds_a_count_only_when_given():
     logs: list[dict] = []
     lc.log(logs, "parse", "Parsed 3 rows", count=3)
     lc.log(logs, "error", "bad", "error")
     assert [(e["step"], e["level"], e["message"], e.get("count")) for e in logs] == [
-        ("parse", "info", "Parsed 3 rows", 3), ("error", "error", "bad", None)]
+        ("parse", "info", "Parsed 3 rows", 3),
+        ("error", "error", "bad", None),
+    ]
     assert "count" not in logs[1] and all(isinstance(e["ts"], int) for e in logs)
 
 
@@ -37,8 +40,10 @@ def test_row_errors_count_every_failure_but_keep_only_the_cap(monkeypatch):
         errors.add(n, "qty", "x", "not a number")
     errors.add_db_error(6, "violates foreign key")
     assert errors.failed == 6
-    assert errors.items == [{"rowNumber": 1, "column": "qty", "value": "x", "reason": "not a number"},
-                            {"rowNumber": 2, "column": "qty", "value": "x", "reason": "not a number"}]
+    assert errors.items == [
+        {"rowNumber": 1, "column": "qty", "value": "x", "reason": "not a number"},
+        {"rowNumber": 2, "column": "qty", "value": "x", "reason": "not a number"},
+    ]
     assert errors.first() == errors.items[0]
 
 
@@ -80,8 +85,19 @@ def test_the_rows_failed_response_keeps_its_field_order():
 def test_the_ok_result_keeps_its_field_order():
     res = lc.ok_result(7, "t", 3, 2, 1, 0, ["a"], ["text"], rowErrors=[], logs=[])
     assert res["fileId"] == "7"
-    assert list(res) == ["status", "fileId", "tableName", "totalRows", "insertedRows", "duplicateRowsSkipped",
-                         "failedRows", "columns", "types", "rowErrors", "logs"]
+    assert list(res) == [
+        "status",
+        "fileId",
+        "tableName",
+        "totalRows",
+        "insertedRows",
+        "duplicateRowsSkipped",
+        "failedRows",
+        "columns",
+        "types",
+        "rowErrors",
+        "logs",
+    ]
 
 
 def _stmt(text):
@@ -129,6 +145,7 @@ def test_batches_are_chunked():
 
 # ── dynamic loader ──────────────────────────────────────────────────────────────────────────────────────────────
 
+
 def test_the_row_hash_is_unambiguous():
     """#178: a join on U+001F made these two rows hash the same."""
     assert dyn.row_hash(["a\x1fb", "c"]) != dyn.row_hash(["a", "b\x1fc"])
@@ -167,10 +184,13 @@ def test_header_renames_are_applied_or_refused():
 
 
 # sanitize_columns names blank headers and de-duplicates (a, A -> a, a_2), so only the types can be refused here.
-@pytest.mark.parametrize("header, types, message", [
-    (["a", "b"], ["text"], "Provided 1 column types but the CSV has 2 columns."),
-    (["a"], ["money"], "Unsupported column type provided."),
-])
+@pytest.mark.parametrize(
+    "header, types, message",
+    [
+        (["a", "b"], ["text"], "Provided 1 column types but the CSV has 2 columns."),
+        (["a"], ["money"], "Unsupported column type provided."),
+    ],
+)
 def test_unusable_columns_or_types_are_refused(header, types, message):
     res = dyn._columns_and_types(header, types, [])
     assert isinstance(res, dict) and res["status"] == "error" and message in res["message"]
@@ -186,12 +206,14 @@ def test_the_every_row_failed_message_names_the_first_problem():
     errors = lc.RowErrors()
     errors.add(2, "qty", "x", "not an integer")
     res = dyn._every_row_failed(errors, 2, ["qty"], ["int8"], [])
-    assert res["message"] == ('None of the 2 rows could be imported, so nothing was saved. '
-                              'First problem: row 2, column "qty": not an integer')
+    assert res["message"] == (
+        'None of the 2 rows could be imported, so nothing was saved. First problem: row 2, column "qty": not an integer'
+    )
     assert (res["columns"], res["types"]) == (["qty"], ["int8"])
 
 
 # ── T&E loader ──────────────────────────────────────────────────────────────────────────────────────────────────
+
 
 def test_te_rows_are_stripped_and_empty_cells_are_null():
     errors = lc.RowErrors()

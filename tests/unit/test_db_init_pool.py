@@ -12,6 +12,7 @@ SQLAlchemy's long chained traceback (tests at the end).
 No database needed. Most tests monkeypatch psycopg2's pool and ``time.sleep``; a few talk to a fake
 PostgreSQL on loopback so that real libpq produces the message text the classifier has to read.
 """
+
 import os
 import socketserver
 import struct
@@ -24,12 +25,12 @@ from pathlib import Path
 import psycopg2
 import psycopg2.pool
 import pytest
+from pydantic import SecretStr
 from sqlalchemy.exc import OperationalError as SQLAlchemyOperationalError
 from sqlalchemy.exc import ProgrammingError
 
 from api import db
 from api.config import settings
-from pydantic import SecretStr
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
@@ -69,12 +70,14 @@ TRANSIENT = [
     f"{_PREFIX}Connection refused\n\tIs the server running on that host and accepting TCP/IP connections?",
     _server_sent("the database system is starting up"),
     _server_sent("the database system is shutting down"),
-    _server_sent("the database system is not yet accepting connections\nDETAIL:  Consistent recovery state has not been yet reached."),
+    _server_sent(
+        "the database system is not yet accepting connections\nDETAIL:  Consistent recovery state has not been yet reached."
+    ),
     _server_sent("the database system is in recovery mode"),
     _server_sent("sorry, too many clients already"),
     _server_sent("remaining connection slots are reserved for non-replication superuser connections"),
     _server_sent('too many connections for role "app"'),
-    "could not translate host name \"db\" to address: Temporary failure in name resolution",
+    'could not translate host name "db" to address: Temporary failure in name resolution',
     f"{_PREFIX}timeout expired",
     f"{_PREFIX}Network is unreachable",
     f"{_PREFIX}server closed the connection unexpectedly\n\tThis probably means the server terminated abnormally",
@@ -202,6 +205,7 @@ def test_permanent_failure_message_names_the_runtime_role_when_one_is_configured
 
 # ── owner_connect: one connection as the owner, no retry ──────────────────────────────────
 
+
 def test_owner_connect_turns_a_connection_failure_into_the_same_clear_error(monkeypatch):
     calls = []
 
@@ -224,6 +228,7 @@ def test_owner_connect_turns_a_connection_failure_into_the_same_clear_error(monk
 
 
 # ── run_cli: what the scripts use instead of a traceback ──────────────────────────────────
+
 
 def test_run_cli_passes_the_exit_status_through():
     assert db.run_cli(lambda: 7) == 7
@@ -250,9 +255,15 @@ def test_run_cli_does_not_hide_other_errors():
 
 # ── Real libpq against a fake server ──────────────────────────────────────────────────────
 
+
 def _error_response(code, message, severity="FATAL"):
-    fields = b"".join(tag.encode() + value.encode() + b"\0" for tag, value in
-                      (("S", severity), ("V", "FATAL"), ("C", code), ("M", message))) + b"\0"
+    fields = (
+        b"".join(
+            tag.encode() + value.encode() + b"\0"
+            for tag, value in (("S", severity), ("V", "FATAL"), ("C", code), ("M", message))
+        )
+        + b"\0"
+    )
     return b"E" + struct.pack("!I", len(fields) + 4) + fields
 
 
@@ -319,13 +330,17 @@ def _point_at(monkeypatch, server):
     monkeypatch.setattr(db, "_getconn_executor", None)
 
 
-@pytest.mark.parametrize("code, message, severity", [
-    ("28P01", 'password authentication failed for user "alice"', "FATAL"),
-    ("28000", "Passwort-Authentifizierung für Benutzer »alice« fehlgeschlagen", "FATAL"),
-    ("28000", "парольная проверка подлинности пользователя «alice» не прошла", "ВАЖНО"),
-])
+@pytest.mark.parametrize(
+    "code, message, severity",
+    [
+        ("28P01", 'password authentication failed for user "alice"', "FATAL"),
+        ("28000", "Passwort-Authentifizierung für Benutzer »alice« fehlgeschlagen", "FATAL"),
+        ("28000", "парольная проверка подлинности пользователя «alice» не прошла", "ВАЖНО"),
+    ],
+)
 def test_real_libpq_permanent_rejection_stops_after_one_connection(
-        fake_postgres, no_sleep, monkeypatch, code, message, severity):
+    fake_postgres, no_sleep, monkeypatch, code, message, severity
+):
     server = fake_postgres(code, message, severity)
     _point_at(monkeypatch, server)
 
@@ -350,13 +365,26 @@ def test_real_libpq_server_starting_up_is_retried(fake_postgres, no_sleep, monke
 def test_script_with_a_refused_login_exits_1_at_once_without_a_traceback(fake_postgres, tmp_path):
     """The reported symptom: reset_password.py with a wrong PGPASSWORD looped until Ctrl+C."""
     server = fake_postgres("28P01", 'password authentication failed for user "alice"')
-    env = {**os.environ, "PGHOST": "127.0.0.1", "PGPORT": str(server.port), "PGUSER": "alice",
-           "PGPASSWORD": _SECRET, "TE_NEW_PASSWORD": "a-long-enough-password-123", "APP_DB_USER": ""}
+    env = {
+        **os.environ,
+        "PGHOST": "127.0.0.1",
+        "PGPORT": str(server.port),
+        "PGUSER": "alice",
+        "PGPASSWORD": _SECRET,
+        "TE_NEW_PASSWORD": "a-long-enough-password-123",
+        "APP_DB_USER": "",
+    }
     script = Path(__file__).resolve().parents[2] / "scripts" / "reset_password.py"
 
     started = time.monotonic()
-    done = subprocess.run([sys.executable, str(script), "--username", "admin"], env=env,
-                          capture_output=True, text=True, timeout=60, cwd=tmp_path)
+    done = subprocess.run(
+        [sys.executable, str(script), "--username", "admin"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=tmp_path,
+    )
 
     assert time.monotonic() - started < 30  # not 30 attempts of backoff
     assert done.returncode == 1
@@ -368,10 +396,13 @@ def test_script_with_a_refused_login_exits_1_at_once_without_a_traceback(fake_po
 
 # ── bootstrap(): the migrations' own login (the owner, PGUSER) ────────────────────────────
 
+
 def _alembic_fails_with(monkeypatch, exc: Exception):
     """Make `alembic upgrade head` raise ``exc``, as env.py's engine.connect() would."""
+
     def boom(*args, **kwargs):
         raise exc
+
     monkeypatch.setattr("alembic.command.upgrade", boom)
 
 
@@ -388,8 +419,9 @@ def test_bootstrap_login_refusal_raises_the_short_named_error(monkeypatch, messa
         db.bootstrap()
 
     assert not isinstance(info.value, SQLAlchemyOperationalError)
-    assert info.value.__cause__ is None and info.value.__suppress_context__, \
+    assert info.value.__cause__ is None and info.value.__suppress_context__, (
         "the long SQLAlchemy chain must not be printed under it"
+    )
     assert "Background on this error" not in str(info.value), "SQLAlchemy's own footer is not repeated"
 
 

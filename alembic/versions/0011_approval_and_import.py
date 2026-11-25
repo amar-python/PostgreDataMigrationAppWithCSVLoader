@@ -24,9 +24,9 @@ Revises: 0010
 Create Date: 2026-11-09
 """
 
-from alembic import context, op
 from sqlalchemy import text
 
+from alembic import context, op
 from api.config import settings
 
 revision = "0011"
@@ -57,8 +57,10 @@ def upgrade() -> None:
         op.execute(f"ALTER TABLE {_tenants()} ADD COLUMN allow_self_approval BOOLEAN NOT NULL DEFAULT false")
     op.execute(f"ALTER TABLE {s}.uploads DROP CONSTRAINT uploads_status_check")
     op.execute(f"ALTER TABLE {s}.uploads ADD CONSTRAINT uploads_status_check CHECK (status IN ({_STATUSES}))")
-    op.execute(f"ALTER TABLE {s}.uploads ADD COLUMN types_provenance TEXT "
-               "CHECK (types_provenance IN ('inferred_unconfirmed', 'user_confirmed'))")
+    op.execute(
+        f"ALTER TABLE {s}.uploads ADD COLUMN types_provenance TEXT "
+        "CHECK (types_provenance IN ('inferred_unconfirmed', 'user_confirmed'))"
+    )
     op.execute(f"""CREATE TABLE {s}.submissions (
         id BIGSERIAL PRIMARY KEY,
         upload_id BIGINT NOT NULL REFERENCES {s}.uploads (id),
@@ -93,10 +95,14 @@ def upgrade() -> None:
     for t in ("submissions", "approvals"):
         op.execute(f"CREATE INDEX {t}_by_upload ON {s}.{t} (upload_id, id)")
     for t in _TABLES:
-        op.execute(f"CREATE TRIGGER {t}_no_change BEFORE UPDATE OR DELETE ON {s}.{t} "
-                   f"FOR EACH ROW EXECUTE FUNCTION {s}.audit_reject_change()")
-        op.execute(f"CREATE TRIGGER {t}_no_truncate BEFORE TRUNCATE ON {s}.{t} "
-                   f"FOR EACH STATEMENT EXECUTE FUNCTION {s}.audit_reject_change()")
+        op.execute(
+            f"CREATE TRIGGER {t}_no_change BEFORE UPDATE OR DELETE ON {s}.{t} "
+            f"FOR EACH ROW EXECUTE FUNCTION {s}.audit_reject_change()"
+        )
+        op.execute(
+            f"CREATE TRIGGER {t}_no_truncate BEFORE TRUNCATE ON {s}.{t} "
+            f"FOR EACH STATEMENT EXECUTE FUNCTION {s}.audit_reject_change()"
+        )
 
 
 def downgrade() -> None:
@@ -105,8 +111,10 @@ def downgrade() -> None:
     # rather than rewrite an insert-only table; nothing has been dropped yet.
     staged = op.get_bind().execute(text(f"SELECT count(*) FROM {s}.uploads WHERE status = 'staged'")).scalar()  # nosec B608
     if staged:
-        raise RuntimeError(f"Cannot downgrade {settings.UPLOADS_SCHEMA}: {staged} upload(s) are staged. "
-                           "Import them or leave the schema at 0011.")
+        raise RuntimeError(
+            f"Cannot downgrade {settings.UPLOADS_SCHEMA}: {staged} upload(s) are staged. "
+            "Import them or leave the schema at 0011."
+        )
     for t in reversed(_TABLES):
         op.execute(f"DROP TABLE IF EXISTS {s}.{t}")
     op.execute(f"ALTER TABLE {s}.uploads DROP COLUMN types_provenance")

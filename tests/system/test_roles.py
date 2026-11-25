@@ -46,7 +46,7 @@ def _doc_matrix() -> dict[str, frozenset[str]]:
     rows = [ln for ln in _DOC.read_text(encoding="utf-8").splitlines() if ln.startswith("| ")]
     header = [c.strip() for c in rows[0].strip("|").split("|")]
     out = {}
-    for ln in rows[1:]:   # the |---| separator does not start with "| "
+    for ln in rows[1:]:  # the |---| separator does not start with "| "
         cells = [c.strip() for c in ln.strip("|").split("|")]
         out[cells[0]] = frozenset(r for r, c in zip(header[2:], cells[2:]) if c == "✓")
     return out
@@ -82,8 +82,9 @@ class RoleMatrixOverTheApi(unittest.TestCase):
             conn.commit()
         migrate_tenant(cls.slug)
         for role in ROLES:
-            res = cls.client.post("/api/auth/login", json={
-                "tenant": cls.slug, "username": f"{cls.slug}_{role}", "password": _PW})
+            res = cls.client.post(
+                "/api/auth/login", json={"tenant": cls.slug, "username": f"{cls.slug}_{role}", "password": _PW}
+            )
             assert res.status_code == 200, res.text
             cls.headers[role] = {"Authorization": f"Bearer {res.json()['token']}"}
 
@@ -93,17 +94,26 @@ class RoleMatrixOverTheApi(unittest.TestCase):
         with Conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_for(cls.slug))))
-                cur.execute(sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(
-                    sql.Identifier(settings.CONTROL_SCHEMA)), (cls.slug,))
-                cur.execute(sql.SQL("DELETE FROM {}.users WHERE username LIKE %s").format(
-                    sql.Identifier(settings.CONTROL_SCHEMA)), (f"{cls.slug}_%",))
+                cur.execute(
+                    sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(sql.Identifier(settings.CONTROL_SCHEMA)),
+                    (cls.slug,),
+                )
+                cur.execute(
+                    sql.SQL("DELETE FROM {}.users WHERE username LIKE %s").format(
+                        sql.Identifier(settings.CONTROL_SCHEMA)
+                    ),
+                    (f"{cls.slug}_%",),
+                )
             conn.commit()
         cls.ctx.__exit__(None, None, None)
 
     def _file(self) -> tuple[str, str, str]:
         tag = uuid.uuid4().hex[:10]
-        res = self.client.post("/api/csv/upload", headers=self.headers["tenant_admin"],
-                               json={"fileName": f"r_{tag}.csv", "content": f"k\n{tag}\n"}).json()
+        res = self.client.post(
+            "/api/csv/upload",
+            headers=self.headers["tenant_admin"],
+            json={"fileName": f"r_{tag}.csv", "content": f"k\n{tag}\n"},
+        ).json()
         assert res["status"] == "ok", res
         return res["tableName"], res["fileId"], res["uploadId"]
 
@@ -119,8 +129,12 @@ class RoleMatrixOverTheApi(unittest.TestCase):
             user = f"{self.slug}_t{uuid.uuid4().hex[:6]}"
             with Conn() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(sql.SQL("SELECT id FROM {}.tenants WHERE slug = %s").format(
-                        sql.Identifier(settings.CONTROL_SCHEMA)), (self.slug,))
+                    cur.execute(
+                        sql.SQL("SELECT id FROM {}.tenants WHERE slug = %s").format(
+                            sql.Identifier(settings.CONTROL_SCHEMA)
+                        ),
+                        (self.slug,),
+                    )
                     tid = cur.fetchone()[0]
                     accounts.add_membership(cur, accounts.create_user(cur, user, _PW), tid, "uploader")
                 conn.commit()
@@ -129,8 +143,12 @@ class RoleMatrixOverTheApi(unittest.TestCase):
             body = {"decision": "exclude", "reason": "role matrix test"}
         if action == "approve_import":
             body = {"decision": "reject", "reason": "role matrix test"}
-        res = self.client.request(method, path.format(table=table, id=file_id, user=user, upload=upload_id),
-                                  headers=self.headers[role], json=body)
+        res = self.client.request(
+            method,
+            path.format(table=table, id=file_id, user=user, upload=upload_id),
+            headers=self.headers[role],
+            json=body,
+        )
         return res.status_code
 
     def test_every_role_against_every_route(self):

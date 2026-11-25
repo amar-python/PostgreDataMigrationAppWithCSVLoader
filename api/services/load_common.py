@@ -78,23 +78,35 @@ def too_many_rows(data_row_count: int, logs: list[LogEntry]) -> LoadResult | Non
     }
 
 
-def rows_failed(text: str, errors: RowErrors, total_rows: int, entries: list[LogEntry],
-                **fields: Unpack[LoadFields]) -> LoadResult:
+def rows_failed(
+    text: str, errors: RowErrors, total_rows: int, entries: list[LogEntry], **fields: Unpack[LoadFields]
+) -> LoadResult:
     """The response when rows failed and nothing was saved (#123, #170, #289).
 
     ``text`` is the message and ``entries`` the logs. ``fields`` follow ``failedRows`` and come before ``logs``, in
     the order given (tests/system/test_loader_responses_golden.py pins the order).
     """
     log(entries, "error", text, "error")
-    result: LoadResult = {"status": "error", "message": text, "rowErrors": errors.items,
-                          "totalRows": total_rows, "failedRows": errors.failed}
+    result: LoadResult = {
+        "status": "error",
+        "message": text,
+        "rowErrors": errors.items,
+        "totalRows": total_rows,
+        "failedRows": errors.failed,
+    }
     result.update(cast(LoadResult, fields))  # the keywords were checked against LoadFields at the call
     result["logs"] = entries
     return result
 
 
-def insert_with_row_fallback(cur: cursor, batch_stmt: sql.Composable, row_stmt: sql.Composable,
-                             rows: Sequence[tuple[int, list[Any]]], errors: RowErrors, chunk_size: int = 500) -> int:
+def insert_with_row_fallback(
+    cur: cursor,
+    batch_stmt: sql.Composable,
+    row_stmt: sql.Composable,
+    rows: Sequence[tuple[int, list[Any]]],
+    errors: RowErrors,
+    chunk_size: int = 500,
+) -> int:
     """Insert ``(row number, values)`` pairs in batches; when a batch fails, retry it a row at a time.
 
     A constraint (FK, UNIQUE, CHECK) or a cast the database makes itself fails the whole batch, so the batch is
@@ -103,7 +115,7 @@ def insert_with_row_fallback(cur: cursor, batch_stmt: sql.Composable, row_stmt: 
     """
     inserted = 0
     for start in range(0, len(rows), chunk_size):
-        chunk = rows[start:start + chunk_size]
+        chunk = rows[start : start + chunk_size]
         cur.execute("SAVEPOINT chunk_sp")
         try:
             execute_values(cur, batch_stmt.as_string(cur), [v for _, v in chunk])
@@ -116,8 +128,9 @@ def insert_with_row_fallback(cur: cursor, batch_stmt: sql.Composable, row_stmt: 
     return inserted
 
 
-def _insert_one_by_one(cur: cursor, row_stmt: sql.Composable, chunk: Sequence[tuple[int, list[Any]]],
-                       errors: RowErrors) -> int:
+def _insert_one_by_one(
+    cur: cursor, row_stmt: sql.Composable, chunk: Sequence[tuple[int, list[Any]]], errors: RowErrors
+) -> int:
     inserted = 0
     for row_number, values in chunk:
         cur.execute("SAVEPOINT row_sp")
@@ -132,12 +145,29 @@ def _insert_one_by_one(cur: cursor, row_stmt: sql.Composable, chunk: Sequence[tu
     return inserted
 
 
-def ok_result(file_id: object, table_name: str, total_rows: int, inserted: int, duplicates: int, failed: int,
-              cols: list[str], col_types: list[str], **fields: Unpack[LoadFields]) -> LoadResult:
+def ok_result(
+    file_id: object,
+    table_name: str,
+    total_rows: int,
+    inserted: int,
+    duplicates: int,
+    failed: int,
+    cols: list[str],
+    col_types: list[str],
+    **fields: Unpack[LoadFields],
+) -> LoadResult:
     """The "ok" response of a load: ``cols`` and ``col_types`` are its ``columns`` and ``types``. ``fields`` follow
     ``types``, in the order given."""
-    result: LoadResult = {"status": "ok", "fileId": str(file_id), "tableName": table_name, "totalRows": total_rows,
-                          "insertedRows": inserted, "duplicateRowsSkipped": duplicates, "failedRows": failed,
-                          "columns": cols, "types": col_types}
+    result: LoadResult = {
+        "status": "ok",
+        "fileId": str(file_id),
+        "tableName": table_name,
+        "totalRows": total_rows,
+        "insertedRows": inserted,
+        "duplicateRowsSkipped": duplicates,
+        "failedRows": failed,
+        "columns": cols,
+        "types": col_types,
+    }
     result.update(cast(LoadResult, fields))  # the keywords were checked against LoadFields at the call
     return result

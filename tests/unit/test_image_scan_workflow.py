@@ -8,6 +8,7 @@ Read as text (trivy and Docker are not available to a unit test). What they pin 
   * an SBOM that is written but never reaches the bundle (the bundle job must require it);
   * an exception in .trivyignore.yaml with no reason or no expiry date, or one that has expired.
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -108,4 +109,6 @@ def test_the_trivy_exceptions_file_documents_and_limits_every_exception():
         expires = entry.get("expired_at")
         assert expires, f"{entry.get('id')}: an exception needs an expiry date"
         expires = expires if isinstance(expires, dt.date) else dt.date.fromisoformat(str(expires))
-        assert expires >= dt.date.today(), f"{entry['id']} expired on {expires}: renew it with a new reason, or remove it"
+        assert expires >= dt.date.today(), (
+            f"{entry['id']} expired on {expires}: renew it with a new reason, or remove it"
+        )

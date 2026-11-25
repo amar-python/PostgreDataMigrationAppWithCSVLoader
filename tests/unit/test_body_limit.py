@@ -14,6 +14,7 @@ API buffer a body of any size before the check ran. ``BodyLimitMiddleware`` now 
 The middleware is driven directly at the ASGI level, so what it read and what the handler saw can be asserted, and
 then through the real app, where the CORS headers and the route's own answer matter. No database is needed.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,8 +29,8 @@ from api.main import app
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression, pytest.mark.security]
 
-MAX_UPLOAD = 1000            # patched in, so the tests send kilobytes, not hundreds of megabytes
-CAP = 2 * MAX_UPLOAD - 1     # the largest body let through
+MAX_UPLOAD = 1000  # patched in, so the tests send kilobytes, not hundreds of megabytes
+CAP = 2 * MAX_UPLOAD - 1  # the largest body let through
 
 
 @pytest.fixture(autouse=True)
@@ -41,9 +42,9 @@ class Run:
     """The outcome of one request driven through the middleware."""
 
     def __init__(self):
-        self.entered = False        # the handler behind the middleware was called
-        self.handler_read = 0       # bytes the handler got to read
-        self.chunks_taken = 0       # chunks pulled from the client
+        self.entered = False  # the handler behind the middleware was called
+        self.handler_read = 0  # bytes the handler got to read
+        self.chunks_taken = 0  # chunks pulled from the client
         self.sent: list[dict] = []  # everything the middleware sent to the client
 
     @property
@@ -61,8 +62,13 @@ class Run:
         return json.loads(data) if data else {}
 
 
-def drive(chunks: list[bytes], *, content_length: int | None = None, scope_type: str = "http",
-          raw_content_length: bytes | None = None) -> Run:
+def drive(
+    chunks: list[bytes],
+    *,
+    content_length: int | None = None,
+    scope_type: str = "http",
+    raw_content_length: bytes | None = None,
+) -> Run:
     run = Run()
     queue = list(chunks)
 
@@ -71,7 +77,7 @@ def drive(chunks: list[bytes], *, content_length: int | None = None, scope_type:
         while True:
             message = await receive()
             if message["type"] == "http.disconnect":
-                raise RuntimeError("client went away")   # what a real handler does when told the client left
+                raise RuntimeError("client went away")  # what a real handler does when told the client left
             run.handler_read += len(message.get("body", b""))
             if not message.get("more_body"):
                 break
@@ -102,13 +108,16 @@ def chunks_of(total: int, size: int = 400) -> list[bytes]:
 
 # -- the cap ---------------------------------------------------------------------------------------------------------
 
+
 def test_the_cap_is_just_under_twice_the_file_limit():
     assert max_body_bytes() == CAP
-    assert 2 * MAX_UPLOAD > max_body_bytes() >= MAX_UPLOAD * 4 // 3, \
+    assert 2 * MAX_UPLOAD > max_body_bytes() >= MAX_UPLOAD * 4 // 3, (
         "a body of 2 x the limit is refused, but base64 of a full-size file must fit"
+    )
 
 
 # -- Content-Length --------------------------------------------------------------------------------------------------
+
 
 def test_a_declared_length_over_the_cap_is_refused_without_reading_the_body():
     run = drive(chunks_of(2 * MAX_UPLOAD), content_length=2 * MAX_UPLOAD)
@@ -124,8 +133,9 @@ def test_a_declared_length_at_the_cap_is_let_through():
 
 # -- no Content-Length, or a wrong one ------------------------------------------------------------------------------
 
+
 def test_a_chunked_body_over_the_cap_is_refused_and_reading_stops():
-    chunks = chunks_of(10 * MAX_UPLOAD)           # 25 chunks, no Content-Length
+    chunks = chunks_of(10 * MAX_UPLOAD)  # 25 chunks, no Content-Length
     run = drive(chunks)
     assert run.status == 413 and run.body == {"detail": "Request body too large"}, run.sent
     assert run.chunks_taken < len(chunks), "the whole body must not be pulled in"
@@ -153,6 +163,7 @@ def test_an_unusable_content_length_is_ignored_and_the_body_is_counted(raw):
 
 # -- what it leaves alone --------------------------------------------------------------------------------------------
 
+
 def test_a_request_without_a_body_passes_through():
     run = drive([])
     assert run.status == 200 and run.handler_read == 0
@@ -172,16 +183,21 @@ def test_only_http_requests_are_limited(scope_type):
 
 # -- through the real app --------------------------------------------------------------------------------------------
 
+
 def test_the_real_app_refuses_an_oversize_body_with_the_cors_headers_a_browser_needs():
     client = TestClient(app)
-    res = client.post("/api/csv/upload", content=b"x" * (2 * MAX_UPLOAD),
-                      headers={"Content-Type": "application/json", "Origin": "http://localhost:5173"})
+    res = client.post(
+        "/api/csv/upload",
+        content=b"x" * (2 * MAX_UPLOAD),
+        headers={"Content-Type": "application/json", "Origin": "http://localhost:5173"},
+    )
     assert res.status_code == 413 and res.json() == {"detail": "Request body too large"}, res.text
-    assert res.headers.get("access-control-allow-origin") == "http://localhost:5173", \
+    assert res.headers.get("access-control-allow-origin") == "http://localhost:5173", (
         "without CORS headers the browser cannot read the 413"
+    )
 
 
 def test_the_real_app_hands_a_body_within_the_cap_to_the_route():
     client = TestClient(app)
     res = client.post("/api/csv/upload", content=b"{}", headers={"Content-Type": "application/json"})
-    assert res.status_code != 413, res.text      # it reached the route, which rejects the empty request itself
+    assert res.status_code != 413, res.text  # it reached the route, which rejects the empty request itself

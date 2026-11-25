@@ -12,6 +12,7 @@ without review, and the registry recorded the partial count. Asserted here, thro
 
 Needs a live PostgreSQL with the dev schema deployed, as in CI.
 """
+
 from __future__ import annotations
 
 import unittest
@@ -53,16 +54,26 @@ class TeImportIsAllOrNothing(unittest.TestCase):
         return "\n".join([HEADER, *rows]) + "\n"
 
     def _upload(self, content: str, file_name: str | None = None) -> dict:
-        res = self.client.post("/api/csv/upload", json={
-            "fileName": file_name or self.file_name, "content": content,
-            "mode": "te", "targetTable": "organisations"})
+        res = self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": file_name or self.file_name,
+                "content": content,
+                "mode": "te",
+                "targetTable": "organisations",
+            },
+        )
         self.assertEqual(res.status_code, 200, res.text)
         return res.json()
 
     def _org_names(self) -> list[str]:
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("SELECT name FROM {}.organisations WHERE name LIKE %s ORDER BY name").format(
-                sql.Identifier(settings.TE_SCHEMA)), (f"{self.tag}\\_%",))
+            cur.execute(
+                sql.SQL("SELECT name FROM {}.organisations WHERE name LIKE %s ORDER BY name").format(
+                    sql.Identifier(settings.TE_SCHEMA)
+                ),
+                (f"{self.tag}\\_%",),
+            )
             return [r[0] for r in cur.fetchall()]
 
     def _registered(self) -> list[dict]:
@@ -72,10 +83,16 @@ class TeImportIsAllOrNothing(unittest.TestCase):
 
     def _cleanup(self) -> None:
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("DELETE FROM {}.organisations WHERE name LIKE %s").format(
-                sql.Identifier(settings.TE_SCHEMA)), (f"{self.tag}\\_%",))
-            cur.execute(sql.SQL("DELETE FROM {}.csv_files WHERE file_name = %s AND mode = 'te'").format(
-                sql.Identifier(settings.UPLOADS_SCHEMA)), (self.file_name,))
+            cur.execute(
+                sql.SQL("DELETE FROM {}.organisations WHERE name LIKE %s").format(sql.Identifier(settings.TE_SCHEMA)),
+                (f"{self.tag}\\_%",),
+            )
+            cur.execute(
+                sql.SQL("DELETE FROM {}.csv_files WHERE file_name = %s AND mode = 'te'").format(
+                    sql.Identifier(settings.UPLOADS_SCHEMA)
+                ),
+                (self.file_name,),
+            )
             conn.commit()
 
     def _assert_nothing_imported(self, body: dict) -> None:
@@ -101,10 +118,13 @@ class TeImportIsAllOrNothing(unittest.TestCase):
         self.assertEqual([e["rowNumber"] for e in body["rowErrors"]], [2], body)
 
     def test_both_kinds_of_failure_are_all_reported_and_nothing_is_imported(self):
-        body = self._upload(self._csv(
-            self._org("a", is_active="NOT_A_BOOL"),     # row 1: type check
-            self._org("b", org_type="INVALID_ENUM"),    # row 2: database
-            self._org("c")))                            # row 3: fine, but it must not land either
+        body = self._upload(
+            self._csv(
+                self._org("a", is_active="NOT_A_BOOL"),  # row 1: type check
+                self._org("b", org_type="INVALID_ENUM"),  # row 2: database
+                self._org("c"),
+            )
+        )  # row 3: fine, but it must not land either
         self._assert_nothing_imported(body)
         self.assertEqual((body["totalRows"], body["failedRows"]), (3, 2), body)
         self.assertEqual(sorted(e["rowNumber"] for e in body["rowErrors"]), [1, 2], body)
@@ -121,8 +141,11 @@ class TeImportIsAllOrNothing(unittest.TestCase):
         again = self._upload(self._csv(self._org("second"), self._org("bad", is_active="NOT_A_BOOL")))
         self.assertEqual(again["status"], "error", again)
         self.assertEqual(self._org_names(), [f"{self.tag}_first"], "the second file's good row must not land")
-        self.assertEqual([f["id"] for f in self._registered()], [registered["id"]],
-                         "the earlier load's registry row must be untouched")
+        self.assertEqual(
+            [f["id"] for f in self._registered()],
+            [registered["id"]],
+            "the earlier load's registry row must be untouched",
+        )
 
     def test_a_clean_file_still_imports_every_row(self):
         body = self._upload(self._csv(self._org("a"), self._org("b"), self._org("c")))

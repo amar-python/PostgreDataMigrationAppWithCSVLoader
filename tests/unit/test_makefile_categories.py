@@ -4,6 +4,7 @@ pytest exits 5 when it collects nothing. The Makefile's `run_category` used to t
 category, so a renamed folder, a wrong path or a changed marker made `make test-<category>` pass without running a
 test. Now only the categories named in `EMPTY_CATEGORIES` may be empty.
 """
+
 from __future__ import annotations
 
 import os

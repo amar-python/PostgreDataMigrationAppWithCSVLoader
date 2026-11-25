@@ -13,10 +13,10 @@ import threading
 from typing import Any, NamedTuple
 
 from psycopg2 import sql
+from psycopg2.extensions import cursor
 
 from api.config import settings
 from api.db import fetch_one
-from psycopg2.extensions import cursor
 
 ROLES = ("uploader", "reviewer", "tenant_admin", "auditor")
 MIN_PASSWORD = 12
@@ -80,7 +80,7 @@ def _q(query: str) -> sql.Composed:
 
 class Existing(NamedTuple):
     tenant: bool  # a tenant with this slug exists
-    user: bool    # a user with this username exists; usernames are unique across all tenants
+    user: bool  # a user with this username exists; usernames are unique across all tenants
     member: bool  # that user is already a member of that tenant
 
 
@@ -90,13 +90,17 @@ def existing(cur: cursor, slug: str, username: str) -> Existing:
     Lets a caller refuse to create a duplicate with a clear message, instead of failing on
     the database's unique key after the person has already typed a password.
     """
-    cur.execute(_q(
-        "SELECT EXISTS (SELECT 1 FROM {c}.tenants WHERE slug = %s), "
-        "EXISTS (SELECT 1 FROM {c}.users WHERE username = %s), "
-        "EXISTS (SELECT 1 FROM {c}.users u "
-        "JOIN {c}.memberships m ON m.user_id = u.id "
-        "JOIN {c}.tenants t ON t.id = m.tenant_id "
-        "WHERE t.slug = %s AND u.username = %s)"), (slug, username, slug, username))
+    cur.execute(
+        _q(
+            "SELECT EXISTS (SELECT 1 FROM {c}.tenants WHERE slug = %s), "
+            "EXISTS (SELECT 1 FROM {c}.users WHERE username = %s), "
+            "EXISTS (SELECT 1 FROM {c}.users u "
+            "JOIN {c}.memberships m ON m.user_id = u.id "
+            "JOIN {c}.tenants t ON t.id = m.tenant_id "
+            "WHERE t.slug = %s AND u.username = %s)"
+        ),
+        (slug, username, slug, username),
+    )
     return Existing(*fetch_one(cur))
 
 
@@ -123,16 +127,19 @@ def set_self_approval(cur: cursor, slug: str, allowed: bool) -> None:
 
 
 def create_user(cur: cursor, username: str, password: str) -> int:
-    cur.execute(_q("INSERT INTO {c}.users (username, password_hash) VALUES (%s, %s) RETURNING id"),
-                (username, hash_password(password)))
+    cur.execute(
+        _q("INSERT INTO {c}.users (username, password_hash) VALUES (%s, %s) RETURNING id"),
+        (username, hash_password(password)),
+    )
     return int(fetch_one(cur)[0])
 
 
 def add_membership(cur: cursor, user_id: int, tenant_id: int, role: str) -> None:
     if role not in ROLES:
         raise ValueError(f"Unknown role {role!r}; expected one of {ROLES}")
-    cur.execute(_q("INSERT INTO {c}.memberships (user_id, tenant_id, role) VALUES (%s, %s, %s)"),
-                (user_id, tenant_id, role))
+    cur.execute(
+        _q("INSERT INTO {c}.memberships (user_id, tenant_id, role) VALUES (%s, %s, %s)"), (user_id, tenant_id, role)
+    )
 
 
 def login(cur: cursor, tenant_slug: str, username: str, password: str) -> dict[str, Any] | None:
@@ -142,13 +149,17 @@ def login(cur: cursor, tenant_slug: str, username: str, password: str) -> dict[s
     Wrong tenant, unknown user, wrong password, inactive user and locked
     account (#102) all return None, so a caller cannot tell which one failed.
     """
-    cur.execute(_q(
-        "SELECT u.id, u.password_hash, u.is_active, t.id, m.role, "
-        "COALESCE(u.locked_until > now(), false) "
-        "FROM {c}.users u "
-        "LEFT JOIN {c}.tenants t ON t.slug = %s "
-        "LEFT JOIN {c}.memberships m ON m.user_id = u.id AND m.tenant_id = t.id "
-        "WHERE u.username = %s"), (tenant_slug, username))
+    cur.execute(
+        _q(
+            "SELECT u.id, u.password_hash, u.is_active, t.id, m.role, "
+            "COALESCE(u.locked_until > now(), false) "
+            "FROM {c}.users u "
+            "LEFT JOIN {c}.tenants t ON t.slug = %s "
+            "LEFT JOIN {c}.memberships m ON m.user_id = u.id AND m.tenant_id = t.id "
+            "WHERE u.username = %s"
+        ),
+        (tenant_slug, username),
+    )
     row = cur.fetchone()
     stored = row[1] if row else _DUMMY_HASH
     ok = verify_password(password, stored)
@@ -161,8 +172,10 @@ def login(cur: cursor, tenant_slug: str, username: str, password: str) -> dict[s
         return None
     if needs_rehash(stored):
         _upgrade_hash(cur, row[0], stored, password)
-    cur.execute(_q("UPDATE {c}.users SET failed_logins = 0, first_failed_at = NULL, "
-                   "locked_until = NULL WHERE id = %s"), (row[0],))
+    cur.execute(
+        _q("UPDATE {c}.users SET failed_logins = 0, first_failed_at = NULL, locked_until = NULL WHERE id = %s"),
+        (row[0],),
+    )
     return _new_session(cur, row[0], row[3], username, tenant_slug, row[4])
 
 
@@ -172,8 +185,10 @@ def _upgrade_hash(cur: cursor, user_id: int, old_hash: str, password: str) -> bo
     The condition keeps a password changed between the check and this update from being undone. Returns whether a row
     was changed. The caller commits.
     """
-    cur.execute(_q("UPDATE {c}.users SET password_hash = %s WHERE id = %s AND password_hash = %s"),
-                (hash_password(password), user_id, old_hash))
+    cur.execute(
+        _q("UPDATE {c}.users SET password_hash = %s WHERE id = %s AND password_hash = %s"),
+        (hash_password(password), user_id, old_hash),
+    )
     return cur.rowcount == 1
 
 
@@ -183,39 +198,58 @@ def login_trusted(cur: cursor, tenant_slug: str, username: str) -> dict[str, Any
     Authorisation stays local: the user must already exist, be active and be a
     member of the tenant. Nobody is created from IdP claims.
     """
-    cur.execute(_q(
-        "SELECT u.id, t.id, m.role FROM {c}.users u "
-        "JOIN {c}.tenants t ON t.slug = %s "
-        "JOIN {c}.memberships m ON m.user_id = u.id AND m.tenant_id = t.id "
-        "WHERE u.username = %s AND u.is_active"), (tenant_slug, username))
+    cur.execute(
+        _q(
+            "SELECT u.id, t.id, m.role FROM {c}.users u "
+            "JOIN {c}.tenants t ON t.slug = %s "
+            "JOIN {c}.memberships m ON m.user_id = u.id AND m.tenant_id = t.id "
+            "WHERE u.username = %s AND u.is_active"
+        ),
+        (tenant_slug, username),
+    )
     row = cur.fetchone()
     return _new_session(cur, row[0], row[1], username, tenant_slug, row[2]) if row else None
 
 
-def _new_session(cur: cursor, user_id: int, tenant_id: int, username: str, tenant_slug: str, role: str) -> dict[str, Any]:
+def _new_session(
+    cur: cursor, user_id: int, tenant_id: int, username: str, tenant_slug: str, role: str
+) -> dict[str, Any]:
     token = secrets.token_urlsafe(32)
-    cur.execute(_q(
-        "INSERT INTO {c}.sessions (token_hash, user_id, tenant_id, expires_at) "
-        "VALUES (%s, %s, %s, now() + make_interval(hours => %s)) RETURNING expires_at"),
-        (_token_hash(token), user_id, tenant_id, settings.SESSION_TTL_HOURS))
+    cur.execute(
+        _q(
+            "INSERT INTO {c}.sessions (token_hash, user_id, tenant_id, expires_at) "
+            "VALUES (%s, %s, %s, now() + make_interval(hours => %s)) RETURNING expires_at"
+        ),
+        (_token_hash(token), user_id, tenant_id, settings.SESSION_TTL_HOURS),
+    )
     expires_at = fetch_one(cur)[0]
-    return {"token": token, "expiresAt": expires_at.isoformat(), "username": username,
-            "tenant": tenant_slug, "role": role}
+    return {
+        "token": token,
+        "expiresAt": expires_at.isoformat(),
+        "username": username,
+        "tenant": tenant_slug,
+        "role": role,
+    }
 
 
 def _record_failure(cur: cursor, user_id: int) -> None:
     """Count a wrong password; lock the account once the window's limit is reached (#102)."""
-    cur.execute(_q(
-        "UPDATE {c}.users SET "
-        "failed_logins = CASE WHEN first_failed_at > now() - make_interval(mins => %(m)s) "
-        "                     THEN failed_logins + 1 ELSE 1 END, "
-        "first_failed_at = CASE WHEN first_failed_at > now() - make_interval(mins => %(m)s) "
-        "                       THEN first_failed_at ELSE now() END "
-        "WHERE id = %(id)s RETURNING failed_logins"),
-        {"m": settings.LOGIN_LOCKOUT_MINUTES, "id": user_id})
+    cur.execute(
+        _q(
+            "UPDATE {c}.users SET "
+            "failed_logins = CASE WHEN first_failed_at > now() - make_interval(mins => %(m)s) "
+            "                     THEN failed_logins + 1 ELSE 1 END, "
+            "first_failed_at = CASE WHEN first_failed_at > now() - make_interval(mins => %(m)s) "
+            "                       THEN first_failed_at ELSE now() END "
+            "WHERE id = %(id)s RETURNING failed_logins"
+        ),
+        {"m": settings.LOGIN_LOCKOUT_MINUTES, "id": user_id},
+    )
     if fetch_one(cur)[0] >= settings.LOGIN_MAX_FAILURES:
-        cur.execute(_q("UPDATE {c}.users SET locked_until = now() + make_interval(mins => %s) "
-                       "WHERE id = %s"), (settings.LOGIN_LOCKOUT_MINUTES, user_id))
+        cur.execute(
+            _q("UPDATE {c}.users SET locked_until = now() + make_interval(mins => %s) WHERE id = %s"),
+            (settings.LOGIN_LOCKOUT_MINUTES, user_id),
+        )
 
 
 def session_for(cur: cursor, token: str) -> dict[str, Any] | None:
@@ -225,21 +259,31 @@ def session_for(cur: cursor, token: str) -> dict[str, Any] | None:
     minutes (#296). A hit records the use; the caller commits, or the record is lost.
     """
     idle = settings.SESSION_IDLE_MINUTES
-    cur.execute(_q(
-        "SELECT u.id, u.username, t.id, t.slug, m.role, s.expires_at, t.allow_self_approval "
-        "FROM {c}.sessions s "
-        "JOIN {c}.users u ON u.id = s.user_id AND u.is_active "
-        "JOIN {c}.tenants t ON t.id = s.tenant_id "
-        "JOIN {c}.memberships m ON m.user_id = u.id AND m.tenant_id = t.id "
-        "WHERE s.token_hash = %s AND s.revoked_at IS NULL AND s.expires_at > now() "
-        "AND (%s <= 0 OR s.last_seen_at > now() - make_interval(mins => %s))"),
-        (_token_hash(token), idle, idle))
+    cur.execute(
+        _q(
+            "SELECT u.id, u.username, t.id, t.slug, m.role, s.expires_at, t.allow_self_approval "
+            "FROM {c}.sessions s "
+            "JOIN {c}.users u ON u.id = s.user_id AND u.is_active "
+            "JOIN {c}.tenants t ON t.id = s.tenant_id "
+            "JOIN {c}.memberships m ON m.user_id = u.id AND m.tenant_id = t.id "
+            "WHERE s.token_hash = %s AND s.revoked_at IS NULL AND s.expires_at > now() "
+            "AND (%s <= 0 OR s.last_seen_at > now() - make_interval(mins => %s))"
+        ),
+        (_token_hash(token), idle, idle),
+    )
     row = cur.fetchone()
     if not row:
         return None
     _touch(cur, _token_hash(token))
-    return {"userId": row[0], "username": row[1], "tenantId": row[2], "tenant": row[3],
-            "role": row[4], "expiresAt": row[5].isoformat(), "allowSelfApproval": bool(row[6])}
+    return {
+        "userId": row[0],
+        "username": row[1],
+        "tenantId": row[2],
+        "tenant": row[3],
+        "role": row[4],
+        "expiresAt": row[5].isoformat(),
+        "allowSelfApproval": bool(row[6]),
+    }
 
 
 def _touch(cur: cursor, token_hash: str) -> None:
@@ -249,10 +293,14 @@ def _touch(cur: cursor, token_hash: str) -> None:
     looks idle because the write was skipped.
     """
     idle = settings.SESSION_IDLE_MINUTES
-    gap = max(1, min(60, idle * 15)) if idle > 0 else 60   # seconds: a quarter of the idle limit, at most a minute
-    cur.execute(_q("UPDATE {c}.sessions SET last_seen_at = now() "
-                   "WHERE token_hash = %s AND last_seen_at < now() - make_interval(secs => %s)"),
-                (token_hash, gap))
+    gap = max(1, min(60, idle * 15)) if idle > 0 else 60  # seconds: a quarter of the idle limit, at most a minute
+    cur.execute(
+        _q(
+            "UPDATE {c}.sessions SET last_seen_at = now() "
+            "WHERE token_hash = %s AND last_seen_at < now() - make_interval(secs => %s)"
+        ),
+        (token_hash, gap),
+    )
 
 
 def purge_sessions(cur: cursor) -> int:
@@ -261,29 +309,42 @@ def purge_sessions(cur: cursor) -> int:
     Ended means expired, revoked, or (when the idle limit is on) idle for longer than the limit. A live session, one
     that ended recently, and every user and membership are left alone. The caller commits.
     """
-    cur.execute(_q(
-        "DELETE FROM {c}.sessions WHERE "
-        "expires_at < now() - make_interval(days => %(grace)s) "
-        "OR revoked_at < now() - make_interval(days => %(grace)s) "
-        "OR (%(idle)s > 0 AND last_seen_at < now() - make_interval(days => %(grace)s) "
-        "                                       - make_interval(mins => %(idle)s))"),
-        {"grace": settings.SESSION_PURGE_GRACE_DAYS, "idle": settings.SESSION_IDLE_MINUTES})
+    cur.execute(
+        _q(
+            "DELETE FROM {c}.sessions WHERE "
+            "expires_at < now() - make_interval(days => %(grace)s) "
+            "OR revoked_at < now() - make_interval(days => %(grace)s) "
+            "OR (%(idle)s > 0 AND last_seen_at < now() - make_interval(days => %(grace)s) "
+            "                                       - make_interval(mins => %(idle)s))"
+        ),
+        {"grace": settings.SESSION_PURGE_GRACE_DAYS, "idle": settings.SESSION_IDLE_MINUTES},
+    )
     return cur.rowcount
 
 
 def revoke(cur: cursor, token: str) -> None:
-    cur.execute(_q("UPDATE {c}.sessions SET revoked_at = now() "
-                   "WHERE token_hash = %s AND revoked_at IS NULL"), (_token_hash(token),))
+    cur.execute(
+        _q("UPDATE {c}.sessions SET revoked_at = now() WHERE token_hash = %s AND revoked_at IS NULL"),
+        (_token_hash(token),),
+    )
 
 
 def _set_password(cur: cursor, user_id: int, password: str, keep_token: str | None = None) -> None:
     """New hash, lockout cleared, and every session revoked except ``keep_token`` (#117)."""
-    cur.execute(_q("UPDATE {c}.users SET password_hash = %s, failed_logins = 0, "
-                   "first_failed_at = NULL, locked_until = NULL WHERE id = %s"),
-                (hash_password(password), user_id))
-    cur.execute(_q("UPDATE {c}.sessions SET revoked_at = now() WHERE user_id = %s "
-                   "AND revoked_at IS NULL AND token_hash IS DISTINCT FROM %s"),
-                (user_id, _token_hash(keep_token) if keep_token else None))
+    cur.execute(
+        _q(
+            "UPDATE {c}.users SET password_hash = %s, failed_logins = 0, "
+            "first_failed_at = NULL, locked_until = NULL WHERE id = %s"
+        ),
+        (hash_password(password), user_id),
+    )
+    cur.execute(
+        _q(
+            "UPDATE {c}.sessions SET revoked_at = now() WHERE user_id = %s "
+            "AND revoked_at IS NULL AND token_hash IS DISTINCT FROM %s"
+        ),
+        (user_id, _token_hash(keep_token) if keep_token else None),
+    )
 
 
 def change_password(cur: cursor, user_id: int, token: str, current: str, new: str) -> bool:
@@ -304,11 +365,15 @@ def reset_password(cur: cursor, tenant_id: int, username: str, new: str) -> str:
     of its sessions. Returns "ok", "missing" (not a member of ``tenant_id``) or
     "shared": a user who is also in another tenant is refused, because the
     password is global and one tenant's admin must not take over the others."""
-    cur.execute(_q("SELECT u.id, EXISTS (SELECT 1 FROM {c}.memberships o "
-                   "WHERE o.user_id = u.id AND o.tenant_id <> %s) "
-                   "FROM {c}.users u JOIN {c}.memberships m "
-                   "ON m.user_id = u.id AND m.tenant_id = %s WHERE u.username = %s"),
-                (tenant_id, tenant_id, username))
+    cur.execute(
+        _q(
+            "SELECT u.id, EXISTS (SELECT 1 FROM {c}.memberships o "
+            "WHERE o.user_id = u.id AND o.tenant_id <> %s) "
+            "FROM {c}.users u JOIN {c}.memberships m "
+            "ON m.user_id = u.id AND m.tenant_id = %s WHERE u.username = %s"
+        ),
+        (tenant_id, tenant_id, username),
+    )
     row = cur.fetchone()
     if not row:
         return "missing"

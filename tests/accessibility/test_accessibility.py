@@ -11,6 +11,7 @@ RENDERED (a redirect to the sign-in page or an error screen would otherwise scan
 and then scans. Results are judged against known_violations.json; see README.md in this
 folder for what that means, and why scans of an unfixed frontend still pass today.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -123,6 +124,7 @@ def test_signed_out_visitors_are_sent_to_sign_in(open_page, path):
 # The stub is served over HTTP (conftest.stub_api_url); pages are reached through the sidebar.
 # st.dataframe draws on a canvas, so axe cannot see inside grids (README.md).
 
+
 def test_streamlit_sign_in_page(streamlit_page, scan):
     page = streamlit_page(sign_in=False)
     _shows(page, "Sign in")
@@ -132,6 +134,7 @@ def test_streamlit_sign_in_page(streamlit_page, scan):
 
 def test_streamlit_sign_in_after_a_failed_attempt(streamlit_page, scan):
     from tests.accessibility.conftest import sign_in_as
+
     page = streamlit_page(sign_in=False)
     sign_in_as(page, "not-the-password")
     _shows(page, "Invalid tenant, username or password")

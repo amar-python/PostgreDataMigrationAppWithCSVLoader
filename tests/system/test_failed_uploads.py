@@ -26,8 +26,9 @@ class EveryRowFailed(unittest.TestCase):
         self.registry_cleanup.append(self.name)
 
     def _upload(self, content: str, types: list[str], overwrite: bool = False) -> dict:
-        return self.client.post("/api/csv/upload", json={
-            "fileName": self.name, "content": content, "types": types, "overwrite": overwrite}).json()
+        return self.client.post(
+            "/api/csv/upload", json={"fileName": self.name, "content": content, "types": types, "overwrite": overwrite}
+        ).json()
 
     def _registered(self) -> list[dict]:
         return [f for f in self.client.get("/api/csv/files").json() if f["file_name"] == self.name]

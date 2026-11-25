@@ -23,18 +23,18 @@ MIN_PASSWORD = 12  # api/services/accounts.py MIN_PASSWORD
 # A copy of api/auth.py PERMISSIONS, so the app does not import the API's packages. A test fails if the
 # two drift apart (tests/unit/test_streamlit_shell.py::test_the_permission_table_matches_the_api).
 PERMISSIONS: dict[str, frozenset[str]] = {
-    "preview":        frozenset({"uploader", "tenant_admin"}),
-    "upload":         frozenset({"uploader", "tenant_admin"}),
-    "list_files":     frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
-    "read_rows":      frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
-    "list_te":        frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
-    "delete_file":    frozenset({"tenant_admin"}),
-    "read_audit":     frozenset({"tenant_admin", "auditor"}),
+    "preview": frozenset({"uploader", "tenant_admin"}),
+    "upload": frozenset({"uploader", "tenant_admin"}),
+    "list_files": frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
+    "read_rows": frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
+    "list_te": frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
+    "delete_file": frozenset({"tenant_admin"}),
+    "read_audit": frozenset({"tenant_admin", "auditor"}),
     "reset_password": frozenset({"tenant_admin"}),
-    "review_rows":    frozenset({"reviewer", "tenant_admin"}),
-    "submit_import":  frozenset({"uploader", "tenant_admin"}),
+    "review_rows": frozenset({"reviewer", "tenant_admin"}),
+    "submit_import": frozenset({"uploader", "tenant_admin"}),
     "approve_import": frozenset({"reviewer", "tenant_admin"}),
-    "run_import":     frozenset({"uploader", "reviewer", "tenant_admin"}),
+    "run_import": frozenset({"uploader", "reviewer", "tenant_admin"}),
 }
 
 
@@ -94,8 +94,9 @@ def take_notice() -> str | None:
 def sign_in(tenant: str, username: str, password: str) -> str | None:
     """Sign in. Returns None on success, or the message to show. Same wording as the React app."""
     try:
-        new = api_client.request("POST", "/api/auth/login",
-                                 json={"tenant": tenant, "username": username, "password": password})
+        new = api_client.request(
+            "POST", "/api/auth/login", json={"tenant": tenant, "username": username, "password": password}
+        )
     except api_client.Unauthorized:
         return "Invalid tenant, username or password"
     except api_client.ApiError as e:

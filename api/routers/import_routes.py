@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import base64
 import binascii
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from psycopg2.extensions import cursor
 from pydantic import BaseModel, Field
 
 from api import policy
@@ -16,14 +19,14 @@ from api.db import Conn
 from api.routers.csv_routes import HeaderRename
 from api.services import staged_import
 from api.services.type_confirmation import require_confirmed_types
-from typing import Any
-from psycopg2.extensions import cursor
-from collections.abc import Callable
-from typing import TypeVar
 
 T = TypeVar("T")
 
-router = APIRouter(prefix="/api/csv/uploads", tags=["import"], dependencies=[Depends(tenant_scope), Depends(policy.mark_classification)])
+router = APIRouter(
+    prefix="/api/csv/uploads",
+    tags=["import"],
+    dependencies=[Depends(tenant_scope), Depends(policy.mark_classification)],
+)
 
 
 class StageRequest(BaseModel):
@@ -33,8 +36,9 @@ class StageRequest(BaseModel):
     typesConfirmed: bool = Field(
         default=False,
         description="A person confirmed `types` (#195); the import records it in the registry. "
-                    "A server started with API_REQUIRE_TYPE_CONFIRMATION=true answers 422 unless this is true "
-                    "and `types` is sent (#242).")
+        "A server started with API_REQUIRE_TYPE_CONFIRMATION=true answers 422 unless this is true "
+        "and `types` is sent (#242).",
+    )
     headerMapping: list[HeaderRename] | None = Field(default=None, max_length=1000)
     contentBase64: str | None = None  # the file's bytes as uploaded, kept as the preserved original (#185)
 
@@ -90,11 +94,13 @@ def stage(req: StageRequest) -> dict[str, Any]:
 @router.get("/{upload_id}/workflow", dependencies=[Depends(allow("read_rows"))])
 def workflow(upload_id: int) -> dict[str, Any]:
     """The upload's state, its latest submission, approval and import, and the history of each."""
+
     def read(cur: cursor, uid: int) -> dict[str, Any]:
         st = staged_import.state_of(cur, uid)
         if st is None:
             raise staged_import.WorkflowError(404, "No such upload")
         return {**st, "history": staged_import.history(cur, uid)}
+
     return _run(read, upload_id, commit=False)
 
 
@@ -104,13 +110,18 @@ def submit(upload_id: int, req: SubmitRequest | None = None) -> dict[str, Any]:
 
 
 @router.post("/{upload_id}/approval", dependencies=[Depends(allow("approve_import"))])
-def approval(upload_id: int, req: ApprovalRequest, session: dict[str, Any] | None = Depends(tenant_scope)) -> dict[str, Any]:
+def approval(
+    upload_id: int, req: ApprovalRequest, session: dict[str, Any] | None = Depends(tenant_scope)
+) -> dict[str, Any]:
     return _run(staged_import.decide_approval, upload_id, req.decision, req.reason, session)
 
 
 @router.post("/{upload_id}/import", dependencies=[Depends(allow("run_import")), Depends(import_slot)])
-def run_import(upload_id: int, idempotency_key: str = Header(default="", alias="Idempotency-Key"),
-               session: dict[str, Any] | None = Depends(tenant_scope)) -> dict[str, Any]:
+def run_import(
+    upload_id: int,
+    idempotency_key: str = Header(default="", alias="Idempotency-Key"),
+    session: dict[str, Any] | None = Depends(tenant_scope),
+) -> dict[str, Any]:
     """Import an approved upload in one transaction. Send an Idempotency-Key and reuse it to retry."""
     try:
         return staged_import.import_upload(upload_id, idempotency_key, session)

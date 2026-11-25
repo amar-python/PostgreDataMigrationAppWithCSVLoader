@@ -1,6 +1,7 @@
 """psql on Windows (client encoding WIN1252) does not skip a UTF-8 BOM and
 fails the launcher with 'syntax error at or near "ï»¿"'. Linux CI skips it,
 so guard the shipped SQL templates here."""
+
 from pathlib import Path
 
 import pytest

@@ -19,7 +19,6 @@ Create Date: 2026-10-28
 """
 
 from alembic import op
-
 from api.config import settings
 
 revision = "0007"
@@ -69,10 +68,14 @@ def upgrade() -> None:
             USING ERRCODE = 'insufficient_privilege';
         END $$""")
     for t in _TABLES:
-        op.execute(f"CREATE TRIGGER {t}_no_change BEFORE UPDATE OR DELETE ON {s}.{t} "
-                   f"FOR EACH ROW EXECUTE FUNCTION {s}.audit_reject_change()")
-        op.execute(f"CREATE TRIGGER {t}_no_truncate BEFORE TRUNCATE ON {s}.{t} "
-                   f"FOR EACH STATEMENT EXECUTE FUNCTION {s}.audit_reject_change()")
+        op.execute(
+            f"CREATE TRIGGER {t}_no_change BEFORE UPDATE OR DELETE ON {s}.{t} "
+            f"FOR EACH ROW EXECUTE FUNCTION {s}.audit_reject_change()"
+        )
+        op.execute(
+            f"CREATE TRIGGER {t}_no_truncate BEFORE TRUNCATE ON {s}.{t} "
+            f"FOR EACH STATEMENT EXECUTE FUNCTION {s}.audit_reject_change()"
+        )
 
 
 def downgrade() -> None:

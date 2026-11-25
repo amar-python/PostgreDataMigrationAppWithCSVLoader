@@ -35,8 +35,13 @@ _ROOT = Path(__file__).resolve().parents[2]
 
 
 def _owner():
-    return psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                            password=settings.PG_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
+    return psycopg2.connect(
+        host=settings.PG_HOST,
+        port=settings.PG_PORT,
+        user=settings.PG_USER,
+        password=settings.PG_PASSWORD.get_secret_value(),
+        dbname=settings.PG_DATABASE,
+    )
 
 
 @pytest.mark.integration
@@ -48,9 +53,21 @@ class RuntimeRole(unittest.TestCase):
         env_file = Path(cls.tmp.name) / "app-db.env"
         # RV-S3 (#173): --env is mandatory. The role and credential file are
         # still overridden here so each run gets a unique, disposable role.
-        run = subprocess.run([sys.executable, "scripts/create_app_role.py", "--env", "test",
-                              "--role", cls.role, "--env-file", str(env_file)],
-                             cwd=_ROOT, capture_output=True, text=True)
+        run = subprocess.run(
+            [
+                sys.executable,
+                "scripts/create_app_role.py",
+                "--env",
+                "test",
+                "--role",
+                cls.role,
+                "--env-file",
+                str(env_file),
+            ],
+            cwd=_ROOT,
+            capture_output=True,
+            text=True,
+        )
         assert run.returncode == 0, run.stderr
         cls.script_stdout = run.stdout
         values = dict(line.split("=", 1) for line in env_file.read_text().splitlines())
@@ -70,8 +87,13 @@ class RuntimeRole(unittest.TestCase):
         cls.tmp.cleanup()
 
     def _as_runtime(self):
-        return psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.APP_DB_USER,
-                                password=settings.APP_DB_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
+        return psycopg2.connect(
+            host=settings.PG_HOST,
+            port=settings.PG_PORT,
+            user=settings.APP_DB_USER,
+            password=settings.APP_DB_PASSWORD.get_secret_value(),
+            dbname=settings.PG_DATABASE,
+        )
 
     def test_script_keeps_the_password_out_of_its_output(self):
         self.assertIn(self.role, self.script_stdout)
@@ -84,19 +106,24 @@ class RuntimeRole(unittest.TestCase):
         up = self.client.post("/api/csv/upload", json={"fileName": name, "content": f"v\n{name}\n"}).json()
         self.assertEqual(up["status"], "ok", up)
         self.assertIsNotNone(up["uploadId"], "the original must be stored by the runtime role")
-        over = self.client.post("/api/csv/upload", json={
-            "fileName": name, "content": f"v\nnew_{name}\n", "overwrite": True}).json()
+        over = self.client.post(
+            "/api/csv/upload", json={"fileName": name, "content": f"v\nnew_{name}\n", "overwrite": True}
+        ).json()
         self.assertEqual(over["status"], "ok", over)
         # P15 (docs/test-cases/M4-review.md): review changes work through the runtime role.
-        decided = self.client.put(f"/api/csv/uploads/{up['uploadId']}/rows/1/decision",
-                                  json={"decision": "exclude", "reason": "runtime role case"})
+        decided = self.client.put(
+            f"/api/csv/uploads/{up['uploadId']}/rows/1/decision",
+            json={"decision": "exclude", "reason": "runtime role case"},
+        )
         self.assertEqual(decided.status_code, 200, decided.text)
-        edited = self.client.put(f"/api/csv/uploads/{up['uploadId']}/rows/1/cells/v",
-                                 json={"value": "changed", "reason": "runtime role case"})
+        edited = self.client.put(
+            f"/api/csv/uploads/{up['uploadId']}/rows/1/cells/v",
+            json={"value": "changed", "reason": "runtime role case"},
+        )
         self.assertEqual(edited.status_code, 200, edited.text)
         self.assertEqual(self.client.delete(f"/api/csv/files/{over['fileId']}").status_code, 200)
         self.assertTrue(self.client.get("/api/audit/verify").json()["intact"])
-        with Conn() as conn, conn.cursor() as cur:   # the API's own request pool
+        with Conn() as conn, conn.cursor() as cur:  # the API's own request pool
             cur.execute("SELECT current_user")
             self.assertEqual(cur.fetchone()[0], self.role)
 
@@ -114,12 +141,26 @@ class RuntimeRole(unittest.TestCase):
 
     def test_runtime_role_cannot_change_or_unprotect_append_only_tables(self):
         schema = settings.UPLOADS_SCHEMA
-        tables = ("audit_log", "uploads", "upload_blobs", "source_rows", "row_decisions", "cell_edits", "row_flags",
-                  "submissions", "approvals", "imports")
+        tables = (
+            "audit_log",
+            "uploads",
+            "upload_blobs",
+            "source_rows",
+            "row_decisions",
+            "cell_edits",
+            "row_flags",
+            "submissions",
+            "approvals",
+            "imports",
+        )
         statements = [f"{verb} {{}}.{table}" for table in tables for verb in ("DELETE FROM", "TRUNCATE")]
-        statements += ["UPDATE {}.audit_log SET actor = 'x'", "UPDATE {}.uploads SET status = 'failed'",
-                       "UPDATE {}.row_decisions SET reason = 'x'", "UPDATE {}.cell_edits SET new_value = 'x'",  # N15
-                       "ALTER TABLE {}.audit_log DISABLE TRIGGER audit_no_change"]
+        statements += [
+            "UPDATE {}.audit_log SET actor = 'x'",
+            "UPDATE {}.uploads SET status = 'failed'",
+            "UPDATE {}.row_decisions SET reason = 'x'",
+            "UPDATE {}.cell_edits SET new_value = 'x'",  # N15
+            "ALTER TABLE {}.audit_log DISABLE TRIGGER audit_no_change",
+        ]
         conn = self._as_runtime()
         try:
             for statement in statements:
@@ -129,9 +170,12 @@ class RuntimeRole(unittest.TestCase):
                     # Refused by privilege, not by the trigger: the owner's triggers are a second layer.
                     self.assertNotIn("append-only", str(caught.exception))
                     conn.rollback()
-            with conn.cursor() as cur:   # inserting into the audit log still works
-                cur.execute(sql.SQL("INSERT INTO {}.audit_log (action, actor) VALUES ('upload', 'role-test')")
-                            .format(sql.Identifier(schema)))
+            with conn.cursor() as cur:  # inserting into the audit log still works
+                cur.execute(
+                    sql.SQL("INSERT INTO {}.audit_log (action, actor) VALUES ('upload', 'role-test')").format(
+                        sql.Identifier(schema)
+                    )
+                )
             conn.rollback()
         finally:
             conn.close()
@@ -142,7 +186,7 @@ class RuntimeRole(unittest.TestCase):
         with Conn() as conn, conn.cursor() as cur:
             tid = accounts.create_tenant(cur, slug, "Runtime role tenant")
             accounts.add_membership(cur, accounts.create_user(cur, f"{slug}_u", pw), tid, "tenant_admin")
-            accounts.set_self_approval(cur, slug, True)   # one user here; also checks the session carries the flag
+            accounts.set_self_approval(cur, slug, True)  # one user here; also checks the session carries the flag
             conn.commit()
         try:
             migrate_tenant(slug)
@@ -154,8 +198,11 @@ class RuntimeRole(unittest.TestCase):
             self.assertEqual(up.json()["status"], "ok", up.text)
             uid = up.json()["uploadId"]
             for res in (
-                self.client.put(f"/api/csv/uploads/{uid}/rows/1/decision", headers=h,
-                                json={"decision": "exclude", "reason": "runtime role case"}),
+                self.client.put(
+                    f"/api/csv/uploads/{uid}/rows/1/decision",
+                    headers=h,
+                    json={"decision": "exclude", "reason": "runtime role case"},
+                ),
                 self.client.get(f"/api/csv/uploads/{uid}/rows/1/history", headers=h),
                 self.client.get(f"/api/csv/tables/{up.json()['tableName']}/rows", headers=h),
                 self.client.get("/api/csv/uploads", headers=h),
@@ -165,8 +212,9 @@ class RuntimeRole(unittest.TestCase):
             log = self.client.get("/api/audit/log?limit=50", headers=h).json()["entries"]
             self.assertIn(name, [e["fileName"] for e in log])
             self.assertTrue(self.client.get("/api/audit/verify", headers=h).json()["intact"])
-            staged = self.client.post("/api/csv/uploads", headers=h,
-                                      json={"fileName": "s_" + name, "content": "v\nstaged\n"}).json()["uploadId"]
+            staged = self.client.post(
+                "/api/csv/uploads", headers=h, json={"fileName": "s_" + name, "content": "v\nstaged\n"}
+            ).json()["uploadId"]
             for action, body in (("submit", None), ("approval", {"decision": "approve"})):
                 res = self.client.post(f"/api/csv/uploads/{staged}/{action}", headers=h, json=body)
                 self.assertEqual(res.status_code, 200, res.text)
@@ -177,12 +225,14 @@ class RuntimeRole(unittest.TestCase):
             conn = self._as_runtime()
             try:
                 with conn.cursor() as cur:
-                    with self.assertRaises(psycopg2.errors.InsufficientPrivilege):   # no rights without SET ROLE
+                    with self.assertRaises(psycopg2.errors.InsufficientPrivilege):  # no rights without SET ROLE
                         cur.execute(sql.SQL("SELECT * FROM {}.csv_files").format(sql.Identifier(schema_for(slug))))
                     conn.rollback()
-                    cur.execute("SELECT m.inherit_option, m.set_option FROM pg_auth_members m "
-                                "WHERE m.roleid = to_regrole(%s) AND m.member = to_regrole(%s)",
-                                (role_for(slug), self.role))
+                    cur.execute(
+                        "SELECT m.inherit_option, m.set_option FROM pg_auth_members m "
+                        "WHERE m.roleid = to_regrole(%s) AND m.member = to_regrole(%s)",
+                        (role_for(slug), self.role),
+                    )
                     self.assertEqual(cur.fetchone(), (False, True), "member WITH INHERIT FALSE, SET TRUE")
                     cur.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(role_for(slug))))
                     cur.execute(sql.SQL("SELECT count(*) FROM {}.csv_files").format(sql.Identifier(schema_for(slug))))
@@ -192,8 +242,12 @@ class RuntimeRole(unittest.TestCase):
         finally:
             with _owner() as conn, conn.cursor() as cur:
                 cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_for(slug))))
-                cur.execute(sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(
-                    sql.Identifier(settings.CONTROL_SCHEMA)), (slug,))
-                cur.execute(sql.SQL("DELETE FROM {}.users WHERE username = %s").format(
-                    sql.Identifier(settings.CONTROL_SCHEMA)), (f"{slug}_u",))
+                cur.execute(
+                    sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(sql.Identifier(settings.CONTROL_SCHEMA)),
+                    (slug,),
+                )
+                cur.execute(
+                    sql.SQL("DELETE FROM {}.users WHERE username = %s").format(sql.Identifier(settings.CONTROL_SCHEMA)),
+                    (f"{slug}_u",),
+                )
                 drop_tenant_role(cur, slug)
