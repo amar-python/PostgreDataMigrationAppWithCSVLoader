@@ -84,7 +84,21 @@ class CSVDropHandler(FileSystemEventHandler):
             return True
 
     def _maybe_trigger(self, src_path: str) -> None:
-        path = Path(src_path)
+        """Handle one file event. Never raises: an error is logged and the watcher goes on (#351).
+
+        An exception that escapes a watchdog handler ends the observer's event thread, while the main loop keeps
+        sleeping, so the process looks healthy and does nothing. (Reproduced with watchdog 7.1.1: the thread dies with
+        the handler's exception.) A locked file, a permission error or a database that went away must cost one file,
+        not the watcher.
+        """
+        try:
+            self._handle_file(Path(src_path))
+        except Exception as exc:  # noqa: BLE001 - the point is that nothing may escape into watchdog's thread
+            self.reporter.logger.exception(
+                "Watcher failed on %s (%s: %s); it keeps watching", src_path, type(exc).__name__, exc,
+            )
+
+    def _handle_file(self, path: Path) -> None:
         job = self.jobs_by_filename.get(path.name)
         if not job:
             return  # Silently ignore files we have no job for.
@@ -99,10 +113,12 @@ class CSVDropHandler(FileSystemEventHandler):
             )
             return
 
-        # Copy to the configured source location and trigger the job.
+        # Copy to the configured source location and trigger the job. When the watched folder is the one that holds the
+        # job's CSV, the dropped file already is the source: copying it onto itself raised SameFileError on every file.
         target = Path(job.source_csv)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, target)
+        if path.resolve() != target.resolve():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
         self.reporter.logger.info(
             "Triggering job %s for incoming file %s", job.name, path.name
         )
