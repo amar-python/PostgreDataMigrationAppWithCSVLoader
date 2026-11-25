@@ -17,6 +17,7 @@ One version, **CPython 3.12**, named in one file: `.python-version`. Before this
 | `preflight.sh` / `preflight.ps1` | 3.10 or later | 3.12 or later required; anything but 3.12 is a warning |
 | README badge, `docs/QUICKSTART.md`, `evals/USAGE.md` | 3.10+ | 3.12 |
 | Hashed lock files (`scripts/lock_requirements.sh`, #327) | none | compiled for 3.12 |
+| `pyproject.toml` `requires-python`, mypy `python_version` (added by #412) | `>=3.10`, unset | `>=3.12`, `3.12` |
 
 ## Why 3.12
 
@@ -36,15 +37,16 @@ are all 3.12. A matrix would double the database jobs for a version nobody runs.
 (#327) be compiled once. If a second version is ever needed (for example during the move to 3.13), add it to the
 matrix of the free-tier and integration jobs and compile the locks for both, then remove the old one.
 
-## No `pyproject.toml`
+## `pyproject.toml`
 
-The issue asked for `requires-python` in `pyproject.toml`. The repository has no `pyproject.toml` (it is not a package;
-pytest reads `pytest.ini`), and adding one only for that line would make tools treat the repository as an installable
-project. `.python-version` is the single source instead: `actions/setup-python` reads it, and so do pyenv and uv.
+When this was decided the repository had no `pyproject.toml`, so `.python-version` became the single source
+(`actions/setup-python` reads it, and so do pyenv and uv). #412 then added a `pyproject.toml` for tool configuration;
+its `requires-python` is now `>=3.12` and mypy checks against 3.12 (`python_version`), both naming the same version.
 
 ## How it stays true
 
 `tests/unit/test_reproducible_builds.py` fails if `.python-version` is not 3.12, if a CI job names its own Python
 version, if a Dockerfile's Python base image is another version, if the offline bundle downloads wheels for another
-version, if preflight accepts an older version, or if the locks are compiled for another version. Dependabot does not
+version, if preflight accepts an older version, if `pyproject.toml` names another version, or if the locks are compiled for
+another version. Dependabot does not
 propose minor or major Python image updates (`.github/dependabot.yml`): changing the version is a new decision.

@@ -118,6 +118,14 @@ def test_preflight_requires_the_supported_version():
     assert f"[int]$parts[1] -ge {minor}" in _text(ROOT / "preflight.ps1")
 
 
+def test_pyproject_requires_the_supported_version():
+    import tomllib
+
+    data = tomllib.loads(_text(ROOT / "pyproject.toml"))
+    assert data["project"]["requires-python"] == f">={SUPPORTED_PYTHON}"
+    assert data["tool"]["mypy"]["python_version"] == SUPPORTED_PYTHON
+
+
 def test_the_locks_are_compiled_for_the_supported_version():
     assert re.search(rf"^PY={re.escape(SUPPORTED_PYTHON)}$", _text(ROOT / "scripts/lock_requirements.sh"), re.M)
 
