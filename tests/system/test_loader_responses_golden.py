@@ -46,7 +46,7 @@ def _te(name: str, content: str, table: str = "organisations") -> dict:
 
 def corpus(t: str) -> list[tuple[str, dict]]:
     """``t`` is this run's tag. Every file that reaches the database carries it, so no run sees another's rows."""
-    bad_many = f"n,tag\n" + "".join(f"x{i},{t}\n" for i in range(10)) + f"7,{t}\n"
+    bad_many = "n,tag\n" + "".join(f"x{i},{t}\n" for i in range(10)) + f"7,{t}\n"
     return [
         ("good", _dyn(f"people_{t}.csv", f"id,name,qty\n1,a{t},5\n2,b,6\n")),
         ("same bytes again", _dyn(f"other_{t}.csv", f"id,name,qty\n1,a{t},5\n2,b,6\n")),
