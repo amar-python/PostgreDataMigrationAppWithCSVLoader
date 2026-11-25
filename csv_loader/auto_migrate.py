@@ -78,6 +78,16 @@ def _is_integer(series: pd.Series) -> bool:
     return True
 
 
+# A zero followed by another digit ("0800", "0412345678", "007", "-007"): padding, not a number. A single zero ("0"), a
+# zero before a decimal point ("0.5") and trailing zeros ("10") do not match.
+_PADDED_NUMBER = re.compile(r"^[+-]?0\d")
+
+
+def _has_leading_zero(series: pd.Series) -> bool:
+    """True if any value is a zero-padded number (postcode, phone or account number)."""
+    return any(_PADDED_NUMBER.match(str(v).strip()) for v in series.dropna())
+
+
 def _is_numeric(series: pd.Series) -> bool:
     for v in series.dropna():
         try:
@@ -137,6 +147,10 @@ def infer_column_type(series: pd.Series) -> str:
         return "text"
     if _is_boolean(series):
         return "boolean"
+    # #352: an identifier with leading zeros is text. Stored as INTEGER (or NUMERIC), 0800 becomes 800 for good, and the
+    # comparison step, which turns both sides into numbers for such a column, would report 800 == 800 as a pass.
+    if _has_leading_zero(series) and _is_numeric(series):
+        return "text"
     if _is_integer(series):
         return "integer"
     if _is_numeric(series):
