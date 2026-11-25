@@ -1,14 +1,46 @@
-__pycache__
-*.pyc
-*.pyo
-.env
-.git
-.gitignore
-tests/
+# Second line of defence (#348): the Dockerfile copies only what it names, and this keeps credentials and data out of the
+# build context even if someone puts a broader COPY back. Docker matches a pattern from the context root only; `**/`
+# makes it match at any depth. tests/test_docker_build_context.py checks both layers.
+
+# credentials and tool configuration
+**/.env
+**/.env.*
+**/*.env
+**/.ssh
+**/.aws
+**/.azure
+**/.gnupg
+**/.kube
+**/.docker
+**/.config
+**/.netrc
+**/id_rsa*
+**/id_ed25519*
+**/*.pem
+**/*.key
+**/*.pfx
+**/*.p12
+**/*.tfvars
+**/*.tfstate
+**/OneDrive
+
+# version control and caches
+**/.git
+**/.gitignore
+**/__pycache__
+**/*.pyc
+**/*.pyo
+
+# data and run output are mounted at run time, never baked in
+input_data/
 reports/
+
+# development files
+tests/
 *.md
 pytest.ini
 run_tests.py
 deploy/
+auto_migrate.py
 .dockerignore
 Dockerfile
