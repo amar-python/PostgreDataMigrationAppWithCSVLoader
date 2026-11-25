@@ -1,0 +1,2032 @@
+[
+ {
+  "case": "good",
+  "http": 200,
+  "body": {
+   "status": "ok",
+   "fileId": "<volatile>",
+   "tableName": "csv_people_<tag>_v1",
+   "totalRows": 2,
+   "insertedRows": 2,
+   "duplicateRowsSkipped": 0,
+   "failedRows": 0,
+   "columns": [
+    "id",
+    "name",
+    "qty"
+   ],
+   "types": [
+    "text",
+    "text",
+    "text"
+   ],
+   "typesProvenance": "inferred_unconfirmed",
+   "rowErrors": [],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"people_<tag>.csv\" (35 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 3 raw rows (including header)",
+     "count": 3
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "info",
+     "message": "Checking existing content hash"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "version",
+     "level": "info",
+     "message": "\"people_<tag>\" version 1",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "Validated 3 columns",
+     "count": 3
+    },
+    {
+     "ts": "<volatile>",
+     "step": "create_table",
+     "level": "info",
+     "message": "create table csv_people_<tag>_v1 (3 cols)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "info",
+     "message": "Cast 2 rows → 2 valid, 0 errors, 0 in-file duplicates",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "insert",
+     "level": "info",
+     "message": "Inserted 2 rows",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "register",
+     "level": "info",
+     "message": "Registering file in csv_files"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "done",
+     "level": "info",
+     "message": "Import complete for people_<tag>.csv"
+    }
+   ],
+   "dataset": "people_<tag>",
+   "version": 1,
+   "schemaCheck": null,
+   "duplicateRowsAcrossUploads": 0,
+   "crossUploadDuplicates": [],
+   "overwritten": false,
+   "replacedFileName": null,
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "same bytes again",
+  "http": 200,
+  "body": {
+   "status": "duplicate_file",
+   "reason": "content",
+   "existingFileName": "people_<tag>.csv",
+   "tableName": "csv_people_<tag>_v1",
+   "existingRowCount": 2,
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"other_<tag>.csv\" (35 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 3 raw rows (including header)",
+     "count": 3
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "info",
+     "message": "Checking existing content hash"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "warn",
+     "message": "Content matches existing file (people_<tag>.csv)"
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "version 2, new column, one row repeated",
+  "http": 200,
+  "body": {
+   "status": "ok",
+   "fileId": "<volatile>",
+   "tableName": "csv_people_<tag>_v2",
+   "totalRows": 2,
+   "insertedRows": 2,
+   "duplicateRowsSkipped": 0,
+   "failedRows": 0,
+   "columns": [
+    "id",
+    "name",
+    "qty",
+    "extra"
+   ],
+   "types": [
+    "text",
+    "text",
+    "text",
+    "text"
+   ],
+   "typesProvenance": "inferred_unconfirmed",
+   "rowErrors": [],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"people_<tag>.csv\" (44 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 3 raw rows (including header)",
+     "count": 3
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "info",
+     "message": "Checking existing content hash"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "version",
+     "level": "info",
+     "message": "\"people_<tag>\" version 2",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "Validated 4 columns",
+     "count": 4
+    },
+    {
+     "ts": "<volatile>",
+     "step": "schema_check",
+     "level": "info",
+     "message": "Columns match the previous version"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "create_table",
+     "level": "info",
+     "message": "create table csv_people_<tag>_v2 (4 cols)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "info",
+     "message": "Cast 2 rows → 2 valid, 0 errors, 0 in-file duplicates",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "insert",
+     "level": "info",
+     "message": "Inserted 2 rows",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "register",
+     "level": "info",
+     "message": "Registering file in csv_files"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "done",
+     "level": "info",
+     "message": "Import complete for people_<tag>.csv"
+    }
+   ],
+   "dataset": "people_<tag>",
+   "version": 2,
+   "schemaCheck": {
+    "compatible": true,
+    "added": [
+     "extra"
+    ],
+    "removed": [],
+    "changed": [],
+    "comparedTo": {
+     "fileName": "people_<tag>.csv",
+     "version": 1,
+     "tableName": "csv_people_<tag>_v1"
+    }
+   },
+   "duplicateRowsAcrossUploads": 0,
+   "crossUploadDuplicates": [],
+   "overwritten": false,
+   "replacedFileName": null,
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "version 3, typed, one bad row",
+  "http": 200,
+  "body": {
+   "status": "ok",
+   "fileId": "<volatile>",
+   "tableName": "csv_people_<tag>_v3",
+   "totalRows": 3,
+   "insertedRows": 2,
+   "duplicateRowsSkipped": 0,
+   "failedRows": 1,
+   "columns": [
+    "id",
+    "name",
+    "qty"
+   ],
+   "types": [
+    "int8",
+    "text",
+    "numeric"
+   ],
+   "typesProvenance": "user_confirmed",
+   "rowErrors": [
+    {
+     "rowNumber": 2,
+     "column": "id",
+     "value": "x",
+     "reason": "\"x\" is not a whole number"
+    }
+   ],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"people_<tag>.csv\" (43 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 4 raw rows (including header)",
+     "count": 4
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "info",
+     "message": "Checking existing content hash"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "version",
+     "level": "info",
+     "message": "\"people_<tag>\" version 3",
+     "count": 3
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "Validated 3 columns",
+     "count": 3
+    },
+    {
+     "ts": "<volatile>",
+     "step": "schema_check",
+     "level": "warn",
+     "message": "Columns differ from the previous version"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "create_table",
+     "level": "info",
+     "message": "create table csv_people_<tag>_v3 (3 cols)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "warn",
+     "message": "Cast 3 rows → 2 valid, 1 errors, 0 in-file duplicates",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "insert",
+     "level": "info",
+     "message": "Inserted 2 rows",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "register",
+     "level": "info",
+     "message": "Registering file in csv_files"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "done",
+     "level": "info",
+     "message": "Import complete for people_<tag>.csv"
+    }
+   ],
+   "dataset": "people_<tag>",
+   "version": 3,
+   "schemaCheck": {
+    "compatible": false,
+    "added": [],
+    "removed": [
+     "extra"
+    ],
+    "changed": [
+     {
+      "column": "id",
+      "was": "text",
+      "now": "int8"
+     },
+     {
+      "column": "qty",
+      "was": "text",
+      "now": "numeric"
+     }
+    ],
+    "comparedTo": {
+     "fileName": "people_<tag>.csv",
+     "version": 2,
+     "tableName": "csv_people_<tag>_v2"
+    }
+   },
+   "duplicateRowsAcrossUploads": 0,
+   "crossUploadDuplicates": [],
+   "overwritten": false,
+   "replacedFileName": null,
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "every row bad",
+  "http": 200,
+  "body": {
+   "status": "error",
+   "message": "None of the 2 rows could be imported, so nothing was saved. First problem: row 1, column \"n\": \"x\" is not a whole number",
+   "rowErrors": [
+    {
+     "rowNumber": 1,
+     "column": "n",
+     "value": "x",
+     "reason": "\"x\" is not a whole number"
+    },
+    {
+     "rowNumber": 2,
+     "column": "n",
+     "value": "y",
+     "reason": "\"y\" is not a whole number"
+    }
+   ],
+   "totalRows": 2,
+   "failedRows": 2,
+   "columns": [
+    "n",
+    "tag"
+   ],
+   "types": [
+    "int8",
+    "text"
+   ],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"allbad_<tag>.csv\" (34 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 3 raw rows (including header)",
+     "count": 3
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "info",
+     "message": "Checking existing content hash"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "version",
+     "level": "info",
+     "message": "\"allbad_<tag>\" version 1",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "Validated 2 columns",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "create_table",
+     "level": "info",
+     "message": "create table csv_allbad_<tag>_v1 (2 cols)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "warn",
+     "message": "Cast 2 rows → 0 valid, 2 errors, 0 in-file duplicates",
+     "count": 0
+    },
+    {
+     "ts": "<volatile>",
+     "step": "error",
+     "level": "error",
+     "message": "None of the 2 rows could be imported, so nothing was saved. First problem: row 1, column \"n\": \"x\" is not a whole number"
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "ragged and short rows",
+  "http": 200,
+  "body": {
+   "status": "ok",
+   "fileId": "<volatile>",
+   "tableName": "csv_ragged_<tag>_v1",
+   "totalRows": 3,
+   "insertedRows": 2,
+   "duplicateRowsSkipped": 0,
+   "failedRows": 1,
+   "columns": [
+    "a",
+    "b"
+   ],
+   "types": [
+    "text",
+    "text"
+   ],
+   "typesProvenance": "inferred_unconfirmed",
+   "rowErrors": [
+    {
+     "rowNumber": 1,
+     "column": "(beyond header)",
+     "value": "3",
+     "reason": "Row has 3 cells but the header has 2; the extra value(s) would be lost, so the row was not imported."
+    }
+   ],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"ragged_<tag>.csv\" (26 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 4 raw rows (including header)",
+     "count": 4
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "info",
+     "message": "Checking existing content hash"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "version",
+     "level": "info",
+     "message": "\"ragged_<tag>\" version 1",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "Validated 2 columns",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "create_table",
+     "level": "info",
+     "message": "create table csv_ragged_<tag>_v1 (2 cols)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "warn",
+     "message": "Cast 3 rows → 2 valid, 1 errors, 0 in-file duplicates",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "insert",
+     "level": "info",
+     "message": "Inserted 2 rows",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "register",
+     "level": "info",
+     "message": "Registering file in csv_files"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "done",
+     "level": "info",
+     "message": "Import complete for ragged_<tag>.csv"
+    }
+   ],
+   "dataset": "ragged_<tag>",
+   "version": 1,
+   "schemaCheck": null,
+   "duplicateRowsAcrossUploads": 0,
+   "crossUploadDuplicates": [],
+   "overwritten": false,
+   "replacedFileName": null,
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "in-file duplicates",
+  "http": 200,
+  "body": {
+   "status": "ok",
+   "fileId": "<volatile>",
+   "tableName": "csv_dupes_<tag>_v1",
+   "totalRows": 3,
+   "insertedRows": 2,
+   "duplicateRowsSkipped": 1,
+   "failedRows": 0,
+   "columns": [
+    "a"
+   ],
+   "types": [
+    "text"
+   ],
+   "typesProvenance": "inferred_unconfirmed",
+   "rowErrors": [],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"dupes_<tag>.csv\" (28 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 4 raw rows (including header)",
+     "count": 4
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "info",
+     "message": "Checking existing content hash"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "version",
+     "level": "info",
+     "message": "\"dupes_<tag>\" version 1",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "Validated 1 columns",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "create_table",
+     "level": "info",
+     "message": "create table csv_dupes_<tag>_v1 (1 cols)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "info",
+     "message": "Cast 3 rows → 2 valid, 0 errors, 1 in-file duplicates",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "insert",
+     "level": "info",
+     "message": "Inserted 2 rows",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "register",
+     "level": "info",
+     "message": "Registering file in csv_files"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "done",
+     "level": "info",
+     "message": "Import complete for dupes_<tag>.csv"
+    }
+   ],
+   "dataset": "dupes_<tag>",
+   "version": 1,
+   "schemaCheck": null,
+   "duplicateRowsAcrossUploads": 0,
+   "crossUploadDuplicates": [],
+   "overwritten": false,
+   "replacedFileName": null,
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "empty",
+  "http": 422,
+  "body": {
+   "detail": [
+    {
+     "type": "string_too_short",
+     "loc": [
+      "body",
+      "content"
+     ],
+     "msg": "String should have at least 1 character",
+     "input": "",
+     "ctx": {
+      "min_length": 1
+     }
+    }
+   ]
+  }
+ },
+ {
+  "case": "header only",
+  "http": 200,
+  "body": {
+   "status": "invalid_structure",
+   "reason": "header_only",
+   "message": "This CSV has a header row but no data rows. Add at least one data row and try again.",
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"header_<tag>.csv\" (4 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 1 raw rows (including header)",
+     "count": 1
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "blank header",
+  "http": 200,
+  "body": {
+   "status": "invalid_structure",
+   "reason": "no_columns",
+   "message": "This CSV's first row is blank, so we can't detect any column headers.",
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"blank_<tag>.csv\" (16 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 2 raw rows (including header)",
+     "count": 2
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "header rename",
+  "http": 200,
+  "body": {
+   "status": "ok",
+   "fileId": "<volatile>",
+   "tableName": "csv_rename_<tag>_v1",
+   "totalRows": 1,
+   "insertedRows": 1,
+   "duplicateRowsSkipped": 0,
+   "failedRows": 0,
+   "columns": [
+    "new_name",
+    "b"
+   ],
+   "types": [
+    "text",
+    "text"
+   ],
+   "typesProvenance": "inferred_unconfirmed",
+   "rowErrors": [],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"rename_<tag>.csv\" (25 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 2 raw rows (including header)",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "header_mapping",
+     "level": "info",
+     "message": "Renamed 1 column header(s)",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "info",
+     "message": "Checking existing content hash"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "version",
+     "level": "info",
+     "message": "\"rename_<tag>\" version 1",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "Validated 2 columns",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "create_table",
+     "level": "info",
+     "message": "create table csv_rename_<tag>_v1 (2 cols)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "info",
+     "message": "Cast 1 rows → 1 valid, 0 errors, 0 in-file duplicates",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "insert",
+     "level": "info",
+     "message": "Inserted 1 rows",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "register",
+     "level": "info",
+     "message": "Registering file in csv_files"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "done",
+     "level": "info",
+     "message": "Import complete for rename_<tag>.csv"
+    }
+   ],
+   "dataset": "rename_<tag>",
+   "version": 1,
+   "schemaCheck": null,
+   "duplicateRowsAcrossUploads": 0,
+   "crossUploadDuplicates": [],
+   "overwritten": false,
+   "replacedFileName": null,
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "bad header mapping",
+  "http": 200,
+  "body": {
+   "status": "error",
+   "reason": "invalid_header_mapping",
+   "message": "Header mapping refers to \"nope\", which is not a header in this file.",
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"rename2_<tag>.csv\" (14 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 2 raw rows (including header)",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "header_mapping",
+     "level": "error",
+     "message": "Header mapping refers to \"nope\", which is not a header in this file."
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "type count mismatch",
+  "http": 200,
+  "body": {
+   "status": "error",
+   "message": "Provided 1 column types but the CSV has 2 columns.",
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"types_<tag>.csv\" (18 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 2 raw rows (including header)",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "info",
+     "message": "Checking existing content hash"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "version",
+     "level": "info",
+     "message": "\"types_<tag>\" version 1",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "Validated 2 columns",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "error",
+     "level": "error",
+     "message": "Provided 1 column types but the CSV has 2 columns."
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "unsupported type",
+  "http": 200,
+  "body": {
+   "status": "error",
+   "message": "Unsupported column type provided.",
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"types2_<tag>.csv\" (14 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 2 raw rows (including header)",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "info",
+     "message": "Checking existing content hash"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "version",
+     "level": "info",
+     "message": "\"types2_<tag>\" version 1",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "Validated 1 columns",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "error",
+     "level": "error",
+     "message": "Unsupported column type provided"
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "over the row cap",
+  "http": 200,
+  "body": {
+   "status": "error",
+   "message": "CSV has 60 data rows, but the API is configured to accept at most 50. Split the file or raise API_MAX_ROWS.",
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"big_<tag>.csv\" (172 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 61 raw rows (including header)",
+     "count": 61
+    },
+    {
+     "ts": "<volatile>",
+     "step": "error",
+     "level": "error",
+     "message": "CSV has 60 data rows; max allowed is 50."
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "error list capped",
+  "http": 200,
+  "body": {
+   "status": "ok",
+   "fileId": "<volatile>",
+   "tableName": "csv_capped_<tag>_v1",
+   "totalRows": 11,
+   "insertedRows": 1,
+   "duplicateRowsSkipped": 0,
+   "failedRows": 10,
+   "columns": [
+    "n",
+    "tag"
+   ],
+   "types": [
+    "int8",
+    "text"
+   ],
+   "typesProvenance": "inferred_unconfirmed",
+   "rowErrors": [
+    {
+     "rowNumber": 1,
+     "column": "n",
+     "value": "x0",
+     "reason": "\"x0\" is not a whole number"
+    },
+    {
+     "rowNumber": 2,
+     "column": "n",
+     "value": "x1",
+     "reason": "\"x1\" is not a whole number"
+    },
+    {
+     "rowNumber": 3,
+     "column": "n",
+     "value": "x2",
+     "reason": "\"x2\" is not a whole number"
+    }
+   ],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"capped_<tag>.csv\" (170 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 12 raw rows (including header)",
+     "count": 12
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "info",
+     "message": "Checking existing content hash"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "version",
+     "level": "info",
+     "message": "\"capped_<tag>\" version 1",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "Validated 2 columns",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "create_table",
+     "level": "info",
+     "message": "create table csv_capped_<tag>_v1 (2 cols)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "warn",
+     "message": "Cast 11 rows → 1 valid, 10 errors, 0 in-file duplicates",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "insert",
+     "level": "info",
+     "message": "Inserted 1 rows",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "register",
+     "level": "info",
+     "message": "Registering file in csv_files"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "done",
+     "level": "info",
+     "message": "Import complete for capped_<tag>.csv"
+    }
+   ],
+   "dataset": "capped_<tag>",
+   "version": 1,
+   "schemaCheck": null,
+   "duplicateRowsAcrossUploads": 0,
+   "crossUploadDuplicates": [],
+   "overwritten": false,
+   "replacedFileName": null,
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "overwrite flag",
+  "http": 200,
+  "body": {
+   "status": "ok",
+   "fileId": "<volatile>",
+   "tableName": "csv_people_<tag>_v4",
+   "totalRows": 1,
+   "insertedRows": 1,
+   "duplicateRowsSkipped": 0,
+   "failedRows": 0,
+   "columns": [
+    "id",
+    "name",
+    "qty"
+   ],
+   "types": [
+    "text",
+    "text",
+    "text"
+   ],
+   "typesProvenance": "inferred_unconfirmed",
+   "rowErrors": [],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"people_<tag>.csv\" (29 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 2 raw rows (including header)",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "overwrite",
+     "level": "warn",
+     "message": "Overwrite is not supported (decision 2): storing a new version instead"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "info",
+     "message": "Checking existing content hash"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "version",
+     "level": "info",
+     "message": "\"people_<tag>\" version 4",
+     "count": 4
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "Validated 3 columns",
+     "count": 3
+    },
+    {
+     "ts": "<volatile>",
+     "step": "schema_check",
+     "level": "warn",
+     "message": "Columns differ from the previous version"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "create_table",
+     "level": "info",
+     "message": "create table csv_people_<tag>_v4 (3 cols)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "info",
+     "message": "Cast 1 rows → 1 valid, 0 errors, 0 in-file duplicates",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "insert",
+     "level": "info",
+     "message": "Inserted 1 rows",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "register",
+     "level": "info",
+     "message": "Registering file in csv_files"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "done",
+     "level": "info",
+     "message": "Import complete for people_<tag>.csv"
+    }
+   ],
+   "dataset": "people_<tag>",
+   "version": 4,
+   "schemaCheck": {
+    "compatible": false,
+    "added": [],
+    "removed": [],
+    "changed": [
+     {
+      "column": "id",
+      "was": "int8",
+      "now": "text"
+     },
+     {
+      "column": "qty",
+      "was": "numeric",
+      "now": "text"
+     }
+    ],
+    "comparedTo": {
+     "fileName": "people_<tag>.csv",
+     "version": 3,
+     "tableName": "csv_people_<tag>_v3"
+    }
+   },
+   "duplicateRowsAcrossUploads": 0,
+   "crossUploadDuplicates": [],
+   "overwritten": false,
+   "replacedFileName": null,
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "te: not a T&E table",
+  "http": 200,
+  "body": {
+   "status": "error",
+   "message": "\"nope\" is not a T&E table. Valid: organisations, personnel, test_programs, temp_documents, test_phases, requirements, test_cases, vcrm_entries, test_events, test_results, defect_reports, evidence_artifacts",
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"t0_<tag>.csv\" for T&E table \"nope\""
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "te: empty",
+  "http": 200,
+  "body": {
+   "status": "invalid_structure",
+   "reason": "header_only",
+   "message": "The CSV needs a header row and at least one data row.",
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"t1_<tag>.csv\" for T&E table \"organisations\""
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "te: unknown column",
+  "http": 200,
+  "body": {
+   "status": "error",
+   "message": "CSV columns not present in te_dev.organisations: bogus",
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"t2_<tag>.csv\" for T&E table \"organisations\""
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "te: good",
+  "http": 200,
+  "body": {
+   "status": "ok",
+   "fileId": "<volatile>",
+   "tableName": "te_dev.organisations",
+   "totalRows": 2,
+   "insertedRows": 2,
+   "duplicateRowsSkipped": 0,
+   "failedRows": 0,
+   "columns": [
+    "name",
+    "org_type",
+    "country"
+   ],
+   "types": [
+    "text",
+    "text",
+    "text"
+   ],
+   "rowErrors": [],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"orgs_<tag>.csv\" for T&E table \"organisations\""
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "All 3 CSV columns exist on organisations"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "info",
+     "message": "Client-side validated 2 rows → 2 valid, 0 type errors",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "done",
+     "level": "info",
+     "message": "T&E load complete: 2 rows into organisations",
+     "count": 2
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "te: CHECK violation on one row (database fallback)",
+  "http": 200,
+  "body": {
+   "status": "error",
+   "message": "1 of the 2 rows could not be imported into organisations, so nothing was saved. Fix them and upload the file again. First problem: row 2, : new row for relation \"organisations\" violates check constraint \"organisations_org_type_check\"",
+   "rowErrors": [
+    {
+     "rowNumber": 2,
+     "reason": "new row for relation \"organisations\" violates check constraint \"organisations_org_type_check\""
+    }
+   ],
+   "totalRows": 2,
+   "failedRows": 1,
+   "insertedRows": 0,
+   "columns": [
+    "name",
+    "org_type",
+    "country"
+   ],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"orgs2_<tag>.csv\" for T&E table \"organisations\""
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "All 3 CSV columns exist on organisations"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "info",
+     "message": "Client-side validated 2 rows → 2 valid, 0 type errors",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "error",
+     "level": "error",
+     "message": "1 of the 2 rows could not be imported into organisations, so nothing was saved. Fix them and upload the file again. First problem: row 2, : new row for relation \"organisations\" violates check constraint \"organisations_org_type_check\""
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "te: client-side type error",
+  "http": 200,
+  "body": {
+   "status": "error",
+   "message": "None of the 1 rows could be imported into organisations, so nothing was saved. First problem: row 1, is_active: \"maybe\" is not true/false",
+   "rowErrors": [
+    {
+     "rowNumber": 1,
+     "column": "is_active",
+     "value": "maybe",
+     "reason": "\"maybe\" is not true/false"
+    }
+   ],
+   "totalRows": 1,
+   "failedRows": 1,
+   "insertedRows": 0,
+   "columns": [
+    "is_active",
+    "name",
+    "org_type"
+   ],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"ev_<tag>.csv\" for T&E table \"organisations\""
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "All 3 CSV columns exist on organisations"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "warn",
+     "message": "Client-side validated 1 rows → 0 valid, 1 type errors",
+     "count": 0
+    },
+    {
+     "ts": "<volatile>",
+     "step": "error",
+     "level": "error",
+     "message": "None of the 1 rows could be imported into organisations, so nothing was saved. First problem: row 1, is_active: \"maybe\" is not true/false"
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "te: ragged",
+  "http": 200,
+  "body": {
+   "status": "error",
+   "message": "None of the 1 rows could be imported into organisations, so nothing was saved. First problem: row 1, (beyond header): Row has 3 cells but the header has 2; the extra value(s) would be lost, so the row was not imported.",
+   "rowErrors": [
+    {
+     "rowNumber": 1,
+     "column": "(beyond header)",
+     "value": "extra",
+     "reason": "Row has 3 cells but the header has 2; the extra value(s) would be lost, so the row was not imported."
+    }
+   ],
+   "totalRows": 1,
+   "failedRows": 1,
+   "insertedRows": 0,
+   "columns": [
+    "name",
+    "org_type"
+   ],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"orgs3_<tag>.csv\" for T&E table \"organisations\""
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "All 2 CSV columns exist on organisations"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "warn",
+     "message": "Client-side validated 1 rows → 0 valid, 1 type errors",
+     "count": 0
+    },
+    {
+     "ts": "<volatile>",
+     "step": "error",
+     "level": "error",
+     "message": "None of the 1 rows could be imported into organisations, so nothing was saved. First problem: row 1, (beyond header): Row has 3 cells but the header has 2; the extra value(s) would be lost, so the row was not imported."
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "te: re-upload by the same name",
+  "http": 200,
+  "body": {
+   "status": "ok",
+   "fileId": "<volatile>",
+   "tableName": "te_dev.organisations",
+   "totalRows": 1,
+   "insertedRows": 1,
+   "duplicateRowsSkipped": 0,
+   "failedRows": 0,
+   "columns": [
+    "name",
+    "org_type",
+    "country"
+   ],
+   "types": [
+    "text",
+    "text",
+    "text"
+   ],
+   "rowErrors": [],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"orgs_<tag>.csv\" for T&E table \"organisations\""
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "All 3 CSV columns exist on organisations"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "info",
+     "message": "Client-side validated 1 rows → 1 valid, 0 type errors",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "done",
+     "level": "info",
+     "message": "T&E load complete: 1 rows into organisations",
+     "count": 1
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "dynamic: an organisation-shaped dataset",
+  "http": 200,
+  "body": {
+   "status": "ok",
+   "fileId": "<volatile>",
+   "tableName": "csv_orgset_<tag>_v1",
+   "totalRows": 1,
+   "insertedRows": 1,
+   "duplicateRowsSkipped": 0,
+   "failedRows": 0,
+   "columns": [
+    "name",
+    "org_type",
+    "country"
+   ],
+   "types": [
+    "text",
+    "text",
+    "text"
+   ],
+   "typesProvenance": "inferred_unconfirmed",
+   "rowErrors": [],
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"orgset_<tag>.csv\" (49 chars)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "hash",
+     "level": "info",
+     "message": "Computed content hash <hash>…"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "parse",
+     "level": "info",
+     "message": "Parsed 2 raw rows (including header)",
+     "count": 2
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "info",
+     "message": "Checking existing content hash"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "version",
+     "level": "info",
+     "message": "\"orgset_<tag>\" version 1",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "Validated 3 columns",
+     "count": 3
+    },
+    {
+     "ts": "<volatile>",
+     "step": "create_table",
+     "level": "info",
+     "message": "create table csv_orgset_<tag>_v1 (3 cols)"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "cast_rows",
+     "level": "info",
+     "message": "Cast 1 rows → 1 valid, 0 errors, 0 in-file duplicates",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "insert",
+     "level": "info",
+     "message": "Inserted 1 rows",
+     "count": 1
+    },
+    {
+     "ts": "<volatile>",
+     "step": "register",
+     "level": "info",
+     "message": "Registering file in csv_files"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "done",
+     "level": "info",
+     "message": "Import complete for orgset_<tag>.csv"
+    }
+   ],
+   "dataset": "orgset_<tag>",
+   "version": 1,
+   "schemaCheck": null,
+   "duplicateRowsAcrossUploads": 0,
+   "crossUploadDuplicates": [],
+   "overwritten": false,
+   "replacedFileName": null,
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "te: content already a dataset",
+  "http": 200,
+  "body": {
+   "status": "duplicate_file",
+   "reason": "content",
+   "existingMode": "dynamic",
+   "existingFileName": "orgset_<tag>.csv",
+   "tableName": "csv_orgset_<tag>_v1",
+   "existingRowCount": 1,
+   "message": "This file's content is already stored as the dataset \"orgset_<tag>.csv\". A T&E upload cannot replace a dataset, so nothing was imported.",
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"orgs-te_<tag>.csv\" for T&E table \"organisations\""
+    },
+    {
+     "ts": "<volatile>",
+     "step": "validate_columns",
+     "level": "info",
+     "message": "All 3 CSV columns exist on organisations"
+    },
+    {
+     "ts": "<volatile>",
+     "step": "duplicate_check",
+     "level": "warn",
+     "message": "Identical content is already the dataset \"orgset_<tag>.csv\"; nothing was imported"
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "te: over the row cap",
+  "http": 200,
+  "body": {
+   "status": "error",
+   "message": "CSV has 60 data rows, but the API is configured to accept at most 50. Split the file or raise API_MAX_ROWS.",
+   "logs": [
+    {
+     "ts": "<volatile>",
+     "step": "receive",
+     "level": "info",
+     "message": "Received \"bigte_<tag>.csv\" for T&E table \"organisations\""
+    },
+    {
+     "ts": "<volatile>",
+     "step": "error",
+     "level": "error",
+     "message": "CSV has 60 data rows; max allowed is 50."
+    }
+   ],
+   "uploadId": "<volatile>"
+  }
+ },
+ {
+  "case": "registry rows the corpus left",
+  "body": [
+   {
+    "id": "<volatile>",
+    "file_name": "capped_<tag>.csv",
+    "table_name": "csv_capped_<tag>_v1",
+    "mode": "dynamic",
+    "row_count": 1,
+    "column_names": [
+     "n",
+     "tag"
+    ],
+    "created_at": "<volatile>",
+    "total_rows": 11,
+    "duplicate_rows_skipped": 0,
+    "failed_rows": 10,
+    "uploader": "anonymous",
+    "upload_id": "<volatile>",
+    "types_provenance": "inferred_unconfirmed"
+   },
+   {
+    "id": "<volatile>",
+    "file_name": "dupes_<tag>.csv",
+    "table_name": "csv_dupes_<tag>_v1",
+    "mode": "dynamic",
+    "row_count": 2,
+    "column_names": [
+     "a"
+    ],
+    "created_at": "<volatile>",
+    "total_rows": 3,
+    "duplicate_rows_skipped": 1,
+    "failed_rows": 0,
+    "uploader": "anonymous",
+    "upload_id": "<volatile>",
+    "types_provenance": "inferred_unconfirmed"
+   },
+   {
+    "id": "<volatile>",
+    "file_name": "orgs_<tag>.csv",
+    "table_name": "te_dev.organisations",
+    "mode": "te",
+    "row_count": 1,
+    "column_names": [
+     "name",
+     "org_type",
+     "country"
+    ],
+    "created_at": "<volatile>",
+    "total_rows": 1,
+    "duplicate_rows_skipped": 0,
+    "failed_rows": 0,
+    "uploader": "anonymous",
+    "upload_id": "<volatile>",
+    "types_provenance": null
+   },
+   {
+    "id": "<volatile>",
+    "file_name": "orgset_<tag>.csv",
+    "table_name": "csv_orgset_<tag>_v1",
+    "mode": "dynamic",
+    "row_count": 1,
+    "column_names": [
+     "name",
+     "org_type",
+     "country"
+    ],
+    "created_at": "<volatile>",
+    "total_rows": 1,
+    "duplicate_rows_skipped": 0,
+    "failed_rows": 0,
+    "uploader": "anonymous",
+    "upload_id": "<volatile>",
+    "types_provenance": "inferred_unconfirmed"
+   },
+   {
+    "id": "<volatile>",
+    "file_name": "people_<tag>.csv",
+    "table_name": "csv_people_<tag>_v1",
+    "mode": "dynamic",
+    "row_count": 2,
+    "column_names": [
+     "id",
+     "name",
+     "qty"
+    ],
+    "created_at": "<volatile>",
+    "total_rows": 2,
+    "duplicate_rows_skipped": 0,
+    "failed_rows": 0,
+    "uploader": "anonymous",
+    "upload_id": "<volatile>",
+    "types_provenance": "inferred_unconfirmed"
+   },
+   {
+    "id": "<volatile>",
+    "file_name": "people_<tag>.csv",
+    "table_name": "csv_people_<tag>_v2",
+    "mode": "dynamic",
+    "row_count": 2,
+    "column_names": [
+     "id",
+     "name",
+     "qty",
+     "extra"
+    ],
+    "created_at": "<volatile>",
+    "total_rows": 2,
+    "duplicate_rows_skipped": 0,
+    "failed_rows": 0,
+    "uploader": "anonymous",
+    "upload_id": "<volatile>",
+    "types_provenance": "inferred_unconfirmed"
+   },
+   {
+    "id": "<volatile>",
+    "file_name": "people_<tag>.csv",
+    "table_name": "csv_people_<tag>_v3",
+    "mode": "dynamic",
+    "row_count": 2,
+    "column_names": [
+     "id",
+     "name",
+     "qty"
+    ],
+    "created_at": "<volatile>",
+    "total_rows": 3,
+    "duplicate_rows_skipped": 0,
+    "failed_rows": 1,
+    "uploader": "anonymous",
+    "upload_id": "<volatile>",
+    "types_provenance": "user_confirmed"
+   },
+   {
+    "id": "<volatile>",
+    "file_name": "people_<tag>.csv",
+    "table_name": "csv_people_<tag>_v4",
+    "mode": "dynamic",
+    "row_count": 1,
+    "column_names": [
+     "id",
+     "name",
+     "qty"
+    ],
+    "created_at": "<volatile>",
+    "total_rows": 1,
+    "duplicate_rows_skipped": 0,
+    "failed_rows": 0,
+    "uploader": "anonymous",
+    "upload_id": "<volatile>",
+    "types_provenance": "inferred_unconfirmed"
+   },
+   {
+    "id": "<volatile>",
+    "file_name": "ragged_<tag>.csv",
+    "table_name": "csv_ragged_<tag>_v1",
+    "mode": "dynamic",
+    "row_count": 2,
+    "column_names": [
+     "a",
+     "b"
+    ],
+    "created_at": "<volatile>",
+    "total_rows": 3,
+    "duplicate_rows_skipped": 0,
+    "failed_rows": 1,
+    "uploader": "anonymous",
+    "upload_id": "<volatile>",
+    "types_provenance": "inferred_unconfirmed"
+   },
+   {
+    "id": "<volatile>",
+    "file_name": "rename_<tag>.csv",
+    "table_name": "csv_rename_<tag>_v1",
+    "mode": "dynamic",
+    "row_count": 1,
+    "column_names": [
+     "new_name",
+     "b"
+    ],
+    "created_at": "<volatile>",
+    "total_rows": 1,
+    "duplicate_rows_skipped": 0,
+    "failed_rows": 0,
+    "uploader": "anonymous",
+    "upload_id": "<volatile>",
+    "types_provenance": "inferred_unconfirmed"
+   }
+  ]
+ }
+]
