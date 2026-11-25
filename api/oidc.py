@@ -16,6 +16,7 @@ from urllib.request import url2pathname
 import jwt
 
 from api.config import settings
+from typing import Any
 
 ALGORITHMS = ["RS256", "ES256"]
 # Seconds to wait for the IdP's key set. PyJWT's default is 30, which would hold a request thread that long for
@@ -38,7 +39,7 @@ def check_config() -> None:
 
 
 @lru_cache(maxsize=4)
-def _jwks(url: str):
+def _jwks(url: str) -> jwt.PyJWKClient | jwt.PyJWKSet:
     """Key source for ``url``: https:// is fetched; file:// is a JWKS file published inside an
     enclave. Plain http:// is refused, since keys fetched over it could be swapped.
 
@@ -53,18 +54,20 @@ def _jwks(url: str):
     raise ValueError(f"OIDC_JWKS_URL must be https:// or file://, got {url!r}")
 
 
-def _signing_key(id_token: str):
+def _signing_key(id_token: str) -> Any:
     source = _jwks(settings.OIDC_JWKS_URL)
     if isinstance(source, jwt.PyJWKClient):
         return source.get_signing_key_from_jwt(id_token).key
     kid = jwt.get_unverified_header(id_token).get("kid")
+    if not isinstance(kid, str):  # no (or a non-text) key id: the same refusal as an unknown one
+        raise jwt.InvalidTokenError(f"unknown key id {kid!r}")
     try:
         return source[kid].key
     except KeyError:
         raise jwt.InvalidTokenError(f"unknown key id {kid!r}") from None
 
 
-def verify(id_token: str) -> dict:
+def verify(id_token: str) -> dict[str, Any]:
     """The token's claims once its signature, issuer, audience and expiry check out; raises ``jwt.PyJWTError`` if not.
 
     ``username_from`` hides the reason; this keeps it, for scripts/check_oidc.py.

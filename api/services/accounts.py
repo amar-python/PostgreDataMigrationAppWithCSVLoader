@@ -10,11 +10,13 @@ import hashlib
 import hmac
 import secrets
 import threading
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from psycopg2 import sql
 
 from api.config import settings
+from api.db import fetch_one
+from psycopg2.extensions import cursor
 
 ROLES = ("uploader", "reviewer", "tenant_admin", "auditor")
 MIN_PASSWORD = 12
@@ -82,7 +84,7 @@ class Existing(NamedTuple):
     member: bool  # that user is already a member of that tenant
 
 
-def existing(cur, slug: str, username: str) -> Existing:
+def existing(cur: cursor, slug: str, username: str) -> Existing:
     """What already exists for a tenant slug and a username.
 
     Lets a caller refuse to create a duplicate with a clear message, instead of failing on
@@ -95,22 +97,22 @@ def existing(cur, slug: str, username: str) -> Existing:
         "JOIN {c}.memberships m ON m.user_id = u.id "
         "JOIN {c}.tenants t ON t.id = m.tenant_id "
         "WHERE t.slug = %s AND u.username = %s)"), (slug, username, slug, username))
-    return Existing(*cur.fetchone())
+    return Existing(*fetch_one(cur))
 
 
-def tenant_id(cur, slug: str) -> int | None:
+def tenant_id(cur: cursor, slug: str) -> int | None:
     """The id of the tenant with this slug, or None if there is none."""
     cur.execute(_q("SELECT id FROM {c}.tenants WHERE slug = %s"), (slug,))
     row = cur.fetchone()
     return row[0] if row else None
 
 
-def create_tenant(cur, slug: str, name: str) -> int:
+def create_tenant(cur: cursor, slug: str, name: str) -> int:
     cur.execute(_q("INSERT INTO {c}.tenants (slug, name) VALUES (%s, %s) RETURNING id"), (slug, name))
-    return cur.fetchone()[0]
+    return int(fetch_one(cur)[0])
 
 
-def set_self_approval(cur, slug: str, allowed: bool) -> None:
+def set_self_approval(cur: cursor, slug: str, allowed: bool) -> None:
     """Let a tenant's members approve data they uploaded or submitted themselves (decision 5, M6).
 
     Off by default. For a tenant with one user, who couldn't otherwise approve anything. The caller commits.
@@ -120,20 +122,20 @@ def set_self_approval(cur, slug: str, allowed: bool) -> None:
         raise ValueError(f"No tenant {slug!r}")
 
 
-def create_user(cur, username: str, password: str) -> int:
+def create_user(cur: cursor, username: str, password: str) -> int:
     cur.execute(_q("INSERT INTO {c}.users (username, password_hash) VALUES (%s, %s) RETURNING id"),
                 (username, hash_password(password)))
-    return cur.fetchone()[0]
+    return int(fetch_one(cur)[0])
 
 
-def add_membership(cur, user_id: int, tenant_id: int, role: str) -> None:
+def add_membership(cur: cursor, user_id: int, tenant_id: int, role: str) -> None:
     if role not in ROLES:
         raise ValueError(f"Unknown role {role!r}; expected one of {ROLES}")
     cur.execute(_q("INSERT INTO {c}.memberships (user_id, tenant_id, role) VALUES (%s, %s, %s)"),
                 (user_id, tenant_id, role))
 
 
-def login(cur, tenant_slug: str, username: str, password: str) -> dict | None:
+def login(cur: cursor, tenant_slug: str, username: str, password: str) -> dict[str, Any] | None:
     """Return a new session for an active member of the tenant, else None.
 
     The caller commits, including on failure so failed attempts are counted.
@@ -164,7 +166,7 @@ def login(cur, tenant_slug: str, username: str, password: str) -> dict | None:
     return _new_session(cur, row[0], row[3], username, tenant_slug, row[4])
 
 
-def _upgrade_hash(cur, user_id: int, old_hash: str, password: str) -> bool:
+def _upgrade_hash(cur: cursor, user_id: int, old_hash: str, password: str) -> bool:
     """Store a hash of ``password`` at the current cost, if the stored hash is still ``old_hash`` (#294).
 
     The condition keeps a password changed between the check and this update from being undone. Returns whether a row
@@ -175,7 +177,7 @@ def _upgrade_hash(cur, user_id: int, old_hash: str, password: str) -> bool:
     return cur.rowcount == 1
 
 
-def login_trusted(cur, tenant_slug: str, username: str) -> dict | None:
+def login_trusted(cur: cursor, tenant_slug: str, username: str) -> dict[str, Any] | None:
     """Session for a user whose identity an IdP has already proven (OIDC, #95).
 
     Authorisation stays local: the user must already exist, be active and be a
@@ -190,18 +192,18 @@ def login_trusted(cur, tenant_slug: str, username: str) -> dict | None:
     return _new_session(cur, row[0], row[1], username, tenant_slug, row[2]) if row else None
 
 
-def _new_session(cur, user_id: int, tenant_id: int, username: str, tenant_slug: str, role: str) -> dict:
+def _new_session(cur: cursor, user_id: int, tenant_id: int, username: str, tenant_slug: str, role: str) -> dict[str, Any]:
     token = secrets.token_urlsafe(32)
     cur.execute(_q(
         "INSERT INTO {c}.sessions (token_hash, user_id, tenant_id, expires_at) "
         "VALUES (%s, %s, %s, now() + make_interval(hours => %s)) RETURNING expires_at"),
         (_token_hash(token), user_id, tenant_id, settings.SESSION_TTL_HOURS))
-    expires_at = cur.fetchone()[0]
+    expires_at = fetch_one(cur)[0]
     return {"token": token, "expiresAt": expires_at.isoformat(), "username": username,
             "tenant": tenant_slug, "role": role}
 
 
-def _record_failure(cur, user_id: int) -> None:
+def _record_failure(cur: cursor, user_id: int) -> None:
     """Count a wrong password; lock the account once the window's limit is reached (#102)."""
     cur.execute(_q(
         "UPDATE {c}.users SET "
@@ -211,12 +213,12 @@ def _record_failure(cur, user_id: int) -> None:
         "                       THEN first_failed_at ELSE now() END "
         "WHERE id = %(id)s RETURNING failed_logins"),
         {"m": settings.LOGIN_LOCKOUT_MINUTES, "id": user_id})
-    if cur.fetchone()[0] >= settings.LOGIN_MAX_FAILURES:
+    if fetch_one(cur)[0] >= settings.LOGIN_MAX_FAILURES:
         cur.execute(_q("UPDATE {c}.users SET locked_until = now() + make_interval(mins => %s) "
                        "WHERE id = %s"), (settings.LOGIN_LOCKOUT_MINUTES, user_id))
 
 
-def session_for(cur, token: str) -> dict | None:
+def session_for(cur: cursor, token: str) -> dict[str, Any] | None:
     """The live session for a token, with its user, tenant and role, else None.
 
     Live means not revoked, not past its expiry, and (when ``SESSION_IDLE_MINUTES`` is above 0) used within that many
@@ -240,7 +242,7 @@ def session_for(cur, token: str) -> dict | None:
             "role": row[4], "expiresAt": row[5].isoformat(), "allowSelfApproval": bool(row[6])}
 
 
-def _touch(cur, token_hash: str) -> None:
+def _touch(cur: cursor, token_hash: str) -> None:
     """Record that a session was just used, writing at most about once a minute (#296).
 
     Every request would otherwise write. The gap stays well inside the idle limit, so an active session never
@@ -253,7 +255,7 @@ def _touch(cur, token_hash: str) -> None:
                 (token_hash, gap))
 
 
-def purge_sessions(cur) -> int:
+def purge_sessions(cur: cursor) -> int:
     """Delete the rows of sessions that ended more than ``SESSION_PURGE_GRACE_DAYS`` ago; return how many (#296).
 
     Ended means expired, revoked, or (when the idle limit is on) idle for longer than the limit. A live session, one
@@ -269,12 +271,12 @@ def purge_sessions(cur) -> int:
     return cur.rowcount
 
 
-def revoke(cur, token: str) -> None:
+def revoke(cur: cursor, token: str) -> None:
     cur.execute(_q("UPDATE {c}.sessions SET revoked_at = now() "
                    "WHERE token_hash = %s AND revoked_at IS NULL"), (_token_hash(token),))
 
 
-def _set_password(cur, user_id: int, password: str, keep_token: str | None = None) -> None:
+def _set_password(cur: cursor, user_id: int, password: str, keep_token: str | None = None) -> None:
     """New hash, lockout cleared, and every session revoked except ``keep_token`` (#117)."""
     cur.execute(_q("UPDATE {c}.users SET password_hash = %s, failed_logins = 0, "
                    "first_failed_at = NULL, locked_until = NULL WHERE id = %s"),
@@ -284,7 +286,7 @@ def _set_password(cur, user_id: int, password: str, keep_token: str | None = Non
                 (user_id, _token_hash(keep_token) if keep_token else None))
 
 
-def change_password(cur, user_id: int, token: str, current: str, new: str) -> bool:
+def change_password(cur: cursor, user_id: int, token: str, current: str, new: str) -> bool:
     """A signed-in user changes their own password; other sessions end. False if
     ``current`` is wrong, which counts towards the lockout (#102)."""
     cur.execute(_q("SELECT password_hash FROM {c}.users WHERE id = %s"), (user_id,))
@@ -297,7 +299,7 @@ def change_password(cur, user_id: int, token: str, current: str, new: str) -> bo
     return True
 
 
-def reset_password(cur, tenant_id: int, username: str, new: str) -> str:
+def reset_password(cur: cursor, tenant_id: int, username: str, new: str) -> str:
     """An admin sets a member's password; it also unlocks the account and ends all
     of its sessions. Returns "ok", "missing" (not a member of ``tenant_id``) or
     "shared": a user who is also in another tenant is refused, because the
@@ -316,7 +318,7 @@ def reset_password(cur, tenant_id: int, username: str, new: str) -> str:
     return "ok"
 
 
-def set_password(cur, username: str, new: str) -> bool:
+def set_password(cur: cursor, username: str, new: str) -> bool:
     """Break-glass reset by username, for an operator with database access (#117)."""
     cur.execute(_q("SELECT id FROM {c}.users WHERE username = %s"), (username,))
     row = cur.fetchone()

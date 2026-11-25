@@ -22,7 +22,11 @@ from contextvars import ContextVar
 
 from psycopg2 import sql
 
+from api.db import fetch_one
 from api.tenancy import uploads_schema
+from typing import Any
+from psycopg2.extensions import cursor
+from collections.abc import Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +46,7 @@ def current_actor() -> str | None:
 
 
 @contextmanager
-def acting_as(actor: str):
+def acting_as(actor: str) -> Iterator[None]:
     token = _actor.set(actor)
     try:
         yield
@@ -50,9 +54,9 @@ def acting_as(actor: str):
         _actor.reset(token)
 
 
-def write_audit(cur, action: str, file_id: int | None, file_name: str | None,
+def write_audit(cur: cursor, action: str, file_id: int | None, file_name: str | None,
                 table_name: str | None, mode: str | None,
-                before: dict | None = None, after: dict | None = None) -> None:
+                before: dict[str, Any] | None = None, after: dict[str, Any] | None = None) -> None:
     """Insert one audit row using the caller's cursor.
 
     Use this when you already hold a transaction and want the audit row to
@@ -73,7 +77,7 @@ def write_audit(cur, action: str, file_id: int | None, file_name: str | None,
     )
 
 
-def verify_chain(cur) -> dict:
+def verify_chain(cur: cursor) -> dict[str, Any]:
     """Recompute the audit hash chain (M3a). Returns the row count and the
     first row whose link or hash doesn't match, or None if the chain is intact."""
     schema = sql.Identifier(uploads_schema())
@@ -84,7 +88,7 @@ def verify_chain(cur) -> dict:
         "             lag(a.row_hash) OVER (ORDER BY a.id) AS expected_prev "
         "      FROM {s}.audit_log a) t"
     ).format(s=schema))
-    rows, first_bad = cur.fetchone()
+    rows, first_bad = fetch_one(cur)
     return {"rows": rows, "intact": first_bad is None, "firstBadId": first_bad}
 
 
