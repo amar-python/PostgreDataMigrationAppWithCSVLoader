@@ -9,6 +9,11 @@ from api import policy
 from api.auth import allow, tenant_scope
 from api.db import Conn
 from api.services import review
+from typing import Any
+from collections.abc import Callable
+from typing import TypeVar
+
+T = TypeVar("T")
 
 router = APIRouter(prefix="/api/csv/uploads", tags=["review"], dependencies=[Depends(tenant_scope), Depends(policy.mark_classification)])
 
@@ -23,7 +28,7 @@ class EditRequest(BaseModel):
     reason: str
 
 
-def _run(fn, *args, commit: bool = False):
+def _run(fn: Callable[..., T], *args: Any, commit: bool = False) -> T:
     with Conn() as conn:
         with conn.cursor() as cur:
             try:
@@ -37,21 +42,21 @@ def _run(fn, *args, commit: bool = False):
 
 
 @router.get("/{upload_id}/rows", dependencies=[Depends(allow("read_rows"))])
-def rows(upload_id: int, offset: int = 0, limit: int = 100) -> dict:
+def rows(upload_id: int, offset: int = 0, limit: int = 100) -> dict[str, Any]:
     """One page of every stored row, with current values, validation errors and decisions."""
     return _run(review.page, upload_id, offset, limit)
 
 
 @router.put("/{upload_id}/rows/{row_number}/decision", dependencies=[Depends(allow("review_rows"))])
-def decide(upload_id: int, row_number: int, req: DecisionRequest) -> dict:
+def decide(upload_id: int, row_number: int, req: DecisionRequest) -> dict[str, Any]:
     return _run(review.decide, upload_id, row_number, req.decision, req.reason, commit=True)
 
 
 @router.put("/{upload_id}/rows/{row_number}/cells/{column}", dependencies=[Depends(allow("review_rows"))])
-def edit(upload_id: int, row_number: int, column: str, req: EditRequest) -> dict:
+def edit(upload_id: int, row_number: int, column: str, req: EditRequest) -> dict[str, Any]:
     return _run(review.edit, upload_id, row_number, column, req.value, req.reason, commit=True)
 
 
 @router.get("/{upload_id}/rows/{row_number}/history", dependencies=[Depends(allow("read_rows"))])
-def history(upload_id: int, row_number: int) -> list[dict]:
+def history(upload_id: int, row_number: int) -> list[dict[str, Any]]:
     return _run(review.history, upload_id, row_number)

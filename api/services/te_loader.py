@@ -26,13 +26,15 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
+from typing import Any
 
 import psycopg2.errors
 from psycopg2 import sql
+from psycopg2.extensions import connection, cursor
 
 from api.config import TE_TABLES
 from api.tenancy import te_schema, uploads_schema
-from api.db import Conn
+from api.db import Conn, fetch_one
 from api.services.destructive_ops import _require_delete
 from api.services.csv_parse import (
     cast_value,
@@ -49,6 +51,7 @@ from api.services.load_common import (
     too_many_rows,
 )
 from api.services.load_common import log as _log
+from api.services.results import LoadResult, LogEntry, RowError
 
 
 def te_table_columns(table: str) -> list[str]:
@@ -67,7 +70,7 @@ def te_table_columns(table: str) -> list[str]:
             return [r[0] for r in cur.fetchall()]
 
 
-def _te_column_types(cur, table: str) -> dict[str, str]:
+def _te_column_types(cur: cursor, table: str) -> dict[str, str]:
     """Return ``{column_name: data_type}`` for a T&E table via one query."""
     cur.execute(
         """
@@ -89,7 +92,7 @@ def match_te_table(columns: list[str]) -> str | None:
     return None
 
 
-def _cleanup_prior_registry_entries(cur, file_name, file_hash):
+def _cleanup_prior_registry_entries(cur: cursor, file_name: str, file_hash: str) -> None:
     """Remove prior T&E registry entries for this file. Uses sql.Identifier, no f-strings.
 
     Only non-dynamic entries are ever removed, and no table is dropped: a T&E entry
@@ -106,15 +109,15 @@ def _cleanup_prior_registry_entries(cur, file_name, file_hash):
     )
 
 
-def upload_te(file_name: str, content: str, target_table: str, *, session: dict | None = None,
-              on_commit: Callable[[object, dict], None] | None = None) -> dict:
+def upload_te(file_name: str, content: str, target_table: str, *, session: dict[str, Any] | None = None,
+              on_commit: Callable[[cursor, LoadResult], None] | None = None) -> LoadResult:
     """Load ``content`` into a T&E table.
 
     ``on_commit(cur, result)`` runs on the load's cursor just before the commit, given the "ok" result
     this call will return. Whatever it writes commits with the load. If it raises, the load rolls back
     and the exception propagates (#288).
     """
-    logs: list[dict] = []
+    logs: list[LogEntry] = []
     _log(logs, "receive", f'Received "{file_name}" for T&E table "{target_table}"')
     checked = _check_file(content, target_table, logs)
     if isinstance(checked, dict):
@@ -176,7 +179,7 @@ def upload_te(file_name: str, content: str, target_table: str, *, session: dict 
     return result
 
 
-def _check_file(content: str, target_table: str, logs: list[dict]) -> tuple[list[list[str]], list[str]] | dict:
+def _check_file(content: str, target_table: str, logs: list[LogEntry]) -> tuple[list[list[str]], list[str]] | LoadResult:
     """The parsed rows and sanitized columns, or the error response if the file cannot load into ``target_table``.
 
     The CSV's sanitized headers must all be existing columns of the target table.
@@ -238,7 +241,7 @@ def _insert_statements(target_table: str, columns: list[str]) -> tuple[sql.Compo
     return batch_insert_stmt, insert_stmt
 
 
-def _cast_types(cur, target_table: str, columns: list[str], logs: list[dict]) -> list[str | None]:
+def _cast_types(cur: cursor, target_table: str, columns: list[str], logs: list[LogEntry]) -> list[str | None]:
     """BUG-028: each column's type to validate against, from one lookup; None where Postgres must cast it."""
     col_pg_types = _te_column_types(cur, target_table)
     col_types: list[str | None] = [
@@ -256,8 +259,8 @@ def _cast_types(cur, target_table: str, columns: list[str], logs: list[dict]) ->
     return col_types
 
 
-def _check_earlier_loads(cur, file_name: str, file_hash: str, session: dict | None,
-                         logs: list[dict]) -> dict | None:
+def _check_earlier_loads(cur: cursor, file_name: str, file_hash: str, session: dict[str, Any] | None,
+                         logs: list[LogEntry]) -> LoadResult | None:
     """Refuse content that is already a dynamic dataset; require delete permission to replace an earlier load."""
     cur.execute(
         sql.SQL(
@@ -291,9 +294,9 @@ def _check_earlier_loads(cur, file_name: str, file_hash: str, session: dict | No
 
 
 def cast_te_rows(data_rows: list[list[str]], columns: list[str], col_types: list[str | None],
-                 errors: RowErrors) -> list[tuple[int, list]]:
+                 errors: RowErrors) -> list[tuple[int, list[Any]]]:
     """``(source row number, values)`` for each row that passes the client-side check; failures go to ``errors``."""
-    to_insert: list[tuple[int, list]] = []
+    to_insert: list[tuple[int, list[Any]]] = []
     for r, raw in enumerate(data_rows):
         row_number = r + 1
         if ragged(raw, len(columns), row_number, errors):
@@ -305,9 +308,9 @@ def cast_te_rows(data_rows: list[list[str]], columns: list[str], col_types: list
 
 
 def _cast_te_cells(raw: list[str], columns: list[str], col_types: list[str | None], row_number: int,
-                   errors: RowErrors) -> list | None:
+                   errors: RowErrors) -> list[Any] | None:
     """One row's values: an empty cell is NULL, an unmapped type goes to Postgres as text. None if a cell failed."""
-    values: list = []
+    values: list[Any] = []
     for c, col_type in enumerate(col_types):
         cell = raw[c].strip() if c < len(raw) else ""
         if cell == "":
@@ -325,7 +328,7 @@ def _cast_te_cells(raw: list[str], columns: list[str], col_types: list[str | Non
 
 
 def _not_imported(errors: RowErrors, total_rows: int, target_table: str, columns: list[str],
-                  logs: list[dict]) -> dict:
+                  logs: list[LogEntry]) -> LoadResult:
     if errors.failed >= total_rows:
         msg = (f"None of the {total_rows} rows could be imported into {target_table}, "
                "so nothing was saved.")
@@ -338,8 +341,8 @@ def _not_imported(errors: RowErrors, total_rows: int, target_table: str, columns
     return rows_failed(msg, errors, total_rows, logs, insertedRows=0, columns=columns)
 
 
-def _register(conn, cur, file_name: str, file_hash: str, target_table: str, inserted: int, columns: list[str],
-              total_rows: int, failed: int, logs: list[dict]) -> object:
+def _register(conn: connection, cur: cursor, file_name: str, file_hash: str, target_table: str, inserted: int, columns: list[str],
+              total_rows: int, failed: int, logs: list[LogEntry]) -> int | LoadResult:
     """Add the load to csv_files and return its id, or the error response if a concurrent load got there first."""
     try:
         cur.execute(
@@ -361,11 +364,12 @@ def _register(conn, cur, file_name: str, file_hash: str, target_table: str, inse
             "message": "The same file was loaded concurrently and that load finished first. Nothing was imported by this request.",
             "logs": logs,
         }
-    return cur.fetchone()[0]
+    return int(fetch_one(cur)[0])
 
 
-def _ok_result(file_id, target_table, data_rows, inserted, failed_row_count, columns, col_types,
-               row_errors, logs) -> dict:
+def _ok_result(file_id: object, target_table: str, data_rows: list[list[str]], inserted: int, failed_row_count: int,
+               columns: list[str], col_types: list[str | None], row_errors: list[RowError],
+               logs: list[LogEntry]) -> LoadResult:
     return ok_result(
         file_id, f"{te_schema()}.{target_table}", len(data_rows), inserted, 0, failed_row_count, columns,
         # #190: stored with the upload so review revalidates against the target's types.

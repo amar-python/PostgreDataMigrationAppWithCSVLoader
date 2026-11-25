@@ -7,6 +7,7 @@ from api.auth import allow, tenant_scope
 from api.config import TE_TABLES
 from api.tenancy import te_schema
 from api.db import Conn
+from typing import Any
 
 # BUG-035: auth is applied per-router (see csv_routes.py for the rationale).
 router = APIRouter(
@@ -17,7 +18,7 @@ router = APIRouter(
 
 
 @router.get("/tables", dependencies=[Depends(allow("list_te"))])
-def te_tables() -> list[dict]:
+def te_tables() -> list[dict[str, Any]]:
     # BUG-042: this used to run 1-2 queries per table (24 for the 12-table
     # whitelist) — a COUNT(*) existence check plus a full COUNT(*) scan.
     # Two queries total instead: existence from information_schema.tables,
