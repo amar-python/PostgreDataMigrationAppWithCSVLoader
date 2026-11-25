@@ -45,9 +45,9 @@ line (line 32), and Teradata writes `CREATE SET TABLE`. The file defines all 12,
 the same names as the PostgreSQL set, and did so at the 2026-09-10 baseline. 12
 statements are not verified Teradata DDL: nothing has run them on a server, and
 the adapter that fills in the `{{...}}` placeholders is not exercised by a test.
-BR-02 stays deferred. The old figure is still in `docs/adr/0001-postgresql-first.md`
-and `docs/VCRM.md` (owner's records) and in two superseded registers; tracked in
-#342.
+BR-02 stays deferred. The old figure was corrected on 2026-11-24 in
+`docs/adr/0001-postgresql-first.md` (an amendment), `docs/VCRM.md` (erratum E-09) and
+the two superseded registers (#342, PR #408).
 
 ## Missing from both SQLite and MariaDB
 
@@ -89,9 +89,13 @@ answering them.
 2. **Teradata.** The DDL defines all 12 tables (see the erratum above; this
    question was first asked on a count of 1). What is missing is verification:
    nothing runs it against a Teradata server, and no test checks that its 12
-   tables match the reference set the way Tier X does for SQLite. Decide whether
-   a structural scenario (no server needed) is wanted, or keep the claim at
-   "DDL written, unverified".
+   tables match the reference set the way Tier X does for SQLite.
+   **Decided 2026-11-25 (owner, #342): no Teradata Tier X scenario for now.** The
+   claim stays at "DDL written, unverified". Reasons: Tier X does not run in CI
+   (ADR-0001), so a scenario would only run by hand; without a Teradata server it
+   could not show the DDL works; and the table count is already checked in CI by
+   `tests/unit/test_gap_registers_agree.py`, which counts `CREATE SET TABLE`.
+   Revisit when BR-02 is reactivated.
 3. **InfluxDB and Redis.** Neither is relational, so "12 tables" does not
    translate. What would count as supported — seed data landing in the expected
    measurements / key namespaces? That needs defining before it can be verified.
