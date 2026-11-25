@@ -97,7 +97,8 @@ def audit_events(
     """
     if action is not None and action not in VALID_ACTIONS:
         raise HTTPException(422, f"Unknown action {action!r}; expected one of {sorted(VALID_ACTIONS)}")
-    where, params = [], []
+    where: list[sql.Composable] = []
+    params: list[object] = []
     for column, value in (("actor", actor), ("action", action)):
         if value is not None:
             where.append(sql.SQL("{} = %s").format(sql.Identifier(column)))

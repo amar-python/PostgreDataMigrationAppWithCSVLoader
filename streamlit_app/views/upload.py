@@ -46,7 +46,7 @@ SHOWN_ERRORS = 50  # row errors shown for one upload; the report has all the ser
 def render() -> None:
     st.title("Upload")
     if not auth.can("upload"):
-        st.info(f"The role {auth.session()['role']} can't upload files.")
+        st.info(f"The role {auth.current()['role']} can't upload files.")
         return
     st.write("Choose CSV files, check the columns and types, then import. Each file becomes its own table. "
              f"The most a file may hold is {u.format_bytes(u.max_bytes())}.")
@@ -114,7 +114,7 @@ def _one(prepared: u.Prepared) -> dict | None:
             return None
         if pv.get("status") != "ok":
             said = pv.get("message")
-            st.error(m.literal(said) if said else outcomes.STRUCTURE_REASONS.get(pv.get("reason"), "No usable structure."))
+            st.error(m.literal(said) if said else outcomes.STRUCTURE_REASONS.get(str(pv.get("reason")), "No usable structure."))
             return None
         rows = u.approx_rows(pv["totalRowsApprox"], pv["previewBytes"], len(prepared.raw), pv["truncated"])
         st.caption(f"{len(pv['headers'])} columns · {'about ' if pv['truncated'] else ''}{rows} data rows")

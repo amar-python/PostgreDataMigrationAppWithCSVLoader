@@ -1,0 +1,6 @@
+# flake8 reads this file; it does not read pyproject.toml (#324). Editors and the pre-commit hook pick it up.
+# scripts/lint.sh, which CI runs, passes the same options on its command line, and
+# tests/unit/test_tool_config.py fails if the two disagree.
+[flake8]
+max-line-length = 120
+extend-ignore = E501,E221,E272

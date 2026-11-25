@@ -129,7 +129,8 @@ def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> 
             raise RecordFailed(str(exc)) from exc
 
     if req.mode == "te":
-        if not req.targetTable:
+        target_table = req.targetTable
+        if not target_table:
             raise HTTPException(422, "targetTable is required when mode is 'te'")
         if req.headerMapping:
             # T&E columns must match the fixed schema exactly; a rename could
@@ -139,7 +140,7 @@ def upload(req: UploadRequest, session: dict | None = Depends(tenant_scope)) -> 
             raise HTTPException(422, "typesConfirmed is only supported in 'dynamic' mode")
 
         def load() -> dict:
-            return upload_te(req.fileName, req.content, req.targetTable, session=session, on_commit=record_with_load)
+            return upload_te(req.fileName, req.content, target_table, session=session, on_commit=record_with_load)
     elif req.mode == "dynamic":
         if req.typesConfirmed and not req.types:
             raise HTTPException(422, "typesConfirmed requires the confirmed types to be sent in 'types'")
@@ -237,21 +238,22 @@ def list_uploads(
     """
     if status is not None and status not in _UPLOAD_STATUSES:
         raise HTTPException(422, f"Unknown status {status!r}; expected one of {list(_UPLOAD_STATUSES)}")
-    where, params = [], []
+    where: list[sql.Composable] = []
+    params: list[object] = []
     for clause, value in (("u.status = %s", status), ("u.uploader = %s", uploader),
                           ("u.file_name ILIKE %s ESCAPE '\\'", None if file is None else like_pattern(file)),
                           ("u.uploaded_at >= %s", date_from), ("u.uploaded_at < %s", date_to)):
         if value is not None:
             where.append(sql.SQL(clause))
             params.append(value)
-    clause = sql.SQL(" WHERE ") + sql.SQL(" AND ").join(where) if where else sql.SQL("")
+    where_sql = sql.SQL(" WHERE ") + sql.SQL(" AND ").join(where) if where else sql.SQL("")
     with Conn() as conn, conn.cursor() as cur:
         cur.execute(sql.SQL(
             "SELECT u.id, u.file_name, u.sha256, u.byte_size, u.uploader, u.mode, u.status, u.total_rows, "
             "u.imported_rows, u.failed_rows, u.csv_file_id, u.uploaded_at, {reason}, {cols} "
             "FROM {s}.uploads u {join}{where} ORDER BY u.id DESC LIMIT %s OFFSET %s"
         ).format(reason=sql.SQL(_FAILURE_REASON), cols=state_columns(), s=sql.Identifier(uploads_schema()),
-                 join=state_join(), where=clause), [*params, max(1, min(limit, 500)), max(0, offset)])
+                 join=state_join(), where=where_sql), [*params, max(1, min(limit, 500)), max(0, offset)])
         keys = ("id", "file_name", "sha256", "byte_size", "uploader", "mode", "status", "total_rows",
                 "imported_rows", "failed_rows", "csv_file_id", "uploaded_at", "failure_reason")
         out = []

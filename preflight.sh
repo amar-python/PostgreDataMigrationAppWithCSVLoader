@@ -117,6 +117,9 @@ check 'working tree clean'          opt 'Uncommitted changes. git status; commit
       bash -c '[ -z "$(git status --porcelain)" ]'
 check 'remote origin configured'    opt 'No remote. Add one with `git remote add origin <url>`.' \
       git remote get-url origin
+# #324: the hooks in .pre-commit-config.yaml run the CI lint, secret scan and type check before each commit.
+check 'pre-commit hooks installed'  opt 'pip install -r requirements-dev.txt, then `pre-commit install` (README: Local checks).' \
+      bash -c 'test -f "$(git rev-parse --git-path hooks/pre-commit)"'
 
 # ----- PostgreSQL -----
 if [ "$SKIP_PG" -eq 0 ]; then
