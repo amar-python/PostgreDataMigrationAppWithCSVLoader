@@ -21,6 +21,8 @@ from api.db import Conn
 from api.services.accounts import session_for
 from api.services.audit import acting_as
 from api.tenancy import tenant
+from typing import Any
+from collections.abc import Callable
 
 
 ANONYMOUS_ACTOR = "anonymous"
@@ -39,7 +41,7 @@ def bearer_token(authorization: str = Header(default="")) -> str:
     return token.strip()
 
 
-def require_session(token: str = Depends(bearer_token)) -> dict:
+def require_session(token: str = Depends(bearer_token)) -> dict[str, Any]:
     """The caller's live session (user, tenant, role), or 401 (M2a, #92).
 
     Data routers use ``tenant_scope``, which also routes to the tenant's schema.
@@ -47,7 +49,7 @@ def require_session(token: str = Depends(bearer_token)) -> dict:
     return _live_session(token)
 
 
-def _live_session(token: str) -> dict:
+def _live_session(token: str) -> dict[str, Any]:
     with Conn() as conn, conn.cursor() as cur:
         session = session_for(cur, token)
         if session is not None:
@@ -57,7 +59,7 @@ def _live_session(token: str) -> dict:
     return session
 
 
-async def tenant_scope(authorization: str = Header(default="")) -> AsyncIterator[dict | None]:
+async def tenant_scope(authorization: str = Header(default="")) -> AsyncIterator[dict[str, Any] | None]:
     """Route the request to one tenant's schema (M2b, #93).
 
     With ``Authorization: Bearer <token>`` the request runs in the signed-in
@@ -98,7 +100,7 @@ PERMISSIONS: dict[str, frozenset[str]] = {
 }
 
 
-def allow(action: str):
+def allow(action: str) -> Callable[..., None]:
     """Route dependency: 403 unless the signed-in role may perform ``action``.
 
     Requests without a session exist only under the local-dev anonymous opt-in
@@ -106,7 +108,7 @@ def allow(action: str):
     """
     roles = PERMISSIONS[action]
 
-    def check(session: dict | None = Depends(tenant_scope)) -> None:
+    def check(session: dict[str, Any] | None = Depends(tenant_scope)) -> None:
         if session is not None and session["role"] not in roles:
             raise HTTPException(status_code=403,
                                 detail=f"Role '{session['role']}' may not {action.replace('_', ' ')}")

@@ -11,7 +11,8 @@ import csv
 import io
 import re
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 ALLOWED_TYPES = ["int8", "numeric", "date", "timestamptz", "boolean", "text"]
 
@@ -175,7 +176,7 @@ def _base_column_name(header: str, idx: int) -> str:
 
 
 def apply_header_mapping(
-    headers: list[str], mapping: list[dict] | None
+    headers: list[str], mapping: list[dict[str, Any]] | None
 ) -> tuple[list[str], str | None]:
     """Apply user-confirmed header renames (#186) to the raw header row.
 
@@ -235,7 +236,7 @@ def infer_type(values: list[str]) -> str:
     if not non_empty:
         return "text"
 
-    def all_match(pred) -> bool:
+    def all_match(pred: Callable[[str], bool]) -> bool:
         return all(pred(v) for v in non_empty)
 
     # #352: identifiers such as postcodes, phone and account numbers keep their leading zeros only as text. Stored as a
@@ -326,7 +327,7 @@ def _preview_rows(text: str, head: int) -> tuple[list[list[str]], int]:
     return rows, max(len(rows) - 1, 0)
 
 
-def build_preview(text: str, sample_rows: int = 10, infer_rows: int = 200) -> dict:
+def build_preview(text: str, sample_rows: int = 10, infer_rows: int = 200) -> dict[str, Any]:
     """Preview payload: headers, sanitised columns, inferred types, sample rows."""
     rows, total_rows = _preview_rows(text, infer_rows + 1)
     if not rows:

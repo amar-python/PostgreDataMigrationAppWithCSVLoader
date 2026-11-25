@@ -15,6 +15,7 @@ from __future__ import annotations
 from fastapi import Response
 
 from api.config import CLASSIFICATIONS, settings
+from typing import Any
 
 HEADER = "X-Data-Classification"
 
@@ -31,7 +32,7 @@ def check_config(classification: str, retention_years: int) -> None:
         raise RuntimeError(f"AUDIT_RETENTION_YEARS must be at least 1; got {retention_years}.")
 
 
-def current() -> dict:
+def current() -> dict[str, Any]:
     return {"classification": settings.DATA_CLASSIFICATION, "auditRetentionYears": settings.AUDIT_RETENTION_YEARS}
 
 
