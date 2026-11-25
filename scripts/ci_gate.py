@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One verdict from the parallel database jobs, for the `integration (postgres service)` check of quality-gate.yml.
 
-    python3 scripts/ci_gate.py <code-changed: true|false> shards=<result> egress=<result> coverage=<result>
+    python3 scripts/ci_gate.py <code-changed: true|false> shards=<result> egress=<result> coverage=<result> csv_loader=<result>
 
 The check keeps the name it always had, so a branch-protection rule that requires it keeps working, but the work now
 happens in several jobs. This script turns their results into one answer:
