@@ -82,6 +82,10 @@ def load_csv_to_staging(conn, job: JobConfig) -> Tuple[int, int]:
                 )
 
             for row in reader:
+                # #350: DictReader marks a missing field with None and extra fields under the key None. A missing
+                # field must not become an empty value (and then NULL) quietly.
+                if None in row or None in row.values():
+                    raise RuntimeError(f"line {reader.line_num}: wrong number of fields")
                 rows_in_csv += 1
                 out_row = []
                 for csv_col in csv_columns:
