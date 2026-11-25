@@ -15,7 +15,7 @@ streamlit==1.67.0
 
 # The Streamlit app writes XLSX reports (streamlit_app/exports.py), and its tests read them back. Keep in step
 # with streamlit_app/requirements.txt.
-openpyxl>=3.1,<4
+openpyxl>=3.1.5,<4
 
 # #323: static type check (`make typecheck`, configured in pyproject.toml). types-psycopg2 is typeshed's stubs for
 # psycopg2, which ships none; without them every psycopg2 call would go unchecked.
