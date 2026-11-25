@@ -100,6 +100,7 @@ whole suite a third time for coverage): 25 to 40 minutes. Now `quality-gate.yml`
 | `integration-shards` (1 to 3) | the test files of its shard, through `scripts/test_report.py --strict --paths ...` (so every test it holds is accounted for) |
 | `integration-egress` (1 to 3) | the firewall steps and `pytest <its share of tests/system> --block-egress` |
 | `coverage` | no tests: combines the coverage each shard recorded as it ran and applies the floors |
+| `csv-loader` | `csv_loader/tests` (the imported CSV-loader tool) through `scripts/test_report.py --strict`, with its own PostgreSQL; the root `pytest.ini` collects only `tests/`, so this job is the only way they run |
 | `integration-postgres` | the check named **integration (postgres service)**: succeeds only if the three above did |
 
 - **The split** is by test file (`scripts/ci_shards.py`), heaviest first into the lightest shard, from the durations in
