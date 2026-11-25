@@ -13,6 +13,11 @@ concurrency:
   group: quality-gate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# #325: the token can read the repository and nothing else. No job here writes to it (artifacts need no scope); a job
+# that ever needs more raises it for itself, not for the whole workflow.
+permissions:
+  contents: read
+
 jobs:
   # Does this change need the slow database jobs? Only documentation that nothing reads can skip them (scripts/ci_changes.py
   # says why, and runs everything when in doubt). Decided in a job, not by a workflow-level `paths-ignore`, because that
@@ -24,7 +29,7 @@ jobs:
       code: ${{ steps.decide.outputs.code }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0   # the diff against the base needs its history
 
@@ -42,21 +47,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.11'
+          python-version-file: .python-version   # 3.12, the one supported version (DECISIONS/2026-11-24-one-python-version.md)
           cache: 'pip'
-          cache-dependency-path: |
-            requirements-dev.txt
-            api/requirements.txt
+          cache-dependency-path: requirements-dev.lock
 
       - name: Install dev dependencies
-        # api/requirements.txt is needed too: tests/test_api.py imports FastAPI
-        # at module level, so without it pytest collection fails.
-        run: pip install -r requirements-dev.txt -r api/requirements.txt
+        # #327: one hashed lock (scripts/lock_requirements.sh): requirements-dev.txt plus api/requirements.txt, which
+        # is needed too because tests/test_api.py imports FastAPI at module level.
+        run: pip install --require-hashes -r requirements-dev.lock
 
       - name: Unit / regression / security / snapshot tests — final result
         run: |
@@ -65,6 +68,10 @@ jobs:
 
       - name: Lint (flake8 + bandit)
         run: make lint
+
+      # #323: mypy over api/ and streamlit_app/, configured in pyproject.toml. A new type error fails the job.
+      - name: Type check (mypy)
+        run: make typecheck
 
       - name: Component health check
         run: make health
@@ -85,7 +92,7 @@ jobs:
       # would otherwise vanish with the runner — keep them for auditability.
       - name: Upload test catalogue
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-catalogue
           path: docs/TEST_CASES.md
@@ -94,7 +101,7 @@ jobs:
 
       - name: Upload eval reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: eval-reports-free-tier
           path: evals/reports/
@@ -104,7 +111,7 @@ jobs:
   # The whole suite, split by test file (scripts/ci_shards.py) into parallel jobs, each with its own PostgreSQL: the
   # system tests share databases and assume a fresh one, so they cannot share a server. Each shard prints the same final
   # block as before (PASSED / FAILED / ERROR / SKIPPED with reasons / NOT RUN) and --strict fails it on any skip.
-  # Full integration surface: Tier I deploys env_dev.sql twice (idempotency), Tier S runs the 142-assertion SQL suite,
+  # Full integration surface: Tier I deploys env_dev.sql twice (idempotency), Tier S runs the 159-assertion SQL suite,
   # then the PG-gated pytest tiers run. Every shard repeats that cheap setup (a few seconds): the cross-environment
   # parity tests rely on it.
   integration-shards:
@@ -118,7 +125,7 @@ jobs:
         shard: [1, 2, 3]   # keep in step with SHARDS in scripts/ci_shards.py (a test checks it)
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
         env:
           POSTGRES_PASSWORD: postgres
         ports:
@@ -136,21 +143,19 @@ jobs:
       PGDATABASE: postgres
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.11'
+          python-version-file: .python-version   # 3.12, the one supported version (DECISIONS/2026-11-24-one-python-version.md)
           cache: 'pip'
-          cache-dependency-path: |
-            requirements-dev.txt
-            api/requirements.txt
+          cache-dependency-path: requirements-dev.lock
 
       - name: Install dev dependencies
-        # api/requirements.txt is needed too: tests/test_api.py imports FastAPI
-        # at module level, so without it pytest collection fails.
-        run: pip install -r requirements-dev.txt -r api/requirements.txt
+        # #327: one hashed lock (scripts/lock_requirements.sh): requirements-dev.txt plus api/requirements.txt, which
+        # is needed too because tests/test_api.py imports FastAPI at module level.
+        run: pip install --require-hashes -r requirements-dev.lock
 
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
@@ -226,7 +231,7 @@ jobs:
         run: mv .coverage coverage-shard-${{ matrix.shard }}.dat
 
       - name: Upload this shard's coverage data
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-shard-${{ matrix.shard }}
           path: coverage-shard-${{ matrix.shard }}.dat
@@ -235,7 +240,7 @@ jobs:
 
       - name: Upload eval reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: eval-reports-integration-shard-${{ matrix.shard }}
           path: evals/reports/
@@ -255,7 +260,7 @@ jobs:
         shard: [1, 2, 3]   # keep in step with EGRESS_SHARDS in scripts/ci_shards.py (a test checks it)
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
         env:
           POSTGRES_PASSWORD: postgres
         ports:
@@ -273,21 +278,19 @@ jobs:
       PGDATABASE: postgres
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.11'
+          python-version-file: .python-version   # 3.12, the one supported version (DECISIONS/2026-11-24-one-python-version.md)
           cache: 'pip'
-          cache-dependency-path: |
-            requirements-dev.txt
-            api/requirements.txt
+          cache-dependency-path: requirements-dev.lock
 
       - name: Install dev dependencies
-        # api/requirements.txt is needed too: tests/test_api.py imports FastAPI
-        # at module level, so without it pytest collection fails.
-        run: pip install -r requirements-dev.txt -r api/requirements.txt
+        # #327: one hashed lock (scripts/lock_requirements.sh): requirements-dev.txt plus api/requirements.txt, which
+        # is needed too because tests/test_api.py imports FastAPI at module level.
+        run: pip install --require-hashes -r requirements-dev.lock
 
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
@@ -400,7 +403,7 @@ jobs:
 
       - name: Upload eval reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: eval-reports-integration-egress-shard-${{ matrix.shard }}
           path: evals/reports/
@@ -412,35 +415,33 @@ jobs:
   # database, so it takes seconds once the shards are done. It is skipped when a shard failed (no verdict from a partial
   # run); the gate job then fails on the shard anyway.
   coverage:
-    name: coverage gate (api, streamlit_app)
+    name: coverage gate (api, streamlit_app, build/csv, evals)
     runs-on: ubuntu-latest
     needs: [changes, integration-shards]
     if: needs.changes.outputs.code == 'true' && needs.integration-shards.result == 'success'
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.11'
+          python-version-file: .python-version   # 3.12, the one supported version (DECISIONS/2026-11-24-one-python-version.md)
           cache: 'pip'
-          cache-dependency-path: |
-            requirements-dev.txt
-            api/requirements.txt
+          cache-dependency-path: requirements-dev.lock
 
       - name: Install dev dependencies
-        run: pip install -r requirements-dev.txt -r api/requirements.txt
+        run: pip install --require-hashes -r requirements-dev.lock
 
       - name: Download every shard's coverage data
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: coverage-shard-*
           merge-multiple: true
 
       # #275: a failing step fails the job (bash -e, pipefail). One scope, the same in .coveragerc and the Makefile; see
       # tests/README.md.
-      - name: coverage gate (api, streamlit_app)
+      - name: coverage gate (api, streamlit_app, build/csv, evals)
         run: |
           set -eo pipefail
           ls -1 coverage-shard-*.dat
@@ -451,7 +452,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-report
           path: coverage.json
@@ -468,7 +469,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Verdict
         run: |
@@ -489,29 +490,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.11'
+          python-version-file: .python-version   # 3.12, the one supported version (DECISIONS/2026-11-24-one-python-version.md)
           cache: 'pip'
-          cache-dependency-path: |
-            requirements-dev.txt
-            requirements-a11y.txt
-            api/requirements.txt
+          cache-dependency-path: requirements-a11y.lock
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: csv-table-hub-main/package-lock.json
 
       - name: Install dev dependencies
-        # api/requirements.txt is needed too: tests/conftest.py imports the API
-        # app, so pytest collection fails without FastAPI.
-        run: pip install -r requirements-dev.txt -r api/requirements.txt -r requirements-a11y.txt -r streamlit_app/requirements.txt
+        # #327: one hashed lock (scripts/lock_requirements.sh) of requirements-dev.txt, api/requirements.txt (tests/
+        # conftest.py imports the API app), requirements-a11y.txt and streamlit_app/requirements.txt.
+        run: pip install --require-hashes -r requirements-a11y.lock
 
       - name: Install frontend dependencies
         working-directory: csv-table-hub-main
@@ -535,7 +533,7 @@ jobs:
 
       - name: Upload accessibility report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: accessibility-report
           path: accessibility-report/
@@ -552,7 +550,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
         env:
           POSTGRES_PASSWORD: postgres
         ports:
@@ -570,28 +568,26 @@ jobs:
       PGDATABASE: te_mgmt_dev
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.11'
+          python-version-file: .python-version   # 3.12, the one supported version (DECISIONS/2026-11-24-one-python-version.md)
           cache: 'pip'
-          cache-dependency-path: |
-            requirements-dev.txt
-            requirements-a11y.txt
-            api/requirements.txt
+          cache-dependency-path: requirements-a11y.lock
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: csv-table-hub-main/package-lock.json
 
-      # Playwright comes from requirements-a11y.txt (one place pins it); streamlit is in requirements-dev.txt.
+      # Playwright comes from requirements-a11y.txt (one place pins it); streamlit is in requirements-dev.txt. Both are
+      # in the hashed requirements-a11y.lock (#327).
       - name: Install dev dependencies
-        run: pip install -r requirements-dev.txt -r api/requirements.txt -r requirements-a11y.txt
+        run: pip install --require-hashes -r requirements-a11y.lock
 
       - name: Install frontend dependencies
         working-directory: csv-table-hub-main
@@ -634,9 +630,49 @@ jobs:
       # A screenshot of the page for each failed test (e2e/conftest.py), since a red run cannot be looked at.
       - name: Upload browser-test screenshots
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-test-screenshots
           path: e2e-artifacts/
           if-no-files-found: ignore
           retention-days: 14
+
+  # #329: the React frontend's lint, TypeScript type-check and production build. Before this, only its unit tests ran
+  # (in the accessibility job), so a lint error, a type error or a broken build could merge. Needed while React is the
+  # default frontend; it goes when the frontend is retired (#257). It needs no database and no Python.
+  frontend:
+    name: frontend (lint, type-check, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: csv-table-hub-main
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: csv-table-hub-main/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # #327: package-lock.json is the one lock file (bun.lock was removed). npm ci must install exactly it and change
+      # nothing that is tracked; a dirty tree means the lock and package.json have drifted apart.
+      - name: The install leaves the tree clean
+        run: |
+          dirty="$(git status --porcelain --untracked-files=no -- .)"
+          if [ -n "$dirty" ]; then echo "::error::npm ci changed tracked files:"; echo "$dirty"; exit 1; fi
+
+      - name: Lint (eslint, with prettier)
+        run: npm run lint
+
+      - name: Type-check (tsc --noEmit)
+        run: npx --no-install tsc --noEmit
+
+      - name: Production build (vite build)
+        run: npm run build

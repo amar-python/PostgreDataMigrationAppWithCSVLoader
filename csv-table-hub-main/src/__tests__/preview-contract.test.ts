@@ -36,7 +36,10 @@ describe("previewCsv response contract (issue #42)", () => {
     "still accepts reason %s without a message",
     async (reason) => {
       mockFetchJson({ status: "invalid_structure", reason });
-      await expect(previewCsv("f.csv", "x")).resolves.toEqual({ status: "invalid_structure", reason });
+      await expect(previewCsv("f.csv", "x")).resolves.toEqual({
+        status: "invalid_structure",
+        reason,
+      });
     },
   );
 

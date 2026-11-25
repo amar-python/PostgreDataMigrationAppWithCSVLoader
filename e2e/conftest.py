@@ -33,7 +33,7 @@ from scripts import pg_login  # noqa: E402  (its server_available asks whether P
 
 import preflight  # noqa: E402
 from api.services import accounts  # noqa: E402
-from api.tenancy import migrate_tenant, schema_for  # noqa: E402
+from api.tenancy import drop_tenant_role, migrate_tenant, schema_for  # noqa: E402
 
 # Streamlit and the app re-run and redraw after each action; the default 5 s is tight on a cold start.
 expect.set_options(timeout=10_000)
@@ -158,6 +158,7 @@ def stack():
                 cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_for(t))))
                 cur.execute(sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(
                     sql.Identifier(settings.CONTROL_SCHEMA)), (t,))
+                drop_tenant_role(cur, t)   # #297: each tenant has its own database role
             cur.execute(sql.SQL("DELETE FROM {}.users WHERE username LIKE %s OR username LIKE %s OR username LIKE %s "
                                 "OR username LIKE %s").format(sql.Identifier(settings.CONTROL_SCHEMA)),
                         tuple(f"{p}_{tag}" for p in ("admin", "uploader", "reviewer", "other")))

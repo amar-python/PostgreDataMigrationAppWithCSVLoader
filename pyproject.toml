@@ -1,0 +1,53 @@
+# Project metadata and the configuration of the tools that read pyproject.toml (#324, #323).
+#
+# This repository is not installed as a package (there is no [build-system]); the API, the Streamlit app and the
+# scripts run from a checkout. Some tools cannot read this file, so their configuration stays where it was:
+#   flake8    .flake8 (flake8 does not read pyproject.toml). scripts/lint.sh, which CI runs, passes the same options
+#             on its command line; tests/unit/test_tool_config.py fails if the two disagree.
+#   pytest    pytest.ini (it takes precedence over this file, and moving it would churn every test job)
+#   coverage  .coveragerc (tests/unit/test_ci_quality_gate.py keeps its scope in step with the Makefile and CI)
+
+[project]
+name = "postgre-data-migration-app"
+version = "0.0.0"
+description = "CSV loader and T&E data management: FastAPI API, Streamlit app and PostgreSQL schema"
+requires-python = ">=3.12"  # 3.12 is the one supported version: .python-version, DECISIONS/2026-11-24-one-python-version.md
+
+# ── Type checking (#323) ─────────────────────────────────────────────────────────────────────────────────────────
+# `make typecheck` and the free-tier CI job run `python3 -m mypy`, which checks the `files` below. There is no
+# `# type: ignore` anywhere: every error was fixed in the code.
+#
+#   api/            the whole of --strict (`mypy --strict api` passes too). The loaders' results are typed
+#                   (api/services/results.py), so a misspelt result key is a type error.
+#   everything else mypy's default checks plus check_untyped_defs and the --strict flags set globally below.
+#                   streamlit_app/ is largely unannotated, so the flags that require annotations stay api/-only.
+[tool.mypy]
+files = ["api", "streamlit_app", "build/csv", "evals"]
+python_version = "3.12"   # check against the supported version (.python-version), whatever runs mypy
+# Pages import their siblings as top-level modules (`import api_client`), the way `streamlit run` puts the app's
+# folder on sys.path; evals/runner.py imports gap_report the same way.
+mypy_path = ["streamlit_app", "evals"]
+explicit_package_bases = true
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+strict_equality = true
+extra_checks = true
+check_untyped_defs = true
+
+# api/: the rest of --strict.
+[[tool.mypy.overrides]]
+module = ["api", "api.*"]
+no_implicit_reexport = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_any_generics = true
+disallow_untyped_calls = true
+disallow_subclassing_any = true
+warn_return_any = true
+
+# No type information is published for these. Only these modules are exempt; any other unresolved import fails.
+[[tool.mypy.overrides]]
+module = ["pandas", "pandas.*", "openpyxl", "openpyxl.*"]
+ignore_missing_imports = true

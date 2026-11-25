@@ -31,15 +31,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.11'
+          python-version-file: .python-version   # 3.12, the one supported version (DECISIONS/2026-11-24-one-python-version.md)
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
 
@@ -55,7 +55,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout (the whole history)
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -65,7 +65,7 @@ jobs:
           docker run --rm \
             -v "$PWD:/repo" \
             -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo \
-            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
             git /repo --config /repo/.gitleaks.toml --redact --verbose --exit-code 1
 
       - name: Canary (the scanner must still detect a secret)
@@ -75,7 +75,7 @@ jobs:
         run: |
           mkdir canary
           printf 'aws_access_key_id = %s%s\n' "AKIA" "QYLPMN5HHHFPZAM2" > canary/leak.txt
-          if docker run --rm -v "$PWD/canary:/canary" ghcr.io/gitleaks/gitleaks:v8.30.1 \
+          if docker run --rm -v "$PWD/canary:/canary" ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
               dir /canary --redact --exit-code 1; then
             echo "::error::gitleaks did not flag a known fake secret, so its rules are not working"
             exit 1

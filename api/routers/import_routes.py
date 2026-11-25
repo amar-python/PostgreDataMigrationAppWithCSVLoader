@@ -16,6 +16,12 @@ from api.db import Conn
 from api.routers.csv_routes import HeaderRename
 from api.services import staged_import
 from api.services.type_confirmation import require_confirmed_types
+from typing import Any
+from psycopg2.extensions import cursor
+from collections.abc import Callable
+from typing import TypeVar
+
+T = TypeVar("T")
 
 router = APIRouter(prefix="/api/csv/uploads", tags=["import"], dependencies=[Depends(tenant_scope), Depends(policy.mark_classification)])
 
@@ -42,7 +48,7 @@ class ApprovalRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
-def _run(fn, *args, commit: bool = True):
+def _run(fn: Callable[..., T], *args: Any, commit: bool = True) -> T:
     """Run one workflow step in one transaction, answering WorkflowError with its status."""
     with Conn() as conn:
         with conn.cursor() as cur:
@@ -57,7 +63,7 @@ def _run(fn, *args, commit: bool = True):
 
 
 @router.post("", dependencies=[Depends(allow("upload")), Depends(import_slot)])
-def stage(req: StageRequest) -> dict:
+def stage(req: StageRequest) -> dict[str, Any]:
     """Store an upload for review; nothing is imported. Answers 409 for an exact duplicate, 422 for a bad file."""
     if len(req.content.encode("utf-8")) > settings.MAX_UPLOAD_BYTES:
         raise HTTPException(413, "File too large")
@@ -82,9 +88,9 @@ def stage(req: StageRequest) -> dict:
 
 
 @router.get("/{upload_id}/workflow", dependencies=[Depends(allow("read_rows"))])
-def workflow(upload_id: int) -> dict:
+def workflow(upload_id: int) -> dict[str, Any]:
     """The upload's state, its latest submission, approval and import, and the history of each."""
-    def read(cur, uid):
+    def read(cur: cursor, uid: int) -> dict[str, Any]:
         st = staged_import.state_of(cur, uid)
         if st is None:
             raise staged_import.WorkflowError(404, "No such upload")
@@ -93,18 +99,18 @@ def workflow(upload_id: int) -> dict:
 
 
 @router.post("/{upload_id}/submit", dependencies=[Depends(allow("submit_import"))])
-def submit(upload_id: int, req: SubmitRequest | None = None) -> dict:
+def submit(upload_id: int, req: SubmitRequest | None = None) -> dict[str, Any]:
     return _run(staged_import.submit, upload_id, req.note if req else None)
 
 
 @router.post("/{upload_id}/approval", dependencies=[Depends(allow("approve_import"))])
-def approval(upload_id: int, req: ApprovalRequest, session: dict | None = Depends(tenant_scope)) -> dict:
+def approval(upload_id: int, req: ApprovalRequest, session: dict[str, Any] | None = Depends(tenant_scope)) -> dict[str, Any]:
     return _run(staged_import.decide_approval, upload_id, req.decision, req.reason, session)
 
 
 @router.post("/{upload_id}/import", dependencies=[Depends(allow("run_import")), Depends(import_slot)])
 def run_import(upload_id: int, idempotency_key: str = Header(default="", alias="Idempotency-Key"),
-               session: dict | None = Depends(tenant_scope)) -> dict:
+               session: dict[str, Any] | None = Depends(tenant_scope)) -> dict[str, Any]:
     """Import an approved upload in one transaction. Send an Idempotency-Key and reuse it to retry."""
     try:
         return staged_import.import_upload(upload_id, idempotency_key, session)

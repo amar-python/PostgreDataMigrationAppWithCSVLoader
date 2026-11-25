@@ -1,6 +1,6 @@
 # Decision: Main branch protection (Quality Gate required)
 
-Status:  Decided, but NOT applied: `main` has had no protection since this was written (see "Correction, 18 Nov")
+Status:  Applied 24 Nov 2026 by the owner, with the `browser` and accessibility jobs added as required checks (see "Applied, 24 Nov 2026"). From 2 Nov to 24 Nov it was decided but not applied (see "Correction, 18 Nov")
 Date:    2026-11-02
 Review:  On trigger (see below)
 
@@ -21,11 +21,11 @@ Branch protection on main:
 
 - The last 8 merges on main all show all three checks SUCCESS. Formalising reflects practice, not disrupting it.
 - Two months of unprotected red integration is the precedent for why unprotected main is unsafe.
-- Solo project discipline requires enforce_admins: true â€” admin bypass defeats the purpose of the gate for a one-person team.
+- Solo project discipline requires enforce_admins: true — admin bypass defeats the purpose of the gate for a one-person team.
 
 ## Trade-offs accepted
 
-- No admin bypass means emergency merges require temporarily removing protection (deliberate â€” see escape hatch below).
+- No admin bypass means emergency merges require temporarily removing protection (deliberate — see escape hatch below).
 - strict: true forces a pull-and-re-check on stale branches. Small friction, catches merge-main-into-feature drift.
 - Required 0-approval PR means you merge your own PRs; the gate is CI, not review.
 
@@ -87,10 +87,28 @@ Or, with an admin token, save the prepared settings as `protection.json` and run
 
 The T&E audit review of 20 Nov proposed this as requirement BR-60. The product owner decided on 20 Nov to track it as an action on this decision instead (`docs/VCRM.md` §6.4), because it controls the process rather than product behaviour. The action is still open: `main` reported `protected: false` at review time, and the setting needs a repository admin (the owner) to apply one of the two columns above. Close the action when the check under "To check it took" prints `true` and the required check names, and record which column was chosen.
 
-`claude/project-status.md` (session of 2 Nov, "D8" and "Live policy change") still says protection was applied; both places now carry a correction note pointing here.
+`claude/project-status.md` (session of 2 Nov, "D8" and "Live policy change") still says protection was applied; both places now carry a correction note pointing here. *(24 Nov: `claude/project-status.md` was rewritten; its "Current state" now records protection as applied on 24 Nov, and the 2 Nov entries are marked superseded.)*
+
+## Applied, 24 Nov 2026
+
+The owner chose the 2 Nov column, with the `browser` and accessibility jobs added as required checks, and applied it in the browser as the classic rule for `main` (a Claude session still cannot write this API path). Read back on 24 Nov with `gh api repos/amar-python/PostgreDataMigrationAppWithCSVLoader/branches/main/protection`:
+
+| Setting | Live value |
+|---|---|
+| Required checks, each bound to GitHub Actions (app 15368), so another app cannot post a passing result under the same name | `python-validator-tests`, `free-tier (unit, lint, health, evals-p)`, `integration (postgres service)`, `browser (Playwright, e2e/)`, `accessibility (Playwright + axe-core, WCAG 2.1 AA)` |
+| `strict` (branch must be up to date with `main`) | true |
+| `enforce_admins` (no bypass, admins included) | true |
+| Pull request required | yes, 0 approvals |
+| Force-push, deletion | refused |
+
+Why these checks: all five run on every push and pull request with no path filters, so none can leave a PR waiting on a check that never runs. `integration (postgres service)` is the summary job (`if: always()`) over the integration shards, the egress-blocked shards and the coverage gate, so one name covers every database job, including documentation-only PRs where the shards are skipped. Over the 60 Quality Gate runs before 24 Nov, `accessibility` passed 60 of 60 and `browser` 58 of 60: one failure was a real regression it caught (on the #289 branch) and one was a superseded run cancelled, so neither job is flaky. Median times 2 and 4 minutes.
+
+What it means day to day: every change reaches `main` through a pull request, and merges only when all five checks pass on a branch that is up to date with `main`; with `strict`, a PR has to be brought up to date (and re-run) whenever another merges first. The escape hatch above is unchanged.
+
+The open action in `docs/VCRM.md` (BR-60, §6.4) is met by this read-back.
 
 ## Related
 
 - #51 (closed with this decision)
 - #45 (closed 7 days earlier): made option (a) viable
-- 26 Oct 2026 closure rule â€” this decision applies the equivalent discipline to merges
+- 26 Oct 2026 closure rule — this decision applies the equivalent discipline to merges

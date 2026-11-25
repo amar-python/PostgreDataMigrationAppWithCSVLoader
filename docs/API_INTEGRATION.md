@@ -44,19 +44,35 @@ CSV content is sent as a JSON string, not multipart.
 
 ## Authentication
 
-Two kinds of caller (ART Milestone 2, BR-36):
+Every caller signs in (ART Milestone 2, BR-36; #298):
 
 - **People, through the browser,** sign in per user with `POST /api/auth/login`
-  (local accounts) or `POST /api/auth/oidc` (the deployment's IdP). They send
-  `Authorization: Bearer <token>`. Each request runs in the user's tenant
-  schema and is checked against the role matrix in `docs/ROLES.md`. The
-  browser never holds the shared key (#96).
-- **Scripts and services** send `X-API-Key` matching `API_KEY`. These requests
-  use the deployment's default schemas, not any tenant's. If `API_KEY` is unset
-  the check is skipped. That's the local-dev default, and the API refuses to
-  start outside `dev` without it.
+  (local accounts) or `POST /api/auth/oidc` (the deployment's IdP).
+- **Scripts and services** sign in the same way, as a named account with the
+  role they need (for example an `uploader`), with `POST /api/auth/login`.
 
-`/api/health` needs neither.
+Both then send `Authorization: Bearer <token>`. Each request runs in the
+user's tenant schema, is checked against the role matrix in `docs/ROLES.md`,
+and is audited under the username. A request without a session gets
+**401 "Sign in required"**. The shared `X-API-Key` was retired in #298: the
+header is ignored and grants nothing, and `API_KEY` is no longer read (the API
+logs a warning if it is still set).
+
+```bash
+token=$(curl -s -H 'content-type: application/json' \
+  -d '{"tenant":"main","username":"loader","password":"..."}' \
+  http://localhost:8000/api/auth/login | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+curl -H "Authorization: Bearer $token" http://localhost:8000/api/csv/files
+```
+
+**Local development only:** `API_ALLOW_ANONYMOUS=1` together with
+`API_ENV=dev` lets data endpoints answer without signing in. Those requests use
+the deployment's default schemas, are not role-checked and audit as
+`anonymous`; the API logs a warning at start-up while it is on. With any other
+`API_ENV` the API refuses to start if `API_ALLOW_ANONYMOUS` is set. The test
+suite opts in (`tests/conftest.py`).
+
+`/api/health` needs no sign-in.
 
 ## What it does well
 
@@ -115,7 +131,8 @@ database. Consider an allow-list of droppable schemas, or an
 `API_ALLOW_DESTRUCTIVE=1` gate.
 
 Update: the `API_ALLOW_DESTRUCTIVE` gate and an `audit_log` table now exist,
-and every endpoint (including this one) requires the `X-API-Key` header — see
+and every endpoint (including this one) requires a signed-in session, and
+deletes are limited to roles with `delete_file` — see
 [Authentication](#authentication). Callers still get no per-request
 confirmation prompt; that remains a UI-level gap if accidental deletes become
 a problem in practice.

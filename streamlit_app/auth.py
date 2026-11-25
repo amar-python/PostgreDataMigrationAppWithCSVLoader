@@ -10,6 +10,7 @@ The API stays the enforcer. Hiding a page a role cannot use is a courtesy, not t
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import NoReturn
 
 import streamlit as st
 
@@ -39,6 +40,14 @@ PERMISSIONS: dict[str, frozenset[str]] = {
 
 def session() -> dict | None:
     return st.session_state.get(SESSION)
+
+
+def current() -> dict:
+    """The signed-in session, for the pages the navigation shows only after sign-in (app.py)."""
+    s = session()
+    if s is None:
+        raise RuntimeError("no signed-in session: this page is only reachable after sign-in")
+    return s
 
 
 def signed_in() -> bool:
@@ -107,7 +116,7 @@ def sign_out() -> None:
     end_session()
 
 
-def lost_session() -> None:
+def lost_session() -> NoReturn:
     """The server says this session is over (any 401): forget everything, say why, and start the run again."""
     end_session("Your session has ended. Sign in again.")
     st.rerun()

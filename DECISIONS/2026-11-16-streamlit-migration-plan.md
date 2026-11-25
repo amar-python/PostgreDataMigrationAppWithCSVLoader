@@ -1,6 +1,6 @@
 # Decision: Plan for moving the frontend from React to Streamlit (#212)
 
-Status:  Accepted by the owner on 24 Nov, except whether the `browser` job is a required check, which is still open. Steps 1 to 4 were built on the defaults, and the owner confirmed every one of them (see "Owner decisions")
+Status:  Accepted by the owner on 24 Nov; no question is left open. Steps 1 to 4 were built on the defaults, and the owner confirmed every one of them (see "Owner decisions")
 Date:    2026-11-16, updated 2026-11-19
 Review:  Before step 5 (packaging) starts. It still needs the offline dry run (#60); the bundle size and the Azure host are decided. The upload spike (step 4) is done and did not change the plan
 
@@ -13,11 +13,11 @@ Review:  Before step 5 (packaging) starts. It still needs the offline dry run (#
 | 2 Review screen | #252 | Merged (#267) |
 | 3 Import history | #253 | Merged (#269) |
 | 4 Upload and imported files | #255 | Merged (#270, with this update) |
-| 5 Packaging | #256 | Not started. Waits for the #60 dry run; the Azure half is decided (Container Apps, private network only) |
+| 5 Packaging | #256 | Repository side in a draft PR (24 Nov): the Ubuntu bundle ships Streamlit beside React (`te-streamlit`, port 8501, an eighth PASS line), and `infra/terraform-prod` defines the API and Streamlit apps (`terraform validate` only, nothing applied). Still to do: the clean-VM dry run (#60) with the no-outside-connection check, and on Azure the WebSocket and 50 MiB upload checks |
 | 6 Cutover and deletion | #257 | Not started. Needs steps 1 to 5. The accessibility job already scans the Streamlit app too (#388), so the React scans can go with React |
-| Tests | #258 | Done as each screen landed: 364 unit tests (`AppTest` and plain functions) and 49 browser tests in four files. The browser tests run in CI in their own `browser` job (#273), not yet as a required check |
+| Tests | #258 | Done as each screen landed: 364 unit tests (`AppTest` and plain functions) and 49 browser tests in four files. The browser tests run in CI in their own `browser` job (#273), a required check on `main` since 24 Nov |
 
-The three screen PRs were stacked and merged in that order on 19 Nov (#267, #269, #270), as merge commits, once each had passed CI. The issues #252, #253 and #255 were closed on 19 Nov on the owner's instruction, each with its evidence in a comment. #253 and #255 were closed with their owner decisions (the audit-log screen and the changelog, the mapping templates) on the plan's defaults, which the owner confirmed on 24 Nov (see "Owner decisions"). #268 was one PR carrying all three screens; it was closed in favour of the stack, and its branch `claude/streamlit-migration-plan` is kept for reference only. The owner accepted the plan on 24 Nov, apart from the two questions still open under "Owner decisions".
+The three screen PRs were stacked and merged in that order on 19 Nov (#267, #269, #270), as merge commits, once each had passed CI. The issues #252, #253 and #255 were closed on 19 Nov on the owner's instruction, each with its evidence in a comment. #253 and #255 were closed with their owner decisions (the audit-log screen and the changelog, the mapping templates) on the plan's defaults, which the owner confirmed on 24 Nov (see "Owner decisions"). #268 was one PR carrying all three screens; it was closed in favour of the stack, and its branch `claude/streamlit-migration-plan` is kept for reference only. The owner accepted the plan on 24 Nov and answered every question under "Owner decisions".
 
 ## Choice
 
@@ -77,7 +77,7 @@ Only 10 packages overlap with the API's set, and they are small (0.9 MB), so the
 | Limited styling | Accept | Accepted |
 | Deprecated arguments | Use `width="stretch"` and pin the Streamlit version | Done: `streamlit==1.67.0`, pinned in two files that a test keeps in step |
 
-**8. Tests: both.** Checked on the spikes: `AppTest` runs a screen headless with a faked API and tells an uploader ("read-only for your role") from a reviewer, so role gating, captions, error text, filters and the outcome rules are fast tests. It has **no way to select a dataframe row, drive dialogs, or use `st.file_uploader`**, so each screen keeps its logic in a function a test can call (the upload screen's `show(files)`), and the browser tests (Playwright) cover the dialogs, the grid and the uploader itself. Where they run: the `AppTest` tests run in the free-tier job, with Streamlit and `openpyxl` in `requirements-dev.txt`; that job took about 36 s before Streamlit and 61 s to 69 s in the runs since. The browser tests need Chromium and a Postgres, and run in their own `browser` job (#273) through `scripts/test_report.py --paths e2e --strict`, so every test is accounted for and a skip fails; it is not yet a required check (still open under "Owner decisions"). The 186 vitest tests go away screen by screen as the React code is deleted.
+**8. Tests: both.** Checked on the spikes: `AppTest` runs a screen headless with a faked API and tells an uploader ("read-only for your role") from a reviewer, so role gating, captions, error text, filters and the outcome rules are fast tests. It has **no way to select a dataframe row, drive dialogs, or use `st.file_uploader`**, so each screen keeps its logic in a function a test can call (the upload screen's `show(files)`), and the browser tests (Playwright) cover the dialogs, the grid and the uploader itself. Where they run: the `AppTest` tests run in the free-tier job, with Streamlit and `openpyxl` in `requirements-dev.txt`; that job took about 36 s before Streamlit and 61 s to 69 s in the runs since. The browser tests need Chromium and a Postgres, and run in their own `browser` job (#273) through `scripts/test_report.py --paths e2e --strict`, so every test is accounted for and a skip fails; it has been a required check on `main` since 24 Nov (see "Owner decisions"). The 186 vitest tests go away screen by screen as the React code is deleted.
 
 **9. Parked issues.** #176 (fixed in #235) and #179 disappear with the React code. #186: the rename UI is on the upload screen, and the error report carries the renames that were sent. #187: the review screen's upload picker lists every attempt, failed ones included. #188: no Cancel button; the screen says "sent to the server, can't be stopped", as React does. #242: the upload screen sends `typesConfirmed` for the types the person confirmed, and not in T&E mode, where the API refuses it.
 
@@ -93,7 +93,7 @@ Found while filing the implementation issues; they changed what the plan said or
 
 Found while building steps 2 to 4.
 
-**4. The React history page now shows the server's audit events.** PR #261 (merged 18 Nov) added a "Server audit events" panel (BR-35), so only `GET /api/audit/log` and `/api/audit/verify` have no screen anywhere. The Streamlit Import history page has a matching "Server audit events" view for roles that may read the audit log (`GET /api/audit/events`: filters by actor, action, file and date, pages of 100, and the server's own CSV). It follows the React page, so it needs no separate decision; whether to also build the log and its verification is still open (decision 5).
+**4. The React history page now shows the server's audit events.** PR #261 (merged 18 Nov) added a "Server audit events" panel (BR-35), so only `GET /api/audit/log` and `/api/audit/verify` have no screen anywhere. The Streamlit Import history page has a matching "Server audit events" view for roles that may read the audit log (`GET /api/audit/events`: filters by actor, action, file and date, pages of 100, and the server's own CSV). It follows the React page, so it needs no separate decision; the owner decided on 24 Nov not to build a page for the log and its verification (see "Owner decisions").
 
 **5. What was dropped, on the plan's defaults** (saved mapping templates and the "App changelog" were confirmed by the owner on 24 Nov, see "Owner decisions"; the rest were not asked about separately): saved mapping templates, the "App changelog", bulk selection and "Retry" on the history page (an import is retried from the upload screen), "Print / save as PDF", and the header-mapping and cancellation columns of the report (the server does not store them).
 
@@ -118,9 +118,9 @@ The build used the defaults below before the owner had answered. On 24 Nov the o
 | About 116 MB more in the offline bundle | Accepted | 24 Nov |
 | Accessibility job | Scans the Streamlit app as well as React (#388, merged 24 Nov), with no recorded Streamlit violations after the caption-contrast fix. The React scans go with React in step 6 | 24 Nov |
 | Where it runs in Azure | Azure Container Apps, in the existing internal environment (`cae-te-prod`): one always-on app for the API and one for Streamlit, reachable from the private network only, with no public address. See "Azure host" below | 24 Nov |
-| `browser` job (#273), and the accessibility job, as required checks | **Open**: a branch-protection setting | |
+| `browser` job (#273), and the accessibility job, as required checks | Both required, with the three Quality Gate checks, on a protected `main` (see `DECISIONS/2026-11-02-main-branch-protection.md`, "Applied, 24 Nov 2026") | 24 Nov |
 
-Still for the owner: whether the `browser` and accessibility jobs block a merge.
+Nothing is left for the owner in this record.
 
 ### Azure host (decided 24 Nov)
 
@@ -139,7 +139,7 @@ What the build (the Azure half of #256) has to do and check:
 - Upload size: the limits were tested at their edges (a file between Streamlit's limit and the API's is refused by the app, and the API itself refuses just over its limit). A successful import of a file near 50 MiB, its memory (a file is held as bytes, text and base64 before it is sent) and its time were not measured; the 600 s upload timeout is tested with a fake, not by waiting.
 - XLSX reports were read back with `openpyxl`, not opened in Excel (#244).
 - Streamlit's behaviour at the larger row counts of #210.
-- The browser tests ran against a throwaway Postgres, three times in a row without a failure; the `browser` job (#273) now runs them in CI, so a regression is reported on the pull request, but it blocks a merge only if that job is made a required check.
+- The browser tests ran against a throwaway Postgres, three times in a row without a failure; the `browser` job (#273) now runs them in CI, so a regression is reported on the pull request, and since 24 Nov it is a required check, so a failure blocks the merge.
 
 ## Issues filed (18 Nov), on this plan's defaults
 

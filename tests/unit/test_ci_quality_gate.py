@@ -54,6 +54,10 @@ class TestQualityGateStructure(unittest.TestCase):
 # tests/unit/test_ci_parallel_jobs.py asserts they run nothing else.
 PLUMBING_JOBS = {"changes", "integration-postgres"}
 
+# Jobs that check the React frontend only (#329): Node, no Python, and nothing to keep (lint and tsc print to the log;
+# the build output is checked by building it). They still need a checkout and an install.
+NODE_ONLY_JOBS = {"frontend"}
+
 
 class TestAllJobsHaveConsistentStructure(unittest.TestCase):
     """All jobs must have checkout; every job that runs code also python setup, dependencies and an artifact upload."""
@@ -76,7 +80,7 @@ class TestAllJobsHaveConsistentStructure(unittest.TestCase):
             )
 
     def test_all_jobs_have_python_setup(self):
-        for job_id in set(self.jobs) - PLUMBING_JOBS:
+        for job_id in set(self.jobs) - PLUMBING_JOBS - NODE_ONLY_JOBS:
             names = self._step_names(job_id)
             self.assertTrue(
                 any("Setup Python" in n or "Python" in n for n in names),
@@ -84,12 +88,16 @@ class TestAllJobsHaveConsistentStructure(unittest.TestCase):
             )
 
     def test_all_jobs_have_artifact_upload(self):
-        for job_id in set(self.jobs) - PLUMBING_JOBS:
+        for job_id in set(self.jobs) - PLUMBING_JOBS - NODE_ONLY_JOBS:
             names = self._step_names(job_id)
             self.assertTrue(
                 any("Upload" in n for n in names),
                 f"Job {job_id!r} missing artifact upload step",
             )
+
+    def test_the_node_only_jobs_set_up_node(self):
+        for job_id in NODE_ONLY_JOBS:
+            self.assertTrue(any("Setup Node" in n for n in self._step_names(job_id)), job_id)
 
     def test_all_jobs_install_dev_deps(self):
         for job_id in set(self.jobs) - PLUMBING_JOBS:
@@ -118,7 +126,7 @@ class TestAccessibilityJob(unittest.TestCase):
         text = self._run_text("accessibility")
         self.assertIn("playwright install", text)
         self.assertIn("npm ci", text)
-        self.assertIn("requirements-a11y.txt", text)
+        self.assertIn("requirements-a11y.lock", text)
 
     def test_integration_jobs_exclude_accessibility_everywhere_they_run_the_tree(self):
         # The suite runs in the shards (through the accounting script) and the coverage run in its own job.
@@ -215,12 +223,12 @@ class TestCoverageIsMeasuredOneWay(unittest.TestCase):
     """#274, #278: CI, the Makefile and .coveragerc name the same scope, so they cannot drift apart again.
 
     CI measured `api/services`, the Makefile measured `build/csv` and `evals`, and nothing measured or gated the rest
-    of the API or the Streamlit app. Now all three say the same four packages, with branch coverage; only `api` and
-    `streamlit_app` have floors.
+    of the API or the Streamlit app. Now all three say the same four packages, with branch coverage, and all four have a
+    floor (#304 added `build/csv` and `evals`, measured in child processes too).
     """
 
     SCOPE = {"api", "streamlit_app", "build/csv", "evals"}
-    GATED = {"api", "streamlit_app"}
+    GATED = {"api", "streamlit_app", "build/csv", "evals"}
     MAKEFILE = ROOT / "Makefile"
     COVERAGERC = ROOT / ".coveragerc"
 
@@ -254,6 +262,15 @@ class TestCoverageIsMeasuredOneWay(unittest.TestCase):
         parser.read(self.COVERAGERC, encoding="utf-8")
         self.assertEqual({line.strip() for line in parser["run"]["source"].splitlines() if line.strip()}, self.SCOPE)
         self.assertEqual(parser["run"]["branch"].lower(), "true")
+
+    def test_child_processes_are_measured_too(self):
+        """#304: the validator and the evals runner mostly run as child processes; without this they read near 0 %."""
+        import configparser
+
+        parser = configparser.ConfigParser()
+        parser.read(self.COVERAGERC, encoding="utf-8")
+        patches = {p.strip() for p in parser["run"].get("patch", "").replace(",", "\n").splitlines() if p.strip()}
+        self.assertIn("subprocess", patches)
 
     def test_only_the_gated_packages_have_floors_and_they_are_in_the_scope(self):
         sys.path.insert(0, str(ROOT / "scripts"))

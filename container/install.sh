@@ -72,7 +72,7 @@ FIRST_RUN=0
 if [ ! -f .env ] && $RT volume inspect te_te-db >/dev/null 2>&1; then
   if [ "${TE_RESET:-}" = 1 ]; then
     echo "TE_RESET=1: removing the earlier database volume and its containers. This deletes its data."
-    TE_VERSION=x POSTGRES_PASSWORD=x TE_DB_PASSWORD=x TE_RUNTIME_PASSWORD=x API_KEY=x $COMPOSE down -v >/dev/null 2>&1 || true
+    TE_VERSION=x POSTGRES_PASSWORD=x TE_DB_PASSWORD=x TE_RUNTIME_PASSWORD=x $COMPOSE down -v >/dev/null 2>&1 || true
     $RT volume rm -f te_te-db >/dev/null 2>&1 || true
     $RT volume inspect te_te-db >/dev/null 2>&1 && die "could not remove the volume te_te-db; remove it by hand ($RT volume rm te_te-db) and run this again"
   else
@@ -91,7 +91,7 @@ if [ -f .env ]; then
 else
   FIRST_RUN=1
   TE_HOST="${HOST_ARG:-localhost}"
-  POSTGRES_PASSWORD="$(rnd)"; TE_DB_PASSWORD="$(rnd)"; TE_RUNTIME_PASSWORD="$(rnd)"; API_KEY="$(rnd)"
+  POSTGRES_PASSWORD="$(rnd)"; TE_DB_PASSWORD="$(rnd)"; TE_RUNTIME_PASSWORD="$(rnd)"
   echo "generated new secrets"
 fi
 ( umask 077
@@ -101,7 +101,6 @@ fi
     echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
     echo "TE_DB_PASSWORD=$TE_DB_PASSWORD"
     echo "TE_RUNTIME_PASSWORD=$TE_RUNTIME_PASSWORD"
-    echo "API_KEY=$API_KEY"
   } > .env.tmp )
 mv .env.tmp .env; chmod 600 .env
 export TE_VERSION TE_HOST
@@ -142,8 +141,8 @@ fi
 
 # ---- 6. smoke test -----------------------------------------------------------------------
 step "6/6 smoke test"
-# API_KEY is not forwarded: the API container already has it in its environment, and a bare
-# `-e API_KEY` makes podman-compose 1.6 re-read the service's ${API_KEY:?} and fail.
+[ -n "${TE_ADMIN_PASSWORD:-}" ] || echo "No admin password known (TE_ADMIN_PASSWORD not set, no ./te-initial-admin): the sign-in checks will FAIL."
+# The smoke test signs in as the first tenant admin; there is no shared API key (#298).
 export SMOKE_TENANT="$TE_TENANT" SMOKE_USER="$TE_ADMIN_USER" SMOKE_PASSWORD="${TE_ADMIN_PASSWORD:-}"
 smoke_rc=0
 $COMPOSE exec -T -e SMOKE_TENANT -e SMOKE_USER -e SMOKE_PASSWORD api python smoke_test.py || smoke_rc=$?
@@ -152,7 +151,8 @@ if command -v curl >/dev/null 2>&1; then
   curl -sf "http://localhost:8000/api/health" >/dev/null && curl -sf -o /dev/null "http://localhost:8080/" \
     && echo "PASS  ports 8000 and 8080 answer on this machine" || { echo "FAIL  ports 8000 and 8080 do not answer on this machine"; smoke_rc=1; }
 fi
-[ "$smoke_rc" = 0 ] || die "the smoke test failed; the stack is running, so look at: $COMPOSE logs"
+[ "$smoke_rc" = 0 ] || die "the smoke test failed; the stack is running, so look at: $COMPOSE logs.
+  If the admin's password changed since install, or ./te-initial-admin is gone, run this again with TE_ADMIN_PASSWORD set to the current password."
 
 echo
 echo "Installed. Open http://$TE_HOST:8080 and sign in as tenant '$TE_TENANT', user '$TE_ADMIN_USER'."

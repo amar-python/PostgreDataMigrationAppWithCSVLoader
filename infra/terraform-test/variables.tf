@@ -87,3 +87,9 @@ variable "cae_zone_redundant" {
   type        = bool
   default     = true
 }
+
+variable "bootstrap_public_access" {
+  description = "Open Key Vault and ACR to the public network. Only for the first apply, which seeds the secrets and pushes the first image; apply again with false straight after (#299). Leave false otherwise."
+  type        = bool
+  default     = false
+}

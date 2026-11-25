@@ -1,6 +1,6 @@
 .PHONY: test-free test-gate test-evals test-e2e test-all coverage \
         test-unit test-system test-egress-blocked check-bundle security-evidence test-sit test-performance test-accessibility test-uat \
-        lint lint-diff health \
+        lint lint-diff typecheck health \
         eval-list eval-compare eval-summary select-tests \
         csv-load csv-list csv-demo
 
@@ -12,9 +12,9 @@ test-free:
 	pytest -m "unit or regression or security or snapshot" tests/ -v
 
 # One coverage scope everywhere (#274, #278), the same in .coveragerc, here and in the CI step: the API, the Streamlit
-# app, build/csv (the validator) and evals (the runner), with branch coverage. Only api/ and streamlit_app/ are gated
-# (scripts/check_coverage_floors.py). build/csv's loaders are shell, which coverage.py cannot see, and the evals runner
-# is exercised through subprocesses, so those two read low (0 % and 39 % on the full suite, 19 Nov) and have no floor.
+# app, build/csv (the validator) and evals (the runner), with branch coverage. All four have a floor
+# (scripts/check_coverage_floors.py). The validator and the runner mostly run as child processes of the tests;
+# .coveragerc's `patch = subprocess` measures those too (#304). build/csv's loaders are shell, which coverage.py cannot see.
 # tests/unit/test_ci_quality_gate.py fails if the three places stop naming the same scope. See tests/README.md.
 COVERAGE_SCOPE := --cov=api --cov=streamlit_app --cov=build/csv --cov=evals --cov-branch
 
@@ -113,6 +113,11 @@ lint:
 # Mirrors: bun run slop:diff
 lint-diff:
 	bash scripts/lint_diff.sh
+
+# Static type check (#323): api/ and streamlit_app/, configured in pyproject.toml [tool.mypy]. The free-tier CI job
+# runs it after the lint, and the pre-commit hook runs the same command.
+typecheck:
+	python3 -m mypy
 
 # ── Health & eval tooling ─────────────────────────────────────────────────────
 

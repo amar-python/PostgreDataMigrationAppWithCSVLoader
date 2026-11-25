@@ -26,7 +26,7 @@ What it does
    two environments with different namespaces compare equal when their structure
    matches — that namespace difference is the one difference BR-01 permits.
 4. Compares Test, Staging and Prod against Dev. Dev is the reference because it
-   is the environment the other 142 SQL assertions actually exercise, so "drift"
+   is the environment the other 159 SQL assertions actually exercise, so "drift"
    means "differs from what the suite validates".
 
 Why it fails rather than skips

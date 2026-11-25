@@ -23,18 +23,27 @@ function captureBlob(): { blob: Blob | null; filename: string | null; reset: () 
   const origCreate = URL.createObjectURL;
   const origRevoke = URL.revokeObjectURL;
 
-  URL.createObjectURL = (b: Blob) => { state.blob = b; return "blob:mock"; };
+  URL.createObjectURL = (b: Blob) => {
+    state.blob = b;
+    return "blob:mock";
+  };
   URL.revokeObjectURL = vi.fn();
 
   // Intercept <a> click to capture filename
-  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
     state.filename = this.download;
   });
 
   return {
     ...state,
-    get blob() { return state.blob; },
-    get filename() { return state.filename; },
+    get blob() {
+      return state.blob;
+    },
+    get filename() {
+      return state.filename;
+    },
     reset() {
       URL.createObjectURL = origCreate;
       URL.revokeObjectURL = origRevoke;
@@ -91,9 +100,7 @@ describe("buildErrorRows", () => {
     { rowNumber: 3, column: "amount", value: "not-a-number", reason: "expected numeric" },
     { rowNumber: 7, column: "date", value: "99/99/99", reason: "invalid date" },
   ];
-  const mapping: ColumnMapping[] = [
-    { original: "Amount", renamed: "amount", type: "numeric" },
-  ];
+  const mapping: ColumnMapping[] = [{ original: "Amount", renamed: "amount", type: "numeric" }];
 
   it("returns one row per RowError", () => {
     const rows = buildErrorRows("test.csv", rowErrors);
@@ -135,15 +142,19 @@ describe("buildErrorRows", () => {
 describe("downloadErrorReport CSV", () => {
   let cap: ReturnType<typeof captureBlob>;
 
-  beforeEach(() => { cap = captureBlob(); });
-  afterEach(() => { cap.reset(); });
+  beforeEach(() => {
+    cap = captureBlob();
+  });
+  afterEach(() => {
+    cap.reset();
+  });
 
   it("triggers a download with a .csv filename", () => {
     const rows = buildErrorRows("data.csv", [
       { rowNumber: 1, column: "x", value: "bad", reason: "wrong type" },
     ]);
     downloadErrorReport("data.csv", rows, "csv");
-    expect(cap.filename).toMatch(/errors-data.*\.csv$/);  // extension stripped before sanitise
+    expect(cap.filename).toMatch(/errors-data.*\.csv$/); // extension stripped before sanitise
   });
 
   it("CSV content contains the header row", async () => {
@@ -208,8 +219,12 @@ describe("downloadErrorReport CSV", () => {
 describe("downloadErrorReport XLSX", () => {
   let cap: ReturnType<typeof captureBlob>;
 
-  beforeEach(() => { cap = captureBlob(); });
-  afterEach(() => { cap.reset(); });
+  beforeEach(() => {
+    cap = captureBlob();
+  });
+  afterEach(() => {
+    cap.reset();
+  });
 
   it("triggers a download with a .xlsx filename", () => {
     const rows = buildErrorRows("data.csv", [
@@ -230,7 +245,7 @@ describe("downloadErrorReport XLSX", () => {
     const ws = wb.Sheets["Errors"];
     const parsed = XLSX.utils.sheet_to_json(ws);
     expect(parsed).toHaveLength(1);
-    expect((parsed[0] as any).row_number).toBe(3);
+    expect((parsed[0] as Record<string, unknown>).row_number).toBe(3);
   });
 });
 
@@ -239,8 +254,12 @@ describe("downloadErrorReport XLSX", () => {
 describe("downloadErrorReport XLSX formula guard", () => {
   let cap: ReturnType<typeof captureBlob>;
 
-  beforeEach(() => { cap = captureBlob(); });
-  afterEach(() => { cap.reset(); });
+  beforeEach(() => {
+    cap = captureBlob();
+  });
+  afterEach(() => {
+    cap.reset();
+  });
 
   it.each([
     ['=HYPERLINK("http://x","y")'],
@@ -255,7 +274,7 @@ describe("downloadErrorReport XLSX formula guard", () => {
     const wb = XLSX.read(buf, { type: "array" });
     const ws = wb.Sheets["Errors"];
     const parsed = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
-    expect((parsed[0] as any).value).toBe(`'${value}`);
+    expect((parsed[0] as Record<string, unknown>).value).toBe(`'${value}`);
   });
 
   it("leaves plain negative numbers unchanged in XLSX", async () => {
@@ -266,8 +285,8 @@ describe("downloadErrorReport XLSX formula guard", () => {
     const buf = await cap.blob!.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array" });
     const parsed = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets["Errors"]);
-    expect((parsed[0] as any).value).toBe("-5");
-    expect((parsed[0] as any).reason).toBe("+3.2");
+    expect((parsed[0] as Record<string, unknown>).value).toBe("-5");
+    expect((parsed[0] as Record<string, unknown>).reason).toBe("+3.2");
   });
 });
 
@@ -276,11 +295,26 @@ describe("downloadErrorReport XLSX formula guard", () => {
 describe("downloadAuditReport", () => {
   let cap: ReturnType<typeof captureBlob>;
 
-  beforeEach(() => { cap = captureBlob(); });
-  afterEach(() => { cap.reset(); });
+  beforeEach(() => {
+    cap = captureBlob();
+  });
+  afterEach(() => {
+    cap.reset();
+  });
 
   const rows: AuditReportRow[] = [
-    { file: "a.csv", status: "Imported", imported_at: "2026-01-01T00:00:00Z", total_rows: 10, inserted_rows: 9, duplicate_rows_skipped: 1, failed_rows: 0, table_name: "csv_abc", header_mapping: "", cancellation_reason: "" },
+    {
+      file: "a.csv",
+      status: "Imported",
+      imported_at: "2026-01-01T00:00:00Z",
+      total_rows: 10,
+      inserted_rows: 9,
+      duplicate_rows_skipped: 1,
+      failed_rows: 0,
+      table_name: "csv_abc",
+      header_mapping: "",
+      cancellation_reason: "",
+    },
   ];
 
   it("CSV: triggers download with audit-report filename", () => {
@@ -294,7 +328,7 @@ describe("downloadAuditReport", () => {
     const wb = XLSX.read(buf, { type: "array" });
     expect(wb.SheetNames).toContain("Audit");
     const parsed = XLSX.utils.sheet_to_json(wb.Sheets["Audit"]);
-    expect((parsed[0] as any).status).toBe("Imported");
+    expect((parsed[0] as Record<string, unknown>).status).toBe("Imported");
   });
 
   it("CSV: includes header and data row", async () => {
@@ -325,12 +359,20 @@ describe("print window HTML (PDF) escapes everything user-supplied", () => {
   beforeEach(() => {
     written = "";
     vi.useFakeTimers();
-    vi.spyOn(window, "open").mockImplementation(() => ({
-      document: { write: (html: string) => { written += html; }, close: vi.fn() },
-      focus: vi.fn(),
-      print: vi.fn(),
-      close: vi.fn(),
-    }) as unknown as Window);
+    vi.spyOn(window, "open").mockImplementation(
+      () =>
+        ({
+          document: {
+            write: (html: string) => {
+              written += html;
+            },
+            close: vi.fn(),
+          },
+          focus: vi.fn(),
+          print: vi.fn(),
+          close: vi.fn(),
+        }) as unknown as Window,
+    );
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -340,14 +382,19 @@ describe("print window HTML (PDF) escapes everything user-supplied", () => {
   function assertNothingExecutable() {
     expect(written).not.toMatch(/<script/i);
     expect(written).not.toMatch(/<img/i);
-    expect(written).not.toMatch(/<[^>]+\sonerror\s*=/i);   // no tag carries an event handler
+    expect(written).not.toMatch(/<[^>]+\sonerror\s*=/i); // no tag carries an event handler
     for (const text of HOSTILE) expect(written).not.toContain(text);
     expect(written).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
   }
 
   it("error report: the file name (title), headers and every cell", () => {
     const rows = HOSTILE.map((h, i) => ({
-      file: h, row_number: i, column: h, value: h, reason: h, plain_english: h,
+      file: h,
+      row_number: i,
+      column: h,
+      value: h,
+      reason: h,
+      plain_english: h,
     }));
     downloadErrorReport(HOSTILE[0], rows, "pdf");
     expect(written).toContain("<table>");
@@ -356,8 +403,16 @@ describe("print window HTML (PDF) escapes everything user-supplied", () => {
 
   it("audit report: every cell", () => {
     const rows = HOSTILE.map((h) => ({
-      file: h, status: h, imported_at: h, total_rows: h, inserted_rows: h,
-      duplicate_rows_skipped: h, failed_rows: h, table_name: h, header_mapping: h, cancellation_reason: h,
+      file: h,
+      status: h,
+      imported_at: h,
+      total_rows: h,
+      inserted_rows: h,
+      duplicate_rows_skipped: h,
+      failed_rows: h,
+      table_name: h,
+      header_mapping: h,
+      cancellation_reason: h,
     }));
     downloadAuditReport(rows as AuditReportRow[], "pdf");
     assertNothingExecutable();

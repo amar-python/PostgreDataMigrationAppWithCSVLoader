@@ -6,6 +6,8 @@
 #   bash scripts/offline/build_bundle.sh
 # Output: dist/offline-bundle-<commit>.tar.gz plus its .sha256 file.
 # Copy both to the offline VM and follow docs/offline-install.md.
+# The bundle carries both front ends: the React app (te-frontend, the default until #257) and the
+# Streamlit app (te-streamlit, #256), which install.sh runs side by side.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -18,11 +20,15 @@ echo "== 1/4 application source (git HEAD $SHA)"
 git archive --format=tar --prefix=app/ HEAD | tar -x -C "$OUT"
 rm -rf "$OUT/app/csv-table-hub-main"   # shipped prebuilt below
 
-echo "== 2/4 Python wheels for CPython 3.12, manylinux x86_64"
-python3 -m pip download -q -r api/requirements.txt -d "$OUT/wheels" \
-  --only-binary=:all: --python-version 3.12 --implementation cp \
-  --platform manylinux2014_x86_64 --platform manylinux_2_17_x86_64 \
-  --platform manylinux_2_28_x86_64 --platform any
+echo "== 2/4 Python wheels for CPython 3.12, manylinux x86_64: the API and the Streamlit app"
+# 3.12: the one supported version (DECISIONS/2026-11-24-one-python-version.md). One set of flags for both, so the
+# Streamlit wheels (#256, about 116 MB) match the target exactly as the API's do. The hashed locks (#327) fix every
+# version, and pip refuses a wheel whose hash they do not list, so the bundle holds exactly what was locked.
+WHEEL_FLAGS=(--require-hashes --no-deps --only-binary=:all: --python-version 3.12 --implementation cp
+  --platform manylinux2014_x86_64 --platform manylinux_2_17_x86_64
+  --platform manylinux_2_28_x86_64 --platform any)
+python3 -m pip download -q -r api/requirements.lock -d "$OUT/wheels" "${WHEEL_FLAGS[@]}"
+python3 -m pip download -q -r streamlit_app/requirements.lock -d "$OUT/wheels" "${WHEEL_FLAGS[@]}"
 python3 -m pip download -q pip -d "$OUT/wheels" --only-binary=:all: --python-version 3.12
 
 echo "== 3/4 frontend, built for a plain Node server"

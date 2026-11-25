@@ -2,6 +2,10 @@
 
 Two tenants, each with a tenant admin (the most privileged role). Nothing one tenant does may be visible to
 or changeable by the other, or by a request that has no session.
+
+#297 (OIT-012): each tenant also has its own database role, and a signed-in request's connections run as it, so
+a query that reaches another tenant's schema is refused by PostgreSQL itself (InsufficientPrivilege), not only
+by the API routing to the right schema.
 Integration: needs a live PostgreSQL. Fails (never skips) without one.
 """
 
@@ -20,10 +24,11 @@ from fastapi.testclient import TestClient
 from psycopg2 import sql
 
 from api.config import TE_TABLES, settings
+from api import db
 from api.db import Conn
 from api.main import app
 from api.services import accounts
-from api.tenancy import migrate_tenant, schema_for
+from api.tenancy import drop_tenant_role, migrate_tenant, role_for, schema_for, tenant
 
 _HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
          "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1.")
@@ -73,6 +78,7 @@ class CrossTenantIsolation(unittest.TestCase):
                         sql.Identifier(settings.CONTROL_SCHEMA)), (slug,))
                     cur.execute(sql.SQL("DELETE FROM {}.users WHERE username = %s").format(
                         sql.Identifier(settings.CONTROL_SCHEMA)), (f"{slug}_user",))
+                    drop_tenant_role(cur, slug)
             conn.commit()
         cls.ctx.__exit__(None, None, None)
 
@@ -231,3 +237,87 @@ class CrossTenantIsolation(unittest.TestCase):
         with Conn() as conn, conn.cursor() as cur:
             self.assertEqual(provision_te_tables(cur, schema_for(self.slugs["a"]), settings.TE_SCHEMA), 0)
             conn.rollback()
+
+    # --- #297: the database itself keeps tenants apart -------------------------------------------------------
+
+    def test_a_query_as_tenant_a_on_tenant_bs_schema_fails_at_the_database(self):
+        """#297 acceptance: as tenant A's role, reading tenant B's schema raises InsufficientPrivilege.
+
+        Covers B's registry, audit log and T&E tables (made at provisioning) and a csv_* table B's upload made
+        afterwards at run time, plus the shared schemas a tenant role has no business in.
+        """
+        a, b = self.slugs["a"], self.slugs["b"]
+        b_table = self._upload("b", *self._fresh())["tableName"]
+        targets = [(schema_for(b), t) for t in ("csv_files", "audit_log", "uploads", "organisations", b_table)]
+        targets += [(settings.CONTROL_SCHEMA, t) for t in ("users", "sessions", "tenants", "memberships")]
+        targets += [(settings.UPLOADS_SCHEMA, "csv_files"), (settings.TE_SCHEMA, "organisations")]
+        with tenant(a), Conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT current_user")
+            self.assertEqual(cur.fetchone()[0], role_for(a))
+            for schema, table in targets:
+                with self.subTest(schema=schema, table=table):
+                    with self.assertRaises(psycopg2.errors.InsufficientPrivilege):
+                        cur.execute(sql.SQL("SELECT * FROM {}.{} LIMIT 1").format(
+                            sql.Identifier(schema), sql.Identifier(table)))
+                    conn.rollback()
+                    cur.execute("SELECT current_user")   # a rollback must not undo the switch
+                    self.assertEqual(cur.fetchone()[0], role_for(a))
+            cur.execute(sql.SQL("SELECT count(*) FROM {}.csv_files").format(sql.Identifier(schema_for(a))))
+            self.assertIsNotNone(cur.fetchone(), "the tenant's own schema stays readable")
+
+    def test_tenant_role_has_rights_only_on_its_own_schema(self):
+        a, b = self.slugs["a"], self.slugs["b"]
+        with Conn() as conn, conn.cursor() as cur:
+            for role, schema, expected in ((role_for(a), schema_for(a), True), (role_for(a), schema_for(b), False),
+                                           (role_for(b), schema_for(a), False),
+                                           (role_for(a), settings.CONTROL_SCHEMA, False),
+                                           (role_for(a), settings.UPLOADS_SCHEMA, False)):
+                with self.subTest(role=role, schema=schema):
+                    cur.execute("SELECT has_schema_privilege(%s, %s, 'USAGE')", (role, schema))
+                    self.assertIs(cur.fetchone()[0], expected)
+            cur.execute("SELECT rolcanlogin FROM pg_roles WHERE rolname = %s", (role_for(a),))
+            self.assertEqual(cur.fetchone(), (False,), "a tenant role must not be able to log in")
+
+    def test_a_signed_in_request_runs_as_the_tenants_role(self):
+        """The csv_* table an upload creates is owned by the tenant's role: the request ran as it."""
+        res = self._upload("a", *self._fresh())
+        with Conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = to_regclass(%s)",
+                        (f'"{schema_for(self.slugs["a"])}"."{res["tableName"]}"',))
+            self.assertEqual(cur.fetchone()[0], role_for(self.slugs["a"]))
+
+    def test_a_connection_goes_back_to_the_pool_as_the_login_role(self):
+        """A pooled connection must never carry one tenant's role into the next request, error or not."""
+        for fail in (False, True):
+            with self.subTest(error=fail):
+                try:
+                    with tenant(self.slugs["a"]), Conn() as conn:
+                        raw = conn
+                        with conn.cursor() as cur:
+                            cur.execute("SELECT current_user")
+                            self.assertEqual(cur.fetchone()[0], role_for(self.slugs["a"]))
+                            if fail:
+                                cur.execute("SELECT 1 / 0")
+                except psycopg2.errors.DivisionByZero:
+                    self.assertTrue(fail)
+                self.assertFalse(raw.closed, "the connection should have been reset and pooled, not closed")
+                self.assertIn(raw, db._pool._pool, "the connection is back in the pool")
+                with raw.cursor() as cur:   # the pooled connection itself, as the next borrower would get it
+                    cur.execute("SELECT current_user = session_user, current_user")
+                    same, who = cur.fetchone()
+                raw.rollback()
+                self.assertTrue(same, f"pooled connection still runs as {who}")
+                with Conn() as conn, conn.cursor() as cur:   # and an unscoped borrow is the login role
+                    cur.execute("SELECT current_user = session_user")
+                    self.assertTrue(cur.fetchone()[0])
+
+    def test_role_names_are_per_database(self):
+        """Roles are cluster-wide and environments share clusters (#173): the name must include the database."""
+        slug = self.slugs["a"]
+        here = role_for(slug)
+        original = settings.PG_DATABASE
+        try:
+            settings.PG_DATABASE = original + "_other"
+            self.assertNotEqual(role_for(slug), here)
+        finally:
+            settings.PG_DATABASE = original

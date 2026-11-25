@@ -27,7 +27,7 @@ def allowed_labels(role: str) -> list[str]:
 
 
 def render() -> None:
-    s = auth.session()
+    s = auth.current()
     st.title("CSV Table Hub")
     st.write(f"Signed in as **{s['username']}** in **{s['tenant']}**, with the role **{s['role']}**.")
     st.subheader("What your role can do")

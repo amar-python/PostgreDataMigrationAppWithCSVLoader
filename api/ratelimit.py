@@ -29,9 +29,10 @@ import time
 from collections import OrderedDict, deque
 
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from api.config import settings
+from collections.abc import Awaitable, Callable
 
 # Hard cap on distinct client buckets held in memory.
 _MAX_TRACKED_CLIENTS = 4096
@@ -90,8 +91,9 @@ _EXEMPT_PATHS = frozenset({"/api/health", "/openapi.json", "/docs", "/redoc"})
 def _client_id(request: Request) -> str:
     """Identify the caller by a trusted attribute: the client address of the connection.
 
-    The API key is NOT used here because it is checked before authentication: an attacker could rotate
-    arbitrary X-API-Key values to get a fresh rate-limit bucket each time, bypassing brute-force protection (#183).
+    No request header is used here because limiting runs before authentication: an attacker could rotate
+    arbitrary header values (the retired X-API-Key, or a bearer token) to get a fresh rate-limit bucket each time,
+    bypassing brute-force protection (#183).
 
     ``X-Forwarded-For`` is not read here, because a client controls it. uvicorn does read it, in its
     ``ProxyHeadersMiddleware``, and only for connections from an address listed in ``FORWARDED_ALLOW_IPS`` (default:
@@ -103,7 +105,7 @@ def _client_id(request: Request) -> str:
     return f"ip:{client.host}" if client and client.host else "ip:unknown"
 
 
-async def rate_limit_middleware(request: Request, call_next):
+async def rate_limit_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     """Apply the read or write budget, then hand off to the route."""
     if request.url.path in _EXEMPT_PATHS:
         return await call_next(request)

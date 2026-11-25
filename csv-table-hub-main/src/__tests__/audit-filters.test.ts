@@ -11,8 +11,16 @@ import type { Job } from "@/lib/job-types";
 
 function applyFilters(
   jobs: Job[],
-  { search, statusFilter, dateFrom, dateTo }: {
-    search: string; statusFilter: string; dateFrom: string; dateTo: string;
+  {
+    search,
+    statusFilter,
+    dateFrom,
+    dateTo,
+  }: {
+    search: string;
+    statusFilter: string;
+    dateFrom: string;
+    dateTo: string;
   },
 ): Job[] {
   return jobs.filter((j) => {
@@ -45,12 +53,12 @@ const JAN2 = new Date("2026-01-02T00:00:00Z").getTime();
 const JAN3 = new Date("2026-01-03T00:00:00Z").getTime();
 
 const JOBS: Job[] = [
-  job({ id: "j1", name: "sales-2026.csv",   status: "done",      createdAt: JAN1 }),
-  job({ id: "j2", name: "contacts.csv",     status: "done",      createdAt: JAN2, overwritten: true }),
-  job({ id: "j3", name: "products.csv",     status: "error",     createdAt: JAN2 }),
-  job({ id: "j4", name: "orders.csv",       status: "duplicate", createdAt: JAN3 }),
-  job({ id: "j5", name: "inventory.csv",    status: "cancelled", createdAt: JAN3 }),
-  job({ id: "j6", name: "SALES-archive.csv",status: "done",      createdAt: JAN1 }),
+  job({ id: "j1", name: "sales-2026.csv", status: "done", createdAt: JAN1 }),
+  job({ id: "j2", name: "contacts.csv", status: "done", createdAt: JAN2, overwritten: true }),
+  job({ id: "j3", name: "products.csv", status: "error", createdAt: JAN2 }),
+  job({ id: "j4", name: "orders.csv", status: "duplicate", createdAt: JAN3 }),
+  job({ id: "j5", name: "inventory.csv", status: "cancelled", createdAt: JAN3 }),
+  job({ id: "j6", name: "SALES-archive.csv", status: "done", createdAt: JAN1 }),
 ];
 
 const NONE = { search: "", statusFilter: "all", dateFrom: "", dateTo: "" };
@@ -138,8 +146,8 @@ describe("F1 – date range filter", () => {
     // the NEXT day (JAN2 UTC) also passes. Only JAN3 and later are excluded.
     const result = applyFilters(JOBS, { ...NONE, dateTo: "2026-01-01" });
     const ids = result.map((j) => j.id);
-    expect(ids).toContain("j1");   // JAN1 ✓
-    expect(ids).toContain("j6");   // JAN1 ✓
+    expect(ids).toContain("j1"); // JAN1 ✓
+    expect(ids).toContain("j6"); // JAN1 ✓
     expect(ids).not.toContain("j4"); // JAN3 — excluded
     expect(ids).not.toContain("j5"); // JAN3 — excluded
   });
@@ -149,10 +157,10 @@ describe("F1 – date range filter", () => {
     // so JAN3 midnight timestamps are included. Confirm JAN1 is excluded.
     const result = applyFilters(JOBS, { ...NONE, dateFrom: "2026-01-02", dateTo: "2026-01-02" });
     const ids = result.map((j) => j.id);
-    expect(ids).toContain("j2");   // JAN2 ✓
-    expect(ids).toContain("j3");   // JAN2 ✓
-    expect(ids).not.toContain("j1");  // JAN1 — below dateFrom ✗
-    expect(ids).not.toContain("j6");  // JAN1 — below dateFrom ✗
+    expect(ids).toContain("j2"); // JAN2 ✓
+    expect(ids).toContain("j3"); // JAN2 ✓
+    expect(ids).not.toContain("j1"); // JAN1 — below dateFrom ✗
+    expect(ids).not.toContain("j6"); // JAN1 — below dateFrom ✗
   });
 
   it("empty date strings do not filter by date", () => {
@@ -171,7 +179,12 @@ describe("F1 – combined filters", () => {
   });
 
   it("search + date + status combined to a single result", () => {
-    const result = applyFilters(JOBS, { search: "contacts", statusFilter: "overwritten", dateFrom: "2026-01-02", dateTo: "2026-01-02" });
+    const result = applyFilters(JOBS, {
+      search: "contacts",
+      statusFilter: "overwritten",
+      dateFrom: "2026-01-02",
+      dateTo: "2026-01-02",
+    });
     expect(result.map((j) => j.id)).toEqual(["j2"]);
   });
 

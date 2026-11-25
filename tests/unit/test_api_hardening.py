@@ -22,34 +22,31 @@ client = TestClient(app)
 
 @pytest.mark.unit
 class AuthFailsClosed(unittest.TestCase):
-    """O-03: a deployed environment must not boot without an API key."""
+    """O-03 / #298: anonymous access is a local-dev opt-in, never a deployed mode."""
 
-    def test_dev_may_run_without_a_key(self):
-        # The local workflow must keep working — this is why the gate keys on
-        # API_ENV rather than simply requiring a key everywhere.
-        assert_auth_configured("dev", "")
+    def test_dev_starts_with_or_without_the_opt_in(self):
+        assert_auth_configured("dev", False)
+        assert_auth_configured("dev", True)
 
-    def test_any_key_is_accepted_in_dev(self):
-        assert_auth_configured("dev", "s3cret")
+    def test_a_deployed_env_without_the_opt_in_starts(self):
+        # Every data request needs a session there, so there is nothing to refuse.
+        assert_auth_configured("prod", False)
 
-    def test_prod_without_a_key_refuses_to_start(self):
+    def test_the_opt_in_outside_dev_refuses_to_start(self):
         with self.assertRaises(RuntimeError) as ctx:
-            assert_auth_configured("prod", "")
-        # The message must name both the cause and the two ways out, because it
-        # surfaces in a container log where nobody can ask a follow-up question.
+            assert_auth_configured("prod", True)
+        # The message must name the cause and the way out, because it surfaces in a
+        # container log where nobody can ask a follow-up question.
         msg = str(ctx.exception)
-        self.assertIn("API_KEY", msg)
+        self.assertIn("API_ALLOW_ANONYMOUS", msg)
         self.assertIn("prod", msg)
-        self.assertIn("API_ENV=dev", msg)
+        self.assertIn("/api/auth/login", msg)
 
-    def test_staging_and_test_also_refuse(self):
+    def test_staging_and_test_also_refuse_the_opt_in(self):
         for env in ("test", "staging", "production", "azure"):
             with self.subTest(env=env):
                 with self.assertRaises(RuntimeError):
-                    assert_auth_configured(env, "")
-
-    def test_deployed_env_with_a_key_starts(self):
-        assert_auth_configured("prod", "a-real-key")
+                    assert_auth_configured(env, True)
 
 
 @pytest.mark.unit

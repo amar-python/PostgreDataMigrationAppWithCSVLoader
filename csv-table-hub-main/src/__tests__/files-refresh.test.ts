@@ -33,8 +33,11 @@ describe("loadFiles", () => {
   it("refetches the files list and the upload attempts when the loader re-runs", async () => {
     const files = [[file("a")], [file("a"), file("b")]];
     const uploads = [[], [attempt("7", "failed")]];
-    const fetchMock = vi.fn(async (url: string) =>
-      new Response(JSON.stringify(String(url).includes("/uploads") ? uploads.shift() : files.shift())),
+    const fetchMock = vi.fn(
+      async (url: string) =>
+        new Response(
+          JSON.stringify(String(url).includes("/uploads") ? uploads.shift() : files.shift()),
+        ),
     );
     vi.stubGlobal("fetch", fetchMock);
     const qc = new QueryClient();
