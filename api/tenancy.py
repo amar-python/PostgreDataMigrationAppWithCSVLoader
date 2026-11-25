@@ -193,7 +193,10 @@ def te_head() -> str:
     """The newest T&E migration this release knows (build/te_core_schema.sql must stamp the same)."""
     from alembic.script import ScriptDirectory
 
-    return ScriptDirectory.from_config(_te_config("unused")).get_current_head()
+    head = ScriptDirectory.from_config(_te_config("unused")).get_current_head()
+    if head is None:
+        raise RuntimeError("alembic_te has no migrations, so there is no T&E head revision")
+    return head
 
 
 def template_te_version(cur, template: str) -> str | None:

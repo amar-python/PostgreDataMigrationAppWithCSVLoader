@@ -61,7 +61,7 @@ def _flags(cur, upload_id: int, numbers: list[int]) -> dict:
 
 
 def _validate(cells: list[str], raw: list[str], columns: list[str], types: list[str]) -> list[dict]:
-    errors = []
+    errors: list[dict] = []
     if extra_cells(raw, len(columns)):
         errors.append({"column": "(beyond header)", "value": extra_cells(raw, len(columns))[0],
                        "reason": ragged_row_reason(raw, len(columns))})

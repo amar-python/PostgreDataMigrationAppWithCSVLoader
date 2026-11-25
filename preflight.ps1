@@ -130,6 +130,12 @@ Test-Check 'remote `origin` configured' {
     & git remote get-url origin 2>$null
 }
 
+# #324: the hooks in .pre-commit-config.yaml run the CI lint, secret scan and type check before each commit.
+Test-Check 'pre-commit hooks installed' {
+    $hook = & git rev-parse --git-path hooks/pre-commit 2>$null
+    return ($hook -and (Test-Path $hook))
+} -Optional -FixHint 'Run `pip install -r requirements-dev.txt`, then `pre-commit install` (README: Local checks).'
+
 # ----- PostgreSQL connectivity (skip with -SkipPg) -----
 if (-not $SkipPg) {
     Write-Host ""

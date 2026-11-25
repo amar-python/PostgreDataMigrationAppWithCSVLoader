@@ -304,6 +304,30 @@ python evals\runner.py --tiers p,i,s,e   # 27 scenarios: Tier P 23, I 1, S 1, E 
 | `quality-gate.yml` — `integration-postgres` | ubuntu | the check named **integration (postgres service)**: passes only if the shards, the egress job and the coverage gate all passed (or were all skipped for a documentation-only change) |
 | `python-validator-tests.yml` | windows | database-free markers |
 
+The `free-tier` job also runs the lint (`make lint`) and the type check (`make typecheck`).
+
+### Local checks (pre-commit)
+
+The same lint, secret scan and type check can run on your machine before each commit (#324), on Linux, macOS and
+Windows PowerShell alike:
+
+```bash
+pip install -r requirements-dev.txt   # includes pre-commit and mypy
+pre-commit install                    # once per clone
+pre-commit run --all-files            # optional: check the whole tree now
+```
+
+| Hook | Checks | Configured in |
+|---|---|---|
+| flake8 | the CI lint options | `.flake8` (kept equal to `scripts/lint.sh` by a test) |
+| bandit | security lint, medium severity and up, not over `tests/` or `e2e/` | `.pre-commit-config.yaml` |
+| gitleaks | secrets in the staged changes | `.gitleaks.toml` |
+| mypy | static types in `api/` and `streamlit_app/` (#323) | `pyproject.toml` `[tool.mypy]` |
+| gap-registers | the gap registers in `docs/` agree with `docs/VCRM.md` | `tests/unit/test_gap_registers_agree.py` |
+
+Run any of them alone with `make typecheck`, `make lint` or `pre-commit run <hook> --all-files`.
+`./preflight.sh` (or `preflight.ps1`) warns if the hooks are not installed.
+
 ---
 
 ## Environment Variables

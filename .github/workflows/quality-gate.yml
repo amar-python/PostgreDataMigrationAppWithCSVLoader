@@ -66,6 +66,10 @@ jobs:
       - name: Lint (flake8 + bandit)
         run: make lint
 
+      # #323: mypy over api/ and streamlit_app/, configured in pyproject.toml. A new type error fails the job.
+      - name: Type check (mypy)
+        run: make typecheck
+
       - name: Component health check
         run: make health
 
