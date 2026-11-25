@@ -54,7 +54,7 @@ def _error_line(result: subprocess.CompletedProcess) -> str:
 
 def _connect():
     return psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                            password=settings.PG_PASSWORD, dbname=settings.PG_DATABASE)
+                            password=settings.PG_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
 
 
 @pytest.mark.integration
