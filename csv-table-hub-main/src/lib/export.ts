@@ -79,11 +79,7 @@ function sanitizeForXlsx(
   });
 }
 
-function toXlsxBlob(
-  sheetName: string,
-  headers: string[],
-  rows: Record<string, unknown>[],
-): Blob {
+function toXlsxBlob(sheetName: string, headers: string[], rows: Record<string, unknown>[]): Blob {
   const ws = XLSX.utils.json_to_sheet(sanitizeForXlsx(rows, headers), { header: headers });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
@@ -134,10 +130,7 @@ function printHtml(title: string, html: string): void {
 function rowsToHtmlTable(headers: string[], rows: Record<string, unknown>[]): string {
   const ths = headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
   const trs = rows
-    .map(
-      (r) =>
-        `<tr>${headers.map((h) => `<td>${escapeHtml(r[h] ?? "")}</td>`).join("")}</tr>`,
-    )
+    .map((r) => `<tr>${headers.map((h) => `<td>${escapeHtml(r[h] ?? "")}</td>`).join("")}</tr>`)
     .join("");
   return `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
 }
@@ -207,28 +200,19 @@ export function downloadErrorReport(
   } else if (format === "xlsx") {
     triggerDownload(toXlsxBlob("Errors", ERROR_HEADERS, rows), `${base}.xlsx`);
   } else {
-    printHtml(
-      `Error report — ${fileName}`,
-      rowsToHtmlTable(ERROR_HEADERS, rows),
-    );
+    printHtml(`Error report — ${fileName}`, rowsToHtmlTable(ERROR_HEADERS, rows));
   }
 }
 
 /** Download the full audit log for all jobs in the current session. */
-export function downloadAuditReport(
-  rows: AuditReportRow[],
-  format: ExportFormat,
-): void {
+export function downloadAuditReport(rows: AuditReportRow[], format: ExportFormat): void {
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const base = `audit-report-${ts}`;
 
   if (format === "csv") {
     triggerDownload(toCsvBlob(AUDIT_HEADERS, rows), `${base}.csv`);
   } else if (format === "xlsx") {
-    triggerDownload(
-      toXlsxBlob("Audit", AUDIT_HEADERS, rows),
-      `${base}.xlsx`,
-    );
+    triggerDownload(toXlsxBlob("Audit", AUDIT_HEADERS, rows), `${base}.xlsx`);
   } else {
     printHtml("Audit report", rowsToHtmlTable(AUDIT_HEADERS, rows));
   }

@@ -11,7 +11,7 @@
 name = "postgre-data-migration-app"
 version = "0.0.0"
 description = "CSV loader and T&E data management: FastAPI API, Streamlit app and PostgreSQL schema"
-requires-python = ">=3.10"  # what README and preflight.sh state; CI runs 3.11
+requires-python = ">=3.12"  # 3.12 is the one supported version: .python-version, DECISIONS/2026-11-24-one-python-version.md
 
 # ── Type checking (#323) ─────────────────────────────────────────────────────────────────────────────────────────
 # `make typecheck` and the free-tier CI job run `python3 -m mypy`, which checks the `files` below.
@@ -25,6 +25,7 @@ requires-python = ">=3.10"  # what README and preflight.sh state; CI runs 3.11
 #   streamlit_app/  largely unannotated, so only the checks above.
 [tool.mypy]
 files = ["api", "streamlit_app"]
+python_version = "3.12"   # check against the supported version (.python-version), whatever runs mypy
 # Pages import their siblings as top-level modules (`import api_client`), the way `streamlit run` puts the app's
 # folder on sys.path.
 mypy_path = "streamlit_app"

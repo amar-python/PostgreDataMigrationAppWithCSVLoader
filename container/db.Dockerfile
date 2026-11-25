@@ -11,7 +11,9 @@
 # This image therefore carries gosu built from the upstream source tag, not upstream's signed
 # release binary; Go checks the dependencies against go.sum and the checksum database. Building
 # it needs to reach github.com and the Go module proxy (as the other images already need PyPI and npm).
-FROM golang:1.26 AS gosu
+# #327: the base image is pinned by digest (the tag alone can move under the same name); Dependabot's docker
+# ecosystem proposes the new digest when the tag moves. The tag stays for people and for Dependabot.
+FROM golang:1.26@sha256:4165ee6bf3b7811fd7b40373290405c83d0167dcb87ee5f29c427cdcef45ff8f AS gosu
 ARG GO_MINIMUM_VERSION=1.26.10
 ARG GOSU_VERSION=1.19
 ENV GOTOOLCHAIN=local
@@ -28,7 +30,7 @@ RUN set -eux; \
     go version -m /out/gosu | head -n 1; \
     /out/gosu --version
 
-FROM postgres:16
+FROM postgres:16@sha256:3950ad7c3148ca2175ef1b6c36c9efbf78957ae8fbe8b3a5d7c35af50500382f
 
 # Debian's security updates for the packages the image scan flagged (#326): zlib1g and the
 # Kerberos libraries. The base image is rebuilt only now and then; the fixes are in Debian's

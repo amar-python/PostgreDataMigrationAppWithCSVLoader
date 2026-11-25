@@ -1,6 +1,7 @@
 # Coverage scope (#274, #278): one scope, named identically here, in the Makefile (COVERAGE_SCOPE) and in the
 # coverage step of quality-gate.yml; tests/unit/test_ci_quality_gate.py fails if they differ. api/services holds the CSV
-# loader path, streamlit_app is the new front end, build/csv is the validator and evals the runner.
+# loader path, streamlit_app is the new front end, build/csv is the validator and evals the runner. All four have a floor
+# (scripts/check_coverage_floors.py).
 [run]
 source =
     api
@@ -8,6 +9,8 @@ source =
     build/csv
     evals
 branch = True
+# #304: also measure the Python child processes the tests start (build/csv/validator.py, evals/runner.py).
+patch = subprocess
 omit =
     */__pycache__/*
     tests/*

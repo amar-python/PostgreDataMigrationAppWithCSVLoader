@@ -372,7 +372,17 @@ export async function rowHistory(uploadId: string, rowNumber: number): Promise<H
 }
 
 // BR-35 (M7, #111): the server's filtered audit report.
-export const AUDIT_ACTIONS = ["upload", "delete", "password_reset", "row_decision", "cell_edit", "submit", "approve", "reject", "import"] as const;
+export const AUDIT_ACTIONS = [
+  "upload",
+  "delete",
+  "password_reset",
+  "row_decision",
+  "cell_edit",
+  "submit",
+  "approve",
+  "reject",
+  "import",
+] as const;
 
 const auditEventSchema = z.object({
   id: z.string(),
@@ -395,7 +405,14 @@ const auditEventsPageSchema = z.object({
 });
 export type AuditEventsPage = z.infer<typeof auditEventsPageSchema>;
 
-export type AuditFilters = { actor?: string; action?: string; file?: string; table?: string; from?: string; to?: string };
+export type AuditFilters = {
+  actor?: string;
+  action?: string;
+  file?: string;
+  table?: string;
+  from?: string;
+  to?: string;
+};
 
 /** Query string for GET /api/audit/events. Blank filters are left out; `to` is exclusive on the server. */
 export function auditEventsQuery(f: AuditFilters, extra: Record<string, string> = {}): string {
@@ -406,12 +423,18 @@ export function auditEventsQuery(f: AuditFilters, extra: Record<string, string> 
 }
 
 export async function listAuditEvents(f: AuditFilters, offset = 0): Promise<AuditEventsPage> {
-  return apiFetch(`/api/audit/events${auditEventsQuery(f, { limit: "50", offset: String(offset) })}`, auditEventsPageSchema);
+  return apiFetch(
+    `/api/audit/events${auditEventsQuery(f, { limit: "50", offset: String(offset) })}`,
+    auditEventsPageSchema,
+  );
 }
 
 /** The matching events as a CSV file, formulas neutralised by the server. */
 export async function downloadAuditEventsCsv(f: AuditFilters): Promise<void> {
-  const res = await callApi(`${apiBase}/api/audit/events${auditEventsQuery(f, { format: "csv" })}`, { headers: authHeaders() });
+  const res = await callApi(
+    `${apiBase}/api/audit/events${auditEventsQuery(f, { format: "csv" })}`,
+    { headers: authHeaders() },
+  );
   if (res.status === 401) {
     clearSession();
     throw new Error("Your session has ended. Please sign in again.");

@@ -12,9 +12,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const { invalidate } = vi.hoisted(() => ({ invalidate: vi.fn() }));
 vi.mock("@tanstack/react-router", async () => {
-  const actual = await vi.importActual<typeof import("@tanstack/react-router")>(
-    "@tanstack/react-router",
-  );
+  const actual =
+    await vi.importActual<typeof import("@tanstack/react-router")>("@tanstack/react-router");
   return {
     ...actual,
     useRouter: () => ({ invalidate }),
@@ -23,9 +22,7 @@ vi.mock("@tanstack/react-router", async () => {
 
 const { uploadCsv } = vi.hoisted(() => ({ uploadCsv: vi.fn() }));
 vi.mock("@/lib/csv.functions", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/csv.functions")>(
-    "@/lib/csv.functions",
-  );
+  const actual = await vi.importActual<typeof import("@/lib/csv.functions")>("@/lib/csv.functions");
   return { ...actual, uploadCsv: (...args: unknown[]) => uploadCsv(...args) };
 });
 
@@ -40,7 +37,11 @@ function renderUploader() {
     defaultOptions: { queries: { retry: false } },
   });
   return render(
-    React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(Uploader)),
+    React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(Uploader),
+    ),
   );
 }
 
@@ -98,9 +99,7 @@ describe("Uploader state machine", () => {
 
     await dropAndConfirm(csvFile());
 
-    await waitFor(() =>
-      expect(screen.getByText(/duplicate file/i)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/duplicate file/i)).toBeInTheDocument());
   });
 
   it("an invalid_structure response is classified as an error", async () => {
@@ -138,9 +137,19 @@ describe("Uploader state machine", () => {
     expect(await screen.findByText(/sent to the server/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /stop/i })).not.toBeInTheDocument();
 
-    resolveUpload!({ status: "ok", fileId: "1", tableName: "t", totalRows: 1,
-      insertedRows: 1, duplicateRowsSkipped: 0, failedRows: 0, columns: [],
-      types: [], rowErrors: [], logs: [] });
+    resolveUpload!({
+      status: "ok",
+      fileId: "1",
+      tableName: "t",
+      totalRows: 1,
+      insertedRows: 1,
+      duplicateRowsSkipped: 0,
+      failedRows: 0,
+      columns: [],
+      types: [],
+      rowErrors: [],
+      logs: [],
+    });
     await waitFor(() => expect(screen.getByText(/^imported$/i)).toBeInTheDocument());
     expect(screen.queryByText(/^cancelled$/i)).not.toBeInTheDocument();
   });
@@ -205,7 +214,9 @@ describe("Uploader state machine", () => {
 
     await waitFor(() => expect(uploadCsv).toHaveBeenCalled());
     const call = uploadCsv.mock.calls[0][0];
-    expect(Array.from(Uint8Array.from(atob(call.contentBase64), (c) => c.charCodeAt(0)))).toEqual(Array.from(raw));
+    expect(Array.from(Uint8Array.from(atob(call.contentBase64), (c) => c.charCodeAt(0)))).toEqual(
+      Array.from(raw),
+    );
     expect(call.content.startsWith("id,name")).toBe(true); // the BOM is not in the decoded text
   });
 

@@ -93,9 +93,14 @@ echo
 
 # ----- Tools -----
 echo "${C}Tools${X}"
-check 'python3 on PATH'             req 'Install python 3.10+ (apt/brew/winget)' command -v python3
-check 'python >= 3.10'              req 'Upgrade python to 3.10 or later' \
-      bash -c 'python3 -c "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)"'
+# Python 3.12 is the one supported version (.python-version, DECISIONS/2026-11-24-one-python-version.md): older fails,
+# newer works as far as anyone knows but is not what CI and the images run, so it is a warning.
+check 'python3 on PATH'             req 'Install Python 3.12 (apt install python3.12 / brew install python@3.12 / winget)' \
+      command -v python3
+check 'python >= 3.12'              req 'Upgrade Python to 3.12, the supported version' \
+      bash -c 'python3 -c "import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)"'
+check 'python is 3.12 (as CI)'      opt 'CI and the images run Python 3.12; other versions are not tested' \
+      bash -c 'python3 -c "import sys; sys.exit(0 if sys.version_info[:2] == (3,12) else 1)"'
 check 'git on PATH'                 req 'Install git' command -v git
 check 'psql on PATH'                opt 'Add PG client to PATH. brew install postgresql / apt install postgresql-client' \
       command -v psql

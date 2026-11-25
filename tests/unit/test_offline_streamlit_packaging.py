@@ -41,7 +41,8 @@ def heredoc(text: str, opener: str) -> str:
 @pytest.mark.unit
 class BundleCarriesTheStreamlitWheels(unittest.TestCase):
     def test_streamlit_requirements_are_downloaded(self):
-        self.assertRegex(BUILD, r"pip download[^\n]*-r streamlit_app/requirements\.txt")
+        # From the hashed lock (#327), compiled from streamlit_app/requirements.txt.
+        self.assertRegex(BUILD, r"pip download[^\n]*-r streamlit_app/requirements\.lock")
 
     def test_both_wheel_sets_use_one_set_of_flags(self):
         lines = [ln for ln in BUILD.splitlines() if "pip download" in ln and "-r " in ln]
@@ -71,8 +72,9 @@ class InstallAddsTheStreamlitService(unittest.TestCase):
     API_ENV = heredoc(INSTALL, '"$DEST/env"')
 
     def test_the_venv_is_built_offline_from_the_bundle(self):
-        self.assertRegex(INSTALL, r'streamlit-venv/bin/pip" install -q --no-index --find-links "\$BUNDLE/wheels" \\\n'
-                                  r'\s+-r "\$DEST/app/streamlit_app/requirements\.txt"')
+        self.assertRegex(INSTALL, r'streamlit-venv/bin/pip" install -q --no-index --find-links "\$BUNDLE/wheels" '
+                                  r'--require-hashes --no-deps \\\n'
+                                  r'\s+-r "\$DEST/app/streamlit_app/requirements\.lock"')
 
     def test_the_unit_runs_streamlit_from_streamlit_app(self):
         self.assertRegex(self.UNIT, r"(?m)^ExecStart=\$DEST/streamlit-venv/bin/python -m streamlit run app\.py ")

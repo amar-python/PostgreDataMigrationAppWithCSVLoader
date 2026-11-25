@@ -58,7 +58,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The bundle is always built with Docker; Podman is only ever on the installing side.
       - name: Build the three images and save them
@@ -125,7 +125,7 @@ jobs:
 
       - name: Upload this CPU's images
         if: success() && matrix.runtime == 'docker'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: te-images-${{ matrix.arch }}
           path: dist/te-images-*-${{ matrix.arch }}.tar
@@ -148,7 +148,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build the three images
         run: bash container/build_bundle.sh images
@@ -162,7 +162,7 @@ jobs:
             docker run --rm \
               -v /var/run/docker.sock:/var/run/docker.sock \
               -v "$PWD:/repo" -v "$PWD/.trivy-cache:/cache" -w /repo \
-              ghcr.io/aquasecurity/trivy:0.76.2 \
+              ghcr.io/aquasecurity/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb \
               image --cache-dir /cache --format cyclonedx \
               --output "/repo/dist/sbom/te-$img-${{ matrix.arch }}.cdx.json" "te-$img:$VERSION"
           done
@@ -177,7 +177,7 @@ jobs:
             docker run --rm \
               -v /var/run/docker.sock:/var/run/docker.sock \
               -v "$PWD:/repo" -v "$PWD/.trivy-cache:/cache" -w /repo \
-              ghcr.io/aquasecurity/trivy:0.76.2 \
+              ghcr.io/aquasecurity/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb \
               image --cache-dir /cache --ignorefile /repo/.trivyignore.yaml \
               --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "te-$img:$VERSION" || rc=1
           done
@@ -185,7 +185,7 @@ jobs:
 
       - name: Upload the SBOMs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: te-sbom-${{ matrix.arch }}
           path: dist/sbom/*.cdx.json
@@ -197,17 +197,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download both CPUs' images
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: te-images-*
           path: dist
           merge-multiple: true
 
       - name: Download both CPUs' SBOMs
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: te-sbom-*
           path: dist/sbom
@@ -227,7 +227,7 @@ jobs:
           echo "the bundle holds $N SBOMs"
 
       - name: Upload the bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: te-container-bundle
           path: |

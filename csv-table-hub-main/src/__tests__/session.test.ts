@@ -143,11 +143,16 @@ describe("requireSession (route guard)", () => {
 });
 
 describe("API unreachable (#118)", () => {
-  const down = () => vi.fn(async () => { throw new TypeError("Failed to fetch"); });
+  const down = () =>
+    vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
 
   it("sign-in says the API can't be reached instead of 'Failed to fetch'", async () => {
     vi.stubGlobal("fetch", down());
-    await expect(signIn("acme", "alice", "pw")).rejects.toThrow(/Can't reach the API at .*Is it running\?/);
+    await expect(signIn("acme", "alice", "pw")).rejects.toThrow(
+      /Can't reach the API at .*Is it running\?/,
+    );
     expect(getSession()).toBeNull();
   });
 
@@ -160,7 +165,12 @@ describe("API unreachable (#118)", () => {
 
   it("a cancelled request is not reported as the API being down", async () => {
     const abort = new DOMException("The operation was aborted.", "AbortError");
-    vi.stubGlobal("fetch", vi.fn(async () => { throw abort; }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw abort;
+      }),
+    );
     await expect(signIn("acme", "alice", "pw")).rejects.toBe(abort);
   });
 });
