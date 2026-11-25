@@ -8,12 +8,15 @@
 # TE_ADMIN_USER (default: admin) and TE_ADMIN_PASSWORD (default: generated and
 # written to /root/te-initial-admin, readable by root only).
 # Installs to /opt/te-migration, deploys database te_mgmt_prod (schema te_prod),
-# writes /opt/te-migration/env, and installs systemd units te-api and te-frontend.
+# writes /opt/te-migration/env, and installs systemd units te-api, te-frontend (React, port 3000)
+# and te-streamlit (the Streamlit app, port 8501, #256). React stays the default until #257.
 set -euo pipefail
 
 BUNDLE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 API_HOST="${1:-localhost}"
 DEST=/opt/te-migration
+# The API's upload limit. The Streamlit app checks the same value before it sends a file (upload_model.prepare).
+MAX_UPLOAD_BYTES="${MAX_UPLOAD_BYTES:-52428800}"
 
 echo "== 1/6 verify bundle checksums"
 ( cd "$BUNDLE" && sha256sum --quiet -c SHA256SUMS )
@@ -34,8 +37,13 @@ id te-app >/dev/null 2>&1 || useradd --system --home "$DEST" --shell /usr/sbin/n
 rm -rf "$DEST"; mkdir -p "$DEST"
 cp -r "$BUNDLE/app" "$DEST/app"; cp -r "$BUNDLE/frontend" "$DEST/frontend"
 python3.12 -m venv "$DEST/venv"
+# #327: from the hashed locks; --no-index keeps it offline, --require-hashes checks every wheel against the lock.
 "$DEST/venv/bin/pip" install -q --no-index --find-links "$BUNDLE/wheels" --require-hashes --no-deps \
   -r "$DEST/app/api/requirements.lock"
+# The Streamlit app gets its own environment, so neither app's pins can move the other's.
+python3.12 -m venv "$DEST/streamlit-venv"
+"$DEST/streamlit-venv/bin/pip" install -q --no-index --find-links "$BUNDLE/wheels" --require-hashes --no-deps \
+  -r "$DEST/app/streamlit_app/requirements.lock"
 
 echo "== 4/6 database, T&E schema and application role"
 DB_PASS="$(openssl rand -hex 24)"
@@ -66,8 +74,16 @@ APP_DB_PASSWORD=$APP_DB_PASS
 TE_SCHEMA=te_prod
 CORS_ORIGINS=http://$API_HOST:3000
 PORT=3000
+MAX_UPLOAD_BYTES=$MAX_UPLOAD_BYTES
 ENV
 chmod 600 "$DEST/env"
+# The Streamlit app's own settings: no database passwords. It calls the API from the server, so
+# localhost is right whatever API_HOST is.
+cat > "$DEST/streamlit.env" <<ENV
+API_URL=http://localhost:8000
+MAX_UPLOAD_BYTES=$MAX_UPLOAD_BYTES
+ENV
+chmod 600 "$DEST/streamlit.env"
 # Browsers sign in per user (#96); the API key stays server-side for scripts.
 grep -rl "__OFFLINE_API_BASE__" "$DEST/frontend" | xargs sed -i "s#__OFFLINE_API_BASE__#http://$API_HOST:8000#g"
 chown -R te-app:te-app "$DEST"
@@ -96,8 +112,23 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 UNIT
+# Streamlit reads .streamlit/config.toml from the folder it starts in, so WorkingDirectory must be
+# streamlit_app/: that file turns usage statistics off (browser.gatherUsageStats = false).
+cat > /etc/systemd/system/te-streamlit.service <<UNIT
+[Unit]
+Description=T&E migration Streamlit app
+After=te-api.service
+[Service]
+User=te-app
+EnvironmentFile=$DEST/streamlit.env
+WorkingDirectory=$DEST/app/streamlit_app
+ExecStart=$DEST/streamlit-venv/bin/python -m streamlit run app.py --server.headless true --server.address 0.0.0.0 --server.port 8501
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+UNIT
 systemctl daemon-reload
-systemctl enable --now te-api te-frontend >/dev/null
+systemctl enable --now te-api te-frontend te-streamlit >/dev/null
 
 echo "== 6/6 first tenant admin and smoke test"
 TE_TENANT="${TE_TENANT:-main}"; TE_ADMIN_USER="${TE_ADMIN_USER:-admin}"

@@ -1,6 +1,6 @@
 # Offline install (Ubuntu 24.04, no internet)
 
-This is the procedure for installing the platform on a machine with no network access (#60). It covers the API, the frontend, PostgreSQL 16 and the T&E schema.
+This is the procedure for installing the platform on a machine with no network access (#60). It covers the API, both front ends (the React app, still the default, and the Streamlit app that replaces it in #257), PostgreSQL 16 and the T&E schema.
 
 **Windows, macOS, or an Ubuntu machine you would rather not install packages on?** Use the [container bundle](#container-bundle-windows-macos-and-linux-128) instead: the same platform as three containers, installed with Docker or Podman.
 
@@ -18,12 +18,12 @@ It uses two scripts:
 | Part | Contents |
 |---|---|
 | `app/` | The repository at the bundle's commit, without the frontend source |
-| `wheels/` | Python wheels for CPython 3.12 on x86_64 Linux: everything in `api/requirements.lock` (hash-checked), plus pip |
-| `frontend/` | The frontend, prebuilt to run under Node.js |
+| `wheels/` | Python wheels for CPython 3.12 on x86_64 Linux: everything in `api/requirements.lock` and `streamlit_app/requirements.lock` (hash-checked), plus pip |
+| `frontend/` | The React frontend, prebuilt to run under Node.js |
 | `debs/` | Ubuntu 24.04 packages for PostgreSQL 16, `python3.12-venv` and Node.js 18, with dependencies, plus an index so apt can use the folder as a repository |
 | `SHA256SUMS` | A checksum for every file in the bundle |
 
-The bundle is about 140 MB.
+The bundle was about 140 MB with the React frontend alone. The Streamlit wheels add about 116 MB (measured in `DECISIONS/2026-11-16-streamlit-migration-plan.md`, accepted by the owner on 24 Nov), so expect roughly 260 MB. The real figure is printed at the end of `build_bundle.sh`. The Streamlit app's source travels in `app/streamlit_app/`.
 
 ## 1. Build the bundle (connected machine)
 
@@ -69,14 +69,22 @@ The script runs six steps:
 2. Installs the Ubuntu packages, using the bundle as the only apt source. The VM's own apt sources are ignored.
 3. Copies the app to `/opt/te-migration`, creates the `te-app` system user, and builds a Python virtual environment from `wheels/` without network access.
 4. Deploys database `te_mgmt_prod` with schema `te_prod` and its owner role `te_prod_user`. It also creates the runtime role `te_prod_runtime`, which serves requests and can only read and insert the audit and upload tables (M3d, #107). Both get generated passwords.
-5. Writes `/opt/te-migration/env` (mode 600) with both passwords, and starts the `te-api` (port 8000) and `te-frontend` (port 3000) services under systemd. There is no shared API key (#298): people and scripts sign in.
+5. Writes `/opt/te-migration/env` (mode 600) with both passwords, and starts three services under systemd. There is no shared API key (#298): people and scripts sign in.
+
+   | Service | Port | What it is |
+   |---|---|---|
+   | `te-api` | 8000 | The API |
+   | `te-frontend` | 3000 | The React app, still the default front end until the cutover (#257) |
+   | `te-streamlit` | 8501 | The Streamlit app (#256). It runs from its own virtual environment (`/opt/te-migration/streamlit-venv`) and reads `/opt/te-migration/streamlit.env` (mode 600), which holds only `API_URL=http://localhost:8000` and `MAX_UPLOAD_BYTES`, no database password. It calls the API from the server, so `localhost` is right whatever address you passed. It starts in `app/streamlit_app/`, so Streamlit reads the shipped `.streamlit/config.toml`, which switches usage statistics off (`browser.gatherUsageStats = false`) |
+
+   `MAX_UPLOAD_BYTES` (default 52428800, 50 MiB) is written to both env files, so the API and the Streamlit app refuse the same files. To change it, set it on the `sudo` line like the variables above. Streamlit's own limit, `server.maxUploadSize` in `config.toml`, must stay above it (it is 53 MB).
 6. Creates the first tenant and its tenant admin, then runs the smoke test.
 
 During step 2, apt may print `W: Download is performed unsandboxed as root`. This only means apt's sandbox user can't read the bundle folder, and it's harmless.
 
 ## 4. Verify
 
-The install finishes by printing these seven lines. Every one must read PASS:
+The install finishes by printing these eight lines. Every one must read PASS:
 
 ```
 PASS  API health
@@ -86,11 +94,16 @@ PASS  session is tenant_admin
 PASS  upload a CSV (2 rows inserted)
 PASS  upload listed with persisted counts
 PASS  frontend serves the app
+PASS  Streamlit app health
 ```
+
+The last line is Streamlit's own health endpoint, `http://localhost:8501/_stcore/health`, answering `ok`.
 
 The upload and listing checks sign in as the first tenant admin.
 
 Then open `http://<API_HOST>:3000` in a browser. You should land on the sign-in page. Sign in with the tenant, username and password from `/root/te-initial-admin`, or the values you set.
+
+The Streamlit app is at `http://<API_HOST>:8501`, with the same sign-in. A session in one app does not carry over to the other: each keeps its own.
 
 You can re-run the check at any time:
 
@@ -106,13 +119,19 @@ Without `SMOKE_TENANT`, `SMOKE_USER` and `SMOKE_PASSWORD` the sign-in, upload an
 
 Attach the following to #60:
 
-1. `~/install.log` from step 3, showing all seven PASS lines.
+1. `~/install.log` from step 3, showing all eight PASS lines.
 2. Proof that the VM has no outside network. This command should print `000` or a connection error:
    ```bash
    cd ~
    ip route; curl -s -m 5 -o /dev/null -w '%{http_code}\n' https://pypi.org
    ```
 3. The commit in the bundle name, the VM's `lsb_release -d`, and the date.
+4. For the Streamlit app (#256): that with telemetry off it makes no outside connection. Usage statistics are off in the shipped `config.toml`, but that this means no outside connection **has not been tested**. With the VM still offline, open the Streamlit app in a browser, sign in and open each page, then check that `te-streamlit` tried nothing outside the machine, for example:
+   ```bash
+   sudo journalctl -u te-streamlit --no-pager | grep -iE 'connect|resolve|timeout' || echo "no outbound attempts logged"
+   sudo ss -tnp | grep -v -E '127\.0\.0\.1|::1' | grep python || echo "no non-local connections from Python"
+   ```
+   Run the `ss` line while the pages are open. A firewall log on the VM's host, if you have one, is stronger evidence than either.
 
 Once that evidence is on #60, the README can move to the "fully offline" wording in `DECISIONS/2026-10-04-sovereignty-wording.md`.
 
@@ -124,7 +143,8 @@ Once that evidence is on #60, the README can move to the "fully offline" wording
   cd /opt/te-migration/app
   sudo bash -c 'set -a; . /opt/te-migration/env; set +a; runuser -u te-app -- /opt/te-migration/venv/bin/python scripts/reset_password.py --username admin'
   ```
-- **The API address is fixed at install.** It's written into the frontend files. To change it, re-run the install.
+- **The API address is fixed at install** for the React app: it's written into the frontend files. To change it, re-run the install. The Streamlit app does not need it (it calls the API on `localhost`).
+- **Two front ends until #257.** Both run; React is the default. The cutover and the removal of `te-frontend` and Node.js are #257.
 - **Ubuntu 24.04 x86_64 only.** Other operating systems need different packages and wheels. An offline container bundle for Windows, macOS and Linux is tracked as #128 (BR-38).
 
 ## How it was rehearsed
@@ -227,7 +247,7 @@ It is safe to run again: the secrets and data are kept, and the admin is not cre
 
 ### 4. Verify
 
-The installer's last step is the smoke test, `container/smoke_test.py`, which runs inside the API container so that it needs nothing on the host. It is the same seven checks as the Ubuntu install, and prints `7 of 7 passed`:
+The installer's last step is the smoke test, `container/smoke_test.py`, which runs inside the API container so that it needs nothing on the host. It is the Ubuntu install's checks without the Streamlit one (the container bundle has no Streamlit container yet; #256 packaged it for the Ubuntu bundle and Azure), and prints `7 of 7 passed`:
 
 1. API health
 2. the API rejects a request with no key

@@ -195,6 +195,21 @@ def test_the_api_image_installs_its_hashed_lock():
     assert "requirements.txt" not in text
 
 
+def test_the_streamlit_image_installs_its_hashed_lock():
+    text = _text(ROOT / "container/streamlit.Dockerfile")
+    assert "COPY streamlit_app/requirements.lock" in text
+    assert re.search(r"pip install --require-hashes .*-r requirements\.lock", text)
+    assert "requirements.txt" not in text
+
+
+def test_the_offline_bundle_downloads_and_installs_only_hashed_locks():
+    build = _text(ROOT / "scripts/offline/build_bundle.sh")
+    install = _text(ROOT / "scripts/offline/install.sh")
+    for text in (build, install):
+        assert not re.search(r"-r \S*requirements\.txt", text), "the offline bundle must use the locks"
+    assert "--require-hashes" in build and install.count("--require-hashes") >= 2
+
+
 # ── #327: JS lock, image digests, healthchecks ────────────────────────────────
 
 def test_the_frontend_has_one_lock_file():
