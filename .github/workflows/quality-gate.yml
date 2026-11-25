@@ -470,7 +470,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: migration_test
@@ -489,26 +489,24 @@ jobs:
       PG_DATABASE: migration_test
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.11'
+          python-version-file: .python-version   # 3.12, the one supported version (DECISIONS/2026-11-24-one-python-version.md)
           cache: 'pip'
-          cache-dependency-path: |
-            requirements-dev.txt
-            csv_loader/requirements.txt
+          cache-dependency-path: csv_loader/requirements.lock
 
       - name: Install dev dependencies
-        run: pip install -r requirements-dev.txt -r csv_loader/requirements.txt
+        run: pip install --require-hashes -r csv_loader/requirements.lock
 
       - name: csv_loader tests — final result with skip accounting
         run: python3 scripts/test_report.py --markers "not accessibility" --strict --paths csv_loader/tests
 
       - name: Upload csv_loader reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: csv-loader-reports
           path: csv_loader/reports/

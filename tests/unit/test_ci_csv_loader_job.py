@@ -64,13 +64,24 @@ def test_it_does_not_deselect_the_database_tests():
         "the database tests are the ones that prove #349 and the staging and promotion code")
 
 
-def test_it_installs_the_tools_own_requirements():
+def test_it_installs_the_tools_requirements_from_its_hashed_lock():
+    """test_reproducible_builds.py requires hashed locks for CI installs; the tool has its own lock."""
     job = jobs()[JOB]
     install = [s for s in job["steps"] if "pip install" in (s.get("run") or "")]
-    assert install and any("csv_loader/requirements.txt" in s["run"] for s in install)
+    assert install and all("--require-hashes" in s["run"] and "csv_loader/requirements.lock" in s["run"] for s in install)
+    assert not any("requirements.txt" in s["run"] for s in install), "install from the lock, not the range file"
     setup = next(s for s in job["steps"] if "setup-python" in (s.get("uses") or ""))
-    assert "csv_loader/requirements.txt" in str(setup["with"].get("cache-dependency-path")), (
-        "a change to the tool's requirements must refresh the pip cache")
+    assert "csv_loader/requirements.lock" in str(setup["with"].get("cache-dependency-path")), (
+        "a change to the tool's lock must refresh the pip cache")
+    assert setup["with"].get("python-version-file") == ".python-version" and "python-version" not in setup["with"], (
+        "one supported Python for CI (DECISIONS/2026-11-24-one-python-version.md)")
+
+
+def test_the_lock_exists_and_every_entry_in_it_is_hashed():
+    lock = (ROOT / "csv_loader" / "requirements.lock").read_text(encoding="utf-8")
+    pins = [line for line in lock.splitlines() if "==" in line and not line.lstrip().startswith("#")]
+    assert len(pins) >= 7, "the tool's seven direct dependencies and their dependencies must be locked"
+    assert lock.count("--hash=sha256:") >= len(pins)
 
 
 def test_it_uploads_the_tools_reports():
