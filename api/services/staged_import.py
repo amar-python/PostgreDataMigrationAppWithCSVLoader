@@ -505,21 +505,7 @@ def effective_rows(cur: cursor, upload_id: int, decisions_upto: int, edits_upto:
         if changed:
             out["edited"] += 1
         cells = [changed[c] if c in changed else (raw[c] if c < len(raw) else "") for c in range(width)]
-        error: dict[str, str | None] | None = None
-        if extra_cells(raw, width):
-            error = {
-                "column": "(beyond header)",
-                "value": extra_cells(raw, width)[0],
-                "reason": ragged_row_reason(raw, width),
-            }
-        values: list[Any] = []
-        for c in range(width):
-            if error:
-                break
-            ok, val, reason = cast_value(cells[c], types[c])
-            if not ok:
-                error = {"column": columns[c], "value": cells[c], "reason": reason}
-            values.append(val)
+        values, error = _validate_row(raw, cells, columns, types)
         if error:
             out["invalid"] += 1
             if len(out["errors"]) < settings.MAX_ROW_ERRORS_REPORTED:
@@ -563,6 +549,68 @@ def _replay(st: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _validate_row(
+    raw: list[str], cells: list[str], columns: list[str], types: list[str]
+) -> tuple[list[Any], dict[str, str | None] | None]:
+    """A row's values cast to the column types, and the first problem with it (a cell beyond the header, or a cell
+    that does not cast), or None."""
+    width = len(columns)
+    error: dict[str, str | None] | None = None
+    if extra_cells(raw, width):
+        error = {
+            "column": "(beyond header)",
+            "value": extra_cells(raw, width)[0],
+            "reason": ragged_row_reason(raw, width),
+        }
+    values: list[Any] = []
+    for c in range(width):
+        if error:
+            break
+        ok, val, reason = cast_value(cells[c], types[c])
+        if not ok:
+            error = {"column": columns[c], "value": cells[c], "reason": reason}
+        values.append(val)
+    return values, error
+
+
+def _refuse_unless_importable(st: dict[str, Any]) -> None:
+    """409 for an upload already imported (under another key: the same key replays instead) or not yet approved."""
+    if st["import"]:
+        raise WorkflowError(409, "This upload has already been imported", state="imported", importId=st["import"]["id"])
+    if st["state"] != "approved":
+        raise WorkflowError(
+            409, f"This upload is {st['state']}; only an approved upload can be imported", state=st["state"]
+        )
+
+
+def _audit_import(
+    cur: cursor,
+    st: dict[str, Any],
+    upload_id: int,
+    import_id: int,
+    file_id: int,
+    approval_id: int,
+    table_name: str,
+    counts: dict[str, Any],
+) -> None:
+    write_audit(
+        cur,
+        "import",
+        file_id,
+        st["fileName"],
+        table_name,
+        "dynamic",
+        before={"upload": upload_id, "state": "approved"},
+        after={
+            "upload": upload_id,
+            "import": import_id,
+            "approval": approval_id,
+            "table": table_name,
+            "reconciliation": counts,
+        },
+    )
+
+
 def import_upload(upload_id: int, key: str, session: dict[str, Any] | None) -> dict[str, Any]:
     """Import an approved upload in one transaction, or change nothing (ADR-0002).
 
@@ -580,16 +628,9 @@ def import_upload(upload_id: int, key: str, session: dict[str, Any] | None) -> d
             # One import per upload at a time; a concurrent retry waits, then sees the committed result.
             cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"{schema}.import.{upload_id}",))
             st = _require(cur, upload_id)
-            if st["import"]:
-                if st["import"]["idempotencyKey"] == key:
-                    return _replay(st)
-                raise WorkflowError(
-                    409, "This upload has already been imported", state="imported", importId=st["import"]["id"]
-                )
-            if st["state"] != "approved":
-                raise WorkflowError(
-                    409, f"This upload is {st['state']}; only an approved upload can be imported", state=st["state"]
-                )
+            if st["import"] and st["import"]["idempotencyKey"] == key:
+                return _replay(st)
+            _refuse_unless_importable(st)
             approval = st["approval"]
             plan = effective_rows(cur, upload_id, approval["decisionsUpto"], approval["editsUpto"])
             if plan["invalid"]:  # approval checked this; only a bug or manual DB change gets here
@@ -619,22 +660,7 @@ def import_upload(upload_id: int, key: str, session: dict[str, Any] | None) -> d
             )
             _checkpoint("registered")
             _create_and_fill(conn, cur, schema, table_name, import_id, columns, col_types, valid)
-            write_audit(
-                cur,
-                "import",
-                file_id,
-                st["fileName"],
-                table_name,
-                "dynamic",
-                before={"upload": upload_id, "state": "approved"},
-                after={
-                    "upload": upload_id,
-                    "import": import_id,
-                    "approval": int(approval["id"]),
-                    "table": table_name,
-                    "reconciliation": counts,
-                },
-            )
+            _audit_import(cur, st, upload_id, import_id, file_id, int(approval["id"]), table_name, counts)
         conn.commit()
     return {
         "status": "ok",

@@ -103,28 +103,33 @@ def store_upload(
             page_size=1000,
         )
     if flags:
-        execute_values(
-            cur,
-            sql.SQL(
-                "INSERT INTO {}.row_flags (upload_id, row_number, kind, "
-                "matched_file_id, matched_file_name, matched_version) VALUES %s"
-            )
-            .format(s)
-            .as_string(cur),
-            [
-                (
-                    upload_id,
-                    f["rowNumber"],
-                    "duplicate_of_earlier_version",
-                    int(f["matchedFileId"]),
-                    f["matchedFileName"],
-                    f["matchedVersion"],
-                )
-                for f in flags
-            ],
-            page_size=1000,
-        )
+        _store_row_flags(cur, s, upload_id, flags)
     return upload_id
+
+
+def _store_row_flags(cur: cursor, s: sql.Identifier, upload_id: int, flags: list[DuplicateFlag]) -> None:
+    """The rows that duplicate an earlier version of the dataset (M5, BR-29), as ``row_flags``."""
+    execute_values(
+        cur,
+        sql.SQL(
+            "INSERT INTO {}.row_flags (upload_id, row_number, kind, "
+            "matched_file_id, matched_file_name, matched_version) VALUES %s"
+        )
+        .format(s)
+        .as_string(cur),
+        [
+            (
+                upload_id,
+                f["rowNumber"],
+                "duplicate_of_earlier_version",
+                int(f["matchedFileId"]),
+                f["matchedFileName"],
+                f["matchedVersion"],
+            )
+            for f in flags
+        ],
+        page_size=1000,
+    )
 
 
 def record_upload(

@@ -17,7 +17,7 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, NamedTuple
 
 import psycopg2.errors
 from psycopg2 import sql
@@ -199,29 +199,35 @@ def upload_dynamic(
             on_commit=on_commit,
         )
     except psycopg2.errors.UniqueViolation:
-        # #81: an identical concurrent upload won a race that _do_upload could
-        # not settle itself (e.g. both creating csv_<hash> at once). Nothing
-        # from this request was committed.
-        _log(logs, "duplicate_check", "Lost race to a concurrent identical upload", "warn")
-        return {
-            "status": "duplicate_file",
-            "reason": "content",
-            "existingFileName": file_name,
-            "tableName": f"csv_{file_hash[:16]}",
-            "existingRowCount": 0,
-            "logs": logs,
-        }
+        return _lost_race(file_name, file_hash, logs)
     except psycopg2.Error as exc:
-        # Mirror te_loader's structured-error contract: an unexpected DB error
-        # (e.g. a column type edge case not caught by cast_value) should not
-        # surface as a raw 500 to the frontend.
-        logger.warning("Dynamic upload failed for %r: %s", file_name, exc)
-        _log(logs, "error", "Database error while loading the CSV", "error")
-        return {
-            "status": "error",
-            "message": "The CSV could not be loaded due to a database error. Check the file's data types and try again.",
-            "logs": logs,
-        }
+        return _database_error(file_name, exc, logs)
+
+
+def _lost_race(file_name: str, file_hash: str, logs: list[LogEntry]) -> LoadResult:
+    """#81: an identical concurrent upload won a race that _do_upload could not settle itself (e.g. both
+    creating csv_<hash> at once). Nothing from this request was committed."""
+    _log(logs, "duplicate_check", "Lost race to a concurrent identical upload", "warn")
+    return {
+        "status": "duplicate_file",
+        "reason": "content",
+        "existingFileName": file_name,
+        "tableName": f"csv_{file_hash[:16]}",
+        "existingRowCount": 0,
+        "logs": logs,
+    }
+
+
+def _database_error(file_name: str, exc: psycopg2.Error, logs: list[LogEntry]) -> LoadResult:
+    """Mirror te_loader's structured-error contract: an unexpected DB error (e.g. a column type edge case not
+    caught by cast_value) should not surface as a raw 500 to the frontend."""
+    logger.warning("Dynamic upload failed for %r: %s", file_name, exc)
+    _log(logs, "error", "Database error while loading the CSV", "error")
+    return {
+        "status": "error",
+        "message": "The CSV could not be loaded due to a database error. Check the file's data types and try again.",
+        "logs": logs,
+    }
 
 
 def _structure_problem(rows: list[list[str]], logs: list[LogEntry]) -> LoadResult | None:
@@ -280,39 +286,13 @@ def _do_upload(
 ) -> LoadResult:
     with Conn() as conn:
         with conn.cursor() as cur:
-            dataset = dataset_slug(file_name)
-            # One upload per dataset at a time, so two uploads of the same filename can't pick the
-            # same version. Released at commit or rollback.
-            # ponytail: held through row casting; take it just before the insert if big same-name uploads queue.
-            cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"{schema}.{dataset}",))
-            if overwrite:
-                _log(
-                    logs, "overwrite", "Overwrite is not supported (decision 2): storing a new version instead", "warn"
-                )
-
-            duplicate = _same_content(cur, schema, file_hash, logs)
-            if duplicate:
-                return duplicate
-            priors, version = _versions(cur, schema, dataset, logs)
-            checked = _columns_and_types(rows[0], types, logs)
-            if isinstance(checked, dict):
-                return checked
-            columns, col_types = checked
-            schema_check = _compare_with_previous(cur, schema, priors, columns, col_types, logs)
-
-            table_name = f"csv_{dataset}_v{version}"
-            _create_table(cur, schema, table_name, columns, col_types, logs)
+            target = _prepare_version(cur, schema, file_name, file_hash, rows[0], types, overwrite, logs)
+            if isinstance(target, dict):
+                return target
+            dataset, version, priors, columns, col_types, schema_check, table_name = target
 
             data_rows = rows[1:]
-            cast = cast_rows(data_rows, columns, col_types)
-            _log(
-                logs,
-                "cast_rows",
-                f"Cast {len(data_rows)} rows → {len(cast.to_insert)} valid, {cast.errors.failed} errors, "
-                f"{cast.duplicates} in-file duplicates",
-                "warn" if cast.errors.failed else "info",
-                count=len(cast.to_insert),
-            )
+            cast = _cast_and_log(data_rows, columns, col_types, logs)
 
             # #123: if every row failed, nothing was migrated. Roll back the new
             # table (and any overwrite) and report a failed upload, not a success.
@@ -320,17 +300,7 @@ def _do_upload(
                 conn.rollback()
                 return _every_row_failed(cast.errors, len(data_rows), columns, col_types, logs)
 
-            # BR-29: rows whose exact content is already in an earlier version of this dataset are
-            # still loaded, but flagged. The user decides per row (decision 3), through review.
-            flags = _earlier_version_matches(cur, schema, priors, [r[-1] for r in cast.to_insert], cast.insert_rows)
-            if flags:
-                _log(
-                    logs,
-                    "cross_upload_duplicates",
-                    f"{len(flags)} rows already exist in an earlier version",
-                    "warn",
-                    count=len(flags),
-                )
+            flags = _flag_earlier_versions(cur, schema, priors, cast, logs)
 
             inserted = _insert(cur, schema, table_name, columns, cast.to_insert)
             _log(logs, "insert", f"Inserted {inserted} rows", count=inserted)
@@ -374,6 +344,85 @@ def _do_upload(
                 on_commit(cur, result)
         conn.commit()
     return result
+
+
+class _Version(NamedTuple):
+    """The new version of a dataset that an upload becomes, with its table created."""
+
+    dataset: str
+    version: int
+    priors: list[tuple[Any, ...]]
+    columns: list[str]
+    col_types: list[str]
+    schema_check: SchemaCheck | None
+    table_name: str
+
+
+def _prepare_version(
+    cur: cursor,
+    schema: str,
+    file_name: str,
+    file_hash: str,
+    header: list[str],
+    types: list[str] | None,
+    overwrite: bool,
+    logs: list[LogEntry],
+) -> _Version | LoadResult:
+    """Lock the dataset, pick its next version and create that version's table; or the response that stops the load
+    (the same content is already loaded, or the types are invalid)."""
+    dataset = dataset_slug(file_name)
+    # One upload per dataset at a time, so two uploads of the same filename can't pick the
+    # same version. Released at commit or rollback.
+    # ponytail: held through row casting; take it just before the insert if big same-name uploads queue.
+    cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"{schema}.{dataset}",))
+    if overwrite:
+        _log(logs, "overwrite", "Overwrite is not supported (decision 2): storing a new version instead", "warn")
+
+    duplicate = _same_content(cur, schema, file_hash, logs)
+    if duplicate:
+        return duplicate
+    priors, version = _versions(cur, schema, dataset, logs)
+    checked = _columns_and_types(header, types, logs)
+    if isinstance(checked, dict):
+        return checked
+    columns, col_types = checked
+    schema_check = _compare_with_previous(cur, schema, priors, columns, col_types, logs)
+
+    table_name = f"csv_{dataset}_v{version}"
+    _create_table(cur, schema, table_name, columns, col_types, logs)
+    return _Version(dataset, version, priors, columns, col_types, schema_check, table_name)
+
+
+def _cast_and_log(
+    data_rows: list[list[str]], columns: list[str], col_types: list[str], logs: list[LogEntry]
+) -> CastRows:
+    cast = cast_rows(data_rows, columns, col_types)
+    _log(
+        logs,
+        "cast_rows",
+        f"Cast {len(data_rows)} rows → {len(cast.to_insert)} valid, {cast.errors.failed} errors, "
+        f"{cast.duplicates} in-file duplicates",
+        "warn" if cast.errors.failed else "info",
+        count=len(cast.to_insert),
+    )
+    return cast
+
+
+def _flag_earlier_versions(
+    cur: cursor, schema: str, priors: list[tuple[Any, ...]], cast: CastRows, logs: list[LogEntry]
+) -> list[DuplicateFlag]:
+    """BR-29: rows whose exact content is already in an earlier version of this dataset are
+    still loaded, but flagged. The user decides per row (decision 3), through review."""
+    flags = _earlier_version_matches(cur, schema, priors, [r[-1] for r in cast.to_insert], cast.insert_rows)
+    if flags:
+        _log(
+            logs,
+            "cross_upload_duplicates",
+            f"{len(flags)} rows already exist in an earlier version",
+            "warn",
+            count=len(flags),
+        )
+    return flags
 
 
 def _ok(
