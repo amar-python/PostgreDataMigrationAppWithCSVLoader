@@ -20,6 +20,7 @@ path.
 | **Networking** | Public ACR + public KV | **Private VNet + private endpoints** for PG, ACR, KV |
 | **ACR SKU** | Basic ($7/mo) | Premium ($70/mo) — content trust, retention policy, private link |
 | **Compute** | ACI per-run | **Container Apps Job** in the same VNet (managed scheduling) |
+| **Web apps** | — | **API + Streamlit** as two always-on Container Apps in the internal-only environment, private network only (#256) |
 | **Image build** | Docker on GitHub runner | **ACR Tasks remote build** (works with private ACR) |
 | **State** | Local or single Azure blob | Remote state with state locking required |
 | **Audit** | Container logs only | PG/KV/ACR diagnostic settings → Log Analytics (90 days) |
@@ -37,7 +38,8 @@ path.
 | Key Vault Premium | ~AUD 1/mo | same |
 | Log Analytics (90 d, ~10 GB/mo) | ~AUD 15/mo | same |
 | Container Apps env + Job (idle) | ~AUD 5/mo | same |
-| **Total** | **~AUD 300/mo** | **~AUD 400/mo** |
+| API + Streamlit apps, 1 replica each, always on (#256) | ~AUD 40-70/mo | same |
+| **Total** | **~AUD 340-370/mo** | **~AUD 440-470/mo** |
 
 Cost dials in `variables.tf`:
 
@@ -172,6 +174,51 @@ az containerapp job execution list \
 psql "host=<pg_fqdn> port=5432 user=pgadmin dbname=te_prod sslmode=require"
 \dt te_prod.*
 ```
+
+### Step 4 — API and Streamlit apps (#256)
+
+The owner decided on 24 Nov (`DECISIONS/2026-11-16-streamlit-migration-plan.md`, "Azure host") to run the API and the Streamlit front end as two always-on Container Apps in the existing internal-only environment (`cae-te-prod-*`, `internal_load_balancer_enabled = true`). Nothing gets a public address.
+
+| App | Image | Ingress | Replicas |
+|---|---|---|---|
+| `ca-te-api-prod` | `te-api` (`container/api.Dockerfile`) | Internal to the environment (`external_enabled = false`): only the Streamlit app calls it | 1 (rate limits and the import limit are per process) |
+| `ca-te-streamlit-prod` | `te-streamlit` (`container/streamlit.Dockerfile`) | "External", which in an internal environment means the VNet only. Sticky sessions on | 1 minimum, never scales to zero; `streamlit_max_replicas` (default 1) |
+
+Both use the runner identity (AcrPull, Key Vault Secrets User), the prod registry, Key Vault and Log Analytics. The API gets `PGUSER=te_prod_user` with the `pg-app-password` secret, and `APP_DB_USER=te_prod_runtime` with the new `pg-runtime-password` secret. Streamlit gets only `API_URL` (the API's internal address, output `api_internal_url`) and `MAX_UPLOAD_BYTES`, the same value as the API's (variable `max_upload_bytes`, default 50 MiB).
+
+**Order.** The apps need their images in the registry and the runtime role in the database, so:
+
+1. **Bootstrap apply without the apps:** `bootstrap_public_access=true` and `web_apps_enabled=false`. This creates the registry, the vault and its secrets (including `pg-runtime-password`).
+2. **Push both images** to the registry with the tag in `api_image_tag` / `streamlit_image_tag` (default `prod-initial`), for example from the repo root:
+   ```bash
+   az acr build -r <acr_name> -t te-api:prod-initial       -f container/api.Dockerfile .
+   az acr build -r <acr_name> -t te-streamlit:prod-initial -f container/streamlit.Dockerfile .
+   ```
+3. **Run the migration job** once (Step 2), so `te_prod` and its owner role `te_prod_user` exist.
+4. **Create the runtime role**, once, from a machine in the VNet, as `pgadmin`. It is the same SQL `scripts/offline/install.sh` runs on-premises; take the password from the `pg-runtime-password` secret:
+   ```bash
+   RT_PW=$(az keyvault secret show --vault-name <key_vault_name> -n pg-runtime-password --query value -o tsv)
+   psql "host=<pg_fqdn> user=pgadmin dbname=te_prod sslmode=require" -v ON_ERROR_STOP=1 -v rt_pw="$RT_PW" <<'SQL'
+   CREATE ROLE te_prod_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD :'rt_pw';
+   GRANT te_prod_runtime TO te_prod_user;
+   GRANT CONNECT ON DATABASE te_prod TO te_prod_runtime;
+   SQL
+   ```
+   The API's own start-up grants the table rights (as on-premises).
+5. **Apply again with the defaults** (`bootstrap_public_access=false`, `web_apps_enabled=true`). This closes the vault and registry (#299) and creates the two apps, the private DNS zone for the environment and its wildcard record, and the sticky-session setting (through the `azapi` provider; azurerm has no argument for it).
+6. **Create the first tenant admin**, inside the API app:
+   ```bash
+   az containerapp exec -g "$RG" -n ca-te-api-prod --command \
+     "python scripts/create_tenant_admin.py --tenant main --name main --username admin"
+   ```
+
+If the prod environment already exists, step 1 still applies: adding `pg-runtime-password` writes to the vault, which needs either `bootstrap_public_access=true` for that apply or a runner inside the VNet.
+
+**Reaching it.** `terraform output streamlit_url` is the address people open. It resolves through the private zone for the environment's default domain, linked to the prod VNet; a peered network or a VPN needs its own link to that zone, or DNS forwarding to it.
+
+**Not verified yet** (test both before the cutover, #257): that WebSockets stay open through the ingress for a long review session, and that a 50 MiB upload passes it. Also not run against real Azure: this Terraform has passed `terraform validate` only. Sign-in is by password only, which is why the apps have no public address.
+
+**Rate limits.** The API's limits key on the client address (F3, #293). Every Streamlit user's request reaches the API from the Streamlit app, so they share one budget (`API_RATE_LIMIT_READS`, `API_RATE_LIMIT_WRITES`). Raise them on the API app if people hit 429s.
 
 ## Request size limits (#290)
 

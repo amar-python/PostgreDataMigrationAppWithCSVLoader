@@ -92,3 +92,45 @@ variable "bootstrap_public_access" {
   type        = bool
   default     = false
 }
+
+# --- API and Streamlit apps (#256) --------------------------------------
+
+variable "web_apps_enabled" {
+  description = "Deploy the API and Streamlit container apps. Their images must already be in the registry, so the bootstrap apply sets this to false, the images are pushed, and the next apply (default true) creates the apps (docs/PROD_DEPLOY.md)."
+  type        = bool
+  default     = true
+}
+
+variable "api_image_tag" {
+  description = "Tag of te-api (container/api.Dockerfile) in the prod registry."
+  type        = string
+  default     = "prod-initial"
+}
+
+variable "streamlit_image_tag" {
+  description = "Tag of te-streamlit (container/streamlit.Dockerfile) in the prod registry."
+  type        = string
+  default     = "prod-initial"
+}
+
+variable "max_upload_bytes" {
+  description = "The largest file the API accepts. The Streamlit app gets the same value, so it refuses the same files before sending them. Keep it under streamlit_app/.streamlit/config.toml server.maxUploadSize (53, in 1,000,000-byte megabytes)."
+  type        = number
+  default     = 52428800 # 50 MiB, the API's default
+
+  validation {
+    condition     = var.max_upload_bytes > 0 && var.max_upload_bytes < 53 * 1000 * 1000
+    error_message = "max_upload_bytes must be positive and below Streamlit's own limit (53,000,000 bytes); raise server.maxUploadSize first."
+  }
+}
+
+variable "streamlit_max_replicas" {
+  description = "Most Streamlit replicas. The minimum is always 1 (no scale to zero: it would drop sessions and add a cold start). Sessions live in one replica's memory, so ingress has sticky sessions on whatever this is."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.streamlit_max_replicas >= 1 && var.streamlit_max_replicas <= 10
+    error_message = "streamlit_max_replicas must be between 1 and 10."
+  }
+}
