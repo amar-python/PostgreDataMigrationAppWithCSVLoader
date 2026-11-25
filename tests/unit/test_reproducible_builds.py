@@ -34,6 +34,7 @@ LOCKS = {
     "requirements-dev.lock": ["requirements-dev.txt", "api/requirements.txt"],
     "requirements-a11y.lock": ["requirements-dev.txt", "api/requirements.txt", "requirements-a11y.txt",
                                "streamlit_app/requirements.txt"],
+    "csv_loader/requirements.lock": ["csv_loader/requirements.txt"],
 }
 
 

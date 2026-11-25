@@ -11,8 +11,9 @@
 #   streamlit_app/requirements.lock  streamlit_app/requirements.txt
 #   requirements-dev.lock      requirements-dev.txt + api/requirements.txt   (most CI jobs)
 #   requirements-a11y.lock     the above + requirements-a11y.txt + streamlit_app/requirements.txt (browser jobs)
+#   csv_loader/requirements.lock  csv_loader/requirements.txt          (the csv-loader CI job)
 #
-# All four are resolved against one set of versions (the largest set, compiled first, constrains the others), so a
+# All five are resolved against one set of versions (the largest set, compiled first, constrains the others), so a
 # package has the same version in every lock. tests/unit/test_reproducible_builds.py checks that, and that every
 # entry is hashed.
 #
@@ -46,8 +47,9 @@ EXTRA=()   # --upgrade applied to the largest set; the others follow its version
 compile requirements-dev.lock          -c "$WORK/constraints.txt" requirements-dev.txt api/requirements.txt
 compile api/requirements.lock          -c "$WORK/constraints.txt" api/requirements.txt
 compile streamlit_app/requirements.lock -c "$WORK/constraints.txt" streamlit_app/requirements.txt
+compile csv_loader/requirements.lock   -c "$WORK/constraints.txt" csv_loader/requirements.txt
 # The constraints file lives in a temporary folder; name it by what it is, so a re-lock does not change every lock.
-for f in requirements-dev.lock api/requirements.lock streamlit_app/requirements.lock; do
+for f in requirements-dev.lock api/requirements.lock streamlit_app/requirements.lock csv_loader/requirements.lock; do
   sed -i "s|-c $WORK/constraints.txt|-c requirements-a11y.lock (versions only)|" "$f"
 done
-echo "locked: requirements-a11y.lock requirements-dev.lock api/requirements.lock streamlit_app/requirements.lock"
+echo "locked: requirements-a11y.lock requirements-dev.lock api/requirements.lock streamlit_app/requirements.lock csv_loader/requirements.lock"
