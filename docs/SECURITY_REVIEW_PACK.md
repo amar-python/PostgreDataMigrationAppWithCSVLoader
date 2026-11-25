@@ -152,7 +152,7 @@ The decisions below were proposed on 24 Nov 2026 from the state of each issue, f
 | F6 | fix | Fixed: closed (completed) | Project owner | #296 |
 | F7 | fix: one database role per tenant (owner's decision, 24 Nov) | In progress, open | Project owner | #297 |
 | F8 | fix: the T&E drop without the destructive flag (#287) is fixed; the shared API key is being retired (owner's decision, 24 Nov) | #287 closed; #298 in progress, open | Project owner | #287, #298 |
-| F9 | fix: Key Vault and ACR default to private in Terraform (#398, merged 24 Nov); the live Azure settings still need an `az` check, and the API's own deployment is decided (Container Apps, private network only) but not yet built (#256) | Partly fixed, open | Project owner | #299, #256 |
+| F9 | fix: Key Vault and ACR default to private in Terraform (#398, merged 24 Nov); the live Azure settings still need an `az` check, and the API's own deployment is decided (Container Apps, private network only) and defined in `infra/terraform-prod` by #256 (in review; validated, not applied), with its database passwords from Key Vault | Partly fixed, open | Project owner | #299, #256 |
 | F10 | fix | Fixed: closed (completed) | Project owner | #292 |
 | F11 | fix | Fixed: closed (completed) | Project owner | #300 |
 
