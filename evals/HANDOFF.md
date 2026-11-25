@@ -33,7 +33,7 @@
 | `evals/datasets/tier_s/01_fresh_deploy_then_all_tests_pass/` | SQL-suite integration scenario |
 | `evals/expected/tier_p/*.json` | 23 expected-outcome files |
 | `evals/expected/tier_i/01_deploy_dev_twice.json` | Expected outcome (exit codes + row-count parity) |
-| `evals/expected/tier_s/01_fresh_deploy_then_all_tests_pass.json` | Expected outcome (142/142 + ALL TESTS PASSED) |
+| `evals/expected/tier_s/01_fresh_deploy_then_all_tests_pass.json` | Expected outcome (159/159 + ALL TESTS PASSED; `min_total_assertions: 159`, kept equal to the suite's count by `tests/unit/test_tier_s_threshold.py`, #303) |
 | `evals/reports/` | Auto-created at runtime; one folder per run with `summary.json` |
 
 ## What was executed
@@ -113,7 +113,7 @@ Tier I and S can be added when you have PostgreSQL in your CI runner.
 |------|--------------|
 | ~~Tier X — cross-DB schema equivalence (MariaDB / SQLite / Teradata)~~ **Built 2026-09-10 (SQLite)** | Originally: you explicitly said "ignore them for now". Now: SQLite scenario exists; deferred from CI by ADR-0001, which records the same intent as a formal decision |
 | ~~Tier E — cross-environment (Dev/Test/Staging/Prod) structural parity~~ **Built 2026-09-10** | Originally: not needed until you ship beyond Dev. Now: implemented and running in the `integration-postgres` job |
-| Tier D — extended domain-rule evals beyond suite 05 | Existing 142 assertions already cover the high-value rules |
+| Tier D — extended domain-rule evals beyond suite 05 | Existing 159 assertions already cover the high-value rules |
 | Performance / scale (1M+ rows) | Would need a fixture generator — separate round |
 | AI-assisted anomaly detection | Out of scope for deterministic evals |
 | Single-field >128 KB | Current eval covers 50KB; larger-than-default `csv` field-size behavior remains future scope |

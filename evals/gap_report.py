@@ -209,11 +209,11 @@ BR_CATALOGUE: List[Dict[str, Any]] = [
     },
     {
         "id": "BR-20",
-        "title": "85/85 SQL assertions pass",
+        "title": "159/159 SQL assertions pass",
         "category": "Quality",
         "covering_evals": {"s": ["01_fresh_deploy_then_all_tests_pass"]},
         "baseline": "full",
-        "notes": "Tier S asserts min_total_assertions=85 and pass_rate=100%",
+        "notes": "Tier S asserts min_total_assertions=159 and pass_rate=100%",
     },
     {
         "id": "BR-21",

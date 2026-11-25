@@ -45,7 +45,7 @@ The three layers can break independently, so we keep them physically separate. T
 | Path | What it is |
 |------|-----------|
 | `tests/framework/test_framework.sql` | Assertion library + results table |
-| `tests/suites/test_01..05_*.sql` | 142 SQL assertions across 5 suites |
+| `tests/suites/test_01..06_*.sql` | 159 SQL assertions across 6 suites |
 | `tests/run_all_tests.sql` | Master SQL test orchestrator |
 | `tests/run_tests.sh` | Bash wrapper that sources `config.local.env` |
 | `tests/run_python_tests.ps1` | Windows runner — invoked by the GitHub Actions workflow |

@@ -22,7 +22,7 @@ measurable for the first time. Counting `CREATE TABLE` statements per engine:
 | postgresql | 12 | reference |
 | sqlite | 7 | 5 missing |
 | mariadb | 7 | 5 missing |
-| teradata | 1 | 11 missing |
+| teradata | 1 *(wrong: 12, see Amendment 2026-11-24)* | 11 missing *(wrong: none missing)* |
 | influxdb | no DDL (seed `.lp` only) | n/a |
 | redis | no DDL (seed `.sh` only) | n/a |
 
@@ -140,6 +140,20 @@ Any one of these should reopen the decision:
 3. Anyone reports attempting a non-PostgreSQL deployment and hitting the gap.
 4. BR-02's wording is challenged in a review as claiming more than the build
    delivers.
+
+## Amendment, 2026-11-24: Teradata defines 12 tables, not 1 (#342)
+
+The Teradata row of the table in Context is wrong, and the table is kept as written so the record shows what was measured. The corrected row:
+
+| Engine | Tables defined | Against PostgreSQL's 12 |
+|---|---|---|
+| teradata | 12 | none missing; never run against a Teradata server |
+
+`build/schema/teradata/te_core_schema.sql` defines all twelve tables of the reference set, written `CREATE SET TABLE {{DB_NAME}}.{{TBL_...}}`. The count of 1 came from counting `CREATE TABLE`, which on that file matches only a comment (line 32, "No IF NOT EXISTS on CREATE TABLE"). The file has not changed since the 2026-09-10 baseline (`269ffe2`), so it was already 12 when this ADR was written.
+
+**What this does not change:** the decision. BR-02 stays deferred. SQLite and MariaDB are still 7 of 12, InfluxDB and Redis still have no DDL, and twelve `CREATE` statements are not verified Teradata DDL: nothing has run the file against a Teradata server, and the `{{...}}` placeholders are filled in by `adapter_teradata.sh`, which no test exercises. `tests/unit/test_gap_registers_agree.py` now checks the per-engine counts in `docs/ENGINE_PARITY_TODO.md` against the DDL, including `CREATE SET TABLE`.
+
+**Decided 2026-11-25 (owner, #342): no Tier X scenario for Teradata for now.** Tier X does not run in CI (this ADR), so a scenario would run only by hand, and without a Teradata server it could not show the DDL works. The table count is already checked in CI by `tests/unit/test_gap_registers_agree.py`. Revisit when BR-02 is reactivated ("Revisit triggers" above). Recorded in `docs/ENGINE_PARITY_TODO.md`, open question 2.
 
 ## References
 
