@@ -153,7 +153,7 @@ The Teradata row of the table in Context is wrong, and the table is kept as writ
 
 **What this does not change:** the decision. BR-02 stays deferred. SQLite and MariaDB are still 7 of 12, InfluxDB and Redis still have no DDL, and twelve `CREATE` statements are not verified Teradata DDL: nothing has run the file against a Teradata server, and the `{{...}}` placeholders are filled in by `adapter_teradata.sh`, which no test exercises. `tests/unit/test_gap_registers_agree.py` now checks the per-engine counts in `docs/ENGINE_PARITY_TODO.md` against the DDL, including `CREATE SET TABLE`.
 
-Open for the owner: whether a Tier X scenario for Teradata is wanted (no server needed: check the file defines the same 12 tables as the reference, as the SQLite scenario does for SQLite).
+**Decided 2026-11-25 (owner, #342): no Tier X scenario for Teradata for now.** Tier X does not run in CI (this ADR), so a scenario would run only by hand, and without a Teradata server it could not show the DDL works. The table count is already checked in CI by `tests/unit/test_gap_registers_agree.py`. Revisit when BR-02 is reactivated ("Revisit triggers" above). Recorded in `docs/ENGINE_PARITY_TODO.md`, open question 2.
 
 ## References
 
