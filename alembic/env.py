@@ -23,7 +23,7 @@ if context.is_offline_mode():
 url = URL.create(
     "postgresql+psycopg2",
     username=settings.PG_USER,
-    password=settings.PG_PASSWORD or None,
+    password=settings.PG_PASSWORD.get_secret_value() or None,
     host=settings.PG_HOST,
     port=settings.PG_PORT,
     database=settings.PG_DATABASE,

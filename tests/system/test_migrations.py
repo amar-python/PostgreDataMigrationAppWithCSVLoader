@@ -35,7 +35,7 @@ _ALEMBIC_INI = str(Path(__file__).resolve().parents[2] / "alembic.ini")
 def _connect():
     try:
         return psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                                password=settings.PG_PASSWORD, dbname=settings.PG_DATABASE)
+                                password=settings.PG_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
     except psycopg2.OperationalError as exc:
         raise AssertionError(f"Database unreachable: {exc}\n{_HELP}") from None
 

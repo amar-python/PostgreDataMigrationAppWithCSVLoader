@@ -23,6 +23,7 @@ import psycopg2.errors
 import pytest
 from fastapi.testclient import TestClient
 from psycopg2 import sql
+from pydantic import SecretStr
 
 from api.config import settings
 from api.db import Conn
@@ -35,7 +36,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 
 def _owner():
     return psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                            password=settings.PG_PASSWORD, dbname=settings.PG_DATABASE)
+                            password=settings.PG_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
 
 
 @pytest.mark.integration
@@ -55,7 +56,7 @@ class RuntimeRole(unittest.TestCase):
         values = dict(line.split("=", 1) for line in env_file.read_text().splitlines())
         cls.env_mode = env_file.stat().st_mode & 0o777
         cls._orig = (settings.APP_DB_USER, settings.APP_DB_PASSWORD, settings.allow_destructive)
-        settings.APP_DB_USER, settings.APP_DB_PASSWORD = values["APP_DB_USER"], values["APP_DB_PASSWORD"]
+        settings.APP_DB_USER, settings.APP_DB_PASSWORD = values["APP_DB_USER"], SecretStr(values["APP_DB_PASSWORD"])
         settings.allow_destructive = True
         cls.ctx = TestClient(app)
         cls.client = cls.ctx.__enter__()
@@ -70,11 +71,11 @@ class RuntimeRole(unittest.TestCase):
 
     def _as_runtime(self):
         return psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.APP_DB_USER,
-                                password=settings.APP_DB_PASSWORD, dbname=settings.PG_DATABASE)
+                                password=settings.APP_DB_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
 
     def test_script_keeps_the_password_out_of_its_output(self):
         self.assertIn(self.role, self.script_stdout)
-        self.assertNotIn(settings.APP_DB_PASSWORD, self.script_stdout)
+        self.assertNotIn(settings.APP_DB_PASSWORD.get_secret_value(), self.script_stdout)
         if os.name == "posix":
             self.assertEqual(self.env_mode, 0o600)
 
