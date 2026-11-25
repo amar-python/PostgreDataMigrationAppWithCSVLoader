@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from src.config import ColumnSpec, JobConfig, Thresholds, load_db_config
+from src.config import ColumnSpec, JobConfig, Thresholds
 from src.ingestion import load_csv_to_staging
 from src.pre_import_validator import validate_csv
 from src.schema_validator import ensure_staging_table
