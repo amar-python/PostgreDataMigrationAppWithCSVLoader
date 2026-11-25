@@ -35,7 +35,7 @@ def outcome(result: dict) -> str:
     status = result.get("status")
     if status == "ok":
         return "partly_imported" if result.get("failedRows") else "imported"
-    return _STATUS.get(status, "failed")
+    return _STATUS.get(str(status), "failed")
 
 
 def store_upload(cur, file_name: str, content: str, mode: str, result: dict, *,

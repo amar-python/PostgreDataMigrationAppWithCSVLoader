@@ -124,8 +124,8 @@ def build_payload(prepared: Prepared, mode: str, *, types: list[str] | None = No
                   headers: list[str] | None = None, confirmed: bool = False, target: str | None = None) -> dict:
     """The body of POST /api/csv/upload. A T&E load sends no types, no renames and no confirmation: the API refuses
     a header mapping or `typesConfirmed` there (422), because a T&E table has fixed columns."""
-    body = {"fileName": prepared.name, "content": prepared.text,
-            "contentBase64": base64.b64encode(prepared.raw).decode("ascii"), "mode": mode}
+    body: dict[str, object] = {"fileName": prepared.name, "content": prepared.text,
+                               "contentBase64": base64.b64encode(prepared.raw).decode("ascii"), "mode": mode}
     if mode == TE:
         body["targetTable"] = target
         return body

@@ -199,6 +199,8 @@ class Conn:
         return self._conn
 
     def __exit__(self, exc_type, exc, tb):
+        # __enter__ refused to borrow without a pool, so there is one to return the connection to.
+        assert _pool is not None  # nosec B101 — narrows the type for mypy; not a runtime check
         conn, close = self._conn, False
         try:
             # Rolling back first discards what the caller left uncommitted (putconn would anyway) and means the
