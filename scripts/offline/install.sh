@@ -37,11 +37,13 @@ id te-app >/dev/null 2>&1 || useradd --system --home "$DEST" --shell /usr/sbin/n
 rm -rf "$DEST"; mkdir -p "$DEST"
 cp -r "$BUNDLE/app" "$DEST/app"; cp -r "$BUNDLE/frontend" "$DEST/frontend"
 python3.12 -m venv "$DEST/venv"
-"$DEST/venv/bin/pip" install -q --no-index --find-links "$BUNDLE/wheels" -r "$DEST/app/api/requirements.txt"
+# #327: from the hashed locks; --no-index keeps it offline, --require-hashes checks every wheel against the lock.
+"$DEST/venv/bin/pip" install -q --no-index --find-links "$BUNDLE/wheels" --require-hashes --no-deps \
+  -r "$DEST/app/api/requirements.lock"
 # The Streamlit app gets its own environment, so neither app's pins can move the other's.
 python3.12 -m venv "$DEST/streamlit-venv"
-"$DEST/streamlit-venv/bin/pip" install -q --no-index --find-links "$BUNDLE/wheels" \
-  -r "$DEST/app/streamlit_app/requirements.txt"
+"$DEST/streamlit-venv/bin/pip" install -q --no-index --find-links "$BUNDLE/wheels" --require-hashes --no-deps \
+  -r "$DEST/app/streamlit_app/requirements.lock"
 
 echo "== 4/6 database, T&E schema and application role"
 DB_PASS="$(openssl rand -hex 24)"

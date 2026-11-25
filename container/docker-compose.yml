@@ -68,6 +68,13 @@ services:
       API_PUBLIC_URL: http://${TE_HOST:-localhost}:8000
     ports:
       - "8080:8080"
+    healthcheck:
+      # The same check as the image's HEALTHCHECK (container/frontend.Dockerfile, #327). CMD-SHELL: see the api service.
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:8080/').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
 
 volumes:
   te-db:

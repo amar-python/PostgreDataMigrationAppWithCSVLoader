@@ -7,26 +7,28 @@ on:
       - master
   pull_request:
 
+# #325: read-only token; this job writes nothing to the repository.
+permissions:
+  contents: read
+
 jobs:
   python-validator-tests:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.11'
+          python-version-file: .python-version   # 3.12, the one supported version (DECISIONS/2026-11-24-one-python-version.md)
           cache: 'pip'
-          cache-dependency-path: |
-            requirements-dev.txt
-            api/requirements.txt
+          cache-dependency-path: requirements-dev.lock
 
       - name: Install dev dependencies
-        # api/requirements.txt is needed too: tests/test_api.py imports FastAPI
-        # at module level, so without it pytest collection fails.
-        run: pip install -r requirements-dev.txt -r api/requirements.txt
+        # #327: one hashed lock (scripts/lock_requirements.sh): requirements-dev.txt plus api/requirements.txt, which
+        # is needed too because tests/test_api.py imports FastAPI at module level.
+        run: pip install --require-hashes -r requirements-dev.lock
 
       # Database-backed tests (integration/e2e/parity) run in the Linux
       # integration-postgres job of quality-gate.yml, which has a PostgreSQL

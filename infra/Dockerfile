@@ -30,7 +30,10 @@
 #     -e TARGET_ENV=dev \
 #     te-migration:dev deploy
 
-FROM python:3.11-slim AS base
+# #327: the base image is pinned by digest (the tag alone can move under the same name); Dependabot's docker
+# ecosystem proposes the new digest when the tag moves. The tag stays for people and for Dependabot.
+# Python 3.12: the one supported version (DECISIONS/2026-11-24-one-python-version.md).
+FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS base
 
 # psql client + bash + curl for libpq env-var support and shell scripts
 RUN apt-get update \
@@ -46,7 +49,7 @@ RUN apt-get update \
 # protocol is stable across these versions, so the client talks to PG 16
 # server in the Container App without trouble. Pinning to a specific
 # version (e.g. postgresql-client-15) breaks the build whenever the
-# python:3.11-slim base image moves to a newer Debian.
+# python:3.12-slim base image moves to a newer Debian.
 
 # Non-root user — never run migrations as root
 RUN groupadd --gid 1001 app \
