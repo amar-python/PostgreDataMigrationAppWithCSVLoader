@@ -89,7 +89,7 @@ sensible), click the green button.
 | SQL test suite | 5 suites x ~87 assertions: schema, indexes, business rules | Yes |
 | Tier P evals | 23 CSV validator scenarios end-to-end | No |
 | Tier I evals | Idempotency: deploy twice, identical row counts | Yes |
-| Tier S evals | SQL suite integration: 142/142 PASS post-deploy | Yes |
+| Tier S evals | SQL suite integration: 159/159 PASS post-deploy | Yes |
 
 ## Relationship to the other workflows
 

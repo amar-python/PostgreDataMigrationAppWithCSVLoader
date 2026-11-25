@@ -21,11 +21,11 @@ Branch protection on main:
 
 - The last 8 merges on main all show all three checks SUCCESS. Formalising reflects practice, not disrupting it.
 - Two months of unprotected red integration is the precedent for why unprotected main is unsafe.
-- Solo project discipline requires enforce_admins: true â€” admin bypass defeats the purpose of the gate for a one-person team.
+- Solo project discipline requires enforce_admins: true — admin bypass defeats the purpose of the gate for a one-person team.
 
 ## Trade-offs accepted
 
-- No admin bypass means emergency merges require temporarily removing protection (deliberate â€” see escape hatch below).
+- No admin bypass means emergency merges require temporarily removing protection (deliberate — see escape hatch below).
 - strict: true forces a pull-and-re-check on stale branches. Small friction, catches merge-main-into-feature drift.
 - Required 0-approval PR means you merge your own PRs; the gate is CI, not review.
 
@@ -87,7 +87,7 @@ Or, with an admin token, save the prepared settings as `protection.json` and run
 
 The T&E audit review of 20 Nov proposed this as requirement BR-60. The product owner decided on 20 Nov to track it as an action on this decision instead (`docs/VCRM.md` §6.4), because it controls the process rather than product behaviour. The action is still open: `main` reported `protected: false` at review time, and the setting needs a repository admin (the owner) to apply one of the two columns above. Close the action when the check under "To check it took" prints `true` and the required check names, and record which column was chosen.
 
-`claude/project-status.md` (session of 2 Nov, "D8" and "Live policy change") still says protection was applied; both places now carry a correction note pointing here.
+`claude/project-status.md` (session of 2 Nov, "D8" and "Live policy change") still says protection was applied; both places now carry a correction note pointing here. *(24 Nov: `claude/project-status.md` was rewritten; its "Current state" now records protection as applied on 24 Nov, and the 2 Nov entries are marked superseded.)*
 
 ## Applied, 24 Nov 2026
 
@@ -111,4 +111,4 @@ The open action in `docs/VCRM.md` (BR-60, §6.4) is met by this read-back.
 
 - #51 (closed with this decision)
 - #45 (closed 7 days earlier): made option (a) viable
-- 26 Oct 2026 closure rule â€” this decision applies the equivalent discipline to merges
+- 26 Oct 2026 closure rule — this decision applies the equivalent discipline to merges
