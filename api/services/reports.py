@@ -10,17 +10,18 @@ from __future__ import annotations
 import csv
 import io
 import re
+from typing import Any
 
 _FORMULA_START = re.compile(r"^[=+\-@\t\r]")
 _PLAIN_NUMBER = re.compile(r"^[+-]?\d+(\.\d+)?$")
 
 
-def csv_cell(value) -> str:
+def csv_cell(value: object) -> str:
     s = "" if value is None else str(value)
     return "'" + s if _FORMULA_START.match(s) and not _PLAIN_NUMBER.match(s) else s
 
 
-def csv_text(headers: list[str], rows: list[list]) -> str:
+def csv_text(headers: list[str], rows: list[list[Any]]) -> str:
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(headers)

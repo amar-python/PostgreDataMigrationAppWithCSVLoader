@@ -9,17 +9,21 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
+from typing import Any, cast
 
 from psycopg2 import sql
+from psycopg2.extensions import cursor
 from psycopg2.extras import execute_values
+from typing_extensions import Unpack
 
 from api.config import settings
 from api.services.csv_parse import extra_cells, ragged_row_reason
+from api.services.results import LoadFields, LoadResult, LogEntry, RowError
 
 
-def log(logs: list, step: str, message: str, level: str = "info", count: int | None = None) -> None:
+def log(logs: list[LogEntry], step: str, message: str, level: str = "info", count: int | None = None) -> None:
     """Append one entry to an upload's log, the list the response carries as ``logs``."""
-    entry: dict = {"ts": int(time.time() * 1000), "step": step, "level": level, "message": message}
+    entry: LogEntry = {"ts": int(time.time() * 1000), "step": step, "level": level, "message": message}
     if count is not None:
         entry["count"] = count
     logs.append(entry)
@@ -33,7 +37,7 @@ class RowErrors:
     """
 
     def __init__(self) -> None:
-        self.items: list[dict] = []
+        self.items: list[RowError] = []
         self.failed = 0
 
     def add(self, row_number: int, column: str, value: str, reason: str | None) -> None:
@@ -47,7 +51,7 @@ class RowErrors:
         if len(self.items) < settings.MAX_ROW_ERRORS_REPORTED:
             self.items.append({"rowNumber": row_number, "reason": reason})
 
-    def first(self) -> dict | None:
+    def first(self) -> RowError | None:
         return self.items[0] if self.items else None
 
 
@@ -60,7 +64,7 @@ def ragged(raw: list[str], width: int, row_number: int, errors: RowErrors) -> bo
     return True
 
 
-def too_many_rows(data_row_count: int, logs: list) -> dict | None:
+def too_many_rows(data_row_count: int, logs: list[LogEntry]) -> LoadResult | None:
     """BUG-027: the error response for a file over ``API_MAX_ROWS`` data rows, or None if it is within the cap."""
     if data_row_count <= settings.MAX_ROWS:
         return None
@@ -75,15 +79,23 @@ def too_many_rows(data_row_count: int, logs: list) -> dict | None:
     }
 
 
-def rows_failed(message: str, errors: RowErrors, total_rows: int, logs: list, **fields: object) -> dict:
-    """The response when rows failed and nothing was saved (#123, #170, #289). ``fields`` follow ``failedRows``."""
-    log(logs, "error", message, "error")
-    return {"status": "error", "message": message, "rowErrors": errors.items,
-            "totalRows": total_rows, "failedRows": errors.failed, **fields, "logs": logs}
+def rows_failed(text: str, errors: RowErrors, total_rows: int, entries: list[LogEntry],
+                **fields: Unpack[LoadFields]) -> LoadResult:
+    """The response when rows failed and nothing was saved (#123, #170, #289).
+
+    ``text`` is the message and ``entries`` the logs. ``fields`` follow ``failedRows`` and come before ``logs``, in
+    the order given (tests/system/test_loader_responses_golden.py pins the order).
+    """
+    log(entries, "error", text, "error")
+    result: LoadResult = {"status": "error", "message": text, "rowErrors": errors.items,
+                          "totalRows": total_rows, "failedRows": errors.failed}
+    result.update(cast(LoadResult, fields))  # the keywords were checked against LoadFields at the call
+    result["logs"] = entries
+    return result
 
 
-def insert_with_row_fallback(cur, batch_stmt: sql.Composable, row_stmt: sql.Composable,
-                             rows: Sequence[tuple[int, list]], errors: RowErrors, chunk_size: int = 500) -> int:
+def insert_with_row_fallback(cur: cursor, batch_stmt: sql.Composable, row_stmt: sql.Composable,
+                             rows: Sequence[tuple[int, list[Any]]], errors: RowErrors, chunk_size: int = 500) -> int:
     """Insert ``(row number, values)`` pairs in batches; when a batch fails, retry it a row at a time.
 
     A constraint (FK, UNIQUE, CHECK) or a cast the database makes itself fails the whole batch, so the batch is
@@ -105,7 +117,8 @@ def insert_with_row_fallback(cur, batch_stmt: sql.Composable, row_stmt: sql.Comp
     return inserted
 
 
-def _insert_one_by_one(cur, row_stmt: sql.Composable, chunk: Sequence[tuple[int, list]], errors: RowErrors) -> int:
+def _insert_one_by_one(cur: cursor, row_stmt: sql.Composable, chunk: Sequence[tuple[int, list[Any]]],
+                       errors: RowErrors) -> int:
     inserted = 0
     for row_number, values in chunk:
         cur.execute("SAVEPOINT row_sp")
@@ -121,8 +134,11 @@ def _insert_one_by_one(cur, row_stmt: sql.Composable, chunk: Sequence[tuple[int,
 
 
 def ok_result(file_id: object, table_name: str, total_rows: int, inserted: int, duplicates: int, failed: int,
-              columns: list[str], types: list[str], **fields: object) -> dict:
-    """The "ok" response of a load. ``fields`` follow ``types``, in the order given."""
-    return {"status": "ok", "fileId": str(file_id), "tableName": table_name, "totalRows": total_rows,
-            "insertedRows": inserted, "duplicateRowsSkipped": duplicates, "failedRows": failed,
-            "columns": columns, "types": types, **fields}
+              cols: list[str], col_types: list[str], **fields: Unpack[LoadFields]) -> LoadResult:
+    """The "ok" response of a load: ``cols`` and ``col_types`` are its ``columns`` and ``types``. ``fields`` follow
+    ``types``, in the order given."""
+    result: LoadResult = {"status": "ok", "fileId": str(file_id), "tableName": table_name, "totalRows": total_rows,
+                          "insertedRows": inserted, "duplicateRowsSkipped": duplicates, "failedRows": failed,
+                          "columns": cols, "types": col_types}
+    result.update(cast(LoadResult, fields))  # the keywords were checked against LoadFields at the call
+    return result

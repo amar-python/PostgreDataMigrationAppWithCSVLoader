@@ -29,9 +29,10 @@ import time
 from collections import OrderedDict, deque
 
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from api.config import settings
+from collections.abc import Awaitable, Callable
 
 # Hard cap on distinct client buckets held in memory.
 _MAX_TRACKED_CLIENTS = 4096
@@ -104,7 +105,7 @@ def _client_id(request: Request) -> str:
     return f"ip:{client.host}" if client and client.host else "ip:unknown"
 
 
-async def rate_limit_middleware(request: Request, call_next):
+async def rate_limit_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     """Apply the read or write budget, then hand off to the route."""
     if request.url.path in _EXEMPT_PATHS:
         return await call_next(request)

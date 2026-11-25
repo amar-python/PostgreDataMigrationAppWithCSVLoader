@@ -21,25 +21,27 @@ from psycopg2 import sql
 from psycopg2.extras import Json, execute_values
 
 from api.config import settings
-from api.db import Conn
+from api.db import Conn, fetch_one
 from api.services.audit import coerce_file_id, current_actor
 from api.services.csv_parse import parse_csv
 from api.tenancy import uploads_schema
+from psycopg2.extensions import cursor
+from api.services.results import DuplicateFlag, LoadResult
 
 logger = logging.getLogger(__name__)
 
 _STATUS = {"duplicate_file": "duplicate", "invalid_structure": "rejected", "error": "failed", "staged": "staged"}
 
 
-def outcome(result: dict) -> str:
+def outcome(result: LoadResult) -> str:
     status = result.get("status")
     if status == "ok":
         return "partly_imported" if result.get("failedRows") else "imported"
     return _STATUS.get(str(status), "failed")
 
 
-def store_upload(cur, file_name: str, content: str, mode: str, result: dict, *,
-                 original: bytes | None = None, flags: list[dict] | None = None) -> int:
+def store_upload(cur: cursor, file_name: str, content: str, mode: str, result: LoadResult, *,
+                 original: bytes | None = None, flags: list[DuplicateFlag] | None = None) -> int:
     """Insert the upload, its bytes, its parsed rows and any row flags using the caller's cursor.
 
     Raises on failure and doesn't commit: the staged flow (M6) treats a failed store as a failed
@@ -65,7 +67,7 @@ def store_upload(cur, file_name: str, content: str, mode: str, result: dict, *,
          result.get("failedRows"), coerce_file_id(result.get("fileId")) if ok else None,
          Json((result.get("rowErrors") or [])[:settings.MAX_ROW_ERRORS_REPORTED]),
          Json(logs), result.get("columns"), result.get("types"), result.get("typesProvenance")))
-    upload_id = cur.fetchone()[0]
+    upload_id = int(fetch_one(cur)[0])
     cur.execute(sql.SQL("INSERT INTO {}.upload_blobs (upload_id, content) VALUES (%s, %s)").format(s),
                 (upload_id, data))
     rows = parse_csv(content)  # ponytail: second parse after the loader's; share it if uploads get slow
@@ -82,8 +84,8 @@ def store_upload(cur, file_name: str, content: str, mode: str, result: dict, *,
     return upload_id
 
 
-def record_upload(file_name: str, content: str, mode: str, result: dict, *,
-                  original: bytes | None = None, flags: list[dict] | None = None) -> int | None:
+def record_upload(file_name: str, content: str, mode: str, result: LoadResult, *,
+                  original: bytes | None = None, flags: list[DuplicateFlag] | None = None) -> int | None:
     """Record an attempt that loaded nothing, in its own transaction. Returns the upload id, or None on failure."""
     try:
         with Conn() as conn:

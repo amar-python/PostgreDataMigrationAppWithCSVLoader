@@ -11,9 +11,11 @@ from fastapi import HTTPException
 from psycopg2 import sql
 
 from api.auth import PERMISSIONS
+from typing import Any
+from psycopg2.extensions import cursor
 
 
-def authorized_drop_table(cur, session: dict | None, schema: str, table_name: str) -> None:
+def authorized_drop_table(cur: cursor, session: dict[str, Any] | None, schema: str, table_name: str) -> None:
     """Drop a table only if the caller holds delete_file permission.
 
     ``session`` is ``None`` only under the local-dev anonymous opt-in (#298,
@@ -29,7 +31,7 @@ def authorized_drop_table(cur, session: dict | None, schema: str, table_name: st
     )
 
 
-def safe_cleanup_prior(cur, session: dict | None, schema: str,
+def safe_cleanup_prior(cur: cursor, session: dict[str, Any] | None, schema: str,
                        table_name: str, mode: str) -> None:
     """Drop a prior dynamic-mode table during overwrite, with auth check.
 
@@ -46,7 +48,7 @@ def safe_cleanup_prior(cur, session: dict | None, schema: str,
         )
 
 
-def _require_delete(session: dict | None) -> None:
+def _require_delete(session: dict[str, Any] | None) -> None:
     """Raise 403 if the session's role cannot delete files.
 
     ``None`` means the local-dev anonymous opt-in (#298); tenant_scope refuses

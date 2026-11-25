@@ -18,10 +18,11 @@ from psycopg2 import sql
 from api import policy
 from api.auth import allow, tenant_scope
 from api.tenancy import uploads_schema
-from api.db import Conn
+from api.db import Conn, fetch_one
 from api.config import settings
 from api.services.audit import VALID_ACTIONS, verify_chain
 from api.services.reports import csv_text, like_pattern
+from typing import Any
 
 router = APIRouter(
     prefix="/api/audit",
@@ -31,7 +32,7 @@ router = APIRouter(
 
 
 @router.get("/log", dependencies=[Depends(allow("read_audit"))])
-def audit_log(limit: int = 50, offset: int = 0) -> dict:
+def audit_log(limit: int = 50, offset: int = 0) -> dict[str, Any]:
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
     with Conn() as conn:
@@ -41,7 +42,7 @@ def audit_log(limit: int = 50, offset: int = 0) -> dict:
                     sql.Identifier(uploads_schema())
                 )
             )
-            total = cur.fetchone()[0]
+            total = fetch_one(cur)[0]
             cur.execute(
                 sql.SQL(
                     "SELECT id, action, file_id, file_name, table_name, mode, performed_at, actor "
@@ -66,7 +67,7 @@ def audit_log(limit: int = 50, offset: int = 0) -> dict:
 
 
 @router.get("/verify", dependencies=[Depends(allow("read_audit"))])
-def audit_verify() -> dict:
+def audit_verify() -> dict[str, Any]:
     """Recompute this tenant's audit hash chain (M3a, #107). ``intact`` is false
     if any row was changed, removed or inserted out of order."""
     with Conn() as conn:
@@ -89,7 +90,7 @@ def audit_events(
     limit: int | None = None,
     offset: int = 0,
     format: str = Query("json", pattern="^(json|csv)$"),
-) -> Response | dict:
+) -> Response | dict[str, Any]:
     """A filtered report of this tenant's audit log, newest first (M7, #111; BR-35).
 
     Filters combine with AND. ``format=csv`` downloads the matching rows (up to API_MAX_ROWS) with spreadsheet
@@ -120,7 +121,7 @@ def audit_events(
     schema = sql.Identifier(uploads_schema())
     with Conn() as conn, conn.cursor() as cur:
         cur.execute(sql.SQL("SELECT count(*) FROM {}.audit_log{}").format(schema, clause), params)
-        total = cur.fetchone()[0]
+        total = fetch_one(cur)[0]
         cur.execute(sql.SQL("SELECT {} FROM {}.audit_log{} ORDER BY id DESC LIMIT %s OFFSET %s").format(
             sql.SQL(", ").join(sql.Identifier(c) for c in _EVENT_COLUMNS), schema, clause), [*params, limit, offset])
         rows = cur.fetchall()

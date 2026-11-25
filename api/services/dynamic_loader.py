@@ -16,15 +16,17 @@ import json
 import logging
 import re
 from collections.abc import Callable
+from typing import Any
 from dataclasses import dataclass, field
 
 import psycopg2.errors
 from psycopg2 import sql
+from psycopg2.extensions import connection, cursor
 from psycopg2.extras import execute_values
 
 from api.config import settings
 from api.tenancy import uploads_schema
-from api.db import Conn
+from api.db import Conn, fetch_one
 from api.services.csv_parse import (
     ALLOWED_TYPES,
     apply_header_mapping,
@@ -35,6 +37,7 @@ from api.services.csv_parse import (
 )
 from api.services.load_common import RowErrors, ok_result, ragged, rows_failed, too_many_rows
 from api.services.load_common import log as _log
+from api.services.results import DuplicateFlag, LoadResult, LogEntry, SchemaCheck
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +64,8 @@ _SYSTEM_COLUMNS = ("_id", "_row_hash", "_created_at", "_source_row_id", "_import
 _UDT = {"boolean": "bool"}  # information_schema udt_name where it differs from our type name
 
 
-def _schema_diff(cur, schema: str, prior_table: str, columns: list[str], col_types: list[str]) -> dict | None:
+def _schema_diff(cur: cursor, schema: str, prior_table: str, columns: list[str],
+                 col_types: list[str]) -> SchemaCheck | None:
     """How the new columns compare with the previous version's. None if that table is gone.
 
     Additions are compatible; a removed or retyped column is not. Informational only: the
@@ -79,7 +83,8 @@ def _schema_diff(cur, schema: str, prior_table: str, columns: list[str], col_typ
             "added": [c for c in new if c not in old], "removed": removed, "changed": changed}
 
 
-def _earlier_version_matches(cur, schema: str, priors: list, hashes: list[str], rows: list[int]) -> list[dict]:
+def _earlier_version_matches(cur: cursor, schema: str, priors: list[tuple[Any, ...]], hashes: list[str],
+                             rows: list[int]) -> list[DuplicateFlag]:
     """Rows (by number) whose hash is already in an earlier version's table. Newest matching version wins.
 
     ``priors`` is newest first: (registry id, file name, table name, version). A prior whose
@@ -87,7 +92,7 @@ def _earlier_version_matches(cur, schema: str, priors: list, hashes: list[str], 
     """
     by_hash = dict(zip(hashes, rows))
     pending = set(by_hash)
-    flags: list[dict] = []
+    flags: list[DuplicateFlag] = []
     for file_id, file_name, table_name, version in priors:
         if not pending:
             break
@@ -116,18 +121,18 @@ def upload_dynamic(
     types: list[str] | None,
     overwrite: bool,
     *,
-    session: dict | None = None,
-    header_mapping: list[dict] | None = None,
+    session: dict[str, Any] | None = None,
+    header_mapping: list[dict[str, Any]] | None = None,
     types_confirmed: bool = False,
-    on_commit: Callable[[object, dict], None] | None = None,
-) -> dict:
+    on_commit: Callable[[cursor, LoadResult], None] | None = None,
+) -> LoadResult:
     """Load ``content`` as a new version of its dynamic dataset.
 
     ``on_commit(cur, result)`` runs on the load's cursor just before the commit, given the "ok" result
     this call will return. Whatever it writes commits with the load. If it raises, the load rolls back
     and the exception propagates; only ``psycopg2`` errors from the load itself become an error dict (#288).
     """
-    logs: list[dict] = []
+    logs: list[LogEntry] = []
     _log(logs, "receive", f'Received "{file_name}" ({len(content)} chars)')
 
     file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -185,7 +190,7 @@ def upload_dynamic(
         }
 
 
-def _structure_problem(rows: list[list[str]], logs: list[dict]) -> dict | None:
+def _structure_problem(rows: list[list[str]], logs: list[LogEntry]) -> LoadResult | None:
     """The response for a CSV with no data to load (empty, header only, blank header), or None if it has some."""
     if not rows:
         return {
@@ -211,8 +216,8 @@ def _structure_problem(rows: list[list[str]], logs: list[dict]) -> dict | None:
     return None
 
 
-def _apply_header_mapping(rows: list[list[str]], header_mapping: list[dict] | None,
-                          logs: list[dict]) -> tuple[list[list[str]], dict | None]:
+def _apply_header_mapping(rows: list[list[str]], header_mapping: list[dict[str, Any]] | None,
+                          logs: list[LogEntry]) -> tuple[list[list[str]], LoadResult | None]:
     """``rows`` with the confirmed header renames applied (#186), or the error response for an invalid mapping."""
     mapped_headers, mapping_error = apply_header_mapping(rows[0], header_mapping)
     if mapping_error:
@@ -229,15 +234,15 @@ def _do_upload(
     file_name: str,
     types: list[str] | None,
     overwrite: bool,
-    logs: list[dict],
+    logs: list[LogEntry],
     schema: str,
     rows: list[list[str]],
     file_hash: str,
     *,
-    session: dict | None = None,
+    session: dict[str, Any] | None = None,
     types_provenance: str = "inferred_unconfirmed",
-    on_commit: Callable[[object, dict], None] | None = None,
-) -> dict:
+    on_commit: Callable[[cursor, LoadResult], None] | None = None,
+) -> LoadResult:
     with Conn() as conn:
         with conn.cursor() as cur:
             dataset = dataset_slug(file_name)
@@ -303,8 +308,8 @@ def _do_upload(
 
 
 def _ok(file_id: object, table_name: str, total_rows: int, inserted: int, cast: CastRows, columns: list[str],
-        col_types: list[str], types_provenance: str, logs: list[dict], dataset: str, version: int,
-        schema_check: dict | None, flags: list[dict]) -> dict:
+        col_types: list[str], types_provenance: str, logs: list[LogEntry], dataset: str, version: int,
+        schema_check: SchemaCheck | None, flags: list[DuplicateFlag]) -> LoadResult:
     return ok_result(
         file_id, table_name, total_rows, inserted, cast.duplicates, cast.errors.failed, columns, col_types,
         typesProvenance=types_provenance,
@@ -323,7 +328,7 @@ def _ok(file_id: object, table_name: str, total_rows: int, inserted: int, cast: 
     )
 
 
-def _same_content(cur, schema: str, file_hash: str, logs: list[dict]) -> dict | None:
+def _same_content(cur: cursor, schema: str, file_hash: str, logs: list[LogEntry]) -> LoadResult | None:
     """Exact-file duplicate check (BR-28). The registry is per tenant, so this is a per-tenant check."""
     _log(logs, "duplicate_check", "Checking existing content hash")
     cur.execute(
@@ -346,7 +351,7 @@ def _same_content(cur, schema: str, file_hash: str, logs: list[dict]) -> dict | 
     }
 
 
-def _versions(cur, schema: str, dataset: str, logs: list[dict]) -> tuple[list, int]:
+def _versions(cur: cursor, schema: str, dataset: str, logs: list[LogEntry]) -> tuple[list[tuple[Any, ...]], int]:
     """Earlier versions of this dataset, newest first, and the version this upload becomes."""
     cur.execute(
         sql.SQL(
@@ -362,7 +367,7 @@ def _versions(cur, schema: str, dataset: str, logs: list[dict]) -> tuple[list, i
 
 
 def _columns_and_types(header: list[str], types: list[str] | None,
-                       logs: list[dict]) -> tuple[list[str], list[str]] | dict:
+                       logs: list[LogEntry]) -> tuple[list[str], list[str]] | LoadResult:
     """The table's column names and types, or the error response if the header or the types cannot be used."""
     columns = sanitize_columns(header)
     if not columns:
@@ -393,8 +398,8 @@ def _columns_and_types(header: list[str], types: list[str] | None,
     return columns, col_types
 
 
-def _compare_with_previous(cur, schema: str, priors: list, columns: list[str], col_types: list[str],
-                           logs: list[dict]) -> dict | None:
+def _compare_with_previous(cur: cursor, schema: str, priors: list[tuple[Any, ...]], columns: list[str], col_types: list[str],
+                           logs: list[LogEntry]) -> SchemaCheck | None:
     """How the columns compare with the previous version's. Informational: its table is never altered."""
     if not priors:
         return None
@@ -408,8 +413,8 @@ def _compare_with_previous(cur, schema: str, priors: list, columns: list[str], c
     return schema_check
 
 
-def _create_table(cur, schema: str, table_name: str, columns: list[str], col_types: list[str],
-                  logs: list[dict]) -> None:
+def _create_table(cur: cursor, schema: str, table_name: str, columns: list[str], col_types: list[str],
+                  logs: list[LogEntry]) -> None:
     """Plain CREATE, not IF NOT EXISTS: a name clash must fail, not append to a stranger's table."""
     col_defs = sql.SQL(", ").join(
         sql.SQL("{} {}").format(sql.Identifier(c), sql.SQL(_TYPE_SQL[t]))
@@ -429,7 +434,7 @@ def _create_table(cur, schema: str, table_name: str, columns: list[str], col_typ
 class CastRows:
     """The rows of a file, cast to their column types: what to insert, and what failed or repeated."""
 
-    to_insert: list[tuple] = field(default_factory=list)  # cast values, then the row hash
+    to_insert: list[tuple[Any, ...]] = field(default_factory=list)  # cast values, then the row hash
     insert_rows: list[int] = field(default_factory=list)  # source row number of each to_insert entry
     errors: RowErrors = field(default_factory=RowErrors)
     duplicates: int = 0  # rows identical to an earlier row of the same file, skipped
@@ -468,9 +473,9 @@ def cast_rows(data_rows: list[list[str]], columns: list[str], col_types: list[st
 
 
 def _cast_cells(raw: list[str], columns: list[str], col_types: list[str], row_number: int,
-                errors: RowErrors) -> tuple[list, list[str]] | None:
+                errors: RowErrors) -> tuple[list[Any], list[str]] | None:
     """The cast values and raw cells of one row (a short row's missing cells are empty), or None if a cell failed."""
-    values: list = []
+    values: list[Any] = []
     cells: list[str] = []
     for c in range(len(columns)):
         cell = raw[c] if c < len(raw) else ""
@@ -484,7 +489,7 @@ def _cast_cells(raw: list[str], columns: list[str], col_types: list[str], row_nu
 
 
 def _every_row_failed(errors: RowErrors, total_rows: int, columns: list[str], col_types: list[str],
-                      logs: list[dict]) -> dict:
+                      logs: list[LogEntry]) -> LoadResult:
     msg = f"None of the {total_rows} rows could be imported, so nothing was saved."
     e = errors.first()
     if e:
@@ -492,7 +497,7 @@ def _every_row_failed(errors: RowErrors, total_rows: int, columns: list[str], co
     return rows_failed(msg, errors, total_rows, logs, columns=columns, types=col_types)
 
 
-def _insert(cur, schema: str, table_name: str, columns: list[str], to_insert: list[tuple]) -> int:
+def _insert(cur: cursor, schema: str, table_name: str, columns: list[str], to_insert: list[tuple[Any, ...]]) -> int:
     """Insert the cast rows in pages of 500. Returns how many went in."""
     inserted = 0
     if not to_insert:
@@ -516,9 +521,9 @@ def _insert(cur, schema: str, table_name: str, columns: list[str], to_insert: li
     return inserted
 
 
-def _register(conn, cur, schema: str, file_name: str, file_hash: str, table_name: str, inserted: int,
+def _register(conn: connection, cur: cursor, schema: str, file_name: str, file_hash: str, table_name: str, inserted: int,
               columns: list[str], total_rows: int, cast: CastRows, types_provenance: str, dataset: str,
-              version: int, logs: list[dict]) -> object:
+              version: int, logs: list[LogEntry]) -> int | LoadResult:
     """Add the upload to csv_files and return its id, or the "duplicate_file" response if it lost a race.
 
     The duplicate checks above are racy (check-then-act, no lock held across the row-casting work), so a
@@ -536,7 +541,7 @@ def _register(conn, cur, schema: str, file_name: str, file_hash: str, table_name
             (file_name, file_hash, table_name, inserted, columns,
              total_rows, cast.duplicates, cast.errors.failed, types_provenance, dataset, version),
         )
-        return cur.fetchone()[0]
+        return int(fetch_one(cur)[0])
     except psycopg2.errors.UniqueViolation:
         conn.rollback()
         cur.execute(

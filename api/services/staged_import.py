@@ -33,7 +33,7 @@ import psycopg2.errors
 from psycopg2 import sql
 
 from api.config import settings
-from api.db import Conn
+from api.db import Conn, fetch_one
 from api.services.audit import current_actor, write_audit
 from api.services.csv_parse import (
     ALLOWED_TYPES,
@@ -48,6 +48,9 @@ from api.services.csv_parse import (
 from api.services.dynamic_loader import _TYPE_SQL, _earlier_version_matches, _schema_diff, dataset_slug
 from api.services.originals import store_upload
 from api.tenancy import uploads_schema
+from typing import Any, cast
+from psycopg2.extensions import connection, cursor
+from api.services.results import DuplicateFlag, LoadResult, SchemaCheck
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +60,7 @@ IMPORT_STATEMENT_TIMEOUT_MS = 120_000  # ADR-0002: one open transaction needs a 
 class WorkflowError(Exception):
     """A request the API answers with 4xx: ``status`` is the HTTP code; ``extra`` goes in the body."""
 
-    def __init__(self, status: int, message: str, **extra):
+    def __init__(self, status: int, message: str, **extra: Any) -> None:
         super().__init__(message)
         self.status = status
         self.extra = extra
@@ -67,7 +70,7 @@ def _checkpoint(step: str) -> None:
     """A seam for failure-injection tests: they patch this to raise at a named step of the import."""
 
 
-def _s():
+def _s() -> sql.Identifier:
     return sql.Identifier(uploads_schema())
 
 
@@ -78,7 +81,8 @@ def _row_hash(cells: list[str]) -> str:
 
 # -- staging ---------------------------------------------------------------------------------
 
-def prepare(content: str, types: list[str] | None, header_mapping: list[dict] | None):
+def prepare(content: str, types: list[str] | None,
+            header_mapping: list[dict[str, Any]] | None) -> tuple[list[list[str]], list[str], list[str]]:
     """Parse and check a CSV the way the dynamic loader does. Returns (rows, columns, types) or raises.
 
     ponytail: duplicates the loader's structural checks; the loader's own path goes away once
@@ -117,8 +121,8 @@ def prepare(content: str, types: list[str] | None, header_mapping: list[dict] | 
     return rows, columns, col_types
 
 
-def stage(cur, file_name: str, content: str, types: list[str] | None, header_mapping: list[dict] | None,
-          original: bytes | None, types_confirmed: bool = False) -> dict:
+def stage(cur: cursor, file_name: str, content: str, types: list[str] | None, header_mapping: list[dict[str, Any]] | None,
+          original: bytes | None, types_confirmed: bool = False) -> dict[str, Any]:
     """Store an upload for review without importing it. Every attempt is recorded (BR-23).
 
     Returns a result dict whose ``status`` is ``staged``, ``duplicate_file`` or ``invalid_structure``,
@@ -128,7 +132,8 @@ def stage(cur, file_name: str, content: str, types: list[str] | None, header_map
     try:
         rows, columns, col_types = prepare(content, types, header_mapping)
     except WorkflowError as exc:
-        result = {"status": "invalid_structure", "message": str(exc), **exc.extra}
+        result: LoadResult = {"status": "invalid_structure", "message": str(exc)}
+        result.update(cast(LoadResult, exc.extra))  # WorkflowError's fields (reason, ...), after the message as before
         return {**result, "uploadId": str(store_upload(cur, file_name, content, "dynamic", result, original=original))}
 
     cur.execute(sql.SQL("SELECT file_name, table_name, row_count FROM {}.csv_files WHERE file_hash = %s")
@@ -144,7 +149,7 @@ def stage(cur, file_name: str, content: str, types: list[str] | None, header_map
     cur.execute(sql.SQL("SELECT id, file_name, table_name, version FROM {}.csv_files WHERE dataset = %s "
                         "ORDER BY version DESC").format(_s()), (dataset,))
     priors = cur.fetchall()
-    flags: list[dict] = []
+    flags: list[DuplicateFlag] = []
     if priors:
         width, seen, hashes, numbers = len(columns), set(), [], []
         for n, raw in enumerate(rows[1:], start=1):
@@ -192,7 +197,7 @@ def derive_state(status: str, has_import: bool, sub_id: int | None, decision: st
     return "approved" if decision == "approve" else "rejected"
 
 
-def state_of(cur, upload_id: int) -> dict | None:
+def state_of(cur: cursor, upload_id: int) -> dict[str, Any] | None:
     """The upload's workflow state with its latest submission, approval and import. None if there is no such upload."""
     cur.execute(sql.SQL("SELECT u.status, u.uploader, u.file_name, u.sha256, u.types_provenance, {cols} "
                         "FROM {s}.uploads u {join} WHERE u.id = %s")
@@ -207,7 +212,7 @@ def state_of(cur, upload_id: int) -> dict | None:
     if sub_id is not None:
         cur.execute(sql.SQL("SELECT submitter, note, submitted_at FROM {}.submissions WHERE id = %s").format(_s()),
                     (sub_id,))
-        who, note, at = cur.fetchone()
+        who, note, at = fetch_one(cur)
         out["submission"] = {"id": str(sub_id), "submitter": who, "note": note, "at": at.isoformat()}
         cur.execute(sql.SQL("SELECT id, decision, reason, approver, decisions_upto, edits_upto, decided_at "
                             "FROM {}.approvals WHERE submission_id = %s").format(_s()), (sub_id,))
@@ -219,17 +224,17 @@ def state_of(cur, upload_id: int) -> dict | None:
         cur.execute(sql.SQL("SELECT id, idempotency_key, rows_in, rows_excluded, rows_edited, rows_duplicate, "
                             "rows_imported, csv_file_id, table_name, importer, imported_at FROM {}.imports "
                             "WHERE upload_id = %s").format(_s()), (upload_id,))
-        i = cur.fetchone()
+        i = fetch_one(cur)
         out["import"] = {"id": str(i[0]), "idempotencyKey": i[1], "reconciliation": _reconciliation(*i[2:7]),
                          "fileId": str(i[7]), "tableName": i[8], "importer": i[9], "at": i[10].isoformat()}
     return out
 
 
-def _reconciliation(rows_in: int, excluded: int, edited: int, duplicate: int, imported: int) -> dict:
+def _reconciliation(rows_in: int, excluded: int, edited: int, duplicate: int, imported: int) -> dict[str, Any]:
     return {"rowsIn": rows_in, "excluded": excluded, "edited": edited, "duplicate": duplicate, "imported": imported}
 
 
-def history(cur, upload_id: int) -> list[dict]:
+def history(cur: cursor, upload_id: int) -> list[dict[str, Any]]:
     """Every submission, decision and import on an upload, oldest first."""
     cur.execute(sql.SQL(
         "SELECT 'submitted', submitted_at, submitter, note FROM {s}.submissions WHERE upload_id = %s "
@@ -242,14 +247,14 @@ def history(cur, upload_id: int) -> list[dict]:
 
 # -- submit and decide -----------------------------------------------------------------------
 
-def _require(cur, upload_id: int) -> dict:
+def _require(cur: cursor, upload_id: int) -> dict[str, Any]:
     st = state_of(cur, upload_id)
     if st is None:
         raise WorkflowError(404, "No such upload")
     return st
 
 
-def submit(cur, upload_id: int, note: str | None) -> dict:
+def submit(cur: cursor, upload_id: int, note: str | None) -> dict[str, Any]:
     """Submit a staged or rejected upload for approval. The caller commits."""
     st = _require(cur, upload_id)
     if st["state"] == "legacy":
@@ -258,20 +263,20 @@ def submit(cur, upload_id: int, note: str | None) -> dict:
         raise WorkflowError(409, f"This upload is already {st['state']}", state=st["state"])
     cur.execute(sql.SQL("INSERT INTO {}.submissions (upload_id, submitter, note) VALUES (%s, %s, %s) RETURNING id")
                 .format(_s()), (upload_id, current_actor(), (note or "").strip() or None))
-    sub_id = cur.fetchone()[0]
+    sub_id = fetch_one(cur)[0]
     write_audit(cur, "submit", None, st["fileName"], None, "dynamic",
                 before={"upload": upload_id, "state": st["state"]},
                 after={"upload": upload_id, "submission": sub_id, "note": (note or "").strip() or None})
     return _require(cur, upload_id)
 
 
-def _self_approval_allowed(session: dict) -> bool:
+def _self_approval_allowed(session: dict[str, Any]) -> bool:
     """Read from the session (accounts.session_for), not control.tenants: the request runs as the tenant's own
     database role, which has no rights on the control schema (#297)."""
     return bool(session.get("allowSelfApproval"))
 
 
-def decide_approval(cur, upload_id: int, decision: str, reason: str | None, session: dict | None) -> dict:
+def decide_approval(cur: cursor, upload_id: int, decision: str, reason: str | None, session: dict[str, Any] | None) -> dict[str, Any]:
     """Approve or reject the pending submission. The caller commits.
 
     Approving needs every non-excluded row to pass validation (otherwise the import couldn't run),
@@ -293,10 +298,10 @@ def decide_approval(cur, upload_id: int, decision: str, reason: str | None, sess
                                      "A tenant with a single user can allow self-approval.")
     cur.execute(sql.SQL("SELECT COALESCE(max(id), 0) FROM {}.row_decisions WHERE upload_id = %s").format(_s()),
                 (upload_id,))
-    decisions_upto = cur.fetchone()[0]
+    decisions_upto = fetch_one(cur)[0]
     cur.execute(sql.SQL("SELECT COALESCE(max(id), 0) FROM {}.cell_edits WHERE upload_id = %s").format(_s()),
                 (upload_id,))
-    edits_upto = cur.fetchone()[0]
+    edits_upto = fetch_one(cur)[0]
     if decision == "approve":
         plan = effective_rows(cur, upload_id, decisions_upto, edits_upto)
         if plan["invalid"]:
@@ -305,7 +310,7 @@ def decide_approval(cur, upload_id: int, decision: str, reason: str | None, sess
     cur.execute(sql.SQL("INSERT INTO {}.approvals (submission_id, upload_id, decision, reason, approver, "
                         "decisions_upto, edits_upto) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id").format(_s()),
                 (int(st["submission"]["id"]), upload_id, decision, reason, current_actor(), decisions_upto, edits_upto))
-    approval_id = cur.fetchone()[0]
+    approval_id = fetch_one(cur)[0]
     write_audit(cur, decision, None, st["fileName"], None, "dynamic",
                 before={"upload": upload_id, "state": "submitted"},
                 after={"upload": upload_id, "submission": int(st["submission"]["id"]), "approval": approval_id,
@@ -315,7 +320,7 @@ def decide_approval(cur, upload_id: int, decision: str, reason: str | None, sess
 
 # -- the rows an import would load -----------------------------------------------------------
 
-def effective_rows(cur, upload_id: int, decisions_upto: int, edits_upto: int) -> dict:
+def effective_rows(cur: cursor, upload_id: int, decisions_upto: int, edits_upto: int) -> dict[str, Any]:
     """What an import of this upload loads, as of the given decision and edit ids (BR-33, BR-34).
 
     Applies the newest decision and edit per row up to those ids, drops excluded rows, validates the
@@ -324,7 +329,7 @@ def effective_rows(cur, upload_id: int, decisions_upto: int, edits_upto: int) ->
     and ``errors`` (capped) for rows that fail, counted in ``invalid``.
     """
     cur.execute(sql.SQL("SELECT columns, column_types FROM {}.uploads WHERE id = %s").format(_s()), (upload_id,))
-    columns, types = cur.fetchone()
+    columns, types = fetch_one(cur)
     cur.execute(sql.SQL("SELECT DISTINCT ON (row_number) row_number, decision FROM {}.row_decisions "
                         "WHERE upload_id = %s AND id <= %s ORDER BY row_number, id DESC").format(_s()),
                 (upload_id, decisions_upto))
@@ -354,7 +359,7 @@ def effective_rows(cur, upload_id: int, decisions_upto: int, edits_upto: int) ->
         if extra_cells(raw, width):
             error = {"column": "(beyond header)", "value": extra_cells(raw, width)[0],
                      "reason": ragged_row_reason(raw, width)}
-        values: list = []
+        values: list[Any] = []
         for c in range(width):
             if error:
                 break
@@ -378,11 +383,11 @@ def effective_rows(cur, upload_id: int, decisions_upto: int, edits_upto: int) ->
 
 # -- the import ------------------------------------------------------------------------------
 
-def _copy_text(v) -> str:
+def _copy_text(v: object) -> str:
     return ("true" if v else "false") if isinstance(v, bool) else str(v)
 
 
-def _copy_data(rows: list[tuple]) -> io.StringIO:
+def _copy_data(rows: list[tuple[Any, ...]]) -> io.StringIO:
     """CSV text for COPY ... NULL '\\N'. Every value is quoted, so a text value of \\N stays text."""
     buf = io.StringIO()
     for row in rows:
@@ -392,13 +397,13 @@ def _copy_data(rows: list[tuple]) -> io.StringIO:
     return buf
 
 
-def _replay(st: dict) -> dict:
+def _replay(st: dict[str, Any]) -> dict[str, Any]:
     i = st["import"]
     return {"status": "ok", "replayed": True, "importId": i["id"], "fileId": i["fileId"], "tableName": i["tableName"],
             "reconciliation": i["reconciliation"]}
 
 
-def import_upload(upload_id: int, key: str, session: dict | None) -> dict:
+def import_upload(upload_id: int, key: str, session: dict[str, Any] | None) -> dict[str, Any]:
     """Import an approved upload in one transaction, or change nothing (ADR-0002).
 
     ``key`` is the client's Idempotency-Key. Repeating a successful import with the same key returns
@@ -446,8 +451,8 @@ def import_upload(upload_id: int, key: str, session: dict | None) -> dict:
             "schemaCheck": schema_check}
 
 
-def _next_version(cur, schema: str, file_name: str, columns: list[str],
-                  col_types: list[str]) -> tuple[str, int, str, dict | None]:
+def _next_version(cur: cursor, schema: str, file_name: str, columns: list[str],
+                  col_types: list[str]) -> tuple[str, int, str, SchemaCheck | None]:
     """The dataset, the version this import becomes, its table name, and how it compares with the previous one."""
     # Same per-dataset lock as the loader, so versions are never handed out twice (M5).
     dataset = dataset_slug(file_name)
@@ -461,8 +466,8 @@ def _next_version(cur, schema: str, file_name: str, columns: list[str],
     return dataset, version, table_name, schema_check
 
 
-def _register_import(conn, cur, upload_id: int, key: str, st: dict, approval_id: int, table_name: str,
-                     columns: list[str], imported: int, counts: dict, dataset: str, version: int) -> tuple[int, int]:
+def _register_import(conn: connection, cur: cursor, upload_id: int, key: str, st: dict[str, Any], approval_id: int, table_name: str,
+                     columns: list[str], imported: int, counts: dict[str, Any], dataset: str, version: int) -> tuple[int, int]:
     """The csv_files row and the imports record. Returns their ids. Refuses bytes that were imported meanwhile."""
     try:
         cur.execute(sql.SQL(
@@ -474,18 +479,18 @@ def _register_import(conn, cur, upload_id: int, key: str, st: dict, approval_id:
     except psycopg2.errors.UniqueViolation:
         conn.rollback()  # the same bytes were imported meanwhile (exact-file dedup, BR-28)
         raise WorkflowError(409, "These exact file contents were already imported", state="duplicate_file") from None
-    file_id = cur.fetchone()[0]
+    file_id = int(fetch_one(cur)[0])
     cur.execute(sql.SQL(
         "INSERT INTO {}.imports (upload_id, approval_id, idempotency_key, rows_in, rows_excluded, "
         "rows_edited, rows_duplicate, rows_imported, csv_file_id, table_name, importer) "
         "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id").format(_s()),
         (upload_id, approval_id, key, counts["rowsIn"], counts["excluded"], counts["edited"],
          counts["duplicate"], imported, file_id, table_name, current_actor()))
-    return file_id, cur.fetchone()[0]
+    return file_id, int(fetch_one(cur)[0])
 
 
-def _create_and_fill(conn, cur, schema: str, table_name: str, import_id: int, columns: list[str],
-                     col_types: list[str], valid: list) -> None:
+def _create_and_fill(conn: connection, cur: cursor, schema: str, table_name: str, import_id: int, columns: list[str],
+                     col_types: list[str], valid: list[Any]) -> None:
     """Create the dataset's table and fill it through a temporary staging table, checking every row arrived."""
     target, staging = sql.Identifier(schema, table_name), sql.Identifier(f"_stg_{import_id}")
     col_defs = sql.SQL(", ").join(sql.SQL("{} {}").format(sql.Identifier(c), sql.SQL(_TYPE_SQL[t]))
