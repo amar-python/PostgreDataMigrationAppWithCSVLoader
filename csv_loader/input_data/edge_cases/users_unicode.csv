@@ -1,0 +1,7 @@
+id,email,full_name,signup_date,country,lifetime_value
+1,user1@example.com,Hans Müller,2024-01-11,US,10.00
+2,user2@example.com,José María Ñoño,2024-01-12,US,10.00
+3,user3@example.com,田中太郎,2024-01-13,US,10.00
+4,user4@example.com,李小明,2024-01-14,US,10.00
+5,user5@example.com,Åke Svensson,2024-01-15,US,10.00
+6,user6@example.com,Łukasz Kowalski,2024-01-16,US,10.00

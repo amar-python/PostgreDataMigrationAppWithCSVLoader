@@ -1,0 +1,11 @@
+{
+  "job_name": "t",
+  "started_at": "2026-11-24T11:26:48.796361+00:00",
+  "finished_at": "2026-11-24T11:26:48.797188+00:00",
+  "success": false,
+  "rows_in_csv": 0,
+  "rows_in_staging": 0,
+  "rows_in_target": 0,
+  "error": "Pre-import crashed: RuntimeError: simulated parser explosion",
+  "stages": []
+}

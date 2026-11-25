@@ -1,0 +1,16 @@
+2026-11-24 11:27:04 | INFO    | migrator.20261124T112704Z-63e50b | === Starting job: t ===
+2026-11-24 11:27:04 | ERROR   | migrator.20261124T112704Z-63e50b | Pre-import crashed for t
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-PostgreDataMigrationApp/4f5d536a-8421-5eff-88f5-87403a2a12ea/scratchpad/wt-samples/csv_loader/src/migrator.py", line 56, in run_job
+    pre, csv_df = validate_csv(job)
+                  ^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/mock.py", line 1124, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/mock.py", line 1128, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/mock.py", line 1183, in _execute_mock_call
+    raise effect
+RuntimeError: simulated parser explosion
+2026-11-24 11:27:04 | INFO    | migrator.20261124T112704Z-63e50b | Job t finished: success=False, report=reports/20261124T112704Z-63e50b/t.json
