@@ -24,6 +24,8 @@ from pathlib import Path
 FLOORS: dict[str, int] = {
     "api/services/csv_parse.py": 79,
     "api/services/dynamic_loader.py": 84,
+    # #330: the pieces both loaders share; 100 % on the full suite of 25 Nov 2026.
+    "api/services/load_common.py": 96,
     "api/services/te_loader.py": 96,
 }
 

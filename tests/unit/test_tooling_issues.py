@@ -206,7 +206,8 @@ class TestCatalogueGenerator(unittest.TestCase):
 
 @pytest.mark.unit
 class CoverageFloorGate(unittest.TestCase):
-    FILES = ("api/services/csv_parse.py", "api/services/dynamic_loader.py", "api/services/te_loader.py")
+    FILES = ("api/services/csv_parse.py", "api/services/dynamic_loader.py", "api/services/load_common.py",
+             "api/services/te_loader.py")
 
     # Package floors (#274, #278): the report must also hold files from these packages, with statement counts.
     PACKAGE_FILES = {"api/main.py": 100, "streamlit_app/app.py": 100}
@@ -262,7 +263,9 @@ class CoverageFloorGate(unittest.TestCase):
 
     def test_fails_when_the_api_drops_below_its_package_floor(self):
         full = {f: 100.0 for f in self.FILES}
-        self.assertEqual(self._gate(full, packages={"api/main.py": 50, "streamlit_app/app.py": 100}), 1)
+        # api/main.py big enough that api/ is well under its floor however many loader files the report holds.
+        low = self._summary(50, statements=1000)
+        self.assertEqual(self._gate(full, packages={"api/main.py": low, "streamlit_app/app.py": 100}), 1)
 
     def test_fails_when_the_streamlit_app_is_not_in_the_report_at_all(self):
         """Taking --cov=streamlit_app out of CI must fail the gate, not quietly stop measuring it."""
