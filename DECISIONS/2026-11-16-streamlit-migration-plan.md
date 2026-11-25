@@ -13,7 +13,7 @@ Review:  Before step 5 (packaging) starts. It still needs the offline dry run (#
 | 2 Review screen | #252 | Merged (#267) |
 | 3 Import history | #253 | Merged (#269) |
 | 4 Upload and imported files | #255 | Merged (#270, with this update) |
-| 5 Packaging | #256 | Not started. Waits for the #60 dry run; the Azure half is decided (Container Apps, private network only) |
+| 5 Packaging | #256 | Repository side in a draft PR (24 Nov): the Ubuntu bundle ships Streamlit beside React (`te-streamlit`, port 8501, an eighth PASS line), and `infra/terraform-prod` defines the API and Streamlit apps (`terraform validate` only, nothing applied). Still to do: the clean-VM dry run (#60) with the no-outside-connection check, and on Azure the WebSocket and 50 MiB upload checks |
 | 6 Cutover and deletion | #257 | Not started. Needs steps 1 to 5. The accessibility job already scans the Streamlit app too (#388), so the React scans can go with React |
 | Tests | #258 | Done as each screen landed: 364 unit tests (`AppTest` and plain functions) and 49 browser tests in four files. The browser tests run in CI in their own `browser` job (#273), a required check on `main` since 24 Nov |
 
