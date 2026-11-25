@@ -3,7 +3,8 @@
 The lint options are written in two places, because flake8 does not read pyproject.toml: .flake8 (editors and the
 pre-commit hook) and scripts/lint.sh (CI). The secret scan's version is in .pre-commit-config.yaml and in
 security-scan.yml. The type check is configured in pyproject.toml and run by `make typecheck` from the free-tier job.
-These tests fail when one copy changes and the other does not, or when the type check is quietly switched off.
+The formatter (ruff) is configured in pyproject.toml, checked by scripts/lint.sh and run by a pre-commit hook.
+These tests fail when one copy changes and the other does not, or when a check is quietly switched off.
 """
 
 from __future__ import annotations
@@ -48,7 +49,7 @@ def _hook_ids() -> set[str]:
 
 
 def test_pre_commit_runs_the_checks_324_asks_for():
-    assert {"flake8", "bandit", "gitleaks", "mypy", "gap-registers"} <= _hook_ids()
+    assert {"ruff-check", "ruff-format", "flake8", "bandit", "gitleaks", "mypy", "gap-registers"} <= _hook_ids()
 
 
 def test_pre_commit_gitleaks_is_the_version_ci_runs():
@@ -90,11 +91,24 @@ def test_type_check_is_not_silenced():
 
 
 # Every flag `mypy --strict` turns on (mypy 2.x), split between the global section and the api/ override.
-STRICT_GLOBAL = {"warn_unused_configs", "warn_unused_ignores", "warn_redundant_casts", "strict_equality",
-                 "extra_checks", "check_untyped_defs"}
-STRICT_API = {"no_implicit_reexport", "disallow_untyped_decorators", "disallow_untyped_defs",
-              "disallow_incomplete_defs", "disallow_any_generics", "disallow_untyped_calls",
-              "disallow_subclassing_any", "warn_return_any"}
+STRICT_GLOBAL = {
+    "warn_unused_configs",
+    "warn_unused_ignores",
+    "warn_redundant_casts",
+    "strict_equality",
+    "extra_checks",
+    "check_untyped_defs",
+}
+STRICT_API = {
+    "no_implicit_reexport",
+    "disallow_untyped_decorators",
+    "disallow_untyped_defs",
+    "disallow_incomplete_defs",
+    "disallow_any_generics",
+    "disallow_untyped_calls",
+    "disallow_subclassing_any",
+    "warn_return_any",
+}
 
 
 def test_every_package_gets_the_strict_flags_that_need_no_annotations():
@@ -121,9 +135,15 @@ def test_the_loader_result_type_declares_every_key_the_loaders_set():
 
     declared = set(get_type_hints(LoadResult))
     used: set[str] = set()
-    trees = [ast.parse((ROOT / path).read_text(encoding="utf-8")) for path in (
-        "api/services/dynamic_loader.py", "api/services/te_loader.py", "api/services/load_common.py",
-        "api/services/staged_import.py")]
+    trees = [
+        ast.parse((ROOT / path).read_text(encoding="utf-8"))
+        for path in (
+            "api/services/dynamic_loader.py",
+            "api/services/te_loader.py",
+            "api/services/load_common.py",
+            "api/services/staged_import.py",
+        )
+    ]
     # Only the upload route: the preview route also calls its dict `result`, but that is build_preview's shape.
     routes = ast.parse((ROOT / "api/routers/csv_routes.py").read_text(encoding="utf-8"))
     trees += [n for n in ast.walk(routes) if isinstance(n, ast.FunctionDef) and n.name == "upload"]
@@ -131,9 +151,13 @@ def test_the_loader_result_type_declares_every_key_the_loaders_set():
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and getattr(node.func, "id", "") in ("ok_result", "rows_failed"):
                 used |= {k.arg for k in node.keywords if k.arg}
-            if (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
-                    and node.value.id == "result" and isinstance(node.slice, ast.Constant)
-                    and isinstance(node.slice.value, str)):
+            if (
+                isinstance(node, ast.Subscript)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "result"
+                and isinstance(node.slice, ast.Constant)
+                and isinstance(node.slice.value, str)
+            ):
                 used.add(node.slice.value)
     assert used, "found no result keys; the loaders' structure changed, so update this test"
     assert used <= declared, f"set but not declared in LoadResult: {sorted(used - declared)}"
@@ -146,3 +170,62 @@ def test_ci_runs_the_type_check():
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     target = re.search(r"^typecheck:\n\t(.+)$", makefile, re.M)
     assert target and target.group(1).strip() == "python3 -m mypy", "`make typecheck` runs mypy from its config"
+
+
+# ── Formatting and import order (#324) ────────────────────────────────────────────────────────────────────────
+
+
+def _ruff() -> dict:
+    return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["ruff"]
+
+
+def test_the_formatter_wraps_at_the_lint_line_length():
+    cfg = configparser.ConfigParser()
+    cfg.read(ROOT / ".flake8")
+    assert _ruff()["line-length"] == int(cfg["flake8"]["max-line-length"])
+
+
+def test_ruff_only_orders_imports_and_leaves_the_lint_to_flake8():
+    """Two linters with different rules would disagree; flake8 is the one CI's lint options are tested against."""
+    assert _ruff()["lint"]["select"] == ["I"]
+
+
+def test_only_python_files_are_formatted():
+    """ruff also formats Python code blocks inside Markdown; the docs' examples are not code the formatter owns."""
+    assert _ruff()["include"] == ["*.py"]
+    hook = next(h for r in _pre_commit()["repos"] for h in r["hooks"] if h["id"] == "ruff-format")
+    assert hook.get("types_or") == ["python"], "the ruff-format hook would format Markdown files"
+
+
+def test_files_named_on_the_command_line_are_still_excluded():
+    """scripts/lint.sh and pre-commit pass files by name; without force-exclude ruff would check excluded ones."""
+    assert _ruff()["force-exclude"] is True
+
+
+def test_every_excluded_path_exists():
+    """An exclusion outliving its folder hides nothing, and the comment telling someone to remove it is then lost."""
+    missing = [p for p in _ruff().get("extend-exclude", []) if not (ROOT / p).exists()]
+    assert not missing, f"pyproject.toml [tool.ruff] extend-exclude names paths that do not exist: {missing}"
+
+
+def test_the_ci_lint_checks_formatting_and_import_order():
+    text = (ROOT / "scripts" / "lint.sh").read_text(encoding="utf-8")
+    assert re.search(r"python3 -m ruff format --check\b", text), "scripts/lint.sh does not run `ruff format --check`"
+    assert re.search(r"python3 -m ruff check\b", text), "scripts/lint.sh does not run `ruff check` (import order)"
+
+
+def test_pre_commit_ruff_is_the_version_ci_installs():
+    rev = next(r["rev"] for r in _pre_commit()["repos"] if r["repo"].endswith("/ruff-pre-commit"))
+    lock = (ROOT / "requirements-dev.lock").read_text(encoding="utf-8")
+    locked = re.search(r"^ruff==([\d.]+)", lock, re.M)
+    assert locked, "requirements-dev.lock has no ruff; CI's lint would not find it"
+    assert rev == f"v{locked.group(1)}", f"pre-commit runs ruff {rev}, CI installs ruff {locked.group(1)}"
+
+
+def test_blame_ignore_revs_lists_only_full_commit_ids():
+    """git and GitHub skip a line they cannot read as a full 40-character id, so a short one ignores nothing."""
+    lines = (ROOT / ".git-blame-ignore-revs").read_text(encoding="utf-8").splitlines()
+    revs = [ln.strip() for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
+    assert revs, ".git-blame-ignore-revs lists no commit"
+    bad = [r for r in revs if not re.fullmatch(r"[0-9a-f]{40}", r)]
+    assert not bad, f"not full commit ids: {bad}"

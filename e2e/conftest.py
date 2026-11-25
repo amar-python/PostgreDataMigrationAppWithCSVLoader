@@ -31,6 +31,8 @@ from api.config import settings  # noqa: E402
 from api.db import Conn  # noqa: E402
 from scripts import pg_login  # noqa: E402  (its server_available asks whether PostgreSQL is there)
 
+# Keeps preflight, and the imports after it, in the order they were written.
+# isort: split
 import preflight  # noqa: E402
 from api.services import accounts  # noqa: E402
 from api.tenancy import drop_tenant_role, migrate_tenant, schema_for  # noqa: E402

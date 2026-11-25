@@ -155,10 +155,11 @@ class ImportSummaryCounts(unittest.TestCase):
 
     def test_counts_reconcile_for_a_clean_file(self):
         body = self._upload(f"col_a\n{self.tag}-1\n{self.tag}-2\n{self.tag}-3\n")
+        summary = {k: body[k] for k in SUMMARY_FIELDS}
         self.assertEqual(
             body["totalRows"],
             body["insertedRows"] + body["duplicateRowsSkipped"] + body["failedRows"],
-            f"counts do not reconcile: {({k: body[k] for k in SUMMARY_FIELDS})}",
+            f"counts do not reconcile: {summary}",
         )
 
     def test_counts_reconcile_for_a_mixed_file(self):

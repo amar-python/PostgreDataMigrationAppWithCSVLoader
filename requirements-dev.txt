@@ -24,3 +24,6 @@ types-psycopg2>=2.9.21
 
 # #324: local hooks before each commit (.pre-commit-config.yaml). Run `pre-commit install` once per clone.
 pre-commit>=4.7.0
+
+# #324: code formatter and import order (pyproject.toml [tool.ruff]); flake8 above stays the lint.
+ruff>=0.17.6

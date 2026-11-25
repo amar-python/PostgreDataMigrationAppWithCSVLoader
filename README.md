@@ -304,7 +304,8 @@ python evals\runner.py --tiers p,i,s,e   # 27 scenarios: Tier P 23, I 1, S 1, E 
 | `quality-gate.yml` — `integration-postgres` | ubuntu | the check named **integration (postgres service)**: passes only if the shards, the egress job and the coverage gate all passed (or were all skipped for a documentation-only change) |
 | `python-validator-tests.yml` | windows | database-free markers |
 
-The `free-tier` job also runs the lint (`make lint`) and the type check (`make typecheck`).
+The `free-tier` job also runs the lint (`make lint`, which includes the format and import-order check) and the type
+check (`make typecheck`).
 
 ### Local checks (pre-commit)
 
@@ -319,13 +320,26 @@ pre-commit run --all-files            # optional: check the whole tree now
 
 | Hook | Checks | Configured in |
 |---|---|---|
+| ruff-check | import order, fixed in place | `pyproject.toml` `[tool.ruff]` |
+| ruff-format | formatting (black's style, 120 columns), fixed in place | `pyproject.toml` `[tool.ruff]` |
 | flake8 | the CI lint options | `.flake8` (kept equal to `scripts/lint.sh` by a test) |
 | bandit | security lint, medium severity and up, not over `tests/` or `e2e/` | `.pre-commit-config.yaml` |
 | gitleaks | secrets in the staged changes | `.gitleaks.toml` |
 | mypy | static types in `api/` and `streamlit_app/` (#323) | `pyproject.toml` `[tool.mypy]` |
 | gap-registers | the gap registers in `docs/` agree with `docs/VCRM.md` | `tests/unit/test_gap_registers_agree.py` |
 
-Run any of them alone with `make typecheck`, `make lint` or `pre-commit run <hook> --all-files`.
+Run any of them alone with `make typecheck`, `make lint` or `pre-commit run <hook> --all-files`. `make format`
+formats the whole tree and orders its imports. When a ruff hook changes a file the commit stops: look at the change,
+`git add` it and commit again.
+
+The tree was formatted in one commit, listed in `.git-blame-ignore-revs`. GitHub's blame view skips it already; for
+`git blame` on your machine, run once per clone:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
+`csv_loader/` is not formatted yet (`pyproject.toml` explains why); it is checked once it is.
 `./preflight.sh` (or `preflight.ps1`) warns if the hooks are not installed.
 
 ---

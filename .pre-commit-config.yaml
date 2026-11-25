@@ -4,15 +4,25 @@
 #   pre-commit install                      (Windows PowerShell too: pre-commit runs these hooks itself)
 #   pre-commit run --all-files              (optional: check the whole tree now)
 #
+#   ruff       import order (fixed in place) and formatting, as pyproject.toml [tool.ruff] configures them; a
+#              commit the hook changed stops, so you can look at the change and stage it
 #   flake8     the lint options in .flake8, which match scripts/lint.sh (the CI lint)
 #   bandit     as scripts/lint.sh runs it: medium severity and up, not over test code (tests/, e2e/)
 #   gitleaks   the secret scan, with the repository's .gitleaks.toml, over the staged changes (#326)
 #   mypy       the type check configured in pyproject.toml (#323)
 #   gap-registers  tests/unit/test_gap_registers_agree.py, when a gap register or the VCRM changes
 #
-# No formatter yet: adopting one means reformatting the codebase, which #324 wants as a separate one-off commit.
-# Versions: flake8 and bandit are the minimums requirements-dev.txt asks for; gitleaks is the one security-scan.yml runs.
+# Versions: ruff, flake8 and bandit are the minimums requirements-dev.txt asks for; gitleaks is the one
+# security-scan.yml runs.
 repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.6
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+      - id: ruff-format
+        types_or: [python]   # not Markdown: see include in pyproject.toml [tool.ruff]
+
   - repo: https://github.com/PyCQA/flake8
     rev: 7.3.0
     hooks:

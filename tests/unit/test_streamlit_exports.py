@@ -12,6 +12,8 @@ import pytest
 from openpyxl import load_workbook
 
 from tests.unit import streamlit_harness  # noqa: F401  (puts streamlit_app on the path)
+# The imports below need the path the import above sets up, so the import sort must not move them up.
+# isort: split
 
 import exports as x  # noqa: E402
 

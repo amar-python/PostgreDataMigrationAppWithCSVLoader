@@ -219,8 +219,9 @@ class UploadFailureReasons(_Base):
     def test_filters_combine(self):
         self.upload("up", "a.csv", f"k\n{self.tag}a\n")
         self.upload("ad", "b.csv", f"k\n{self.tag}b\n")
-        listing = lambda **p: self.client.get("/api/csv/uploads", headers=self.auth["au"],  # noqa: E731
-                                              params={"file": self.tag, **p}).json()
+        def listing(**p):
+            return self.client.get("/api/csv/uploads", headers=self.auth["au"], params={"file": self.tag, **p}).json()
+
         self.assertEqual(len(listing()), 2)
         self.assertEqual([u["uploader"] for u in listing(uploader=f"{self.slug}_ad")], [f"{self.slug}_ad"])
         self.assertEqual(len(listing(status="imported")), 2)

@@ -14,6 +14,8 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from tests.unit.streamlit_harness import APP_DIR, ROLES, errors, later, widget
+# The imports below need the path the import above sets up, so the import sort must not move them up.
+# isort: split
 
 import api_client  # noqa: E402
 import upload_model as u  # noqa: E402

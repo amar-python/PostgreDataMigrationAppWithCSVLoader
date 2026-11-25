@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/lint.sh — flake8 + bandit over every tracked Python file.
+# scripts/lint.sh — flake8 + bandit + the ruff format and import-order checks over every tracked Python file.
 # Mirrors: bun run slop (full slop-scan report in gstack)
 #
 # Scope is discovered from git, not listed by hand (#322). A hand-kept list had fallen behind twice: it named 14 of
@@ -9,6 +9,8 @@
 #   flake8  every tracked .py file
 #   bandit  every tracked .py file except test code (a tests/ folder at any depth, and e2e/), where its findings are
 #           about fixtures and asserts
+#   ruff    `ruff format --check` and the import order (#324), over the same files as flake8 less the paths
+#           pyproject.toml [tool.ruff] excludes. It only checks; `make format` rewrites.
 #
 # LINT_EXCLUDE below skips exact paths from BOTH tools. Give each entry a reason. It is empty today, and
 # tests/unit/test_lint_scope.py fails if a tracked file is outside the scope and not named here.
@@ -64,7 +66,7 @@ fi
 echo -e "\n${YELLOW}=== flake8 (style + logic): ${#LINT_FILES[@]} files ===${NC}"
 if python3 -m flake8 "${LINT_FILES[@]}" \
         --max-line-length=120 \
-        --extend-ignore=E501,E221,E272; then
+        --extend-ignore=E501,E221,E272,E203; then
     echo -e "${GREEN}✓ flake8 clean${NC}"
 else
     echo -e "${RED}✗ flake8 found issues — fix before merging${NC}"
@@ -78,6 +80,14 @@ elif python3 -m bandit "${SECURITY_FILES[@]}" -ll -q 2>&1; then
     echo -e "${GREEN}✓ bandit clean${NC}"
 else
     echo -e "${RED}✗ bandit found security issues${NC}"
+    exit 1
+fi
+
+echo -e "\n${YELLOW}=== ruff (format + import order, #324) ===${NC}"
+if python3 -m ruff format --check --quiet "${LINT_FILES[@]}" && python3 -m ruff check --quiet "${LINT_FILES[@]}"; then
+    echo -e "${GREEN}✓ formatted, imports in order${NC}"
+else
+    echo -e "${RED}✗ not formatted or imports out of order: run 'make format' and commit the result${NC}"
     exit 1
 fi
 

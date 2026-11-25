@@ -1,6 +1,8 @@
 # flake8 reads this file; it does not read pyproject.toml (#324). Editors and the pre-commit hook pick it up.
 # scripts/lint.sh, which CI runs, passes the same options on its command line, and
 # tests/unit/test_tool_config.py fails if the two disagree.
+# E203 (whitespace before ":") is off because the formatter (ruff, #324) writes slices as `x[a + 1 :]`, as black does;
+# flake8's documentation lists E203 as incompatible with that style.
 [flake8]
 max-line-length = 120
-extend-ignore = E501,E221,E272
+extend-ignore = E501,E221,E272,E203

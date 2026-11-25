@@ -6,6 +6,7 @@
 #             on its command line; tests/unit/test_tool_config.py fails if the two disagree.
 #   pytest    pytest.ini (it takes precedence over this file, and moving it would churn every test job)
 #   coverage  .coveragerc (tests/unit/test_ci_quality_gate.py keeps its scope in step with the Makefile and CI)
+# ruff formats the code and orders imports (below); flake8 stays the lint, so the CI lint did not change.
 
 [project]
 name = "postgre-data-migration-app"
@@ -51,3 +52,28 @@ warn_return_any = true
 [[tool.mypy.overrides]]
 module = ["pandas", "pandas.*", "openpyxl", "openpyxl.*"]
 ignore_missing_imports = true
+
+# ── Formatting and import order (#324) ───────────────────────────────────────────────────────────────────────────
+# `make format` rewrites; scripts/lint.sh (CI's free-tier job) and the pre-commit hooks only check. ruff is used here
+# for those two jobs alone: flake8 (.flake8) is still the lint. The one-off commit that formatted the tree is listed
+# in .git-blame-ignore-revs, so `git blame` skips it.
+[tool.ruff]
+line-length = 120          # the same as flake8's max-line-length (.flake8); a test keeps the two equal
+target-version = "py312"
+# Pages import their siblings as top-level modules (`import api_client`), and evals/runner.py imports gap_report the
+# same way; listing the folders here sorts those imports as first-party, as they are.
+src = [".", "streamlit_app", "evals"]
+# Python files only. ruff would also format the Python examples inside Markdown, and the docs' examples are
+# written for reading, not run.
+include = ["*.py"]
+# Checked even when a file is passed by name, as scripts/lint.sh and pre-commit do.
+force-exclude = true
+# csv_loader/ is not formatted yet: five open PRs (#431-#435) change it, and reformatting under them would conflict
+# every one. It is formatted in a commit of its own once they have merged; remove this line then.
+extend-exclude = ["csv_loader"]
+
+[tool.ruff.lint]
+select = ["I"]             # import order only (isort's rules); everything else is flake8's job
+
+[tool.ruff.format]
+# black's style (ruff's default), at the line length above.

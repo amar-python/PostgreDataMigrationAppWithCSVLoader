@@ -68,7 +68,7 @@ def upgrade() -> None:
             'before_value', r.before_value, 'after_value', r.after_value)::text, 'UTF8')), 'hex')
         $$""")
     # Chain the rows that already exist, oldest first.
-    op.execute(f"""DO $$
+    chain = f"""DO $$
         DECLARE r RECORD; prev TEXT := NULL;
         BEGIN
           FOR r IN SELECT * FROM {t} ORDER BY id LOOP
@@ -77,7 +77,8 @@ def upgrade() -> None:
             SELECT {s}.audit_row_hash(prev, a) INTO prev FROM {t} a WHERE a.id = r.id;
             UPDATE {t} SET row_hash = prev WHERE id = r.id;
           END LOOP;
-        END $$""".replace("TG_SCHEMA_PLACEHOLDER", _literal(settings.UPLOADS_SCHEMA)))  # nosec B608 # {s}, {t} are quoted identifiers; the value is escaped by _literal
+        END $$"""  # nosec B608 # {s}, {t} are quoted identifiers; the value is escaped by _literal
+    op.execute(chain.replace("TG_SCHEMA_PLACEHOLDER", _literal(settings.UPLOADS_SCHEMA)))
     op.execute(f"""
         CREATE FUNCTION {s}.audit_chain() RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN

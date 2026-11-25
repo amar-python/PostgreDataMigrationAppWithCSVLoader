@@ -13,6 +13,8 @@ import pytest
 import streamlit as st
 
 from tests.unit.streamlit_harness import errors, screen, widget
+# The imports below need the path the import above sets up, so the import sort must not move them up.
+# isort: split
 
 import api_client  # noqa: E402
 import history_model as h  # noqa: E402

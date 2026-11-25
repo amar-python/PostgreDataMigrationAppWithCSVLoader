@@ -7,6 +7,8 @@ text must not become Markdown, a timeout is not "can't reach the API", and the v
 import pytest
 
 from tests.unit import streamlit_harness  # noqa: F401  (puts streamlit_app on the path)
+# The imports below need the path the import above sets up, so the import sort must not move them up.
+# isort: split
 
 import api_client  # noqa: E402
 import outcomes as o  # noqa: E402
