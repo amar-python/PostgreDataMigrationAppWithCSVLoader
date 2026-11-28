@@ -17,6 +17,7 @@ reaches containers), counts what it refused, and the job fails if the count is n
 
 `tooling`: these run bash, and the Windows job's `bash` is WSL's, with no distribution installed.
 """
+
 from __future__ import annotations
 
 import json
@@ -33,7 +34,7 @@ pytestmark = pytest.mark.tooling
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "egress_firewall.sh"
-USER = "nobody"      # exists on every Linux and macOS; never root, and not the user running the tests (not under sudo)
+USER = "nobody"  # exists on every Linux and macOS; never root, and not the user running the tests (not under sudo)
 
 FAKE_IPTABLES = '''#!{python}
 """A stateful stand-in for iptables: just the commands egress_firewall.sh uses."""
@@ -100,14 +101,14 @@ else:
 save()
 '''
 
-FAKE_SETPRIV = '''#!/bin/sh
+FAKE_SETPRIV = """#!/bin/sh
 # Records how it was called, then runs the command after the options (the real one would switch user first).
 echo "$@" >> "{calls}"
 while [ $# -gt 0 ]; do
   case "$1" in --*) shift ;; *) break ;; esac
 done
 exec "$@"
-'''
+"""
 
 
 @pytest.fixture
@@ -153,8 +154,9 @@ def fakes(tmp_path):
 
 def run(fakes, *args: str, env: dict | None = None) -> subprocess.CompletedProcess:
     full_env = {"PATH": fakes.path + os.pathsep + "/usr/bin:/bin", "HOME": str(Path.home()), **(env or {})}
-    return subprocess.run([shutil.which("bash"), str(SCRIPT), *args], cwd=ROOT, env=full_env,
-                          capture_output=True, text=True, timeout=60)
+    return subprocess.run(
+        [shutil.which("bash"), str(SCRIPT), *args], cwd=ROOT, env=full_env, capture_output=True, text=True, timeout=60
+    )
 
 
 def uid_of(user: str) -> str:
@@ -162,8 +164,12 @@ def uid_of(user: str) -> str:
 
 
 # Loopback (the local database) and the Docker bridges (containers only) return to the normal rules; the rest is refused.
-CHAIN_RULES = [["-o", "lo", "-j", "RETURN"], ["-o", "docker0", "-j", "RETURN"], ["-o", "br+", "-j", "RETURN"],
-               ["-j", "REJECT"]]
+CHAIN_RULES = [
+    ["-o", "lo", "-j", "RETURN"],
+    ["-o", "docker0", "-j", "RETURN"],
+    ["-o", "br+", "-j", "RETURN"],
+    ["-j", "REJECT"],
+]
 
 
 def jumps(fakes) -> list[list[str]]:
@@ -171,6 +177,7 @@ def jumps(fakes) -> list[list[str]]:
 
 
 # -- install ---------------------------------------------------------------------------------------------------------
+
 
 def test_install_rejects_the_users_traffic_except_to_this_machine(fakes):
     done = run(fakes, "install", USER)
@@ -212,6 +219,7 @@ def test_install_needs_a_user_argument(fakes):
 
 # -- count, check, reset -----------------------------------------------------------------------------------------------
 
+
 def test_count_prints_the_refused_packets(fakes):
     run(fakes, "install", USER)
     fakes.set_packets(7)
@@ -247,6 +255,7 @@ def test_check_cannot_pass_when_the_block_was_never_installed(fakes):
 
 # -- remove ----------------------------------------------------------------------------------------------------------
 
+
 def test_remove_takes_the_rule_and_the_chain_away_and_leaves_other_rules(fakes):
     fakes.add_other_rule("-m", "owner", "--uid-owner", "999", "-j", "ACCEPT")
     run(fakes, "install", USER)
@@ -263,6 +272,7 @@ def test_remove_is_safe_when_nothing_is_installed(fakes):
 
 
 # -- run -------------------------------------------------------------------------------------------------------------
+
 
 def test_run_executes_the_command_as_that_user_with_the_callers_environment(fakes):
     done = run(fakes, "run", USER, "--", "printenv", "EGRESS_TEST_MARKER", env={"EGRESS_TEST_MARKER": "kept"})

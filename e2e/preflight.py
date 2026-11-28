@@ -32,8 +32,10 @@ def check_browser(env: Mapping[str, str]) -> str | None:
     and a missing one is reported by conftest's browser fixture, which is the only place that can tell."""
     override = env.get("E2E_CHROMIUM")
     if override and not Path(override).exists():
-        return (f"E2E_CHROMIUM points at {override}, which does not exist. Unset it to use Playwright's own "
-                "Chromium (`playwright install chromium`), or point it at an installed Chrome or Chromium")
+        return (
+            f"E2E_CHROMIUM points at {override}, which does not exist. Unset it to use Playwright's own "
+            "Chromium (`playwright install chromium`), or point it at an installed Chrome or Chromium"
+        )
     return None
 
 
@@ -43,8 +45,10 @@ def check_postgres(host: str, port: str | int, probe: Callable[[str, str], tuple
     up, why = probe(host, str(port))
     if up:
         return None
-    return (f"PostgreSQL is not accepting connections at {host}:{port} ({why}). Start it, or set PGHOST and "
-            "PGPORT to where it is, and deploy the dev database (bash build/deploy_all.sh dev)")
+    return (
+        f"PostgreSQL is not accepting connections at {host}:{port} ({why}). Start it, or set PGHOST and "
+        "PGPORT to where it is, and deploy the dev database (bash build/deploy_all.sh dev)"
+    )
 
 
 def check_ports(ports: Iterable[int], is_free: Callable[[int], bool]) -> list[str]:
@@ -63,12 +67,24 @@ def check_streamlit() -> str | None:
     return "Streamlit is not installed: pip install -r streamlit_app/requirements.txt"
 
 
-def problems(*, root: Path, env: Mapping[str, str], pg_host: str, pg_port: str | int,
-             probe: Callable[[str, str], tuple[bool, str]], ports: Iterable[int],
-             is_free: Callable[[int], bool]) -> list[str]:
+def problems(
+    *,
+    root: Path,
+    env: Mapping[str, str],
+    pg_host: str,
+    pg_port: str | int,
+    probe: Callable[[str, str], tuple[bool, str]],
+    ports: Iterable[int],
+    is_free: Callable[[int], bool],
+) -> list[str]:
     """Every problem found, in the order a person would fix them. Empty when the tests can start."""
-    found = [check_playwright(), check_browser(env), check_streamlit(), check_node_modules(root),
-             check_postgres(pg_host, pg_port, probe)]
+    found = [
+        check_playwright(),
+        check_browser(env),
+        check_streamlit(),
+        check_node_modules(root),
+        check_postgres(pg_host, pg_port, probe),
+    ]
     return [m for m in found if m] + check_ports(ports, is_free)
 
 

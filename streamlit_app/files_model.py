@@ -22,14 +22,22 @@ def page_count(total: int) -> int:
 
 def files_frame(files: list[dict], first: int = 1) -> pd.DataFrame:
     """A page of the list of imported files, numbered from `first`."""
-    return pd.DataFrame([{
-        "#": first + i, "File": m.literal(f["file_name"]), "Table": m.literal(f["table_name"]),
-        "Columns": str(len(f.get("column_names") or [])), "Rows": str(f["row_count"]),
-        "Failed": "" if not f.get("failed_rows") else str(f["failed_rows"]),
-        "Uploaded (UTC)": m.when(f["created_at"]),
-        "Uploaded by": m.literal(f["uploader"]) if f.get("uploader") else "",
-    } for i, f in enumerate(files)], columns=["#", "File", "Table", "Columns", "Rows", "Failed", "Uploaded (UTC)",
-                                              "Uploaded by"]).set_index("#")
+    return pd.DataFrame(
+        [
+            {
+                "#": first + i,
+                "File": m.literal(f["file_name"]),
+                "Table": m.literal(f["table_name"]),
+                "Columns": str(len(f.get("column_names") or [])),
+                "Rows": str(f["row_count"]),
+                "Failed": "" if not f.get("failed_rows") else str(f["failed_rows"]),
+                "Uploaded (UTC)": m.when(f["created_at"]),
+                "Uploaded by": m.literal(f["uploader"]) if f.get("uploader") else "",
+            }
+            for i, f in enumerate(files)
+        ],
+        columns=["#", "File", "Table", "Columns", "Rows", "Failed", "Uploaded (UTC)", "Uploaded by"],
+    ).set_index("#")
 
 
 def file_label(f: dict) -> str:

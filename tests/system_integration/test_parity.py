@@ -7,6 +7,7 @@ deployments.
 
 All tests skip automatically when PostgreSQL is not reachable.
 """
+
 import os
 import shutil
 import subprocess
@@ -23,29 +24,38 @@ ROOT = Path(__file__).resolve().parents[2]
 # Adjust these values if the seed SQL is intentionally changed.
 _DEV_MIN_COUNTS: dict[str, int] = {
     "organisations": 1,
-    "personnel":     1,
+    "personnel": 1,
     "test_programs": 1,
-    "test_phases":   1,
-    "requirements":  1,
-    "test_cases":    1,
-    "vcrm_entries":  1,
-    "test_events":   1,
-    "test_results":  1,
+    "test_phases": 1,
+    "requirements": 1,
+    "test_cases": 1,
+    "vcrm_entries": 1,
+    "test_events": 1,
+    "test_results": 1,
     "defect_reports": 1,
 }
 
 # Tables that must exist in every environment (not just dev)
 _REQUIRED_TABLES = [
-    "organisations", "personnel", "test_programs", "temp_documents",
-    "test_phases", "requirements", "test_cases", "vcrm_entries",
-    "test_events", "test_results", "defect_reports", "evidence_artifacts",
+    "organisations",
+    "personnel",
+    "test_programs",
+    "temp_documents",
+    "test_phases",
+    "requirements",
+    "test_cases",
+    "vcrm_entries",
+    "test_events",
+    "test_results",
+    "defect_reports",
+    "evidence_artifacts",
 ]
 
 _ENV_CONFIG = {
-    "dev":     ("te_mgmt_dev",     "te_dev"),
-    "test":    ("te_mgmt_test",    "te_test"),
+    "dev": ("te_mgmt_dev", "te_dev"),
+    "test": ("te_mgmt_test", "te_test"),
     "staging": ("te_mgmt_staging", "te_staging"),
-    "prod":    ("te_mgmt_prod",    "te_prod"),
+    "prod": ("te_mgmt_prod", "te_prod"),
 }
 
 
@@ -65,7 +75,10 @@ def _can_connect() -> bool:
     try:
         r = subprocess.run(
             ["psql", "-tA", "-c", "SELECT 1"],
-            env=_pg_env(), capture_output=True, text=True, timeout=5,
+            env=_pg_env(),
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return r.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -76,7 +89,10 @@ def _count_rows(db: str, schema: str, table: str) -> int | None:
     query = f'SELECT count(*) FROM {schema}."{table}";'
     r = subprocess.run(
         ["psql", "-tA", "-d", db, "-c", query],
-        env=_pg_env(), capture_output=True, text=True, timeout=10,
+        env=_pg_env(),
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if r.returncode == 0 and r.stdout.strip().isdigit():
         return int(r.stdout.strip())
@@ -84,13 +100,13 @@ def _count_rows(db: str, schema: str, table: str) -> int | None:
 
 
 def _table_exists(db: str, schema: str, table: str) -> bool:
-    query = (
-        f"SELECT 1 FROM information_schema.tables "
-        f"WHERE table_schema='{schema}' AND table_name='{table}';"
-    )
+    query = f"SELECT 1 FROM information_schema.tables WHERE table_schema='{schema}' AND table_name='{table}';"
     r = subprocess.run(
         ["psql", "-tA", "-d", db, "-c", query],
-        env=_pg_env(), capture_output=True, text=True, timeout=10,
+        env=_pg_env(),
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     return r.returncode == 0 and r.stdout.strip() == "1"
 
@@ -101,9 +117,11 @@ def _db_deployed(db: str) -> bool:
         return False
     try:
         r = subprocess.run(
-            ["psql", "-tA", "-c",
-             f"SELECT 1 FROM pg_database WHERE datname = '{db}'"],
-            env=_pg_env(), capture_output=True, text=True, timeout=5,
+            ["psql", "-tA", "-c", f"SELECT 1 FROM pg_database WHERE datname = '{db}'"],
+            env=_pg_env(),
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return r.returncode == 0 and r.stdout.strip() == "1"
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -115,8 +133,7 @@ _PG_AVAILABLE = _can_connect()
 # environment must also have been deployed (deploy_all.sh). A fresh clone has
 # a running server but no te_mgmt_* databases; skip rather than fail.
 _DEV_DEPLOYED = _db_deployed(_ENV_CONFIG["dev"][0])
-_HELP = ("Run 'bash scripts/provision_full_test_env.sh' (needs a reachable "
-         "PostgreSQL and PGUSER/PGHOST/PGPORT set).")
+_HELP = "Run 'bash scripts/provision_full_test_env.sh' (needs a reachable PostgreSQL and PGUSER/PGHOST/PGPORT set)."
 
 
 def _require_pg():
@@ -143,9 +160,7 @@ class TestDevSeedCounts(unittest.TestCase):
             if count is None:
                 failures.append(f"  {schema}.{table}: could not query (table may not exist)")
             elif count < min_count:
-                failures.append(
-                    f"  {schema}.{table}: expected >= {min_count} rows, got {count}"
-                )
+                failures.append(f"  {schema}.{table}: expected >= {min_count} rows, got {count}")
         if failures:
             self.fail("Dev seed row count failures:\n" + "\n".join(failures))
 
@@ -159,19 +174,18 @@ class TestAllEnvironmentsHaveRequiredTables(unittest.TestCase):
         # Skip if this database doesn't exist at all
         r = subprocess.run(
             ["psql", "-tA", "-d", db, "-c", "SELECT 1"],
-            env=_pg_env(), capture_output=True, text=True, timeout=5,
+            env=_pg_env(),
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if r.returncode != 0:
             self.fail(f"Database {db!r} not deployed. {_HELP}")
 
-        missing = [
-            t for t in _REQUIRED_TABLES
-            if not _table_exists(db, schema, t)
-        ]
+        missing = [t for t in _REQUIRED_TABLES if not _table_exists(db, schema, t)]
         if missing:
             self.fail(
-                f"Environment {env_name!r} ({db}/{schema}) is missing tables:\n"
-                + "\n".join(f"  {t}" for t in missing)
+                f"Environment {env_name!r} ({db}/{schema}) is missing tables:\n" + "\n".join(f"  {t}" for t in missing)
             )
 
     def test_dev_has_required_tables(self):
@@ -194,6 +208,7 @@ class TestNoSeedInStagingAndProd(unittest.TestCase):
     include_seed_data flipped to true, which would silently push test data
     into production. See GitHub Issue #23.
     """
+
     setUpClass = classmethod(lambda cls: _require_pg())
 
     _SEEDED_TABLES = list(_DEV_MIN_COUNTS.keys())
@@ -243,7 +258,10 @@ class TestIdempotentDeployParity(unittest.TestCase):
 
         r = subprocess.run(
             ["psql", "-f", str(env_sql)],
-            env=_pg_env(), capture_output=True, text=True, timeout=180,
+            env=_pg_env(),
+            capture_output=True,
+            text=True,
+            timeout=180,
         )
         if r.returncode != 0:
             self.fail(f"Second deploy failed:\n{r.stderr[-500:]}")

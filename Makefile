@@ -1,6 +1,6 @@
 .PHONY: test-free test-gate test-evals test-e2e test-all coverage \
         test-unit test-system test-egress-blocked check-bundle security-evidence test-sit test-performance test-accessibility test-uat \
-        lint lint-diff typecheck health \
+        lint lint-diff format typecheck health \
         eval-list eval-compare eval-summary select-tests \
         csv-load csv-list csv-demo
 
@@ -113,6 +113,11 @@ lint:
 # Mirrors: bun run slop:diff
 lint-diff:
 	bash scripts/lint_diff.sh
+
+# Format the code and order imports (#324), configured in pyproject.toml [tool.ruff]. `make lint` only checks.
+format:
+	python3 -m ruff check --fix --quiet .
+	python3 -m ruff format --quiet .
 
 # Static type check (#323): api/ and streamlit_app/, configured in pyproject.toml [tool.mypy]. The free-tier CI job
 # runs it after the lint, and the pre-commit hook runs the same command.

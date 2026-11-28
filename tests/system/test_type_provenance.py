@@ -21,14 +21,18 @@ from api.config import settings
 from api.db import Conn
 from api.main import app
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
-         "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1.")
+_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
+    "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1."
+)
 
 
 def _column_types(table: str) -> dict[str, str]:
     with Conn() as conn, conn.cursor() as cur:
-        cur.execute("SELECT column_name, data_type FROM information_schema.columns "
-                    "WHERE table_schema = %s AND table_name = %s", (settings.UPLOADS_SCHEMA, table))
+        cur.execute(
+            "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = %s AND table_name = %s",
+            (settings.UPLOADS_SCHEMA, table),
+        )
         return dict(cur.fetchall())
 
 
@@ -89,24 +93,38 @@ class TypeConfirmationAndProvenance(unittest.TestCase):
         self.assertEqual(self._registered()["types_provenance"], "inferred_unconfirmed")
 
     def test_confirmation_without_the_confirmed_types_is_rejected_and_loads_nothing(self):
-        resp = self.client.post("/api/csv/upload", json={
-            "fileName": self.name, "content": self.content, "typesConfirmed": True})
+        resp = self.client.post(
+            "/api/csv/upload", json={"fileName": self.name, "content": self.content, "typesConfirmed": True}
+        )
         self.assertEqual(resp.status_code, 422)
         self.assertIsNone(self._registered())
 
     def test_te_mode_rejects_types_confirmed(self):
-        resp = self.client.post("/api/csv/upload", json={
-            "fileName": self.name, "content": self.content, "mode": "te",
-            "targetTable": "organisations", "typesConfirmed": True})
+        resp = self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": self.name,
+                "content": self.content,
+                "mode": "te",
+                "targetTable": "organisations",
+                "typesConfirmed": True,
+            },
+        )
         self.assertEqual(resp.status_code, 422)
         self.assertIn("dynamic", resp.json()["detail"])
 
     def test_te_import_rejects_a_dynamic_table_as_its_target(self):
         dynamic = self._upload(types=["int8", "text"], typesConfirmed=True)
         self.assertEqual(dynamic["status"], "ok", dynamic)
-        res = self.client.post("/api/csv/upload", json={
-            "fileName": f"te_{self.name}", "content": self.content, "mode": "te",
-            "targetTable": dynamic["tableName"]}).json()
+        res = self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": f"te_{self.name}",
+                "content": self.content,
+                "mode": "te",
+                "targetTable": dynamic["tableName"],
+            },
+        ).json()
         self.assertEqual(res["status"], "error", res)
         self.assertIn(dynamic["tableName"], res["message"].lower())
         self.assertFalse([f for f in self.client.get("/api/csv/files").json() if f["file_name"] == f"te_{self.name}"])

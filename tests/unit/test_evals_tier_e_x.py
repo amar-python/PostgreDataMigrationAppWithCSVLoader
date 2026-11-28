@@ -12,8 +12,8 @@ from __future__ import annotations
 import subprocess
 import sys
 import unittest
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -94,12 +94,12 @@ class TierEColumnSignatureQuery(unittest.TestCase):
     """
 
     def _scenario(self, completed):
-        expected = {"expected": {"min_tables_per_env": 12},
-                    "envs_under_test": ["dev"]}
+        expected = {"expected": {"min_tables_per_env": 12}, "envs_under_test": ["dev"]}
         result = runner.ScenarioResult(tier="e", name="t")
-        with patch.object(runner, "_deploy_env",
-                          return_value={"env": "dev", "exit_code": 0}), \
-             patch.object(runner.subprocess, "run", return_value=completed) as run:
+        with (
+            patch.object(runner, "_deploy_env", return_value={"env": "dev", "exit_code": 0}),
+            patch.object(runner.subprocess, "run", return_value=completed) as run,
+        ):
             runner._run_envs_have_identical_structure(result, expected)
         return result, run
 
@@ -111,19 +111,18 @@ class TierEColumnSignatureQuery(unittest.TestCase):
         self.assertIn(":'sch'", kwargs["input"])
 
     def test_query_failure_is_reported_as_a_query_error(self):
-        bad = subprocess.CompletedProcess([], 1, stdout="",
-                                          stderr='ERROR:  syntax error at or near ":"')
+        bad = subprocess.CompletedProcess([], 1, stdout="", stderr='ERROR:  syntax error at or near ":"')
         result, _ = self._scenario(bad)
         self.assertFalse(result.passed)
-        self.assertTrue(any("schema query" in e and "syntax error" in e
-                            for e in result.errors), result.errors)
+        self.assertTrue(any("schema query" in e and "syntax error" in e for e in result.errors), result.errors)
 
     def test_genuinely_empty_schema_still_fails(self):
         empty = subprocess.CompletedProcess([], 0, stdout="", stderr="")
         result, _ = self._scenario(empty)
         self.assertFalse(result.passed)
-        self.assertIn("env dev has 0 tables in its schema, expected >= 12 "
-                      "(deploy may have partially failed)", result.errors)
+        self.assertIn(
+            "env dev has 0 tables in its schema, expected >= 12 (deploy may have partially failed)", result.errors
+        )
 
 
 @pytest.mark.unit
@@ -139,17 +138,17 @@ class TierEEmptySchemaControl(unittest.TestCase):
     REF = {"t%d" % i: ["id:uuid:NO"] for i in range(12)}
     EXPECTED = {
         "reference_env": "dev",
-        "expected": {"min_reference_tables": 12, "empty_schema_tables": 0,
-                     "diff_reports_missing_tables": True},
+        "expected": {"min_reference_tables": 12, "empty_schema_tables": 0, "diff_reports_missing_tables": True},
     }
 
     def _run(self, signatures, psql=None, diff=None, expected=None):
         """Run the control; returns (result, psql mock, signature mock)."""
         ok = subprocess.CompletedProcess([], 0, stdout="", stderr="")
         result = runner.ScenarioResult(tier="e", name="02_empty_schema_is_detected")
-        with patch.object(runner, "_column_signature", side_effect=signatures) as sig, \
-             patch.object(runner, "_psql_run",
-                          **({"side_effect": psql} if psql else {"return_value": ok})) as run:
+        with (
+            patch.object(runner, "_column_signature", side_effect=signatures) as sig,
+            patch.object(runner, "_psql_run", **({"side_effect": psql} if psql else {"return_value": ok})) as run,
+        ):
             if diff is None:
                 runner._run_empty_schema_negative_control(result, expected or self.EXPECTED)
             else:
@@ -172,8 +171,7 @@ class TierEEmptySchemaControl(unittest.TestCase):
         # The point of a control: neutralise the thing it guards and it must go red.
         result, _, _ = self._run([self.REF, {}], diff=[])
         self.assertFalse(result.passed)
-        self.assertTrue(any("would pass a deploy that wrote nothing" in e
-                            for e in result.errors), result.errors)
+        self.assertTrue(any("would pass a deploy that wrote nothing" in e for e in result.errors), result.errors)
 
     def test_fails_when_an_empty_schema_reports_tables(self):
         result, _, _ = self._run([self.REF, {"x": ["id:uuid:NO"]}])
@@ -183,8 +181,10 @@ class TierEEmptySchemaControl(unittest.TestCase):
     def test_a_failed_query_on_the_empty_schema_is_not_read_as_no_tables(self):
         result, _, _ = self._run([self.REF, RuntimeError("connection lost")])
         self.assertFalse(result.passed)
-        self.assertTrue(any("must not be reported as 'no tables'" in e
-                            and "connection lost" in e for e in result.errors), result.errors)
+        self.assertTrue(
+            any("must not be reported as 'no tables'" in e and "connection lost" in e for e in result.errors),
+            result.errors,
+        )
 
     def test_refuses_to_run_against_an_empty_reference_and_creates_nothing(self):
         result, run, _ = self._run([{}])
@@ -219,15 +219,15 @@ class TierEEmptySchemaControl(unittest.TestCase):
         bad = subprocess.CompletedProcess([], 1, stdout="", stderr="ERROR: cannot drop")
         result, _, _ = self._run([self.REF, {}], psql=[ok, bad])
         self.assertFalse(result.passed)
-        self.assertTrue(any("could not drop the throwaway schema" in e
-                            and "cannot drop" in e for e in result.errors), result.errors)
+        self.assertTrue(
+            any("could not drop the throwaway schema" in e and "cannot drop" in e for e in result.errors), result.errors
+        )
 
     def test_a_failed_create_is_reported_and_no_schema_query_is_run_on_it(self):
         bad = subprocess.CompletedProcess([], 1, stdout="", stderr="ERROR: permission denied")
         result, _, sig = self._run([self.REF], psql=[bad])
         self.assertFalse(result.passed)
-        self.assertTrue(any("could not create the throwaway schema" in e
-                            for e in result.errors), result.errors)
+        self.assertTrue(any("could not create the throwaway schema" in e for e in result.errors), result.errors)
         self.assertEqual(sig.call_count, 1, "only the reference was queried")
 
     def test_an_unknown_reference_env_is_reported(self):
@@ -238,15 +238,19 @@ class TierEEmptySchemaControl(unittest.TestCase):
 
     def test_the_scenario_is_dispatched_by_name(self):
         scenario = Path("evals/datasets/tier_e/02_empty_schema_is_detected")
-        with patch.object(runner, "_load_expected", return_value={"expected": {}}), \
-             patch.object(runner, "_can_connect_pg", return_value=True), \
-             patch.object(runner, "_run_empty_schema_negative_control") as control:
+        with (
+            patch.object(runner, "_load_expected", return_value={"expected": {}}),
+            patch.object(runner, "_can_connect_pg", return_value=True),
+            patch.object(runner, "_run_empty_schema_negative_control") as control,
+        ):
             runner.run_tier_e_scenario(scenario)
         control.assert_called_once()
 
     def test_an_unknown_tier_e_scenario_is_still_an_error(self):
-        with patch.object(runner, "_load_expected", return_value={"expected": {}}), \
-             patch.object(runner, "_can_connect_pg", return_value=True):
+        with (
+            patch.object(runner, "_load_expected", return_value={"expected": {}}),
+            patch.object(runner, "_can_connect_pg", return_value=True),
+        ):
             result = runner.run_tier_e_scenario(Path("evals/datasets/tier_e/99_unknown"))
         self.assertIn("Unknown tier-E scenario: 99_unknown", result.errors)
 
@@ -264,15 +268,12 @@ class TierXSqliteStructure(unittest.TestCase):
     """O-08: SQLite DDL execution and structural readback."""
 
     def test_placeholders_are_substituted(self):
-        out = runner._substitute_placeholders(
-            "CREATE TABLE {{TBL_ORGANISATIONS}} (x TEXT);"
-        )
+        out = runner._substitute_placeholders("CREATE TABLE {{TBL_ORGANISATIONS}} (x TEXT);")
         self.assertIn("organisations", out)
         self.assertNotIn("{{", out)
 
     def test_every_known_table_has_a_substitution(self):
-        ddl = " ".join("{{TBL_" + t.upper() + "}}"
-                       for t in runner._ENGINE_PLACEHOLDER_TABLES)
+        ddl = " ".join("{{TBL_" + t.upper() + "}}" for t in runner._ENGINE_PLACEHOLDER_TABLES)
         self.assertNotIn("{{", runner._substitute_placeholders(ddl))
 
     def test_unknown_placeholder_survives_so_the_scenario_can_flag_it(self):
@@ -281,8 +282,7 @@ class TierXSqliteStructure(unittest.TestCase):
 
     def test_structure_is_read_back_from_executed_ddl(self):
         got = runner._sqlite_structure(
-            "CREATE TABLE alpha (id TEXT PRIMARY KEY, name TEXT NOT NULL);"
-            "CREATE TABLE beta (ref TEXT);"
+            "CREATE TABLE alpha (id TEXT PRIMARY KEY, name TEXT NOT NULL);CREATE TABLE beta (ref TEXT);"
         )
         self.assertNotIn("error", got)
         self.assertEqual(sorted(got["tables"]), ["alpha", "beta"])
@@ -293,20 +293,17 @@ class TierXSqliteStructure(unittest.TestCase):
         self.assertIn("error", got)
 
     def test_sqlite_internal_tables_are_excluded(self):
-        got = runner._sqlite_structure(
-            "CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT);"
-        )
+        got = runner._sqlite_structure("CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT);")
         # AUTOINCREMENT creates sqlite_sequence; it is not part of the schema.
         self.assertEqual(sorted(got["tables"]), ["t"])
 
     def test_the_real_sqlite_ddl_executes_and_matches_the_expectation_file(self):
         import json
+
         root = Path(__file__).resolve().parents[2]
-        ddl = (root / "build" / "schema" / "sqlite"
-               / "te_core_schema.sql").read_text(encoding="utf-8")
+        ddl = (root / "build" / "schema" / "sqlite" / "te_core_schema.sql").read_text(encoding="utf-8")
         exp = json.loads(
-            (root / "evals" / "expected" / "tier_x"
-             / "01_sqlite_schema_structure.json").read_text(encoding="utf-8")
+            (root / "evals" / "expected" / "tier_x" / "01_sqlite_schema_structure.json").read_text(encoding="utf-8")
         )["expected"]
 
         got = runner._sqlite_structure(runner._substitute_placeholders(ddl))
@@ -318,33 +315,32 @@ class TierXSqliteStructure(unittest.TestCase):
         # these tables to the DDL but forgets to move it out of
         # known_missing_tables, the file would misreport the shortfall.
         import json
+
         root = Path(__file__).resolve().parents[2]
-        ddl = (root / "build" / "schema" / "sqlite"
-               / "te_core_schema.sql").read_text(encoding="utf-8")
+        ddl = (root / "build" / "schema" / "sqlite" / "te_core_schema.sql").read_text(encoding="utf-8")
         exp = json.loads(
-            (root / "evals" / "expected" / "tier_x"
-             / "01_sqlite_schema_structure.json").read_text(encoding="utf-8")
+            (root / "evals" / "expected" / "tier_x" / "01_sqlite_schema_structure.json").read_text(encoding="utf-8")
         )["expected"]
         got = runner._sqlite_structure(runner._substitute_placeholders(ddl))
         for table in exp["known_missing_tables"]:
             self.assertNotIn(
-                table, got["tables"],
-                f"{table} is listed as missing but the DDL now defines it — "
-                "move it into expected_tables",
+                table,
+                got["tables"],
+                f"{table} is listed as missing but the DDL now defines it — move it into expected_tables",
             )
 
     def test_missing_plus_present_accounts_for_all_twelve_tables(self):
         import json
+
         root = Path(__file__).resolve().parents[2]
         exp = json.loads(
-            (root / "evals" / "expected" / "tier_x"
-             / "01_sqlite_schema_structure.json").read_text(encoding="utf-8")
+            (root / "evals" / "expected" / "tier_x" / "01_sqlite_schema_structure.json").read_text(encoding="utf-8")
         )["expected"]
         total = set(exp["expected_tables"]) | set(exp["known_missing_tables"])
         self.assertEqual(
-            total, set(runner._ENGINE_PLACEHOLDER_TABLES),
-            "the expectation file must account for every T&E table, so the "
-            "shortfall cannot be understated by omission",
+            total,
+            set(runner._ENGINE_PLACEHOLDER_TABLES),
+            "the expectation file must account for every T&E table, so the shortfall cannot be understated by omission",
         )
 
 

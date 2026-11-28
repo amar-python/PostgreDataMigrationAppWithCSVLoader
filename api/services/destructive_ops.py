@@ -7,12 +7,13 @@ T&E mode-switch silently dropped tables without checking delete permission.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import HTTPException
 from psycopg2 import sql
+from psycopg2.extensions import cursor
 
 from api.auth import PERMISSIONS
-from typing import Any
-from psycopg2.extensions import cursor
 
 
 def authorized_drop_table(cur: cursor, session: dict[str, Any] | None, schema: str, table_name: str) -> None:
@@ -24,15 +25,10 @@ def authorized_drop_table(cur: cursor, session: dict[str, Any] | None, schema: s
     Raises HTTP 403 if the session's role lacks ``delete_file``.
     """
     _require_delete(session)
-    cur.execute(
-        sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
-            sql.Identifier(schema), sql.Identifier(table_name)
-        )
-    )
+    cur.execute(sql.SQL("DROP TABLE IF EXISTS {}.{}").format(sql.Identifier(schema), sql.Identifier(table_name)))
 
 
-def safe_cleanup_prior(cur: cursor, session: dict[str, Any] | None, schema: str,
-                       table_name: str, mode: str) -> None:
+def safe_cleanup_prior(cur: cursor, session: dict[str, Any] | None, schema: str, table_name: str, mode: str) -> None:
     """Drop a prior dynamic-mode table during overwrite, with auth check.
 
     Only drops when the prior entry is dynamic mode and the table name starts
@@ -41,11 +37,7 @@ def safe_cleanup_prior(cur: cursor, session: dict[str, Any] | None, schema: str,
     """
     _require_delete(session)
     if mode == "dynamic" and table_name.startswith("csv_"):
-        cur.execute(
-            sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
-                sql.Identifier(schema), sql.Identifier(table_name)
-            )
-        )
+        cur.execute(sql.SQL("DROP TABLE IF EXISTS {}.{}").format(sql.Identifier(schema), sql.Identifier(table_name)))
 
 
 def _require_delete(session: dict[str, Any] | None) -> None:

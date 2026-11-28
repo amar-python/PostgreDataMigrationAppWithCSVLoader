@@ -13,6 +13,7 @@ Two kinds of check, both running the real script:
 Policy pinned here: flake8 checks every tracked .py file; bandit checks every tracked .py file except test code
 (tests/ and e2e/), where its findings are about fixtures and asserts.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -60,7 +61,8 @@ def test_flake8_scope_is_every_tracked_python_file():
     tracked, linted, excluded = tracked_python(), listed("--list-files"), listed("--list-excluded")
     assert tracked - linted - excluded == set(), (
         f"tracked Python files that no lint run checks (and that are not in LINT_EXCLUDE): "
-        f"{short(tracked - linted - excluded)}")
+        f"{short(tracked - linted - excluded)}"
+    )
     assert linted - tracked == set(), f"lint.sh lists files git does not track: {short(linted - tracked)}"
 
 
@@ -112,8 +114,7 @@ def test_a_new_tracked_file_with_a_style_error_fails_the_lint(scratch_repo):
 
 def test_a_new_tracked_file_with_a_security_finding_fails_the_lint(scratch_repo):
     repo, add = scratch_repo
-    add("api/fetch.py",
-        "import urllib.request\n\n\ndef get(url):\n    return urllib.request.urlopen(url)\n")  # B310
+    add("api/fetch.py", "import urllib.request\n\n\ndef get(url):\n    return urllib.request.urlopen(url)\n")  # B310
     result = lint_in(repo)
     assert result.returncode != 0, "a source file nobody listed was not scanned by bandit"
     assert "B310" in result.stdout + result.stderr, result.stdout[-600:]
@@ -133,8 +134,10 @@ def test_test_code_is_style_checked_but_not_security_scanned(scratch_repo):
 def test_test_code_in_a_package_folder_is_also_not_security_scanned(scratch_repo):
     """csv_loader/tests/ is test code like tests/: its fixtures build SQL and temp paths on purpose (bandit B608, B108)."""
     repo, add = scratch_repo
-    add("csv_loader/tests/test_fetch.py",
-        "import urllib.request\n\n\ndef test_x(url):\n    return urllib.request.urlopen(url)\n")  # B310 in a fixture
+    add(
+        "csv_loader/tests/test_fetch.py",
+        "import urllib.request\n\n\ndef test_x(url):\n    return urllib.request.urlopen(url)\n",
+    )  # B310 in a fixture
     assert lint_in(repo).returncode == 0, "bandit should not scan a tests/ folder inside a package"
     add("csv_loader/tests/test_unused.py", "import os\n")  # but flake8 does
     result = lint_in(repo)

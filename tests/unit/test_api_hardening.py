@@ -110,6 +110,7 @@ class RateLimiterAlgorithm(unittest.TestCase):
     def test_bucket_table_is_bounded(self):
         # A spray of spoofed identities must not grow memory without limit.
         from api.ratelimit import _MAX_TRACKED_CLIENTS
+
         for i in range(_MAX_TRACKED_CLIENTS + 250):
             self.lim.check(f"client-{i}", "read", 5, 60.0, now=100.0)
         self.assertLessEqual(len(self.lim._buckets), _MAX_TRACKED_CLIENTS)
@@ -135,8 +136,7 @@ class RateLimitMiddleware(unittest.TestCase):
         )
 
     def tearDown(self):
-        (settings.RATE_LIMIT_READS_PER_MINUTE,
-         settings.RATE_LIMIT_WRITES_PER_MINUTE) = self._saved
+        (settings.RATE_LIMIT_READS_PER_MINUTE, settings.RATE_LIMIT_WRITES_PER_MINUTE) = self._saved
         limiter.reset()
 
     def test_exceeding_the_write_budget_returns_429_with_retry_after(self):
@@ -167,19 +167,15 @@ class RateLimitMiddleware(unittest.TestCase):
         settings.RATE_LIMIT_WRITES_PER_MINUTE = 0
         payload = {"fileName": "x.csv", "content": "a,b\n1,2\n"}
         for _ in range(25):
-            self.assertNotEqual(
-                client.post("/api/csv/preview", json=payload).status_code, 429
-            )
+            self.assertNotEqual(client.post("/api/csv/preview", json=payload).status_code, 429)
 
     def test_forwarded_for_cannot_be_used_to_evade_the_limit(self):
         settings.RATE_LIMIT_WRITES_PER_MINUTE = 2
         payload = {"fileName": "x.csv", "content": "a,b\n1,2\n"}
         for i in range(2):
-            client.post("/api/csv/preview", json=payload,
-                        headers={"X-Forwarded-For": f"10.0.0.{i}"})
+            client.post("/api/csv/preview", json=payload, headers={"X-Forwarded-For": f"10.0.0.{i}"})
         # A client-supplied header must not mint a fresh bucket on demand.
-        resp = client.post("/api/csv/preview", json=payload,
-                           headers={"X-Forwarded-For": "10.0.0.99"})
+        resp = client.post("/api/csv/preview", json=payload, headers={"X-Forwarded-For": "10.0.0.99"})
         self.assertEqual(resp.status_code, 429)
 
 
@@ -188,8 +184,20 @@ class AuditWriterContract(unittest.TestCase):
     """O-04: the shared audit writer's guardrails, without touching a database."""
 
     def test_only_known_actions_are_accepted(self):
-        self.assertEqual(VALID_ACTIONS, {"upload", "delete", "password_reset", "row_decision", "cell_edit",
-                                         "submit", "approve", "reject", "import"})
+        self.assertEqual(
+            VALID_ACTIONS,
+            {
+                "upload",
+                "delete",
+                "password_reset",
+                "row_decision",
+                "cell_edit",
+                "submit",
+                "approve",
+                "reject",
+                "import",
+            },
+        )
 
     def test_unknown_action_raises_before_any_sql_runs(self):
         class ExplodingCursor:
@@ -207,8 +215,7 @@ class AuditWriterContract(unittest.TestCase):
                 captured["params"] = params
 
         write_audit(RecordingCursor(), "upload", 7, "f.csv", "csv_abc", "dynamic")
-        self.assertEqual(captured["params"],
-                         ("upload", 7, "f.csv", "csv_abc", "dynamic", None, None, None))
+        self.assertEqual(captured["params"], ("upload", 7, "f.csv", "csv_abc", "dynamic", None, None, None))
 
     def test_file_id_is_coerced_from_the_loaders_string_form(self):
         self.assertEqual(coerce_file_id("42"), 42)

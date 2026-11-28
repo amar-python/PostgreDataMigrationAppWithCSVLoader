@@ -31,7 +31,7 @@ _SCRIPT = Path(__file__).resolve().parent.parent.parent / "scripts" / "check_oid
 def _script():
     spec = importlib.util.spec_from_file_location("check_oidc", _SCRIPT)
     module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module      # @dataclass looks its module up here
+    sys.modules[spec.name] = module  # @dataclass looks its module up here
     spec.loader.exec_module(module)
     return module
 
@@ -53,8 +53,17 @@ class _ApiStub:
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):  # noqa: N802
                 outer.seen.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
-                body = json.dumps({"token": "SESSION-SECRET-TOKEN", "username": "alice", "tenant": "acme", "role": "reviewer",
-                                   "expiresAt": "2026-11-10T00:00:00+00:00"} if status == 200 else {"detail": "no"}).encode()
+                body = json.dumps(
+                    {
+                        "token": "SESSION-SECRET-TOKEN",
+                        "username": "alice",
+                        "tenant": "acme",
+                        "role": "reviewer",
+                        "expiresAt": "2026-11-10T00:00:00+00:00",
+                    }
+                    if status == 200
+                    else {"detail": "no"}
+                ).encode()
                 self.send_response(status)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
@@ -75,7 +84,12 @@ class _ApiStub:
 class _Base(unittest.TestCase):
     def setUp(self):
         self.script = _script()
-        self._orig = (settings.OIDC_ISSUER, settings.OIDC_AUDIENCE, settings.OIDC_JWKS_URL, settings.OIDC_USERNAME_CLAIM)
+        self._orig = (
+            settings.OIDC_ISSUER,
+            settings.OIDC_AUDIENCE,
+            settings.OIDC_JWKS_URL,
+            settings.OIDC_USERNAME_CLAIM,
+        )
         oidc._jwks.cache_clear()
         self.key = new_key()
         self.idp = LocalIdp({"k1": self.key})
@@ -101,8 +115,11 @@ class _Base(unittest.TestCase):
 class EveryStageCanPass(_Base):
     def test_a_good_token_passes_every_stage(self):
         results = self.script.run_checks(self.token())
-        self.assertEqual([(r.step, r.status) for r in results],
-                         [("config", "ok"), ("discovery", "ok"), ("keys", "ok"), ("token", "ok")], results)
+        self.assertEqual(
+            [(r.step, r.status) for r in results],
+            [("config", "ok"), ("discovery", "ok"), ("keys", "ok"), ("token", "ok")],
+            results,
+        )
         self.assertIn("1 signing key(s): k1", results[2].detail)
         self.assertIn("preferred_username = 'alice'", results[3].detail)
 
@@ -126,22 +143,25 @@ class EachStageNamesItsCause(_Base):
         self.assertIn("https:// or file://", self.script.run_checks("x")[0].detail)
 
     def test_an_issuer_that_differs_from_the_idps_own_is_a_warning_naming_both(self):
-        settings.OIDC_ISSUER = self.idp.issuer + "/"          # the classic trailing slash; discovery lives at the same base
+        settings.OIDC_ISSUER = self.idp.issuer + "/"  # the classic trailing slash; discovery lives at the same base
         discovery = self.by_step(self.script.run_checks(self.token()))["discovery"]
         self.assertEqual(discovery.status, "warn")
         self.assertIn("trailing slash", discovery.detail)
 
     def test_a_certificate_the_host_does_not_trust_says_what_to_set(self):
-        with patch.dict(os.environ):                           # restored on exit
-            os.environ.pop("SSL_CERT_FILE", None)               # the host doesn't know this IdP's CA
+        with patch.dict(os.environ):  # restored on exit
+            os.environ.pop("SSL_CERT_FILE", None)  # the host doesn't know this IdP's CA
             keys = self.by_step(self.script.run_checks(self.token(), discovery=False))["keys"]
         self.assertEqual(keys.status, "fail")
         self.assertIn("SSL_CERT_FILE", keys.detail)
 
     def test_wrong_audience_expired_and_wrong_issuer_each_say_why(self):
         now = int(time.time())
-        cases = {"OIDC_AUDIENCE": self.token(aud="another-app"), "expired": self.token(exp=now - 5, iat=now - 400),
-                 "`iss` must equal": self.token(iss="https://evil.example/realms/te")}
+        cases = {
+            "OIDC_AUDIENCE": self.token(aud="another-app"),
+            "expired": self.token(exp=now - 5, iat=now - 400),
+            "`iss` must equal": self.token(iss="https://evil.example/realms/te"),
+        }
         for expected, token in cases.items():
             result = self.by_step(self.script.run_checks(token, discovery=False))["token"]
             self.assertEqual(result.status, "fail", expected)
@@ -206,7 +226,7 @@ class CommandLine(_Base):
         self.assertEqual(code, 2)
         self.assertIn("ID_TOKEN", err)
         with self.assertRaises(SystemExit):
-            self.run_main("--token", "abc")                      # no such option: a token on the command line is refused
+            self.run_main("--token", "abc")  # no such option: a token on the command line is refused
 
     def test_token_from_a_file(self):
         path = Path(os.environ.get("TMPDIR", "/tmp")) / f"idtoken_{os.getpid()}.txt"

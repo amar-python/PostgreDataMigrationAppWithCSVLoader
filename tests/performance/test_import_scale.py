@@ -29,10 +29,12 @@ class ImportAtScale(unittest.TestCase):
         harness = _harness()
         rows = int(os.environ.get("PERF_ROWS", "10000"))
         report = harness.run(rows)
-        self.assertEqual(report["reconciliation"],
-                         {"rowsIn": rows, "excluded": 0, "edited": 0, "duplicate": 0, "imported": rows})
-        self.assertEqual(set(report["timings"]),
-                         {"preview", "stage", "reviewPage", "submit", "approve", "import", "upToImported"})
+        self.assertEqual(
+            report["reconciliation"], {"rowsIn": rows, "excluded": 0, "edited": 0, "duplicate": 0, "imported": rows}
+        )
+        self.assertEqual(
+            set(report["timings"]), {"preview", "stage", "reviewPage", "submit", "approve", "import", "upToImported"}
+        )
         if os.environ.get("PERF_ENFORCE") == "1":
             verdict = harness.verdict(report)
             self.assertTrue(verdict["importUnderTarget"], report["timings"])

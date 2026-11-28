@@ -27,12 +27,12 @@ from __future__ import annotations
 import threading
 import time
 from collections import OrderedDict, deque
+from collections.abc import Awaitable, Callable
 
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
 from api.config import settings
-from collections.abc import Awaitable, Callable
 
 # Hard cap on distinct client buckets held in memory.
 _MAX_TRACKED_CLIENTS = 4096
@@ -45,8 +45,9 @@ class SlidingWindowLimiter:
         self._buckets: OrderedDict[tuple[str, str], deque[float]] = OrderedDict()
         self._lock = threading.Lock()
 
-    def check(self, client: str, scope: str, max_requests: int,
-              window_seconds: float, now: float | None = None) -> tuple[bool, float]:
+    def check(
+        self, client: str, scope: str, max_requests: int, window_seconds: float, now: float | None = None
+    ) -> tuple[bool, float]:
         """Record a hit and report whether it is allowed.
 
         Returns ``(allowed, retry_after_seconds)``. ``retry_after_seconds`` is 0
@@ -115,21 +116,14 @@ async def rate_limit_middleware(request: Request, call_next: Callable[[Request],
     else:
         scope, budget = "read", settings.RATE_LIMIT_READS_PER_MINUTE
 
-    allowed, retry_after = limiter.check(
-        _client_id(request), scope, budget, 60.0
-    )
+    allowed, retry_after = limiter.check(_client_id(request), scope, budget, 60.0)
     if not allowed:
         # Integer seconds, minimum 1 — Retry-After: 0 tells a client to retry
         # instantly, which would defeat the limit.
         seconds = max(1, int(retry_after + 0.999))
         return JSONResponse(
             status_code=429,
-            content={
-                "detail": (
-                    f"Rate limit exceeded for {scope} requests "
-                    f"({budget}/minute). Retry in {seconds}s."
-                )
-            },
+            content={"detail": (f"Rate limit exceeded for {scope} requests ({budget}/minute). Retry in {seconds}s.")},
             headers={"Retry-After": str(seconds)},
         )
     return await call_next(request)

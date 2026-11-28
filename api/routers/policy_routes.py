@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from api import policy
 from api.auth import tenant_scope
-from typing import Any
 
-router = APIRouter(prefix="/api/policy", tags=["policy"],
-                   dependencies=[Depends(tenant_scope), Depends(policy.mark_classification)])
+router = APIRouter(
+    prefix="/api/policy", tags=["policy"], dependencies=[Depends(tenant_scope), Depends(policy.mark_classification)]
+)
 
 
 @router.get("")

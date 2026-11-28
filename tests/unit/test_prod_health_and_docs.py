@@ -12,6 +12,7 @@ port. Asserted here:
 The health tests replace the database connection, so they need no PostgreSQL. The docs routes are fixed when
 the app is created, so they are checked in a fresh process per environment.
 """
+
 from __future__ import annotations
 
 import json
@@ -69,6 +70,7 @@ def health(monkeypatch, api_env: str, *, database_up: bool = True) -> dict:
 
 # -- /api/health ------------------------------------------------------------------------------------------------
 
+
 def test_in_dev_the_health_body_keeps_its_details(monkeypatch):
     body = health(monkeypatch, "dev")
     assert set(body) == DEV_KEYS and body["status"] == "ok", body
@@ -93,12 +95,18 @@ def test_in_dev_a_failing_database_still_says_why_in_general_terms(monkeypatch):
 
 def test_the_production_body_names_nothing_about_the_database(monkeypatch):
     text = json.dumps(health(monkeypatch, "prod"))
-    for secret in (settings.PG_DATABASE, settings.PG_HOST, str(settings.PG_PORT), settings.UPLOADS_SCHEMA,
-                   "PostgreSQL"):
+    for secret in (
+        settings.PG_DATABASE,
+        settings.PG_HOST,
+        str(settings.PG_PORT),
+        settings.UPLOADS_SCHEMA,
+        "PostgreSQL",
+    ):
         assert str(secret) not in text, f"{secret!r} is in {text}"
 
 
 # -- /docs, /redoc, /openapi.json --------------------------------------------------------------------------------
+
 
 def docs_statuses(api_env: str) -> dict[str, int]:
     """Status of each docs route in a fresh process that creates the app with this API_ENV."""
@@ -110,8 +118,7 @@ def docs_statuses(api_env: str) -> dict[str, int]:
         "print(json.dumps({p: c.get(p).status_code for p in ('/docs', '/redoc', '/openapi.json')}))\n"
     )
     env = {**os.environ, "API_ENV": api_env}
-    done = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=env, capture_output=True, text=True,
-                          timeout=180)
+    done = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=env, capture_output=True, text=True, timeout=180)
     assert done.returncode == 0, done.stderr[-600:]
     return json.loads(done.stdout.strip().splitlines()[-1])
 

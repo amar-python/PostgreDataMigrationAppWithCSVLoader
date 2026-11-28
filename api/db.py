@@ -7,8 +7,9 @@ import re
 import sys
 import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 from contextlib import contextmanager
-from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Literal
@@ -48,8 +49,10 @@ class DatabaseConnectError(psycopg2.OperationalError):
 # nobody has listed, or one in another language, still fails fast.
 _SERVER_SENT = re.compile(r"(?:^|failed: )[^\s:]+:  ")
 # The exceptions: the server is up but cannot take the connection yet (SQLSTATE 57P03 and 53300).
-_SERVER_BUSY = re.compile(r"the database system is|sorry, too many clients|remaining connection slots"
-                          r"|too many connections for|could not fork new process")
+_SERVER_BUSY = re.compile(
+    r"the database system is|sorry, too many clients|remaining connection slots"
+    r"|too many connections for|could not fork new process"
+)
 # Client-side, but waiting cannot supply a password or add SSL to the server.
 _CLIENT_CONFIG = re.compile(r"no password supplied|does not support SSL")
 # ponytail: a server whose lc_messages is not English words "starting up" in its own language, so it
@@ -59,12 +62,12 @@ _CLIENT_CONFIG = re.compile(r"no password supplied|does not support SSL")
 
 def _is_permanent(exc: Exception) -> bool:
     msg = str(exc)
-    return bool(_CLIENT_CONFIG.search(msg)) or (
-        bool(_SERVER_SENT.search(msg)) and not _SERVER_BUSY.search(msg))
+    return bool(_CLIENT_CONFIG.search(msg)) or (bool(_SERVER_SENT.search(msg)) and not _SERVER_BUSY.search(msg))
 
 
-def _connect_error(exc: Exception, user: str, creds: str, *, attempts: int = 0,
-                   permanent: bool = False, purpose: str = "") -> DatabaseConnectError:
+def _connect_error(
+    exc: Exception, user: str, creds: str, *, attempts: int = 0, permanent: bool = False, purpose: str = ""
+) -> DatabaseConnectError:
     """``purpose`` says what the login was for (e.g. " to run the database migrations"), where the
     login differs from the one the person might expect."""
     msg = f"Could not connect to PostgreSQL at {settings.PG_HOST}:{settings.PG_PORT} as {user}{purpose}"
@@ -74,7 +77,8 @@ def _connect_error(exc: Exception, user: str, creds: str, *, attempts: int = 0,
         msg += f" after {attempts} attempts." if attempts else "."
     check = f"Check {creds} (and PGDATABASE, PGHOST, PGPORT)"
     return DatabaseConnectError(
-        f"{msg}\n  {str(exc).strip()}\n{check}{'.' if permanent else ' and that the server is running.'}")
+        f"{msg}\n  {str(exc).strip()}\n{check}{'.' if permanent else ' and that the server is running.'}"
+    )
 
 
 def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
@@ -101,7 +105,9 @@ def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
                 host=settings.PG_HOST,
                 port=settings.PG_PORT,
                 user=user,
-                password=(settings.APP_DB_PASSWORD if settings.APP_DB_USER else settings.PG_PASSWORD).get_secret_value(),
+                password=(
+                    settings.APP_DB_PASSWORD if settings.APP_DB_USER else settings.PG_PASSWORD
+                ).get_secret_value(),
                 dbname=settings.PG_DATABASE,
             )
             if attempt > 1:
@@ -114,7 +120,10 @@ def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
             delay = min(base_delay * (2 ** (attempt - 1)), 10.0)
             logger.warning(
                 "Postgres not reachable (attempt %d/%d): %s. Retrying in %.1fs.",
-                attempt, max_attempts, str(exc).split("\n")[0][:120], delay,
+                attempt,
+                max_attempts,
+                str(exc).split("\n")[0][:120],
+                delay,
             )
             time.sleep(delay)
     else:
@@ -124,9 +133,7 @@ def init_pool(max_attempts: int = 30, base_delay: float = 1.0) -> None:
     # BUG-030: worker count = maxconn + a few, so a burst of concurrent
     # requests can all queue their getconn() calls without the executor
     # itself becoming the bottleneck.
-    _getconn_executor = ThreadPoolExecutor(
-        max_workers=_MAXCONN + 4, thread_name_prefix="pool-getconn"
-    )
+    _getconn_executor = ThreadPoolExecutor(max_workers=_MAXCONN + 4, thread_name_prefix="pool-getconn")
 
 
 def close_pool() -> None:
@@ -163,12 +170,12 @@ def _borrow_with_timeout() -> connection:
                 conn = fut.result(timeout=0)
                 _pool.putconn(conn)
                 logger.warning(
-                    "getconn() succeeded after the %.1fs timeout; returning "
-                    "the connection to the pool.",
+                    "getconn() succeeded after the %.1fs timeout; returning the connection to the pool.",
                     settings.POOL_GETCONN_TIMEOUT,
                 )
             except Exception:  # noqa: BLE001 — timeout retry: best-effort
                 pass
+
         future.add_done_callback(_return_late_conn)
         raise psycopg2.pool.PoolError(
             f"Could not obtain a database connection within "
@@ -206,8 +213,9 @@ class Conn:
                 raise
         return self._conn
 
-    def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None,
-                 tb: TracebackType | None) -> Literal[False]:
+    def __exit__(
+        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None
+    ) -> Literal[False]:
         # __enter__ refused to borrow without a pool, so there is one to return the connection to.
         assert _pool is not None  # nosec B101 — narrows the type for mypy; not a runtime check
         conn, close = self._conn, False
@@ -264,9 +272,10 @@ def bootstrap() -> None:
     # Deferred imports so pytest collection of api/ doesn't pull in Alembic
     # unless bootstrap() is actually called (e.g. in the lifespan handler,
     # which is only invoked by tests using TestClient as a context manager).
-    from alembic import command
     from alembic.config import Config
     from sqlalchemy.exc import OperationalError as SQLAlchemyOperationalError
+
+    from alembic import command
 
     alembic_ini = alembic_ini_path()
 
@@ -291,9 +300,13 @@ def bootstrap() -> None:
         return
 
     cfg = Config(str(alembic_ini))
-    logger.info("Running alembic upgrade head against %s@%s:%s/%s",
-                settings.PG_USER, settings.PG_HOST, settings.PG_PORT,
-                settings.PG_DATABASE)
+    logger.info(
+        "Running alembic upgrade head against %s@%s:%s/%s",
+        settings.PG_USER,
+        settings.PG_HOST,
+        settings.PG_PORT,
+        settings.PG_DATABASE,
+    )
     try:
         command.upgrade(cfg, "head")
     except SQLAlchemyOperationalError as exc:
@@ -305,18 +318,24 @@ def bootstrap() -> None:
         # The migrations log in as the owner (PGUSER), not as the runtime role the pool
         # uses, so a pool that connected fine can still stop here. Raise the short, named
         # error instead of SQLAlchemy's chained traceback (~70 lines on Windows).
-        raise _connect_error(orig, settings.PG_USER, "PGUSER / PGPASSWORD", permanent=True,
-                             purpose=" to run the database migrations") from None
+        raise _connect_error(
+            orig, settings.PG_USER, "PGUSER / PGPASSWORD", permanent=True, purpose=" to run the database migrations"
+        ) from None
     with owner_connect() as conn, conn.cursor() as cur:
-        for schema, create in ((settings.UPLOADS_SCHEMA, True), (settings.CONTROL_SCHEMA, False),
-                               (settings.TE_SCHEMA, False)):
+        for schema, create in (
+            (settings.UPLOADS_SCHEMA, True),
+            (settings.CONTROL_SCHEMA, False),
+            (settings.TE_SCHEMA, False),
+        ):
             grant_runtime(cur, schema, create=create)
     _migrate_existing_tenants()
     logger.info("Alembic migrations complete")
     if not settings.APP_DB_USER:
-        logger.warning("APP_DB_USER is not set: the API connects as the owner %r, so the database "
-                       "doesn't stop it changing the audit log (M3d). See docs/QUICKSTART.md.",
-                       settings.PG_USER)
+        logger.warning(
+            "APP_DB_USER is not set: the API connects as the owner %r, so the database "
+            "doesn't stop it changing the audit log (M3d). See docs/QUICKSTART.md.",
+            settings.PG_USER,
+        )
 
 
 @contextmanager
@@ -324,8 +343,13 @@ def owner_connect() -> Iterator[connection]:
     """A connection as the owner (PG_USER): for migrations, provisioning and grants, never requests.
     Closed on exit; the caller commits."""
     try:
-        conn = psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                                password=settings.PG_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
+        conn = psycopg2.connect(
+            host=settings.PG_HOST,
+            port=settings.PG_PORT,
+            user=settings.PG_USER,
+            password=settings.PG_PASSWORD.get_secret_value(),
+            dbname=settings.PG_DATABASE,
+        )
     except psycopg2.OperationalError as exc:
         raise _connect_error(exc, settings.PG_USER, "PGUSER / PGPASSWORD", permanent=_is_permanent(exc)) from exc
     try:
@@ -344,8 +368,20 @@ def run_cli(main: Callable[[], int]) -> int:
 
 
 # Tables the runtime role may only read and insert (M3, #107). Triggers also stop the owner.
-APPEND_ONLY = ("audit_log", "uploads", "upload_blobs", "source_rows", "row_decisions", "cell_edits",
-               "row_flags", "submissions", "approvals", "imports", "alembic_version", "alembic_version_te")
+APPEND_ONLY = (
+    "audit_log",
+    "uploads",
+    "upload_blobs",
+    "source_rows",
+    "row_decisions",
+    "cell_edits",
+    "row_flags",
+    "submissions",
+    "approvals",
+    "imports",
+    "alembic_version",
+    "alembic_version_te",
+)
 
 
 def grant_runtime(cur: cursor, schema: str, create: bool) -> None:
@@ -369,21 +405,27 @@ def grant_schema(cur: cursor, schema: str, role: str, create: bool) -> None:
     if cur.fetchone() is None:
         return
     s, r = sql.Identifier(schema), sql.Identifier(role)
-    cur.execute(sql.SQL("GRANT USAGE{} ON SCHEMA {} TO {}").format(
-        sql.SQL(", CREATE") if create else sql.SQL(""), s, r))
+    cur.execute(
+        sql.SQL("GRANT USAGE{} ON SCHEMA {} TO {}").format(sql.SQL(", CREATE") if create else sql.SQL(""), s, r)
+    )
     cur.execute(sql.SQL("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {} TO {}").format(s, r))
     cur.execute(sql.SQL("GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {} TO {}").format(s, r))
-    cur.execute("SELECT relname FROM pg_class WHERE relnamespace = %s::regnamespace AND relname = ANY(%s)",
-                (schema, list(APPEND_ONLY)))
+    cur.execute(
+        "SELECT relname FROM pg_class WHERE relnamespace = %s::regnamespace AND relname = ANY(%s)",
+        (schema, list(APPEND_ONLY)),
+    )
     for (table,) in cur.fetchall():
-        cur.execute(sql.SQL("REVOKE UPDATE, DELETE, TRUNCATE ON {}.{} FROM {}").format(
-            s, sql.Identifier(table), r))
+        cur.execute(sql.SQL("REVOKE UPDATE, DELETE, TRUNCATE ON {}.{} FROM {}").format(s, sql.Identifier(table), r))
     cur.execute("SELECT to_regclass(%s)", (f'"{schema}".csv_files',))
     if create and fetch_one(cur)[0] is not None:
-        cur.execute(sql.SQL(
-            "SELECT c.relname FROM {}.csv_files f JOIN pg_class c ON c.relname = f.table_name "
-            "AND c.relnamespace = %s::regnamespace WHERE f.mode = 'dynamic' "
-            "AND pg_get_userbyid(c.relowner) <> %s").format(s), (schema, role))
+        cur.execute(
+            sql.SQL(
+                "SELECT c.relname FROM {}.csv_files f JOIN pg_class c ON c.relname = f.table_name "
+                "AND c.relnamespace = %s::regnamespace WHERE f.mode = 'dynamic' "
+                "AND pg_get_userbyid(c.relowner) <> %s"
+            ).format(s),
+            (schema, role),
+        )
         for (table,) in cur.fetchall():
             cur.execute(sql.SQL("ALTER TABLE {}.{} OWNER TO {}").format(s, sql.Identifier(table), r))
     cur.connection.commit()
@@ -410,8 +452,7 @@ def _migrate_existing_tenants() -> None:
     from api.tenancy import migrate_tenant
 
     with owner_connect() as conn, conn.cursor() as cur:
-        cur.execute(sql.SQL("SELECT slug FROM {}.tenants ORDER BY id").format(
-            sql.Identifier(settings.CONTROL_SCHEMA)))
+        cur.execute(sql.SQL("SELECT slug FROM {}.tenants ORDER BY id").format(sql.Identifier(settings.CONTROL_SCHEMA)))
         slugs = [r[0] for r in cur.fetchall()]
     for slug in slugs:
         migrate_tenant(slug)

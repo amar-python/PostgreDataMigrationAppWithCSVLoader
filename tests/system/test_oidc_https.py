@@ -72,9 +72,11 @@ class KeyFetchOverHttps(_Https):
         key = new_key()
         with LocalIdp({"k1": key}) as idp, idp.trust():
             settings.OIDC_JWKS_URL = idp.jwks_url
-            for name, token in {"audience": _token(key, "k1", aud="another-app"),
-                                "issuer": _token(key, "k1", iss="https://evil.example/realms/te"),
-                                "expiry": _token(key, "k1", exp=int(time.time()) - 5, iat=int(time.time()) - 400)}.items():
+            for name, token in {
+                "audience": _token(key, "k1", aud="another-app"),
+                "issuer": _token(key, "k1", iss="https://evil.example/realms/te"),
+                "expiry": _token(key, "k1", exp=int(time.time()) - 5, iat=int(time.time()) - 400),
+            }.items():
                 self.assertIsNone(oidc.username_from(token), name)
 
     def test_a_rotated_signing_key_is_picked_up_without_a_restart_after_the_cooldown(self):
@@ -83,13 +85,19 @@ class KeyFetchOverHttps(_Https):
             settings.OIDC_JWKS_URL = idp.jwks_url
             self.assertEqual(oidc.username_from(_token(old, "old")), "alice")
             client = oidc._jwks(idp.jwks_url)
-            client.cooldown_duration = 0.5                         # PyJWT's default is 30 s; shortened to keep the test quick
-            idp.keys = {"old": old, "new": new}                    # the IdP rotates
-            self.assertIsNone(oidc.username_from(_token(new, "new")), "refused inside the cooldown after the last fetch")
+            client.cooldown_duration = 0.5  # PyJWT's default is 30 s; shortened to keep the test quick
+            idp.keys = {"old": old, "new": new}  # the IdP rotates
+            self.assertIsNone(
+                oidc.username_from(_token(new, "new")), "refused inside the cooldown after the last fetch"
+            )
             self.assertEqual(len(idp.requests), 1, "...and that didn't cost the IdP a request")
             time.sleep(0.6)
-            self.assertEqual(oidc.username_from(_token(new, "new")), "alice", "after the cooldown the key set is re-fetched")
-            self.assertEqual(oidc.username_from(_token(old, "old")), "alice", "the old key still works during the overlap")
+            self.assertEqual(
+                oidc.username_from(_token(new, "new")), "alice", "after the cooldown the key set is re-fetched"
+            )
+            self.assertEqual(
+                oidc.username_from(_token(old, "old")), "alice", "the old key still works during the overlap"
+            )
             self.assertEqual(len(idp.requests), 2)
 
     def test_random_key_ids_cannot_make_the_api_hammer_the_idp(self):
@@ -105,7 +113,7 @@ class KeyFetchOverHttps(_Https):
 class WhenTheIdpCannotBeTrustedOrReached(_Https):
     def test_a_certificate_the_host_does_not_trust_fails_closed(self):
         key = new_key()
-        with LocalIdp({"k1": key}) as idp:                           # no idp.trust(): self-signed and unknown
+        with LocalIdp({"k1": key}) as idp:  # no idp.trust(): self-signed and unknown
             settings.OIDC_JWKS_URL = idp.jwks_url
             self.assertIsNone(oidc.username_from(_token(key, "k1")))
             self.assertEqual(idp.requests, [], "the TLS handshake failed, so no request was made")
@@ -158,16 +166,26 @@ class SignInThroughTheApi(_Https):
         key = new_key()
         with LocalIdp({"k1": key}) as idp, idp.trust():
             settings.OIDC_JWKS_URL = idp.jwks_url
-            res = self.client.post("/api/auth/oidc", json={"tenant": tenant, "idToken": _token(key, "k1", username=user)})
+            res = self.client.post(
+                "/api/auth/oidc", json={"tenant": tenant, "idToken": _token(key, "k1", username=user)}
+            )
             self.assertEqual(res.status_code, 200, res.text)
-            self.assertEqual((res.json()["username"], res.json()["role"], res.json()["tenant"]), (user, "reviewer", tenant))
-            stranger = self.client.post("/api/auth/oidc", json={"tenant": tenant, "idToken": _token(key, "k1", username="nobody")})
+            self.assertEqual(
+                (res.json()["username"], res.json()["role"], res.json()["tenant"]), (user, "reviewer", tenant)
+            )
+            stranger = self.client.post(
+                "/api/auth/oidc", json={"tenant": tenant, "idToken": _token(key, "k1", username="nobody")}
+            )
             self.assertEqual(stranger.status_code, 401, "a valid token for someone who isn't a member gets nothing")
-            forged = self.client.post("/api/auth/oidc", json={"tenant": tenant, "idToken": _token(new_key(), "k1", username=user)})
+            forged = self.client.post(
+                "/api/auth/oidc", json={"tenant": tenant, "idToken": _token(new_key(), "k1", username=user)}
+            )
             self.assertEqual(forged.status_code, 401)
         with Conn() as conn, conn.cursor() as cur:
             from psycopg2 import sql
+
             from api.tenancy import schema_for
+
             control = sql.Identifier(settings.CONTROL_SCHEMA)
             cur.execute(sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(control), (tenant,))
             cur.execute(sql.SQL("DELETE FROM {}.users WHERE username = %s").format(control), (user,))

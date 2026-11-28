@@ -5,6 +5,7 @@ script used to die with `KeyError: 'tableName'` and a traceback; it now says the
 2 (cannot run, as for a missing password) and writes nothing, so the committed sample report is never
 overwritten by a half run. No server or database is needed: the API and the connection are stubs.
 """
+
 import shutil
 import sys
 from pathlib import Path
@@ -33,16 +34,21 @@ def test_a_refused_upload_stops_with_the_reason_and_the_way_out():
 
 
 def test_a_loaded_upload_gives_its_table():
-    assert run.loaded_table(_result({"status": "ok", "tableName": "tenant_dev.organisations"}), "x") == \
-        "tenant_dev.organisations"
+    assert (
+        run.loaded_table(_result({"status": "ok", "tableName": "tenant_dev.organisations"}), "x")
+        == "tenant_dev.organisations"
+    )
 
 
-@pytest.mark.parametrize("response, shown", [
-    ({"status": "error", "message": "a plain message"}, "a plain message"),
-    ({"status": "invalid_structure", "reason": "empty"}, "empty"),
-    ({"detail": "File too large"}, "File too large"),
-    ({}, "no reason given"),
-])
+@pytest.mark.parametrize(
+    "response, shown",
+    [
+        ({"status": "error", "message": "a plain message"}, "a plain message"),
+        ({"status": "invalid_structure", "reason": "empty"}, "empty"),
+        ({"detail": "File too large"}, "File too large"),
+        ({}, "no reason given"),
+    ],
+)
 def test_whatever_the_refusal_looks_like_it_is_explained(response, shown):
     with pytest.raises(run.NotFresh, match=shown):
         run.loaded_table(_result(response, 413), "file")
@@ -89,5 +95,6 @@ def test_main_on_a_populated_database_exits_2_says_why_and_writes_nothing(tmp_pa
     assert code == 2
     err = capsys.readouterr().err
     assert "FRESH database" in err and "Traceback" not in err
-    assert sorted(p.name for p in Path(tmp_path).iterdir()) == ["equipment_register.csv", "orgs_sample.csv"], \
+    assert sorted(p.name for p in Path(tmp_path).iterdir()) == ["equipment_register.csv", "orgs_sample.csv"], (
         "no report or evidence file was written"
+    )

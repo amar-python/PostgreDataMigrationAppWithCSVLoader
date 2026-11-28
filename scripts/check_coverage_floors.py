@@ -19,6 +19,7 @@ api 94.4 % and streamlit_app 97.5 % on the full suite (19 Nov 2026); build/csv 8
 database-free tiers alone with subprocess measurement on (24 Nov 2026, a lower bound for the full suite). Raise them
 when the numbers rise.
 """
+
 from __future__ import annotations
 
 import json
@@ -37,8 +38,8 @@ FLOORS: dict[str, int] = {
 PACKAGE_FLOORS: dict[str, int] = {
     "api/": 90,
     "streamlit_app/": 92,
-    "build/csv/": 80,   # #304: the validator (validator.py); the shell loaders are invisible to coverage.py
-    "evals/": 60,       # #304: the runner and the gap report
+    "build/csv/": 80,  # #304: the validator (validator.py); the shell loaders are invisible to coverage.py
+    "evals/": 60,  # #304: the runner and the gap report
 }
 
 GREEN = "\033[0;32m"

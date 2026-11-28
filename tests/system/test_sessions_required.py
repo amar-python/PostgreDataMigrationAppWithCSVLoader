@@ -14,6 +14,7 @@ After:
 The suite runs with the anonymous opt-in on (tests/conftest.py); every test here switches it off.
 The 401 tests need no database. The session tests need PostgreSQL and fail, never skip, without it.
 """
+
 from __future__ import annotations
 
 import os
@@ -71,8 +72,11 @@ class NoSessionNoData(_NoAnonymous, unittest.TestCase):
         self.assertGreater(len(_data_routes()), 20, _data_routes())
 
     def test_every_data_route_needs_a_session(self):
-        wrong = [(method, path, res.status_code) for method, path in _data_routes()
-                 if (res := self.client.request(method, path, json={})).status_code != 401]
+        wrong = [
+            (method, path, res.status_code)
+            for method, path in _data_routes()
+            if (res := self.client.request(method, path, json={})).status_code != 401
+        ]
         self.assertEqual(wrong, [], "these answered without a session")
 
     def test_api_env_dev_alone_is_not_anonymous(self):
@@ -106,9 +110,14 @@ class NoSessionNoData(_NoAnonymous, unittest.TestCase):
         self.assertFalse(hasattr(settings, "API_KEY"))
 
     def test_cors_no_longer_offers_the_key_header(self):
-        res = self.client.options("/api/csv/files", headers={
-            "Origin": settings.CORS_ORIGINS[0], "Access-Control-Request-Method": "GET",
-            "Access-Control-Request-Headers": "x-api-key"})
+        res = self.client.options(
+            "/api/csv/files",
+            headers={
+                "Origin": settings.CORS_ORIGINS[0],
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "x-api-key",
+            },
+        )
         self.assertNotIn("x-api-key", res.headers.get("access-control-allow-headers", "").lower())
 
 
@@ -136,8 +145,9 @@ class SignedInCallersAreScopedAndNamed(_NoAnonymous, unittest.TestCase):
             conn.commit()
         migrate_tenant(cls.slug)
         for role in ("uploader", "tenant_admin"):
-            res = cls.client.post("/api/auth/login", json={
-                "tenant": cls.slug, "username": f"{cls.slug}_{role}", "password": _PW})
+            res = cls.client.post(
+                "/api/auth/login", json={"tenant": cls.slug, "username": f"{cls.slug}_{role}", "password": _PW}
+            )
             assert res.status_code == 200, res.text
             cls.headers[role] = {"Authorization": f"Bearer {res.json()['token']}"}
 
@@ -147,10 +157,16 @@ class SignedInCallersAreScopedAndNamed(_NoAnonymous, unittest.TestCase):
         with Conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_for(cls.slug))))
-                cur.execute(sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(
-                    sql.Identifier(settings.CONTROL_SCHEMA)), (cls.slug,))
-                cur.execute(sql.SQL("DELETE FROM {}.users WHERE username LIKE %s").format(
-                    sql.Identifier(settings.CONTROL_SCHEMA)), (f"{cls.slug}_%",))
+                cur.execute(
+                    sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(sql.Identifier(settings.CONTROL_SCHEMA)),
+                    (cls.slug,),
+                )
+                cur.execute(
+                    sql.SQL("DELETE FROM {}.users WHERE username LIKE %s").format(
+                        sql.Identifier(settings.CONTROL_SCHEMA)
+                    ),
+                    (f"{cls.slug}_%",),
+                )
             conn.commit()
         cls.ctx.__exit__(None, None, None)
 
@@ -176,11 +192,23 @@ class SignedInCallersAreScopedAndNamed(_NoAnonymous, unittest.TestCase):
     def test_an_uploader_may_not_replace_a_prior_load(self):
         tag = uuid.uuid4().hex[:10]
         name = f"te_{tag}.csv"
-        self._upload("tenant_admin", fileName=name, mode="te", targetTable="organisations",
-                     content=f"name,org_type,country\nORG_A_{tag},government,AU\n")
-        again = self.client.post("/api/csv/upload", headers=self.headers["uploader"], json={
-            "fileName": name, "mode": "te", "targetTable": "organisations",
-            "content": f"name,org_type,country\nORG_B_{tag},government,AU\n"})
+        self._upload(
+            "tenant_admin",
+            fileName=name,
+            mode="te",
+            targetTable="organisations",
+            content=f"name,org_type,country\nORG_A_{tag},government,AU\n",
+        )
+        again = self.client.post(
+            "/api/csv/upload",
+            headers=self.headers["uploader"],
+            json={
+                "fileName": name,
+                "mode": "te",
+                "targetTable": "organisations",
+                "content": f"name,org_type,country\nORG_B_{tag},government,AU\n",
+            },
+        )
         self.assertEqual(again.status_code, 403, again.text)
 
     def test_the_audit_log_names_the_signed_in_user(self):

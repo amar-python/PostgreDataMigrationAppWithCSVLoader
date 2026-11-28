@@ -38,8 +38,11 @@ class TimedOut(ApiError):
     saying "can't reach the API" here would be untrue, and would invite a second import of the same file."""
 
     def __init__(self, seconds: float):
-        super().__init__(0, f"The server did not answer within {seconds:g} seconds. It may still be working on "
-                            "this, and it can't be stopped from here. Look in Import history before trying again.")
+        super().__init__(
+            0,
+            f"The server did not answer within {seconds:g} seconds. It may still be working on "
+            "this, and it can't be stopped from here. Look in Import history before trying again.",
+        )
 
 
 def _detail(response: requests.Response) -> str:

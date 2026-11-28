@@ -28,6 +28,7 @@ Usage
 Exit codes: 0 all executed tests passed; 1 otherwise (or any skip under
 --strict).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -52,9 +53,10 @@ def _collect_all_ids(paths: list[str] | None = None) -> set[str]:
     r = subprocess.run(
         # -o addopts="" neutralises pytest.ini's -q, which would otherwise collapse
         # the listing to per-file counts instead of individual test ids.
-        [sys.executable, "-m", "pytest", "--collect-only", "-q", "--no-header",
-         "-o", "addopts=", *(paths or [])],
-        cwd=ROOT, capture_output=True, text=True,
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "--no-header", "-o", "addopts=", *(paths or [])],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
     )
     ids = set()
     for line in r.stdout.splitlines():
@@ -90,11 +92,9 @@ def _parse(xml_path: Path):
         if (n := case.find("skipped")) is not None:
             skipped.append((tid, (n.get("message") or "").strip() or "no reason given"))
         elif (n := case.find("failure")) is not None:
-            failed.append((tid, (n.get("message") or "").strip().splitlines()[0]
-                           if n.get("message") else ""))
+            failed.append((tid, (n.get("message") or "").strip().splitlines()[0] if n.get("message") else ""))
         elif (n := case.find("error")) is not None:
-            errored.append((tid, (n.get("message") or "").strip().splitlines()[0]
-                            if n.get("message") else ""))
+            errored.append((tid, (n.get("message") or "").strip().splitlines()[0] if n.get("message") else ""))
         else:
             passed.append(tid)
     return passed, failed, errored, skipped
@@ -106,14 +106,15 @@ def _norm(tid: str) -> str:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--markers", default=None,
-                    help='pytest -m expression, e.g. "unit or security"')
-    ap.add_argument("--strict", action="store_true",
-                    help="exit non-zero if any test was skipped")
-    ap.add_argument("--paths", nargs="+", default=None,
-                    help="test paths to run instead of pytest.ini's testpaths (tests/), e.g. e2e for the browser tests")
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--markers", default=None, help='pytest -m expression, e.g. "unit or security"')
+    ap.add_argument("--strict", action="store_true", help="exit non-zero if any test was skipped")
+    ap.add_argument(
+        "--paths",
+        nargs="+",
+        default=None,
+        help="test paths to run instead of pytest.ini's testpaths (tests/), e.g. e2e for the browser tests",
+    )
     args = ap.parse_args()
 
     with tempfile.TemporaryDirectory() as td:
@@ -125,21 +126,27 @@ def main() -> int:
     # pytest's exit codes: 0 all passed, 1 some failed, 2 interrupted (e.g. a collection error), 3 internal error,
     # 4 usage error (a conftest that cannot be imported lands here), 5 nothing collected. Only 0 and 1 mean tests
     # ran; any other code means they did not, whatever the results hold (#273: 4 and 5 used to read as a pass).
-    meanings = {2: "interrupted, e.g. a collection error", 3: "internal error",
-                4: "usage error, e.g. a conftest that cannot be imported", 5: "no tests were collected"}
+    meanings = {
+        2: "interrupted, e.g. a collection error",
+        3: "internal error",
+        4: "usage error, e.g. a conftest that cannot be imported",
+        5: "no tests were collected",
+    }
     interrupted = exit_code not in (0, 1)
 
-    executed = {_norm(t) for t in passed} \
-        | {_norm(t) for t, _ in failed} \
-        | {_norm(t) for t, _ in errored} \
+    executed = (
+        {_norm(t) for t in passed}
+        | {_norm(t) for t, _ in failed}
+        | {_norm(t) for t, _ in errored}
         | {_norm(t) for t, _ in skipped}
+    )
     not_run = sorted(i for i in all_ids if _norm(i) not in executed)
 
     total = len(passed) + len(failed) + len(errored) + len(skipped)
     bar = "=" * 66
     print(f"\n{CYAN}{bar}\n  FINAL RESULT — every test accounted for\n{bar}{NC}")
     if args.markers:
-        print(f"  marker filter : -m \"{args.markers}\"")
+        print(f'  marker filter : -m "{args.markers}"')
     if args.paths:
         print(f"  paths         : {' '.join(args.paths)}")
     print(f"  pytest exit   : {exit_code}" + (f"  ({meanings.get(exit_code, 'unexpected')})" if interrupted else ""))
@@ -149,8 +156,7 @@ def main() -> int:
     print(f"  {RED}FAILED{NC}        : {len(failed)}")
     print(f"  {RED}ERROR{NC}         : {len(errored)}")
     print(f"  {YELLOW}SKIPPED{NC}       : {len(skipped)}")
-    not_run_reason = ("run INTERRUPTED before they could execute"
-                      if interrupted else "deselected by the marker filter")
+    not_run_reason = "run INTERRUPTED before they could execute" if interrupted else "deselected by the marker filter"
     print(f"  {DIM}NOT RUN{NC}       : {len(not_run)}  {DIM}({not_run_reason}){NC}")
 
     for label, colour, items in (("FAILED", RED, failed), ("ERROR", RED, errored)):
@@ -175,21 +181,23 @@ def main() -> int:
         for tid in not_run:
             print(f"    {DIM}- {tid}{NC}")
         if interrupted:
-            print(f"    {RED}The run was interrupted (exit code 2) — most often a"
-                  f" collection error above. These tests never executed.{NC}")
+            print(
+                f"    {RED}The run was interrupted (exit code 2) — most often a"
+                f" collection error above. These tests never executed.{NC}"
+            )
         else:
-            print(f"    {DIM}Deselected by the marker filter, not skipped. They must"
-                  f" run in another job.{NC}")
+            print(f"    {DIM}Deselected by the marker filter, not skipped. They must run in another job.{NC}")
     else:
         print(f"    {GREEN}none — every collected test was executed{NC}")
 
     # A run that executed nothing proves nothing, so it cannot pass.
-    ok = (not failed and not errored and not interrupted and total > 0
-          and not (args.strict and skipped))
+    ok = not failed and not errored and not interrupted and total > 0 and not (args.strict and skipped)
     if not ok:
         if interrupted:
-            print(f"\n  {RED}pytest exited with code {exit_code} "
-                  f"({meanings.get(exit_code, 'unexpected')}): the tests did not run.{NC}")
+            print(
+                f"\n  {RED}pytest exited with code {exit_code} "
+                f"({meanings.get(exit_code, 'unexpected')}): the tests did not run.{NC}"
+            )
         elif total == 0:
             print(f"\n  {RED}No test was executed, so there is nothing to pass.{NC}")
     print(f"\n{bar}")

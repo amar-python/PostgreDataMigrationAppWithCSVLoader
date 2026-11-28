@@ -12,6 +12,7 @@ in this deployment's own API response (not rewritten, because they could not be 
 one JUnit XML parse of a file the script itself had pytest write, and the two string-built DO blocks in the
 migration, whose identifiers are quoted by the dialect.
 """
+
 from __future__ import annotations
 
 import importlib.util

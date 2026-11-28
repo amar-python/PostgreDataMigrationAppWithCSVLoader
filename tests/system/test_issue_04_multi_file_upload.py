@@ -22,6 +22,7 @@ Run::
 Requires a reachable database; per the repository's no-skip policy a missing
 prerequisite FAILS with remediation text rather than skipping.
 """
+
 from __future__ import annotations
 
 import os
@@ -32,10 +33,12 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it. Most often this means "
-         "PGPASSWORD is not set in this shell:\n"
-         "    PowerShell:  $env:PGPASSWORD = '<password>'\n"
-         "    bash:        export PGPASSWORD='<password>'")
+_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it. Most often this means "
+    "PGPASSWORD is not set in this shell:\n"
+    "    PowerShell:  $env:PGPASSWORD = '<password>'\n"
+    "    bash:        export PGPASSWORD='<password>'"
+)
 
 # How many files to push through in the "any number" test. Kept modest so the
 # suite stays fast; the point is that the API imposes no limit, not throughput.
@@ -77,8 +80,7 @@ class MultipleFileUpload(unittest.TestCase):
 
     def _upload(self, name: str, content: str) -> dict:
         self.uploaded.append(name)
-        r = self.client.post("/api/csv/upload",
-                             json={"fileName": name, "content": content})
+        r = self.client.post("/api/csv/upload", json={"fileName": name, "content": content})
         self.assertEqual(r.status_code, 200, r.text[:300])
         return r.json()
 
@@ -88,13 +90,11 @@ class MultipleFileUpload(unittest.TestCase):
         """Uploading several files in sequence must all succeed."""
         tables = []
         for i in range(BATCH_SIZE):
-            body = self._upload(f"{self.tag}_{i}.csv",
-                                f"col_a,col_b\n{self.tag},{i}\n")
+            body = self._upload(f"{self.tag}_{i}.csv", f"col_a,col_b\n{self.tag},{i}\n")
             self.assertEqual(body["status"], "ok", body)
             tables.append(body["tableName"])
 
-        self.assertEqual(len(set(tables)), BATCH_SIZE,
-                         f"each file needs its own table, got {tables}")
+        self.assertEqual(len(set(tables)), BATCH_SIZE, f"each file needs its own table, got {tables}")
 
     def test_every_uploaded_file_is_listed(self):
         """All uploads appear in /api/csv/files — this drives 'Migrated files'."""
@@ -108,8 +108,7 @@ class MultipleFileUpload(unittest.TestCase):
     def test_each_file_is_independently_readable(self):
         """Rows from one upload must not leak into another's table."""
         first = self._upload(f"{self.tag}_first.csv", f"col_a\n{self.tag}-first\n")
-        second = self._upload(f"{self.tag}_second.csv",
-                              f"col_a\n{self.tag}-s1\n{self.tag}-s2\n")
+        second = self._upload(f"{self.tag}_second.csv", f"col_a\n{self.tag}-s1\n{self.tag}-s2\n")
 
         self.assertNotEqual(first["tableName"], second["tableName"])
 
@@ -134,10 +133,8 @@ class MultipleFileUpload(unittest.TestCase):
 
     def test_files_with_different_schemas_coexist(self):
         """Unrelated column sets must not collide — no shared fixed schema."""
-        a = self._upload(f"{self.tag}_shape_a.csv",
-                         f"name,email\n{self.tag},a@example.com\n")
-        b = self._upload(f"{self.tag}_shape_b.csv",
-                         f"sku,qty,price\n{self.tag},3,9.99\n")
+        a = self._upload(f"{self.tag}_shape_a.csv", f"name,email\n{self.tag},a@example.com\n")
+        b = self._upload(f"{self.tag}_shape_b.csv", f"sku,qty,price\n{self.tag},3,9.99\n")
 
         self.assertEqual(a["columns"], ["name", "email"])
         self.assertEqual(b["columns"], ["sku", "qty", "price"])
@@ -149,5 +146,4 @@ class MultipleFileUpload(unittest.TestCase):
         body = self._upload(f"{self.tag}_bulk.csv", f"col_a,col_b\n{rows}\n")
         self.assertEqual(body["status"], "ok", body)
         self.assertEqual(body["totalRows"], 250)
-        self.assertEqual(body["insertedRows"], 250,
-                         "all distinct rows should load")
+        self.assertEqual(body["insertedRows"], 250, "all distinct rows should load")

@@ -7,6 +7,7 @@ and fails if they differ.
     UPDATE_SNAPSHOTS=1 pytest -m snapshot tests/test_snapshot.py   # regenerate
     pytest -m snapshot tests/test_snapshot.py                       # compare
 """
+
 import os
 import subprocess
 import sys
@@ -18,24 +19,24 @@ import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.snapshot]
 
-VALIDATOR     = Path(__file__).resolve().parents[2] / "build" / "csv" / "validator.py"
+VALIDATOR = Path(__file__).resolve().parents[2] / "build" / "csv" / "validator.py"
 SNAPSHOTS_DIR = Path(__file__).resolve().parents[1] / "snapshots"
-UPDATE        = os.environ.get("UPDATE_SNAPSHOTS", "").lower() in ("1", "true", "yes")
+UPDATE = os.environ.get("UPDATE_SNAPSHOTS", "").lower() in ("1", "true", "yes")
 
 
 def _run_validator(csv_content: bytes, table_name: str = "people") -> tuple[str, str, int]:
     """Run the validator on csv_content bytes; return (valid_text, skip_text, exit_code)."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        csv_file  = tmp_path / "input.csv"
+        csv_file = tmp_path / "input.csv"
         valid_csv = tmp_path / "valid.csv"
-        skip_csv  = tmp_path / "skip.csv"
+        skip_csv = tmp_path / "skip.csv"
         csv_file.write_bytes(csv_content)
         env = {
             **os.environ,
-            "CSV_FILE":   str(csv_file),
-            "VALID_CSV":  str(valid_csv),
-            "SKIP_FILE":  str(skip_csv),
+            "CSV_FILE": str(csv_file),
+            "VALID_CSV": str(valid_csv),
+            "SKIP_FILE": str(skip_csv),
             "TABLE_NAME": table_name,
         }
         r = subprocess.run(
@@ -47,7 +48,7 @@ def _run_validator(csv_content: bytes, table_name: str = "people") -> tuple[str,
             errors="replace",
         )
         valid_text = valid_csv.read_text(encoding="utf-8") if valid_csv.exists() else ""
-        skip_text  = skip_csv.read_text(encoding="utf-8")  if skip_csv.exists()  else ""
+        skip_text = skip_csv.read_text(encoding="utf-8") if skip_csv.exists() else ""
         return valid_text, skip_text, r.returncode
 
 
@@ -96,8 +97,7 @@ class SnapshotAllValidInput(unittest.TestCase):
         _assert_snapshot(valid_text, "all_valid_expected_valid.csv")
         # skip file should have only a header (or be empty)
         skip_lines = [ln for ln in skip_text.splitlines() if ln.strip()]
-        self.assertLessEqual(len(skip_lines), 1,
-                             "Expected at most a header row in skip.csv when all rows are valid")
+        self.assertLessEqual(len(skip_lines), 1, "Expected at most a header row in skip.csv when all rows are valid")
 
 
 if __name__ == "__main__":

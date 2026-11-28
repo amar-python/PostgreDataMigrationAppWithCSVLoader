@@ -9,10 +9,9 @@ from __future__ import annotations
 
 import re
 
+from conftest import shell_sign_in
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
-
-from conftest import shell_sign_in
 
 
 def idle(page) -> None:

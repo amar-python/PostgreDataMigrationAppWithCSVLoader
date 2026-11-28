@@ -31,7 +31,10 @@ from api.config import settings  # noqa: E402
 from api.db import Conn  # noqa: E402
 from scripts import pg_login  # noqa: E402  (its server_available asks whether PostgreSQL is there)
 
+# Keeps preflight, and the imports after it, in the order they were written.
+# isort: split
 import preflight  # noqa: E402
+
 from api.services import accounts  # noqa: E402
 from api.tenancy import drop_tenant_role, migrate_tenant, schema_for  # noqa: E402
 
@@ -58,15 +61,21 @@ class Stack:
 
     def token(self, who: str) -> str:
         a = self.accounts[who]
-        res = requests.post(f"{self.api}/api/auth/login", timeout=30,
-                            json={"tenant": a.tenant, "username": a.username, "password": PASSWORD})
+        res = requests.post(
+            f"{self.api}/api/auth/login",
+            timeout=30,
+            json={"tenant": a.tenant, "username": a.username, "password": PASSWORD},
+        )
         res.raise_for_status()
         return res.json()["token"]
 
     def upload(self, who: str, name: str, content: str, **extra) -> dict:
-        res = requests.post(f"{self.api}/api/csv/upload", timeout=60,
-                            headers={"Authorization": f"Bearer {self.token(who)}"},
-                            json={"fileName": name, "content": content, **extra})
+        res = requests.post(
+            f"{self.api}/api/csv/upload",
+            timeout=60,
+            headers={"Authorization": f"Bearer {self.token(who)}"},
+            json={"fileName": name, "content": content, **extra},
+        )
         res.raise_for_status()
         return res.json()
 
@@ -94,8 +103,14 @@ def prerequisites():
     that is missing at once (e2e/preflight.py), rather than the first error a missing piece happens to raise."""
     ports = [API_PORT, WEB_PORT, SHELL_PORT]
     found = preflight.problems(
-        root=ROOT, env=os.environ, pg_host=settings.PG_HOST, pg_port=settings.PG_PORT,
-        probe=pg_login.server_available, ports=ports, is_free=_port_is_free)
+        root=ROOT,
+        env=os.environ,
+        pg_host=settings.PG_HOST,
+        pg_port=settings.PG_PORT,
+        probe=pg_login.server_available,
+        ports=ports,
+        is_free=_port_is_free,
+    )
     if found:
         pytest.exit(preflight.report(found), returncode=3)
 
@@ -121,21 +136,51 @@ def stack():
 
     api, web, shell = (f"http://127.0.0.1:{p}" for p in (API_PORT, WEB_PORT, SHELL_PORT))
     env = {**os.environ, "CORS_ORIGINS": web, "API_RATE_LIMIT_WRITES": "0", "API_RATE_LIMIT_READS": "0"}
-    subprocess.run(["npm", "run", "build"], cwd=ROOT / "csv-table-hub-main", check=True, capture_output=True,
-                   env={**env, "NITRO_PRESET": "node-server", "VITE_API_BASE": api})  # VITE_API_BASE is baked in
+    subprocess.run(
+        ["npm", "run", "build"],
+        cwd=ROOT / "csv-table-hub-main",
+        check=True,
+        capture_output=True,
+        env={**env, "NITRO_PRESET": "node-server", "VITE_API_BASE": api},
+    )  # VITE_API_BASE is baked in
     procs = [
-        subprocess.Popen([sys.executable, "-m", "uvicorn", "api.main:app", "--port", str(API_PORT)],
-                         cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True),
+        subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "api.main:app", "--port", str(API_PORT)],
+            cwd=ROOT,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        ),
         # The production build, served as the offline bundle serves it: what ships, not the dev server.
-        subprocess.Popen(["node", ".output/server/index.mjs"], cwd=ROOT / "csv-table-hub-main",
-                         env={**env, "PORT": str(WEB_PORT), "HOST": "127.0.0.1"},
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True),
+        subprocess.Popen(
+            ["node", ".output/server/index.mjs"],
+            cwd=ROOT / "csv-table-hub-main",
+            env={**env, "PORT": str(WEB_PORT), "HOST": "127.0.0.1"},
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        ),
         # The Streamlit app, started the way its README says: from its own folder, with no flag for telemetry,
         # so the shipped .streamlit/config.toml is what is tested.
-        subprocess.Popen([sys.executable, "-m", "streamlit", "run", "app.py", "--server.headless", "true",
-                          "--server.port", str(SHELL_PORT)],
-                         cwd=ROOT / "streamlit_app", env={**env, "API_URL": api}, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, start_new_session=True),
+        subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "streamlit",
+                "run",
+                "app.py",
+                "--server.headless",
+                "true",
+                "--server.port",
+                str(SHELL_PORT),
+            ],
+            cwd=ROOT / "streamlit_app",
+            env={**env, "API_URL": api},
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        ),
     ]
     try:
         _wait_for(f"{api}/api/health", "the API")
@@ -156,12 +201,18 @@ def stack():
         with Conn() as conn, conn.cursor() as cur:
             for t in tenant_ids:
                 cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_for(t))))
-                cur.execute(sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(
-                    sql.Identifier(settings.CONTROL_SCHEMA)), (t,))
-                drop_tenant_role(cur, t)   # #297: each tenant has its own database role
-            cur.execute(sql.SQL("DELETE FROM {}.users WHERE username LIKE %s OR username LIKE %s OR username LIKE %s "
-                                "OR username LIKE %s").format(sql.Identifier(settings.CONTROL_SCHEMA)),
-                        tuple(f"{p}_{tag}" for p in ("admin", "uploader", "reviewer", "other")))
+                cur.execute(
+                    sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(sql.Identifier(settings.CONTROL_SCHEMA)),
+                    (t,),
+                )
+                drop_tenant_role(cur, t)  # #297: each tenant has its own database role
+            cur.execute(
+                sql.SQL(
+                    "DELETE FROM {}.users WHERE username LIKE %s OR username LIKE %s OR username LIKE %s "
+                    "OR username LIKE %s"
+                ).format(sql.Identifier(settings.CONTROL_SCHEMA)),
+                tuple(f"{p}_{tag}" for p in ("admin", "uploader", "reviewer", "other")),
+            )
             conn.commit()
         db.close_pool()
 
@@ -175,9 +226,12 @@ def browser():
         except PlaywrightError as e:
             if "Executable doesn't exist" not in str(e):
                 raise
-            pytest.exit("The browser tests cannot start: Playwright's Chromium is not installed for this "
-                        "Playwright version. Run `playwright install chromium`, or set E2E_CHROMIUM to an "
-                        "installed Chrome or Chromium.", returncode=3)
+            pytest.exit(
+                "The browser tests cannot start: Playwright's Chromium is not installed for this "
+                "Playwright version. Run `playwright install chromium`, or set E2E_CHROMIUM to an "
+                "installed Chrome or Chromium.",
+                returncode=3,
+            )
         yield b
         b.close()
 

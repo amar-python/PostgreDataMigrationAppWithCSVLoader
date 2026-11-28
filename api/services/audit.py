@@ -17,23 +17,24 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from typing import Any
 
 from psycopg2 import sql
+from psycopg2.extensions import cursor
 
 from api.db import fetch_one
 from api.tenancy import uploads_schema
-from typing import Any
-from psycopg2.extensions import cursor
-from collections.abc import Iterator
 
 logger = logging.getLogger(__name__)
 
 # Actions the log is allowed to record. A typo becomes a loud failure here rather
 # than an unqueryable string in the table.
-VALID_ACTIONS = frozenset({"upload", "delete", "password_reset", "row_decision", "cell_edit",
-                           "submit", "approve", "reject", "import"})
+VALID_ACTIONS = frozenset(
+    {"upload", "delete", "password_reset", "row_decision", "cell_edit", "submit", "approve", "reject", "import"}
+)
 
 # Who is acting (M3a, #107). tenant_scope sets it per request: the signed-in
 # username, or "anonymous" under the local-dev anonymous opt-in (#298; the shared
@@ -54,9 +55,16 @@ def acting_as(actor: str) -> Iterator[None]:
         _actor.reset(token)
 
 
-def write_audit(cur: cursor, action: str, file_id: int | None, file_name: str | None,
-                table_name: str | None, mode: str | None,
-                before: dict[str, Any] | None = None, after: dict[str, Any] | None = None) -> None:
+def write_audit(
+    cur: cursor,
+    action: str,
+    file_id: int | None,
+    file_name: str | None,
+    table_name: str | None,
+    mode: str | None,
+    before: dict[str, Any] | None = None,
+    after: dict[str, Any] | None = None,
+) -> None:
     """Insert one audit row using the caller's cursor.
 
     Use this when you already hold a transaction and want the audit row to
@@ -71,9 +79,16 @@ def write_audit(cur: cursor, action: str, file_id: int | None, file_name: str | 
             "(action, file_id, file_name, table_name, mode, actor, before_value, after_value) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
         ).format(sql.Identifier(uploads_schema())),
-        (action, file_id, file_name, table_name, mode, _actor.get(),
-         None if before is None else json.dumps(before),
-         None if after is None else json.dumps(after)),
+        (
+            action,
+            file_id,
+            file_name,
+            table_name,
+            mode,
+            _actor.get(),
+            None if before is None else json.dumps(before),
+            None if after is None else json.dumps(after),
+        ),
     )
 
 
@@ -81,13 +96,15 @@ def verify_chain(cur: cursor) -> dict[str, Any]:
     """Recompute the audit hash chain (M3a). Returns the row count and the
     first row whose link or hash doesn't match, or None if the chain is intact."""
     schema = sql.Identifier(uploads_schema())
-    cur.execute(sql.SQL(
-        "SELECT count(*), min(id) FILTER (WHERE prev_hash IS DISTINCT FROM expected_prev "
-        "  OR row_hash IS DISTINCT FROM {s}.audit_row_hash(prev_hash, r)) "
-        "FROM (SELECT a AS r, a.id, a.prev_hash, a.row_hash, "
-        "             lag(a.row_hash) OVER (ORDER BY a.id) AS expected_prev "
-        "      FROM {s}.audit_log a) t"
-    ).format(s=schema))
+    cur.execute(
+        sql.SQL(
+            "SELECT count(*), min(id) FILTER (WHERE prev_hash IS DISTINCT FROM expected_prev "
+            "  OR row_hash IS DISTINCT FROM {s}.audit_row_hash(prev_hash, r)) "
+            "FROM (SELECT a AS r, a.id, a.prev_hash, a.row_hash, "
+            "             lag(a.row_hash) OVER (ORDER BY a.id) AS expected_prev "
+            "      FROM {s}.audit_log a) t"
+        ).format(s=schema)
+    )
     rows, first_bad = fetch_one(cur)
     return {"rows": rows, "intact": first_bad is None, "firstBadId": first_bad}
 

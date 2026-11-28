@@ -9,7 +9,6 @@ Create Date: 2026-10-26
 """
 
 from alembic import op
-
 from api.config import settings
 
 revision = "0001"

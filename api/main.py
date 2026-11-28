@@ -9,7 +9,9 @@ Run (from the repo root):
 
 import logging
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 import psycopg2.pool
 from fastapi import FastAPI, Request
@@ -20,11 +22,8 @@ from api import db, oidc, policy
 from api.bodylimit import BodyLimitMiddleware
 from api.config import settings
 from api.ratelimit import rate_limit_middleware
-from api.routers import (audit_routes, auth_routes, csv_routes, import_routes, policy_routes, review_routes,
-                         te_routes)
+from api.routers import audit_routes, auth_routes, csv_routes, import_routes, policy_routes, review_routes, te_routes
 from api.services import accounts
-from typing import Any
-from collections.abc import AsyncIterator
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +69,9 @@ def _purge_old_sessions() -> None:
         if removed:
             logger.info("Purged %d ended session row(s).", removed)
     except Exception:  # noqa: BLE001
-        logger.warning("Could not purge old sessions at start-up; scripts/purge_sessions.py can do it later.",
-                       exc_info=True)
+        logger.warning(
+            "Could not purge old sessions at start-up; scripts/purge_sessions.py can do it later.", exc_info=True
+        )
 
 
 @asynccontextmanager
@@ -155,15 +155,14 @@ def health() -> dict[str, Any]:
     # up. Otherwise a half-bootstrapped API reports "ok" and then every /upload
     # call throws UndefinedTable.
     from psycopg2 import sql as _sql
+
     try:
         with db.Conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT version()")
                 pg_version = db.fetch_one(cur)[0]
                 cur.execute(
-                    _sql.SQL("SELECT 1 FROM {}.csv_files LIMIT 0").format(
-                        _sql.Identifier(settings.UPLOADS_SCHEMA)
-                    )
+                    _sql.SQL("SELECT 1 FROM {}.csv_files LIMIT 0").format(_sql.Identifier(settings.UPLOADS_SCHEMA))
                 )
         body: dict[str, Any] = {"status": "ok"}
         # #291 (BR-54): /api/health is open to anyone who can reach the port, so outside dev it says

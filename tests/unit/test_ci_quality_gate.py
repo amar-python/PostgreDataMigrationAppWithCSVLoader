@@ -4,6 +4,7 @@ Validates that quality-gate.yml has the expected jobs, steps, and
 configuration. Catches accidental removals or misconfigurations before
 they reach CI. No database or network required.
 """
+
 import re
 import sys
 import unittest
@@ -120,7 +121,7 @@ class TestAccessibilityJob(unittest.TestCase):
 
     def test_has_accessibility_job_that_runs_only_the_accessibility_marker(self):
         self.assertIn("accessibility", self.jobs)
-        self.assertIn('--markers accessibility', self._run_text("accessibility"))
+        self.assertIn("--markers accessibility", self._run_text("accessibility"))
 
     def test_accessibility_job_installs_a_browser_and_the_frontend(self):
         text = self._run_text("accessibility")
@@ -142,6 +143,7 @@ class TestGapAnalysisG2Accepted(unittest.TestCase):
     """G2 is accepted as out-of-scope, not closed.
     Checks the decision is recorded in docs/GAP_ANALYSIS.md.
     """
+
     @classmethod
     def setUpClass(cls):
         if not GAP_ANALYSIS.exists():
@@ -157,8 +159,7 @@ class TestGapAnalysisG2Accepted(unittest.TestCase):
             if "| G2 |" in line:
                 lower = line.lower()
                 self.assertTrue(
-                    "accept" in lower or "defer" in lower,
-                    f"G2 row should be accepted/deferred, got: {line.strip()}"
+                    "accept" in lower or "defer" in lower, f"G2 row should be accepted/deferred, got: {line.strip()}"
                 )
                 return
         self.fail("G2 row not found in docs/GAP_ANALYSIS.md")
@@ -168,9 +169,7 @@ class TestGapAnalysisG2Accepted(unittest.TestCase):
 
     def test_g2_is_not_marked_closed(self):
         self.assertNotIn(
-            "G2 — Windows CI cannot host PostgreSQL (Closed)",
-            self.content,
-            "G2 should not say Closed — it is Accepted"
+            "G2 — Windows CI cannot host PostgreSQL (Closed)", self.content, "G2 should not say Closed — it is Accepted"
         )
 
 
@@ -195,7 +194,7 @@ class TestPipedPytestKeepsItsExitStatus(unittest.TestCase):
         return "pipefail" in run or shell == "bash"
 
     def test_the_detector_reads_continuations_and_ignores_or(self):
-        piped = 'python -m pytest tests/ \\\n  --cov=x \\\n  -q 2>&1 | tail -20\npython3 check.py'
+        piped = "python -m pytest tests/ \\\n  --cov=x \\\n  -q 2>&1 | tail -20\npython3 check.py"
         self.assertTrue(self.pipes_pytest(piped))
         self.assertFalse(self.pipes_pytest("python -m pytest tests/ -q || true"))
         self.assertFalse(self.pipes_pytest("python3 scripts/test_report.py --markers x --strict"))
@@ -320,8 +319,11 @@ class TestBrowserJob(unittest.TestCase):
     def test_no_other_job_runs_the_browser_tests(self):
         for job_id in self.jobs:
             if job_id != "browser":
-                self.assertNotIn("e2e", self._run_text(job_id).replace("e2e/", "").replace("Tier E", ""),
-                                 f"job {job_id!r} runs the browser tests")
+                self.assertNotIn(
+                    "e2e",
+                    self._run_text(job_id).replace("e2e/", "").replace("Tier E", ""),
+                    f"job {job_id!r} runs the browser tests",
+                )
 
     def test_a_failure_leaves_screenshots_to_look_at(self):
         uploads = [s for s in self.jobs["browser"]["steps"] if "upload-artifact" in s.get("uses", "")]

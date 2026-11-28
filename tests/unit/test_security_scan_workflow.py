@@ -9,6 +9,7 @@ workflow and the gitleaks config as text, and pin the ways such a job usually go
   * the gitleaks config does not extend the default rules, which leaves only the custom ones (usually none);
   * the allow-list file is malformed or holds an expired entry, which would only show up on the weekly run.
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -70,7 +71,8 @@ def test_the_dependency_audit_installs_a_pinned_pip_audit_and_runs_the_script(wo
 def test_the_secret_scan_checks_out_the_whole_history(workflow):
     checkout = [s for s in steps(workflow, "secret-scan") if "checkout" in s.get("uses", "")]
     assert checkout and checkout[0].get("with", {}).get("fetch-depth") == 0, (
-        "a shallow checkout makes the 'full history' scan look at one commit")
+        "a shallow checkout makes the 'full history' scan look at one commit"
+    )
 
 
 def test_the_secret_scan_runs_a_pinned_gitleaks_that_fails_on_a_leak(workflow):
@@ -102,7 +104,8 @@ def test_the_gitleaks_config_keeps_the_default_rules():
     assert GITLEAKS.exists(), ".gitleaks.toml is missing"
     text = GITLEAKS.read_text(encoding="utf-8")
     assert re.search(r"(?m)^\[extend\]\s*\n\s*useDefault\s*=\s*true", text), (
-        "a config without [extend] useDefault = true replaces gitleaks's rules with only the ones written here")
+        "a config without [extend] useDefault = true replaces gitleaks's rules with only the ones written here"
+    )
 
 
 def test_every_allowlisted_secret_has_a_reason():
@@ -111,7 +114,8 @@ def test_every_allowlisted_secret_has_a_reason():
     blocks = re.split(r"(?m)^\[\[?allowlists?\]\]?\s*$", text)[1:]
     for block in blocks:
         assert re.search(r"(?m)^\s*description\s*=\s*\"[^\"]{15,}\"", block), (
-            "every gitleaks allow-list block needs a description of why it is safe")
+            "every gitleaks allow-list block needs a description of why it is safe"
+        )
 
 
 def test_the_real_audit_allowlist_parses_and_holds_no_expired_entry():

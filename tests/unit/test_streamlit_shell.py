@@ -8,6 +8,7 @@ The things worth failing loudly: a wrong sign-in says what the React app says; a
 session ends up signed out with a reason; sign-out leaves nothing for the next tenant (#176); what a role
 is shown matches what the API will allow; and the Streamlit version stays pinned with telemetry off.
 """
+
 import os
 import subprocess
 import sys
@@ -66,8 +67,7 @@ class FakeApi:
                 raise api_client.Unauthorized(401, "Invalid tenant, username or password")
             tok = f"tok-{len(self.tokens) + 1}"
             self.tokens[tok] = who
-            return {"token": tok, "expiresAt": _later(), "username": who[1], "tenant": who[0],
-                    "role": USERS[who]}
+            return {"token": tok, "expiresAt": _later(), "username": who[1], "tenant": who[0], "role": USERS[who]}
         if token is None or token in self.dead or token not in self.tokens:
             raise api_client.Unauthorized(401, "Not signed in")
         if path == "/api/auth/logout":
@@ -114,22 +114,29 @@ def _errors(at):
 
 # ── sign-in ───────────────────────────────────────────────────────────────────────────────
 
+
 def test_a_signed_out_visitor_sees_only_the_sign_in_page(api):
     at = _open()
 
     assert [t.value for t in at.title] == ["Sign in"]
     assert [t.label for t in at.text_input] == ["Tenant", "Username", "Password"]
-    assert [t.proto.type for t in at.text_input] == [TextInputProto.DEFAULT, TextInputProto.DEFAULT,
-                                                     TextInputProto.PASSWORD], "the password is masked"
+    assert [t.proto.type for t in at.text_input] == [
+        TextInputProto.DEFAULT,
+        TextInputProto.DEFAULT,
+        TextInputProto.PASSWORD,
+    ], "the password is masked"
     assert not at.exception and not at.sidebar.button, "no sign-out, no session menu"
     assert api.calls == [], "nothing is asked of the API until someone signs in"
 
 
-@pytest.mark.parametrize("tenant, username, password", [
-    ("acme", "alice", "wrong password entirely"),
-    ("acme", "nobody", PASSWORD),
-    ("nowhere", "alice", PASSWORD),
-])
+@pytest.mark.parametrize(
+    "tenant, username, password",
+    [
+        ("acme", "alice", "wrong password entirely"),
+        ("acme", "nobody", PASSWORD),
+        ("nowhere", "alice", PASSWORD),
+    ],
+)
 def test_a_wrong_sign_in_says_what_the_react_app_says_and_gives_no_hint_which_part(api, tenant, username, password):
     at = _sign_in(_open(), tenant, username, password)
 
@@ -173,10 +180,16 @@ def test_another_api_error_shows_the_servers_own_message(monkeypatch):
 
 # ── expiry and a revoked session ──────────────────────────────────────────────────────────
 
+
 def test_an_expired_session_is_signed_out_with_a_reason_and_nothing_left_over(api):
     at = _open()
-    at.session_state["session"] = {"token": "t", "expiresAt": _later(-1), "username": "alice",
-                                   "tenant": "acme", "role": "uploader"}
+    at.session_state["session"] = {
+        "token": "t",
+        "expiresAt": _later(-1),
+        "username": "alice",
+        "tenant": "acme",
+        "role": "uploader",
+    }
     at.session_state["leftover"] = "something acme's"
     at.run()
 
@@ -187,8 +200,13 @@ def test_an_expired_session_is_signed_out_with_a_reason_and_nothing_left_over(ap
 
 def test_the_reason_is_shown_once(api):
     at = _open()
-    at.session_state["session"] = {"token": "t", "expiresAt": _later(-1), "username": "a", "tenant": "b",
-                                   "role": "uploader"}
+    at.session_state["session"] = {
+        "token": "t",
+        "expiresAt": _later(-1),
+        "username": "a",
+        "tenant": "b",
+        "role": "uploader",
+    }
     at.run()
     assert len(at.warning) == 1
 
@@ -235,8 +253,13 @@ def _view(name: str, who=("acme", "alice"), api: FakeApi | None = None) -> AppTe
     at = AppTest.from_string(HARNESS.format(app_dir=str(APP_DIR), view=name), default_timeout=30)
     if api is not None:
         api.tokens["tok-v"] = who
-        at.session_state["session"] = {"token": "tok-v", "expiresAt": _later(), "username": who[1],
-                                       "tenant": who[0], "role": USERS[who]}
+        at.session_state["session"] = {
+            "token": "tok-v",
+            "expiresAt": _later(),
+            "username": who[1],
+            "tenant": who[0],
+            "role": USERS[who],
+        }
     return at.run()
 
 
@@ -259,6 +282,7 @@ def test_a_401_from_any_call_ends_the_session_and_says_why(api):
 
 
 # ── sign-out ──────────────────────────────────────────────────────────────────────────────
+
 
 def test_sign_out_revokes_the_session_and_leaves_nothing_behind(api):
     at = _signed_in()
@@ -316,14 +340,20 @@ def test_signing_in_starts_from_a_clean_state_even_if_something_was_left(api):
 
 # ── roles ─────────────────────────────────────────────────────────────────────────────────
 
+
 def _listed(at) -> list[str]:
     return [m.value.removeprefix("- ") for m in at.markdown if m.value.startswith("- ")]
 
 
-@pytest.mark.parametrize("who, role", [
-    (("acme", "alice"), "uploader"), (("acme", "rita"), "reviewer"),
-    (("acme", "ada"), "tenant_admin"), (("acme", "audrey"), "auditor"),
-])
+@pytest.mark.parametrize(
+    "who, role",
+    [
+        (("acme", "alice"), "uploader"),
+        (("acme", "rita"), "reviewer"),
+        (("acme", "ada"), "tenant_admin"),
+        (("acme", "audrey"), "auditor"),
+    ],
+)
 def test_home_lists_exactly_what_the_api_will_allow_that_role(api, who, role):
     at = _signed_in(who)
 
@@ -332,8 +362,9 @@ def test_home_lists_exactly_what_the_api_will_allow_that_role(api, who, role):
 
 
 def test_role_differences_are_visible_and_hold_the_other_way_round(api):
-    uploader, auditor, reviewer = (_listed(_signed_in(w)) for w in
-                                   [("acme", "alice"), ("acme", "audrey"), ("acme", "rita")])
+    uploader, auditor, reviewer = (
+        _listed(_signed_in(w)) for w in [("acme", "alice"), ("acme", "audrey"), ("acme", "rita")]
+    )
 
     assert "Upload CSV files" in uploader and "Upload CSV files" not in auditor
     assert "Read the audit log" in auditor and "Read the audit log" not in uploader
@@ -370,16 +401,20 @@ def test_every_permission_has_a_plain_label():
 
 # ── change password ───────────────────────────────────────────────────────────────────────
 
+
 def test_change_password_success_keeps_this_session_and_says_so(api):
     at = _view("change_password", api=api)
 
     _change(at, PASSWORD, "a brand new passphrase", "a brand new passphrase")
 
     assert [s.value for s in at.success] == [
-        "Password changed. You're still signed in here; any other sessions have been signed out."]
+        "Password changed. You're still signed in here; any other sessions have been signed out."
+    ]
     assert "session" in at.session_state
-    assert api.calls_to("/api/auth/password")[0][3] == {"currentPassword": PASSWORD,
-                                                        "newPassword": "a brand new passphrase"}
+    assert api.calls_to("/api/auth/password")[0][3] == {
+        "currentPassword": PASSWORD,
+        "newPassword": "a brand new passphrase",
+    }
     # The browser empties the fields after the submit; AppTest does not emulate that, so check the form is set to.
     form = next(c for c in at.main.children.values() if c.type == "form")
     assert form.proto.form.clear_on_submit is True, "the passwords are not left in the form"
@@ -432,6 +467,7 @@ def test_a_422_from_the_api_is_explained_in_the_same_words(api):
 
 # ── configuration ─────────────────────────────────────────────────────────────────────────
 
+
 def test_usage_statistics_are_off():
     """Streamlit sends them by default; this app is for on-premises and air-gapped installs."""
     config = tomllib.loads((APP_DIR / ".streamlit" / "config.toml").read_text(encoding="utf-8"))
@@ -439,8 +475,11 @@ def test_usage_statistics_are_off():
 
 
 def test_streamlit_is_pinned_to_the_version_the_tests_run_against():
-    pinned = [ln.strip() for ln in (APP_DIR / "requirements.txt").read_text().splitlines()
-              if ln.strip().startswith("streamlit")]
+    pinned = [
+        ln.strip()
+        for ln in (APP_DIR / "requirements.txt").read_text().splitlines()
+        if ln.strip().startswith("streamlit")
+    ]
     assert pinned == [f"streamlit=={st.__version__}"], "bump the pin and the tests together"
     dev = (ROOT / "requirements-dev.txt").read_text()
     assert f"streamlit=={st.__version__}" in dev, "CI installs it for these tests"
@@ -459,8 +498,9 @@ def test_the_api_address_comes_from_the_environment():
         env = {k: v for k, v in os.environ.items() if k != "API_URL"}
         if api_url is not None:
             env["API_URL"] = api_url
-        return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env,
-                              check=True).stdout.strip()
+        return subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True
+        ).stdout.strip()
 
     assert run("http://api.internal:9000/") == "http://api.internal:9000", "no trailing slash"
     assert run(None) == "http://localhost:8000", "the default is the local API"

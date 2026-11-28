@@ -5,12 +5,16 @@ a byte-order mark), a file that is not UTF-8 (refused, not silently changed), an
 and the request bodies: a new table sends the confirmed types and only the renames, a Test and Evaluation load
 sends neither (the API answers 422 to either there).
 """
+
 import base64
 import tomllib
 
 import pytest
 
 from tests.unit.streamlit_harness import APP_DIR
+
+# The imports below need the path the import above sets up, so the import sort must not move them up.
+# isort: split
 
 import upload_model as u  # noqa: E402
 
@@ -24,6 +28,7 @@ def _prep(name="a.csv", raw=b"id,name\n1,x\n", limit=LIMIT):
 
 
 # ── prepare ───────────────────────────────────────────────────────────────────────────────
+
 
 def test_a_good_file_is_decoded_and_keeps_its_original_bytes():
     p = _prep(raw="id,name\n1,café\n".encode("utf-8"))
@@ -67,7 +72,9 @@ def test_a_file_that_is_not_utf8_is_refused_not_quietly_changed():
     with pytest.raises(u.Refused) as e:
         _prep("latin.csv", "name\n\xe9t\xe9\n".encode("latin-1"))
 
-    assert "not UTF-8" in e.value.reason and "position 5" in e.value.reason and "Save the file as UTF-8" in e.value.reason
+    assert (
+        "not UTF-8" in e.value.reason and "position 5" in e.value.reason and "Save the file as UTF-8" in e.value.reason
+    )
 
 
 def test_an_empty_file_and_a_wrong_extension_are_refused():
@@ -88,13 +95,23 @@ def test_a_refusal_keeps_the_name_apart_from_the_reason_so_the_name_can_be_quote
     assert e.value.name == "[x](http://y.test).txt" and not e.value.reason.startswith("[x]")
 
 
-@pytest.mark.parametrize("n, text", [(0, "0 B"), (1023, "1023 B"), (1024, "1.0 KB"), (1536, "1.5 KB"),
-                                     (1_048_576, "1.00 MB"), (52_428_800, "50.00 MB")])
+@pytest.mark.parametrize(
+    "n, text",
+    [
+        (0, "0 B"),
+        (1023, "1023 B"),
+        (1024, "1.0 KB"),
+        (1536, "1.5 KB"),
+        (1_048_576, "1.00 MB"),
+        (52_428_800, "50.00 MB"),
+    ],
+)
 def test_sizes_are_worded_as_the_react_app_words_them(n, text):
     assert u.format_bytes(n) == text
 
 
 # ── the preview reads only the start of a big file ────────────────────────────────────────
+
 
 def test_a_small_file_is_previewed_whole():
     p = _prep()
@@ -133,6 +150,7 @@ def test_rows_are_estimated_from_the_part_that_was_read_only_when_it_was_cut():
 
 # ── mode and mapping ──────────────────────────────────────────────────────────────────────
 
+
 def test_a_file_that_matches_a_te_table_that_exists_starts_as_one():
     assert u.default_mode({"teTableMatch": "orgs"}, ["orgs", "people"]) == u.TE
     assert u.default_mode({"teTableMatch": "gone"}, ["orgs"]) == u.DYNAMIC
@@ -142,7 +160,8 @@ def test_a_file_that_matches_a_te_table_that_exists_starts_as_one():
 
 def test_only_the_renames_the_person_typed_are_sent_against_the_files_own_headers():
     assert u.header_mapping(["First Name", "age", "city"], ["given", "  ", ""]) == [
-        {"original": "First Name", "renamed": "given"}]
+        {"original": "First Name", "renamed": "given"}
+    ]
     assert u.header_mapping(["a"], [" x "]) == [{"original": "a", "renamed": "x"}]
     assert u.header_mapping(["a", "b"], []) == []
 
@@ -154,15 +173,23 @@ def test_a_new_table_waits_for_the_confirmation_and_a_te_load_for_a_target():
 
 # ── what is sent ──────────────────────────────────────────────────────────────────────────
 
+
 def test_a_new_table_sends_the_text_the_original_bytes_the_types_and_that_they_were_confirmed():
     p = _prep(raw=b"id,name\n1,x\n")
 
-    body = u.build_payload(p, u.DYNAMIC, types=["int8", "text"], confirmed=True, headers=["id", "name"],
-                           renames=["", "who"])
+    body = u.build_payload(
+        p, u.DYNAMIC, types=["int8", "text"], confirmed=True, headers=["id", "name"], renames=["", "who"]
+    )
 
-    assert body == {"fileName": "a.csv", "content": "id,name\n1,x\n", "mode": "dynamic",
-                    "contentBase64": base64.b64encode(b"id,name\n1,x\n").decode(), "types": ["int8", "text"],
-                    "typesConfirmed": True, "headerMapping": [{"original": "name", "renamed": "who"}]}
+    assert body == {
+        "fileName": "a.csv",
+        "content": "id,name\n1,x\n",
+        "mode": "dynamic",
+        "contentBase64": base64.b64encode(b"id,name\n1,x\n").decode(),
+        "types": ["int8", "text"],
+        "typesConfirmed": True,
+        "headerMapping": [{"original": "name", "renamed": "who"}],
+    }
 
 
 def test_no_renames_means_no_header_mapping_key_at_all():
@@ -192,6 +219,7 @@ def test_an_unconfirmed_new_table_says_so_rather_than_claiming_it_was_checked():
 
 # ── the sample the person checks ──────────────────────────────────────────────────────────
 
+
 def test_the_sample_is_a_table_of_code_spans_numbered_from_one():
     pv = {"columns": ["id", "name"], "sampleRows": [["1", "[x](http://y.test)"], ["2", ""]]}
 
@@ -203,14 +231,18 @@ def test_the_sample_is_a_table_of_code_spans_numbered_from_one():
 
 # ── agreement with the API and Streamlit ─────────────────────────────────────────────────
 
+
 def test_the_column_types_are_the_ones_the_api_allows():
     from api.services.csv_parse import ALLOWED_TYPES
+
     assert set(u.ALLOWED_TYPES) == set(ALLOWED_TYPES) and set(u.TYPE_LABELS) == set(ALLOWED_TYPES)
 
 
 def test_the_default_limit_is_the_apis_default():
-    from api.config import settings
     import os
+
+    from api.config import settings
+
     if "MAX_UPLOAD_BYTES" not in os.environ:
         assert u.DEFAULT_MAX_UPLOAD_BYTES == settings.MAX_UPLOAD_BYTES
 
@@ -232,24 +264,29 @@ def test_widget_keys_tell_two_names_for_the_same_bytes_apart_and_are_stable():
 
 
 def test_the_same_name_and_bytes_twice_is_dropped_once_and_different_bytes_are_kept():
-    kept, dropped = u.chosen_once([("a.csv", b"x\n1\n"), ("a.csv", b"x\n1\n"), ("a.csv", b"x\n2\n"), ("b.csv", b"x\n1\n")])
+    kept, dropped = u.chosen_once(
+        [("a.csv", b"x\n1\n"), ("a.csv", b"x\n1\n"), ("a.csv", b"x\n2\n"), ("b.csv", b"x\n1\n")]
+    )
 
     assert [n for n, _ in kept] == ["a.csv", "a.csv", "b.csv"] and dropped == ["a.csv"]
 
 
-@pytest.mark.parametrize("header, i, label", [
-    ("amount", 2, "column 3 (amount)"),
-    ("Full Name", 0, "column 1 (Full Name)"),
-    ("first_name-2", 1, "column 2 (first_name-2)"),
-    ("[click](https://evil.example/x)", 0, "column 1 (click https evil example x)"),
-    ("**bold** :warning: <b>", 4, "column 5 (bold warning b)"),
-    ("www.evil.example a@evil.example", 0, "column 1 (www evil example a evil example)"),
-    ("", 3, "column 4"),
-    ("   ", 3, "column 4"),
-    ("!!!", 0, "column 1"),
-    ("é Ünïcode", 0, "column 1 (é Ünïcode)"),
-    ("a" * 100, 0, "column 1 (" + "a" * 40 + ")"),
-])
+@pytest.mark.parametrize(
+    "header, i, label",
+    [
+        ("amount", 2, "column 3 (amount)"),
+        ("Full Name", 0, "column 1 (Full Name)"),
+        ("first_name-2", 1, "column 2 (first_name-2)"),
+        ("[click](https://evil.example/x)", 0, "column 1 (click https evil example x)"),
+        ("**bold** :warning: <b>", 4, "column 5 (bold warning b)"),
+        ("www.evil.example a@evil.example", 0, "column 1 (www evil example a evil example)"),
+        ("", 3, "column 4"),
+        ("   ", 3, "column 4"),
+        ("!!!", 0, "column 1"),
+        ("é Ünïcode", 0, "column 1 (é Ünïcode)"),
+        ("a" * 100, 0, "column 1 (" + "a" * 40 + ")"),
+    ],
+)
 def test_a_columns_box_label_keeps_what_helps_and_nothing_that_markdown_could_use(header, i, label):
     assert u.column_label(header, i) == label
 
@@ -260,7 +297,10 @@ def test_a_long_header_is_cut_so_that_a_label_stays_one_readable_line():
     assert label == f"column 1 ({'x' * 40})"
 
 
-@pytest.mark.parametrize("header", ["[x](https://e.test)", "https://e.test", "www.e.test", "a@e.test", "<a href=x>", "`code`", "$x$", ":zap:"])
+@pytest.mark.parametrize(
+    "header",
+    ["[x](https://e.test)", "https://e.test", "www.e.test", "a@e.test", "<a href=x>", "`code`", "$x$", ":zap:"],
+)
 def test_no_label_contains_anything_that_forms_a_link_or_formatting(header):
     label = u.column_label(header, 0)
 

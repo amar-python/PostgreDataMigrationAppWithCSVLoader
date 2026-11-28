@@ -7,16 +7,17 @@ The global rate limiter's write budget applies to login attempts.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from api import oidc
 from api.auth import PERMISSIONS, bearer_token, require_session
 from api.db import Conn, acting_role
-from api import oidc
 from api.services import accounts
 from api.services.audit import acting_as, write_audit
 from api.tenancy import tenant
-from typing import Any
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -83,8 +84,9 @@ class ChangePasswordRequest(BaseModel):
 
 
 @router.post("/password")
-def change_password(req: ChangePasswordRequest, token: str = Depends(bearer_token),
-                    session: dict[str, Any] = Depends(require_session)) -> dict[str, Any]:
+def change_password(
+    req: ChangePasswordRequest, token: str = Depends(bearer_token), session: dict[str, Any] = Depends(require_session)
+) -> dict[str, Any]:
     """Change your own password (#117). This session stays signed in; all others end.
 
     A wrong current password is 400, not 401, so the browser keeps the session,
@@ -92,8 +94,7 @@ def change_password(req: ChangePasswordRequest, token: str = Depends(bearer_toke
     """
     with Conn() as conn:
         with conn.cursor() as cur:
-            ok = accounts.change_password(cur, session["userId"], token,
-                                          req.currentPassword, req.newPassword)
+            ok = accounts.change_password(cur, session["userId"], token, req.currentPassword, req.newPassword)
         conn.commit()
     if not ok:
         raise HTTPException(status_code=400, detail="Current password is incorrect")
@@ -105,8 +106,9 @@ class ResetPasswordRequest(BaseModel):
 
 
 @router.post("/users/{username}/password")
-def reset_password(username: str, req: ResetPasswordRequest,
-                   session: dict[str, Any] = Depends(require_session)) -> dict[str, Any]:
+def reset_password(
+    username: str, req: ResetPasswordRequest, session: dict[str, Any] = Depends(require_session)
+) -> dict[str, Any]:
     """A tenant admin sets a member's password, unlocking the account and ending
     its sessions (#117). Audited in the tenant's audit log."""
     if session["role"] not in PERMISSIONS["reset_password"]:
@@ -122,6 +124,8 @@ def reset_password(username: str, req: ResetPasswordRequest,
     if result == "missing":
         raise HTTPException(status_code=404, detail="No such user in this tenant")
     if result == "shared":
-        raise HTTPException(status_code=409, detail="This user is also in another tenant. "
-                            "An operator must reset it with scripts/reset_password.py")
+        raise HTTPException(
+            status_code=409,
+            detail="This user is also in another tenant. An operator must reset it with scripts/reset_password.py",
+        )
     return {"status": "ok"}

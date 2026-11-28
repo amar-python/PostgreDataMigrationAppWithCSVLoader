@@ -10,6 +10,7 @@ Gaps addressed:
 
 Convention: same unittest.TestCase + pytest markers as test_api.py.
 """
+
 from __future__ import annotations
 
 import os
@@ -23,11 +24,13 @@ from api.main import app
 
 client = TestClient(app)
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it. Most often this means "
-         "PGPASSWORD is not set in this shell:\n"
-         "    PowerShell:  $env:PGPASSWORD = '<password>'\n"
-         "    bash:        export PGPASSWORD='<password>'\n"
-         "Defaults come from api/config.py; see scripts/start-api.ps1.")
+_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it. Most often this means "
+    "PGPASSWORD is not set in this shell:\n"
+    "    PowerShell:  $env:PGPASSWORD = '<password>'\n"
+    "    bash:        export PGPASSWORD='<password>'\n"
+    "Defaults come from api/config.py; see scripts/start-api.ps1."
+)
 
 
 class _IntegrationBase(unittest.TestCase):
@@ -71,21 +74,32 @@ class _IntegrationBase(unittest.TestCase):
         name = f"{self.tag}.csv"
         if content is None:
             content = f"col_a,col_b\n{os.getpid()},{self._testMethodName}\n"
-        return self.client.post("/api/csv/upload", json={
-            "fileName": name, "content": content, "overwrite": overwrite,
-        })
+        return self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": name,
+                "content": content,
+                "overwrite": overwrite,
+            },
+        )
 
     def _upload_te(self, content, target_table="organisations"):
         name = f"{self.tag}.csv"
-        return self.client.post("/api/csv/upload", json={
-            "fileName": name, "content": content,
-            "mode": "te", "targetTable": target_table,
-        })
+        return self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": name,
+                "content": content,
+                "mode": "te",
+                "targetTable": target_table,
+            },
+        )
 
 
 # ---------------------------------------------------------------------------
 # Gap 1a: TE_TABLES whitelist (unit — no DB)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TeTablesConfig(unittest.TestCase):
@@ -106,47 +120,52 @@ class TeTablesConfig(unittest.TestCase):
 # Gap 6: CORS middleware (unit — no DB)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class CorsHeaders(unittest.TestCase):
     """CORS middleware must be active with the configured origins."""
 
     def test_preflight_returns_cors_headers(self):
-        r = client.options("/api/health", headers={
-            "Origin": "http://localhost:5173",
-            "Access-Control-Request-Method": "GET",
-        })
+        r = client.options(
+            "/api/health",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
         self.assertIn("access-control-allow-origin", r.headers)
 
     def test_preflight_allows_put_for_review_changes(self):
         """#108: the browser's review screen sends PUT; without it the preflight fails."""
-        r = client.options("/api/csv/uploads/1/rows/1/decision", headers={
-            "Origin": "http://localhost:8080",
-            "Access-Control-Request-Method": "PUT",
-            "Access-Control-Request-Headers": "authorization,content-type",
-        })
+        r = client.options(
+            "/api/csv/uploads/1/rows/1/decision",
+            headers={
+                "Origin": "http://localhost:8080",
+                "Access-Control-Request-Method": "PUT",
+                "Access-Control-Request-Headers": "authorization,content-type",
+            },
+        )
         self.assertEqual(r.status_code, 200, r.text)
         self.assertIn("PUT", r.headers.get("access-control-allow-methods", ""))
 
     def test_cors_allows_configured_origin(self):
         r = client.get("/api/health", headers={"Origin": "http://localhost:5173"})
-        self.assertEqual(
-            r.headers.get("access-control-allow-origin"), "http://localhost:5173")
+        self.assertEqual(r.headers.get("access-control-allow-origin"), "http://localhost:5173")
 
     def test_default_origins_include_vite_dev_port(self):
         """Issue #43: the Vite dev server runs on :8080 and must be allowed by default."""
         r = client.get("/api/health", headers={"Origin": "http://localhost:8080"})
-        self.assertEqual(
-            r.headers.get("access-control-allow-origin"), "http://localhost:8080")
+        self.assertEqual(r.headers.get("access-control-allow-origin"), "http://localhost:8080")
 
     def test_cors_rejects_unconfigured_origin(self):
         r = client.get("/api/health", headers={"Origin": "http://evil.example.com"})
-        self.assertNotEqual(
-            r.headers.get("access-control-allow-origin"), "http://evil.example.com")
+        self.assertNotEqual(r.headers.get("access-control-allow-origin"), "http://evil.example.com")
 
 
 # ---------------------------------------------------------------------------
 # Gap 1b: GET /api/te/tables (integration — needs deployed T&E schema)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.integration
 class TeTablesEndpoint(_IntegrationBase):
@@ -176,9 +195,7 @@ class TeTablesEndpoint(_IntegrationBase):
 
     def test_all_tables_exist_after_deploy(self):
         for entry in self.data:
-            self.assertTrue(
-                entry["exists"],
-                f"T&E table '{entry['table']}' does not exist — run deploy_all.sh dev")
+            self.assertTrue(entry["exists"], f"T&E table '{entry['table']}' does not exist — run deploy_all.sh dev")
 
     def test_row_count_is_non_negative_integer(self):
         for entry in self.data:
@@ -190,14 +207,14 @@ class TeTablesEndpoint(_IntegrationBase):
 # Gap 3: preview teTableMatch (integration — match_te_table queries the DB)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.integration
 class PreviewTeTableMatch(_IntegrationBase):
     """POST /api/csv/preview must populate teTableMatch when columns fit."""
 
     def test_preview_returns_te_match_for_matching_columns(self):
         csv = f"name,org_type,country\n{self.tag},government,AU\n"
-        r = self.client.post("/api/csv/preview",
-                             json={"fileName": f"{self.tag}.csv", "content": csv})
+        r = self.client.post("/api/csv/preview", json={"fileName": f"{self.tag}.csv", "content": csv})
         self.assertEqual(r.status_code, 200)
         body = r.json()
         self.assertEqual(body.get("status"), "ok", body)
@@ -205,16 +222,14 @@ class PreviewTeTableMatch(_IntegrationBase):
 
     def test_preview_returns_null_for_non_matching_columns(self):
         csv = "col_x,col_y\n1,2\n"
-        r = self.client.post("/api/csv/preview",
-                             json={"fileName": f"{self.tag}.csv", "content": csv})
+        r = self.client.post("/api/csv/preview", json={"fileName": f"{self.tag}.csv", "content": csv})
         body = r.json()
         self.assertEqual(body.get("status"), "ok", body)
         self.assertIsNone(body.get("teTableMatch"))
 
     def test_te_table_match_key_present_in_ok_response(self):
         csv = "a,b\n1,2\n"
-        r = self.client.post("/api/csv/preview",
-                             json={"fileName": f"{self.tag}.csv", "content": csv})
+        r = self.client.post("/api/csv/preview", json={"fileName": f"{self.tag}.csv", "content": csv})
         body = r.json()
         if body.get("status") == "ok":
             self.assertIn("teTableMatch", body)
@@ -223,6 +238,7 @@ class PreviewTeTableMatch(_IntegrationBase):
 # ---------------------------------------------------------------------------
 # Gap 4: DELETE /api/csv/files/{file_id} (integration)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.integration
 class DeleteEndpoint(_IntegrationBase):
@@ -251,8 +267,7 @@ class DeleteEndpoint(_IntegrationBase):
         self.client.delete(f"/api/csv/files/{file_id}")
 
         rows = self.client.get(f"/api/csv/tables/{table}/rows")
-        self.assertEqual(rows.status_code, 404,
-                         "table should be unregistered after delete")
+        self.assertEqual(rows.status_code, 404, "table should be unregistered after delete")
 
     def test_delete_te_only_removes_registry(self):
         csv = f"name,org_type,country\n{self.tag}_del,government,AU\n"
@@ -264,8 +279,7 @@ class DeleteEndpoint(_IntegrationBase):
         self.client.delete(f"/api/csv/files/{file_id}")
 
         file_names = [f["file_name"] for f in self.client.get("/api/csv/files").json()]
-        self.assertNotIn(f"{self.tag}.csv", file_names,
-                         "registry entry should be gone")
+        self.assertNotIn(f"{self.tag}.csv", file_names, "registry entry should be gone")
 
         te = self.client.get("/api/te/tables").json()
         org = next(t for t in te if t["table"] == "organisations")
@@ -283,6 +297,7 @@ class DeleteEndpoint(_IntegrationBase):
 # ---------------------------------------------------------------------------
 # BUG-041: GET /api/audit/log (integration)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.integration
 class AuditLogEndpoint(_IntegrationBase):
@@ -302,9 +317,7 @@ class AuditLogEndpoint(_IntegrationBase):
         page = r.json()
         for field in ("total", "limit", "offset", "entries"):
             self.assertIn(field, page)
-        entry = next(
-            (e for e in page["entries"] if e["fileId"] == file_id), None
-        )
+        entry = next((e for e in page["entries"] if e["fileId"] == file_id), None)
         self.assertIsNotNone(entry, "delete should be recorded in the audit log")
         self.assertEqual(entry["action"], "delete")
         self.assertEqual(entry["fileName"], file_name)
@@ -314,6 +327,7 @@ class AuditLogEndpoint(_IntegrationBase):
 # ---------------------------------------------------------------------------
 # Gap 5: overwrite=true (integration)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.integration
 class OverwriteUpload(_IntegrationBase):
@@ -359,6 +373,7 @@ class OverwriteUpload(_IntegrationBase):
 # Gap 2: T&E mode upload (integration)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.integration
 class TeUploadPipeline(_IntegrationBase):
     """POST /api/csv/upload with mode=te against a deployed T&E schema."""
@@ -372,9 +387,8 @@ class TeUploadPipeline(_IntegrationBase):
         body = r.json()
         self.assertEqual(body["status"], "ok", body)
         self.assertGreaterEqual(
-            body["insertedRows"], 1,
-            f"failedRows={body.get('failedRows')}, "
-            f"rowErrors={body.get('rowErrors')}")
+            body["insertedRows"], 1, f"failedRows={body.get('failedRows')}, rowErrors={body.get('rowErrors')}"
+        )
         self.assertIn("organisations", body["tableName"])
 
     def test_response_shape_matches_contract(self):
@@ -382,9 +396,7 @@ class TeUploadPipeline(_IntegrationBase):
         r = self._upload_te(csv)
         body = r.json()
         self.assertEqual(body["status"], "ok", body)
-        for key in ("totalRows", "insertedRows",
-                    "duplicateRowsSkipped", "failedRows",
-                    "columns", "rowErrors"):
+        for key in ("totalRows", "insertedRows", "duplicateRowsSkipped", "failedRows", "columns", "rowErrors"):
             self.assertIn(key, body, f"missing key '{key}'")
         self.assertEqual(body["duplicateRowsSkipped"], 0)
         # #190: one reviewable type per column (organisations' columns are all text).
@@ -423,8 +435,9 @@ class TeUploadPipeline(_IntegrationBase):
         r = self._upload_te(csv)
         body = r.json()
         self.assertEqual(body["status"], "error", body)
-        self.assertGreaterEqual(body["failedRows"], 1,
-                                "Invalid enum value should fail at row level, not crash the endpoint")
+        self.assertGreaterEqual(
+            body["failedRows"], 1, "Invalid enum value should fail at row level, not crash the endpoint"
+        )
         self.assertIn("rowNumber", body["rowErrors"][0])
 
     def test_null_in_not_null_column_reported_per_row(self):
@@ -433,18 +446,20 @@ class TeUploadPipeline(_IntegrationBase):
         r = self._upload_te(csv)
         body = r.json()
         self.assertEqual(body["status"], "error", body)
-        self.assertGreaterEqual(body["failedRows"], 1,
-                                "NULL in a NOT NULL column should fail at row level")
+        self.assertGreaterEqual(body["failedRows"], 1, "NULL in a NOT NULL column should fail at row level")
         self.assertIn("rowNumber", body["rowErrors"][0])
 
     def test_unknown_target_table_returns_error(self):
         """Uploading to a table not in TE_TABLES must return status=error."""
-        r = self.client.post("/api/csv/upload", json={
-            "fileName": f"{self.tag}.csv",
-            "content": "col_a\nval\n",
-            "mode": "te",
-            "targetTable": "non_existent_table",
-        })
+        r = self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": f"{self.tag}.csv",
+                "content": "col_a\nval\n",
+                "mode": "te",
+                "targetTable": "non_existent_table",
+            },
+        )
         body = r.json()
         self.assertEqual(body["status"], "error", body)
         self.assertIn("non_existent_table", body.get("message", ""))
@@ -461,8 +476,7 @@ class TeUploadPipeline(_IntegrationBase):
         self.assertEqual(r2.json()["status"], "ok", r2.json())
         files = self.client.get("/api/csv/files").json()
         matches = [f for f in files if f["file_name"] == f"{self.tag}.csv"]
-        self.assertEqual(len(matches), 1,
-                         "Re-upload should replace the registry entry, not create a duplicate")
+        self.assertEqual(len(matches), 1, "Re-upload should replace the registry entry, not create a duplicate")
 
     def test_te_client_side_type_validation_reports_column_and_value(self):
         """BUG-028: a bad value on a client-validatable column (BOOLEAN here)
@@ -482,15 +496,12 @@ class TeUploadPipeline(_IntegrationBase):
         # #289: a T&E load is all or nothing, so the valid row does not land either.
         self.assertEqual(body["status"], "error", body)
         self.assertEqual(body["failedRows"], 1)
-        self.assertEqual(body["insertedRows"], 0,
-                         "A file with a failing row imports nothing (#289).")
+        self.assertEqual(body["insertedRows"], 0, "A file with a failing row imports nothing (#289).")
         self.assertTrue(body["rowErrors"], "rowErrors must be populated")
         err = body["rowErrors"][0]
         # These two fields are the fingerprint of the client-side path.
-        self.assertEqual(err.get("column"), "is_active",
-                         f"Client-side validator must set column; got {err!r}")
-        self.assertEqual(err.get("value"), "NOT_A_BOOL",
-                         f"Client-side validator must set value; got {err!r}")
+        self.assertEqual(err.get("column"), "is_active", f"Client-side validator must set column; got {err!r}")
+        self.assertEqual(err.get("value"), "NOT_A_BOOL", f"Client-side validator must set value; got {err!r}")
         self.assertIn("true/false", err["reason"].lower())
 
     def test_te_upload_rejects_over_row_cap(self):
@@ -498,12 +509,11 @@ class TeUploadPipeline(_IntegrationBase):
         rows must be rejected up-front with status=error and never reach the DB.
         """
         from api import config as cfg
+
         original = cfg.settings.MAX_ROWS
         cfg.settings.MAX_ROWS = 2  # keep the test small
         try:
-            csv = "name,org_type,country\n" + "".join(
-                f"{self.tag}_row{i},government,AU\n" for i in range(5)
-            )
+            csv = "name,org_type,country\n" + "".join(f"{self.tag}_row{i},government,AU\n" for i in range(5))
             r = self._upload_te(csv, target_table="organisations")
             body = r.json()
             self.assertEqual(body["status"], "error", body)
@@ -513,8 +523,7 @@ class TeUploadPipeline(_IntegrationBase):
             # Sanity check: no rows leaked to the DB.
             files = self.client.get("/api/csv/files").json()
             matches = [f for f in files if f["file_name"] == f"{self.tag}.csv"]
-            self.assertFalse(matches,
-                             "An over-cap upload must not create a registry entry.")
+            self.assertFalse(matches, "An over-cap upload must not create a registry entry.")
         finally:
             cfg.settings.MAX_ROWS = original
 
@@ -525,11 +534,11 @@ class DeleteGateUnit(unittest.TestCase):
 
     def test_delete_blocked_returns_403(self):
         from api import config as cfg
+
         original = cfg.settings.allow_destructive
         cfg.settings.allow_destructive = False
         try:
             r = client.delete("/api/csv/files/1")
-            self.assertEqual(r.status_code, 403,
-                             "DELETE must return 403 when API_ALLOW_DESTRUCTIVE=false")
+            self.assertEqual(r.status_code, 403, "DELETE must return 403 when API_ALLOW_DESTRUCTIVE=false")
         finally:
             cfg.settings.allow_destructive = original

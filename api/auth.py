@@ -11,7 +11,8 @@ local development and tests, by explicit opt-in: ``API_ALLOW_ANONYMOUS=1`` with
 the default ``API_ENV=dev`` on its own, requires a session.
 """
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from typing import Any
 
 from fastapi import Depends, Header, HTTPException
 from starlette.concurrency import run_in_threadpool
@@ -21,9 +22,6 @@ from api.db import Conn
 from api.services.accounts import session_for
 from api.services.audit import acting_as
 from api.tenancy import tenant
-from typing import Any
-from collections.abc import Callable
-
 
 ANONYMOUS_ACTOR = "anonymous"
 
@@ -53,7 +51,7 @@ def _live_session(token: str) -> dict[str, Any]:
     with Conn() as conn, conn.cursor() as cur:
         session = session_for(cur, token)
         if session is not None:
-            conn.commit()   # session_for records the use (#296); nothing else was written, and a close would roll it back
+            conn.commit()  # session_for records the use (#296); nothing else was written, and a close would roll it back
     if session is None:
         raise HTTPException(status_code=401, detail="Session expired or invalid; sign in again")
     return session
@@ -85,13 +83,13 @@ async def tenant_scope(authorization: str = Header(default="")) -> AsyncIterator
 # M2c (#94): which roles may perform each action. docs/ROLES.md shows the same
 # table, and tests/system/test_roles.py checks that the two agree.
 PERMISSIONS: dict[str, frozenset[str]] = {
-    "preview":     frozenset({"uploader", "tenant_admin"}),
-    "upload":      frozenset({"uploader", "tenant_admin"}),
-    "list_files":  frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
-    "read_rows":   frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
-    "list_te":     frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
+    "preview": frozenset({"uploader", "tenant_admin"}),
+    "upload": frozenset({"uploader", "tenant_admin"}),
+    "list_files": frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
+    "read_rows": frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
+    "list_te": frozenset({"uploader", "reviewer", "tenant_admin", "auditor"}),
     "delete_file": frozenset({"tenant_admin"}),
-    "read_audit":  frozenset({"tenant_admin", "auditor"}),
+    "read_audit": frozenset({"tenant_admin", "auditor"}),
     "reset_password": frozenset({"tenant_admin"}),
     "review_rows": frozenset({"reviewer", "tenant_admin"}),
     "submit_import": frozenset({"uploader", "tenant_admin"}),
@@ -110,6 +108,6 @@ def allow(action: str) -> Callable[..., None]:
 
     def check(session: dict[str, Any] | None = Depends(tenant_scope)) -> None:
         if session is not None and session["role"] not in roles:
-            raise HTTPException(status_code=403,
-                                detail=f"Role '{session['role']}' may not {action.replace('_', ' ')}")
+            raise HTTPException(status_code=403, detail=f"Role '{session['role']}' may not {action.replace('_', ' ')}")
+
     return check

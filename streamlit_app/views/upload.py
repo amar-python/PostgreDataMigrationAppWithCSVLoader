@@ -48,8 +48,10 @@ def render() -> None:
     if not auth.can("upload"):
         st.info(f"The role {auth.current()['role']} can't upload files.")
         return
-    st.write("Choose CSV files, check the columns and types, then import. Each file becomes its own table. "
-             f"The most a file may hold is {u.format_bytes(u.max_bytes())}.")
+    st.write(
+        "Choose CSV files, check the columns and types, then import. Each file becomes its own table. "
+        f"The most a file may hold is {u.format_bytes(u.max_bytes())}."
+    )
     generation = st.session_state.get(GENERATION, 0)
     chosen = st.file_uploader("CSV files", type=["csv"], accept_multiple_files=True, key=f"upload_files_{generation}")
     show([(f.name, f.getvalue()) for f in chosen])
@@ -57,6 +59,7 @@ def render() -> None:
 
 
 # ── the files chosen ────────────────────────────────────────────────────────────────────────
+
 
 def show(files: list[tuple[str, bytes]]) -> None:
     """One section per chosen file, and what to send. (Separate from the chooser so it can be tested with bytes.)"""
@@ -114,33 +117,47 @@ def _one(prepared: u.Prepared) -> dict | None:
             return None
         if pv.get("status") != "ok":
             said = pv.get("message")
-            st.error(m.literal(said) if said else outcomes.STRUCTURE_REASONS.get(str(pv.get("reason")), "No usable structure."))
+            st.error(
+                m.literal(said)
+                if said
+                else outcomes.STRUCTURE_REASONS.get(str(pv.get("reason")), "No usable structure.")
+            )
             return None
         rows = u.approx_rows(pv["totalRowsApprox"], pv["previewBytes"], len(prepared.raw), pv["truncated"])
         st.caption(f"{len(pv['headers'])} columns · {'about ' if pv['truncated'] else ''}{rows} data rows")
         st.table(u.sample_frame(pv))
 
         tables = _te_tables()
-        mode = st.radio("Load as", [u.DYNAMIC, u.TE], format_func=u.MODE_LABELS.__getitem__, horizontal=True,
-                        index=[u.DYNAMIC, u.TE].index(u.default_mode(pv, tables)), key=f"mode_{key}")
+        mode = st.radio(
+            "Load as",
+            [u.DYNAMIC, u.TE],
+            format_func=u.MODE_LABELS.__getitem__,
+            horizontal=True,
+            index=[u.DYNAMIC, u.TE].index(u.default_mode(pv, tables)),
+            key=f"mode_{key}",
+        )
         types, renames, confirmed, target = None, None, False, None
         if mode == u.TE:
             if not tables:
                 st.warning("There are no Test and Evaluation tables to load into.")
             else:
                 match = pv.get("teTableMatch")
-                target = st.selectbox("Into table", tables, index=tables.index(match) if match in tables else 0,
-                                      key=f"table_{key}")
-            st.caption("The columns of a Test and Evaluation table are fixed, so the file's headers are matched to them "
-                       "as they are: nothing here can be renamed or retyped.")
+                target = st.selectbox(
+                    "Into table", tables, index=tables.index(match) if match in tables else 0, key=f"table_{key}"
+                )
+            st.caption(
+                "The columns of a Test and Evaluation table are fixed, so the file's headers are matched to them "
+                "as they are: nothing here can be renamed or retyped."
+            )
         else:
             types, renames = _mapping(key, pv)
             confirmed = st.checkbox(u.CONFIRM, key=f"confirm_{key}")
         ok = u.ready(mode, confirmed, target)
 
         def build() -> dict:  # at the click only: encoding a big file for every re-run would be slow
-            return u.build_payload(prepared, mode, types=types, renames=renames, headers=pv["headers"],
-                                   confirmed=confirmed, target=target)
+            return u.build_payload(
+                prepared, mode, types=types, renames=renames, headers=pv["headers"], confirmed=confirmed, target=target
+            )
 
         st.caption(outcomes.NO_CANCEL + " (once you click Upload).")
         item = {"name": prepared.name, "build": build, "ready": ok}
@@ -160,15 +177,30 @@ def _mapping(key: str, pv: dict) -> tuple[list[str], list[str]]:
             name.caption(f"becomes {m.literal(column)}")
         # A label is Markdown even when hidden, and also the box's aria-label as written: see column_label.
         label = u.column_label(header, i)
-        renames.append(rename.text_input(f"Rename {label}", key=f"rename_{key}_{i}",
-                                         label_visibility="collapsed", placeholder="keep", max_chars=128))
-        types.append(kind.selectbox(f"Type of {label}", u.ALLOWED_TYPES, index=u.ALLOWED_TYPES.index(inferred),
-                                    format_func=u.TYPE_LABELS.__getitem__, key=f"type_{key}_{i}",
-                                    label_visibility="collapsed"))
+        renames.append(
+            rename.text_input(
+                f"Rename {label}",
+                key=f"rename_{key}_{i}",
+                label_visibility="collapsed",
+                placeholder="keep",
+                max_chars=128,
+            )
+        )
+        types.append(
+            kind.selectbox(
+                f"Type of {label}",
+                u.ALLOWED_TYPES,
+                index=u.ALLOWED_TYPES.index(inferred),
+                format_func=u.TYPE_LABELS.__getitem__,
+                key=f"type_{key}_{i}",
+                label_visibility="collapsed",
+            )
+        )
     return types, renames
 
 
 # ── sending ─────────────────────────────────────────────────────────────────────────────────
+
 
 def _send(items: list[dict]) -> None:
     """Send each file in turn. The server cannot be asked to stop, so say so, and say what happened to every file."""
@@ -183,9 +215,16 @@ def _send(items: list[dict]) -> None:
                 outcome = outcomes.classify(item["name"], res)
             except api_client.ApiError as e:
                 outcome = outcomes.classify_error(item["name"], e)
-        results.insert(0, {"name": item["name"], "outcome": outcome, "res": res,
-                           "mapping": payload.get("headerMapping"),
-                           "at": datetime.now(timezone.utc).strftime("%H:%M UTC")})
+        results.insert(
+            0,
+            {
+                "name": item["name"],
+                "outcome": outcome,
+                "res": res,
+                "mapping": payload.get("headerMapping"),
+                "at": datetime.now(timezone.utc).strftime("%H:%M UTC"),
+            },
+        )
         if bar:
             bar.progress(n / len(items))
     st.cache_data.clear()  # the history, the review picker and the files list now have something new
@@ -196,6 +235,7 @@ def _send(items: list[dict]) -> None:
 
 # ── what happened ───────────────────────────────────────────────────────────────────────────
 
+
 def report() -> None:
     """This session's outcomes, newest first. The server's record, for everyone, is Import history."""
     results = st.session_state.get(RESULTS) or []
@@ -204,8 +244,10 @@ def report() -> None:
     st.divider()
     st.subheader("Upload report")
     done = sum(r["outcome"].kind == "done" for r in results)
-    st.caption(f"{len(results)} upload{'' if len(results) == 1 else 's'} in this session, {done} imported. "
-               "Import history keeps the server's record.")
+    st.caption(
+        f"{len(results)} upload{'' if len(results) == 1 else 's'} in this session, {done} imported. "
+        "Import history keeps the server's record."
+    )
     for i, r in enumerate(results):
         _result(i, r)
     if st.button("Clear this report"):
@@ -229,13 +271,36 @@ def _result(i: int, r: dict) -> None:
     rows = exports.error_rows(r["name"], errors, None, r["mapping"])
     if rows:
         one, two, three, _ = st.columns([1, 1, 1, 3])
-        one.download_button("Error report (CSV)", exports.to_csv(exports.ERROR_HEADERS, rows),
-                            exports.report_name("errors", "csv", r["name"]), exports.CSV_TYPE, key=f"up_csv_{i}")
-        two.download_button("Error report (XLSX)", exports.to_xlsx("Errors", exports.ERROR_HEADERS, rows),
-                            exports.report_name("errors", "xlsx", r["name"]), exports.XLSX_TYPE, key=f"up_xlsx_{i}")
+        one.download_button(
+            "Error report (CSV)",
+            exports.to_csv(exports.ERROR_HEADERS, rows),
+            exports.report_name("errors", "csv", r["name"]),
+            exports.CSV_TYPE,
+            key=f"up_csv_{i}",
+        )
+        two.download_button(
+            "Error report (XLSX)",
+            exports.to_xlsx("Errors", exports.ERROR_HEADERS, rows),
+            exports.report_name("errors", "xlsx", r["name"]),
+            exports.XLSX_TYPE,
+            key=f"up_xlsx_{i}",
+        )
         if res.get("logs"):
-            body = json.dumps({"file": r["name"], "status": res.get("status"), "tableName": res.get("tableName"),
-                               "generatedAt": datetime.now(timezone.utc).isoformat(), "logs": res.get("logs"),
-                               "rowErrors": errors}, indent=2)
-            three.download_button("Processing logs (JSON)", body, exports.report_name("logs", "json", r["name"]),
-                                  "application/json", key=f"up_log_{i}")
+            body = json.dumps(
+                {
+                    "file": r["name"],
+                    "status": res.get("status"),
+                    "tableName": res.get("tableName"),
+                    "generatedAt": datetime.now(timezone.utc).isoformat(),
+                    "logs": res.get("logs"),
+                    "rowErrors": errors,
+                },
+                indent=2,
+            )
+            three.download_button(
+                "Processing logs (JSON)",
+                body,
+                exports.report_name("logs", "json", r["name"]),
+                "application/json",
+                key=f"up_log_{i}",
+            )

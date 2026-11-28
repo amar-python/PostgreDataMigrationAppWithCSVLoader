@@ -3,21 +3,22 @@
 
 Mirrors `bun run eval:list` in gstack.
 """
+
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
 
-ROOT        = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1]
 REPORTS_DIR = ROOT / "evals" / "reports"
 
-GREEN  = "\033[0;32m"
-RED    = "\033[0;31m"
+GREEN = "\033[0;32m"
+RED = "\033[0;31m"
 YELLOW = "\033[1;33m"
-CYAN   = "\033[0;36m"
-DIM    = "\033[2m"
-NC     = "\033[0m"
+CYAN = "\033[0;36m"
+DIM = "\033[2m"
+NC = "\033[0m"
 
 
 def main() -> None:
@@ -38,7 +39,7 @@ def main() -> None:
     print(f"\n{CYAN}Eval runs ({len(runs)} total) — most recent first{NC}")
     print("=" * 70)
     print(f"  {'Run ID':<30}  {'Total':>5}  {'Pass':>5}  {'Fail':>5}  {'Skip':>5}")
-    print(f"  {'-'*30}  {'-'*5}  {'-'*5}  {'-'*5}  {'-'*5}")
+    print(f"  {'-' * 30}  {'-' * 5}  {'-' * 5}  {'-' * 5}  {'-' * 5}")
 
     for run_dir in runs:
         summary_path = run_dir / "summary.json"
@@ -48,9 +49,9 @@ def main() -> None:
         try:
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             t = summary.get("totals", {})
-            total   = t.get("total",   0)
-            passed  = t.get("passed",  0)
-            failed  = t.get("failed",  0)
+            total = t.get("total", 0)
+            passed = t.get("passed", 0)
+            failed = t.get("failed", 0)
             skipped = t.get("skipped", 0)
             fail_col = RED if failed else NC
             print(

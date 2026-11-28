@@ -77,7 +77,8 @@ class DeployAllPrereqs(unittest.TestCase):
         shutil.copy(SCRIPT, self.dir / "build" / "deploy_all.sh")
         for env in ("dev", "test"):
             (self.dir / "build" / "environments" / f"env_{env}.sql").write_text(
-                f"\\set db_name te_mgmt_{env}\n\\set db_owner postgres\n", encoding="utf-8")
+                f"\\set db_name te_mgmt_{env}\n\\set db_owner postgres\n", encoding="utf-8"
+            )
         self.log = self.dir / "calls.log"
         self.log.write_text("")
 
@@ -91,19 +92,22 @@ class DeployAllPrereqs(unittest.TestCase):
         if with_psql:
             stub = path / "psql"
             # An absolute shebang: the restricted PATH has no `bash` for `env` to find.
-            stub.write_text(PSQL_STUB.replace("#!/usr/bin/env bash", f"#!{BASH}", 1),
-                            encoding="utf-8", newline="\n")
+            stub.write_text(PSQL_STUB.replace("#!/usr/bin/env bash", f"#!{BASH}", 1), encoding="utf-8", newline="\n")
             stub.chmod(0o755)
         return path
 
     def run_script(self, *args: str, with_psql: bool = True, **env: str) -> subprocess.CompletedProcess:
-        full = {"PATH": str(self._bin(with_psql)), "STUB_LOG": str(self.log),
-                "HOME": str(self.dir), **env}
+        full = {"PATH": str(self._bin(with_psql)), "STUB_LOG": str(self.log), "HOME": str(self.dir), **env}
         # stdin is closed: with no terminal the script must never wait for an answer, even
         # when the person running pytest has one (stderr is captured, so it is not a terminal).
-        return subprocess.run([BASH, str(self.dir / "build" / "deploy_all.sh"), *args],
-                              capture_output=True, text=True, env=full, timeout=60,
-                              stdin=subprocess.DEVNULL)
+        return subprocess.run(
+            [BASH, str(self.dir / "build" / "deploy_all.sh"), *args],
+            capture_output=True,
+            text=True,
+            env=full,
+            timeout=60,
+            stdin=subprocess.DEVNULL,
+        )
 
     def run_interactive(self, *args: str, answer: str, **env: str) -> tuple[int, str]:
         """Run the script with a real terminal (a pseudo-terminal) and type ``answer`` at it.
@@ -113,8 +117,14 @@ class DeployAllPrereqs(unittest.TestCase):
         """
         full = {"PATH": str(self._bin(True)), "STUB_LOG": str(self.log), "HOME": str(self.dir), **env}
         master, slave = pty.openpty()
-        proc = subprocess.Popen([BASH, str(self.dir / "build" / "deploy_all.sh"), *args],
-                                stdin=slave, stdout=slave, stderr=slave, env=full, close_fds=True)
+        proc = subprocess.Popen(
+            [BASH, str(self.dir / "build" / "deploy_all.sh"), *args],
+            stdin=slave,
+            stdout=slave,
+            stderr=slave,
+            env=full,
+            close_fds=True,
+        )
         os.close(slave)
         out = b""
         try:
@@ -169,8 +179,9 @@ class DeployAllPrereqs(unittest.TestCase):
         res = self.run_script("dev", with_psql=False, PROGRAMFILES=str(pf))
         self.assertEqual(res.returncode, 1)
         self.assertIn("installed, but its bin folder is not on PATH", res.stderr)
-        self.assertIn(f'export PATH="{pf}/PostgreSQL/18/bin:$PATH"', res.stderr,
-                      "version order, not text order: 18 beats 9.6")
+        self.assertIn(
+            f'export PATH="{pf}/PostgreSQL/18/bin:$PATH"', res.stderr, "version order, not text order: 18 beats 9.6"
+        )
 
     def test_a_missing_psql_with_no_install_says_how_to_get_it(self):
         res = self.run_script("dev", with_psql=False, PROGRAMFILES=str(self.dir / "empty-pf"))
@@ -182,16 +193,21 @@ class DeployAllPrereqs(unittest.TestCase):
     # -- bash from PowerShell is WSL: say so, instead of sending a Windows user to apt --------
 
     def test_inside_wsl_a_missing_psql_points_at_git_bash_not_at_apt_alone(self):
-        res = self.run_script("dev", with_psql=False, WSL_DISTRO_NAME="Ubuntu-24.04",
-                              PROGRAMFILES=str(self.dir / "empty-pf"))
+        res = self.run_script(
+            "dev", with_psql=False, WSL_DISTRO_NAME="Ubuntu-24.04", PROGRAMFILES=str(self.dir / "empty-pf")
+        )
         self.assertEqual(res.returncode, 1)
         self.assertIn("psql was not found on PATH", res.stderr)
         self.assertIn("inside WSL", res.stderr)
         self.assertIn("Git Bash", res.stderr)
-        self.assertIn(r'"C:\Program Files\Git\bin\bash.exe" build/deploy_all.sh', res.stderr,
-                      "the exact PowerShell command to use instead")
-        self.assertIn("sudo apt install postgresql-client", res.stderr,
-                      "still offered, for a PostgreSQL that runs inside WSL")
+        self.assertIn(
+            r'"C:\Program Files\Git\bin\bash.exe" build/deploy_all.sh',
+            res.stderr,
+            "the exact PowerShell command to use instead",
+        )
+        self.assertIn(
+            "sudo apt install postgresql-client", res.stderr, "still offered, for a PostgreSQL that runs inside WSL"
+        )
         self.assertNotIn("Install it with: apt install", res.stderr, "the generic Linux hint is replaced")
         self.assertNotIn("Creating database", res.stdout)
         self.assertEqual(self.calls, [])
@@ -228,8 +244,9 @@ class DeployAllPrereqs(unittest.TestCase):
     def test_the_host_and_port_in_the_message_are_the_ones_used(self):
         res = self.run_script("dev", STUB_CONNECT="fail", PGHOST="db.example", PGPORT="5433", PGUSER="admin")
         self.assertIn("at db.example:5433 as admin", res.stderr)
-        self.assertTrue(any("-h db.example" in c and "-p 5433" in c and "-U admin" in c
-                            for c in self.calls), self.calls)
+        self.assertTrue(
+            any("-h db.example" in c and "-p 5433" in c and "-U admin" in c for c in self.calls), self.calls
+        )
 
     # -- the existence check -----------------------------------------------------
 

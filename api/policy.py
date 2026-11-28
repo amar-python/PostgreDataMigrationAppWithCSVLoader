@@ -12,10 +12,11 @@ Any purge is an operator action outside the app, and must keep audit rows for at
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import Response
 
 from api.config import CLASSIFICATIONS, settings
-from typing import Any
 
 HEADER = "X-Data-Classification"
 
@@ -25,7 +26,8 @@ def check_config(classification: str, retention_years: int) -> None:
     if classification == "PROTECTED":
         raise RuntimeError(
             "DATA_CLASSIFICATION=PROTECTED is not supported. PROTECTED needs IRAP-assessed hosting and "
-            "ISM PROTECTED controls (#49); the design target is OFFICIAL: Sensitive.")
+            "ISM PROTECTED controls (#49); the design target is OFFICIAL: Sensitive."
+        )
     if classification not in CLASSIFICATIONS:
         raise RuntimeError(f"DATA_CLASSIFICATION must be one of {', '.join(CLASSIFICATIONS)}; got {classification!r}.")
     if retention_years < 1:

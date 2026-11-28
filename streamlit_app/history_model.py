@@ -20,15 +20,32 @@ EXPORT_LIMIT = 5_000  # the most one report holds; above it the report says it i
 EVENTS_PAGE = 100  # audit events a page shows (the API's default)
 ERROR_ROWS_SHOWN = 200  # failed rows shown at once; the report has all the server kept
 
-STATUSES = [("", "All statuses"), ("imported", "Imported"), ("partly_imported", "Partly imported"),
-            ("failed", "Failed"), ("rejected", "Rejected"), ("duplicate", "Duplicate"), ("staged", "Staged")]
+STATUSES = [
+    ("", "All statuses"),
+    ("imported", "Imported"),
+    ("partly_imported", "Partly imported"),
+    ("failed", "Failed"),
+    ("rejected", "Rejected"),
+    ("duplicate", "Duplicate"),
+    ("staged", "Staged"),
+]
 
 # The actions the API records (api/services/audit.py VALID_ACTIONS). A test fails if the two drift apart.
-AUDIT_ACTIONS = ("upload", "delete", "password_reset", "row_decision", "cell_edit", "submit", "approve", "reject",
-                 "import")
+AUDIT_ACTIONS = (
+    "upload",
+    "delete",
+    "password_reset",
+    "row_decision",
+    "cell_edit",
+    "submit",
+    "approve",
+    "reject",
+    "import",
+)
 
 
 # ── what is asked ───────────────────────────────────────────────────────────────────────────
+
 
 def day_start(day: date) -> str:
     """Midnight UTC at the start of `day`, as the API takes a time."""
@@ -42,8 +59,15 @@ def _range(params: dict, date_from: date | None, date_to: date | None) -> None:
         params["to"] = day_start(date_to + timedelta(days=1))
 
 
-def uploads_params(file: str = "", status: str = "", uploader: str = "", date_from: date | None = None,
-                   date_to: date | None = None, limit: int = PAGE_SIZE + 1, offset: int = 0) -> dict:
+def uploads_params(
+    file: str = "",
+    status: str = "",
+    uploader: str = "",
+    date_from: date | None = None,
+    date_to: date | None = None,
+    limit: int = PAGE_SIZE + 1,
+    offset: int = 0,
+) -> dict:
     """The query for the list of imports. Blank filters are left out. One more than a page is asked for, so
     the screen knows whether there is a next page without a count (the API gives none)."""
     params: dict = {"limit": limit, "offset": offset}
@@ -54,8 +78,16 @@ def uploads_params(file: str = "", status: str = "", uploader: str = "", date_fr
     return params
 
 
-def events_params(actor: str = "", action: str = "", file: str = "", date_from: date | None = None,
-                  date_to: date | None = None, limit: int = EVENTS_PAGE, offset: int = 0, fmt: str = "json") -> dict:
+def events_params(
+    actor: str = "",
+    action: str = "",
+    file: str = "",
+    date_from: date | None = None,
+    date_to: date | None = None,
+    limit: int = EVENTS_PAGE,
+    offset: int = 0,
+    fmt: str = "json",
+) -> dict:
     params: dict = {"limit": limit, "offset": offset}
     for key, value in (("actor", actor), ("action", action), ("file", file)):
         if value and value.strip():
@@ -88,6 +120,7 @@ def page_of(rows: list, size: int = PAGE_SIZE) -> tuple[list, bool]:
 
 # ── what is shown ───────────────────────────────────────────────────────────────────────────
 
+
 def status_label(status: str) -> str:
     return m.ATTEMPT_LABEL.get(status, status)
 
@@ -105,13 +138,23 @@ def _number(value: int | None) -> str:
 
 def uploads_frame(uploads: list[dict]) -> pd.DataFrame:
     """The list of imports as a table, indexed by the upload's number."""
-    return pd.DataFrame([{
-        "#": int(u["id"]), "File": _text(u["file_name"]), "Status": status_label(u["status"]),
-        "Rows": _number(u.get("total_rows")), "Imported": _number(u.get("imported_rows")),
-        "Failed": _number(u.get("failed_rows")), "Uploaded (UTC)": m.when(u["uploaded_at"]),
-        "Uploaded by": _text(u.get("uploader")), "Mode": u.get("mode") or "",
-    } for u in uploads], columns=["#", "File", "Status", "Rows", "Imported", "Failed", "Uploaded (UTC)",
-                                  "Uploaded by", "Mode"]).set_index("#")
+    return pd.DataFrame(
+        [
+            {
+                "#": int(u["id"]),
+                "File": _text(u["file_name"]),
+                "Status": status_label(u["status"]),
+                "Rows": _number(u.get("total_rows")),
+                "Imported": _number(u.get("imported_rows")),
+                "Failed": _number(u.get("failed_rows")),
+                "Uploaded (UTC)": m.when(u["uploaded_at"]),
+                "Uploaded by": _text(u.get("uploader")),
+                "Mode": u.get("mode") or "",
+            }
+            for u in uploads
+        ],
+        columns=["#", "File", "Status", "Rows", "Imported", "Failed", "Uploaded (UTC)", "Uploaded by", "Mode"],
+    ).set_index("#")
 
 
 def import_label(upload: dict) -> str:
@@ -133,9 +176,18 @@ def outcome_line(upload: dict, detail: dict) -> str:
 
 
 def errors_frame(row_errors: list[dict]) -> pd.DataFrame:
-    return pd.DataFrame([{"Row": e.get("rowNumber"), "Column": _text(e.get("column")), "Value": _text(e.get("value")),
-                          "Reason": _text(e["reason"])} for e in row_errors],
-                        columns=["Row", "Column", "Value", "Reason"]).set_index("Row")
+    return pd.DataFrame(
+        [
+            {
+                "Row": e.get("rowNumber"),
+                "Column": _text(e.get("column")),
+                "Value": _text(e.get("value")),
+                "Reason": _text(e["reason"]),
+            }
+            for e in row_errors
+        ],
+        columns=["Row", "Column", "Value", "Reason"],
+    ).set_index("Row")
 
 
 def errors_note(shown: int, failed: int | None) -> str | None:
@@ -150,16 +202,32 @@ def log_frame(logs: list[dict]) -> pd.DataFrame:
     rows = []
     for entry in logs:
         at = datetime.fromtimestamp(entry["ts"] / 1000, tz=timezone.utc).strftime("%H:%M:%S.%f")[:-3]
-        rows.append({"Time (UTC)": at, "Step": entry["step"], "Level": entry["level"],
-                     "Message": _text(entry["message"]), "Count": _number(entry.get("count"))})
+        rows.append(
+            {
+                "Time (UTC)": at,
+                "Step": entry["step"],
+                "Level": entry["level"],
+                "Message": _text(entry["message"]),
+                "Count": _number(entry.get("count")),
+            }
+        )
     return pd.DataFrame(rows, columns=["Time (UTC)", "Step", "Level", "Message", "Count"]).set_index("Time (UTC)")
 
 
 def events_frame(entries: list[dict]) -> pd.DataFrame:
-    return pd.DataFrame([{
-        "When (UTC)": m.when(e["performedAt"]), "Actor": _text(e.get("actor")), "Action": e["action"],
-        "File": _text(e.get("fileName")), "Table": _text(e.get("tableName")),
-    } for e in entries], columns=["When (UTC)", "Actor", "Action", "File", "Table"]).set_index("When (UTC)")
+    return pd.DataFrame(
+        [
+            {
+                "When (UTC)": m.when(e["performedAt"]),
+                "Actor": _text(e.get("actor")),
+                "Action": e["action"],
+                "File": _text(e.get("fileName")),
+                "Table": _text(e.get("tableName")),
+            }
+            for e in entries
+        ],
+        columns=["When (UTC)", "Actor", "Action", "File", "Table"],
+    ).set_index("When (UTC)")
 
 
 def events_summary(page: dict) -> str:

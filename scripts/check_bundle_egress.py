@@ -21,12 +21,18 @@ TEXT = {".js", ".mjs", ".cjs", ".css", ".html", ".json", ".txt", ".map", ".svg"}
 HOST = re.compile(r"""(?:https?|wss?)://([A-Za-z0-9._-]+)""", re.I)
 LOCAL = {"localhost", "127.0.0.1"}
 URL = r"""["'`](?:https?|wss?)://[^"'`\s]+"""
-MARKUP = {".html", ".css", ".svg"}   # where src=, @import and url() mean "load this"; in scripts `new URL(...)` doesn't
+MARKUP = {".html", ".css", ".svg"}  # where src=, @import and url() mean "load this"; in scripts `new URL(...)` doesn't
 LOADS = [
-    ("HTML/CSS external resource", re.compile(
-        r"""(?:\bsrc|\bhref)\s*=\s*["'](?:https?:)?//[^"']+"""
-        r"""|@import\s+(?:url\()?["']?(?:https?:)?//[^;)\s]+"""
-        r"""|\burl\(\s*["']?(?:https?:)?//[^)]+""", re.I), MARKUP),
+    (
+        "HTML/CSS external resource",
+        re.compile(
+            r"""(?:\bsrc|\bhref)\s*=\s*["'](?:https?:)?//[^"']+"""
+            r"""|@import\s+(?:url\()?["']?(?:https?:)?//[^;)\s]+"""
+            r"""|\burl\(\s*["']?(?:https?:)?//[^)]+""",
+            re.I,
+        ),
+        MARKUP,
+    ),
     ("fetch of a literal URL", re.compile(r"\bfetch\(\s*" + URL, re.I), None),
     ("XMLHttpRequest of a literal URL", re.compile(r"""\.open\(\s*["'][A-Za-z]+["']\s*,\s*""" + URL, re.I), None),
     ("sendBeacon", re.compile(r"\bsendBeacon\(\s*" + URL, re.I), None),
@@ -37,7 +43,9 @@ LOADS = [
 BANNED = re.compile(
     r"(google-analytics|googletagmanager|doubleclick|googleapis|gstatic|sentry\.io|ingest\.sentry|posthog|mixpanel|segment\.(?:io|com)|"
     r"amplitude\.com|datadoghq|newrelic|nr-data|hotjar|logrocket|fullstory|bugsnag|rollbar|intercom|clarity\.ms|"
-    r"cdn\.jsdelivr|unpkg\.com|cdnjs|cloudflare(?:insights)?\.com|bootstrapcdn|fontawesome|typekit|lovable\.(?:dev|app))", re.I)
+    r"cdn\.jsdelivr|unpkg\.com|cdnjs|cloudflare(?:insights)?\.com|bootstrapcdn|fontawesome|typekit|lovable\.(?:dev|app))",
+    re.I,
+)
 
 
 def scan(root: Path) -> dict:
@@ -48,8 +56,11 @@ def scan(root: Path) -> dict:
         for label, pattern, only in LOADS:
             if only and path.suffix.lower() not in only:
                 continue
-            loads += [f"{rel}: {label}: {m.group(0)[:100]}" for m in pattern.finditer(text)
-                      if not any(h in m.group(0) for h in ("localhost", "127.0.0.1"))]
+            loads += [
+                f"{rel}: {label}: {m.group(0)[:100]}"
+                for m in pattern.finditer(text)
+                if not any(h in m.group(0) for h in ("localhost", "127.0.0.1"))
+            ]
         for m in HOST.finditer(text):
             host = m.group(1).lower().rstrip(".")
             if host in LOCAL:
@@ -71,15 +82,23 @@ def main(argv: list[str]) -> int:
             print(f"{arg}: not a directory; build the frontend first", file=sys.stderr)
             return 2
         found = scan(root)
-        print(f"{arg}: {len(found['loads'])} load path(s), {len(found['banned'])} analytics/CDN host(s), "
-              f"{len(found['other'])} other host name(s) that are never requested")
+        print(
+            f"{arg}: {len(found['loads'])} load path(s), {len(found['banned'])} analytics/CDN host(s), "
+            f"{len(found['other'])} other host name(s) that are never requested"
+        )
         for line in found["loads"] + found["banned"]:
             print("  FAIL", line)
         if found["other"]:
-            print("  named only (namespaces, documentation links): " +
-                  ", ".join(f"{h} x{n}" for h, n in sorted(found["other"].items(), key=lambda kv: -kv[1])))
+            print(
+                "  named only (namespaces, documentation links): "
+                + ", ".join(f"{h} x{n}" for h, n in sorted(found["other"].items(), key=lambda kv: -kv[1]))
+            )
         failed = failed or bool(found["loads"] or found["banned"])
-    print("FAILED: the build can reach outside this deployment" if failed else "OK: the build requests nothing outside this deployment")
+    print(
+        "FAILED: the build can reach outside this deployment"
+        if failed
+        else "OK: the build requests nothing outside this deployment"
+    )
     return 1 if failed else 0
 
 

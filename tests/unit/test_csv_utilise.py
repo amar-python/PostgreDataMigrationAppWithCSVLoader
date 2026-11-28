@@ -4,6 +4,7 @@ Argument-parsing and reachability paths are covered as unit tests (no DB).
 Database-backed paths (list/describe/peek/export/drop against a real schema)
 live alongside the integration tests in test_csv_loader_arbitrary_shapes.py.
 """
+
 import os
 import shutil
 import subprocess
@@ -55,8 +56,7 @@ class CsvUtiliseArgumentParsing(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if _BASH is None:
-            raise AssertionError(
-                "No working bash found — install Git Bash and ensure it is on PATH.")
+            raise AssertionError("No working bash found — install Git Bash and ensure it is on PATH.")
 
     def test_no_args_shows_usage_and_exits_nonzero(self):
         """No args → exit 1 with usage banner on stdout."""

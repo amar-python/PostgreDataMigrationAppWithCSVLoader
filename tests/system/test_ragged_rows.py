@@ -12,8 +12,10 @@ from fastapi.testclient import TestClient
 from api.main import app
 from api.services.csv_parse import extra_cells
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
-         "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1.")
+_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
+    "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1."
+)
 
 
 @pytest.mark.unit
@@ -68,8 +70,7 @@ class RaggedRowsOverTheApi(unittest.TestCase):
         self.assertEqual((res["status"], res["insertedRows"], res["failedRows"]), ("ok", 1, 0))
 
     def test_te_mode_reports_a_row_wider_than_the_header(self):
-        content = (f"name,org_type,country\nRAG_{self.tag}_1,government,AU\n"
-                   f"RAG_{self.tag}_2,government,AU,LOST\n")
+        content = f"name,org_type,country\nRAG_{self.tag}_1,government,AU\nRAG_{self.tag}_2,government,AU,LOST\n"
         res = self._upload(content, mode="te", targetTable="organisations")
         # #289: a T&E file with a bad row is rejected as a whole. The wide row is still reported, never
         # silently truncated (#82), and the good row does not land either.
@@ -80,10 +81,7 @@ class RaggedRowsOverTheApi(unittest.TestCase):
 
     def test_multiple_ragged_rows_each_get_a_reason(self):
         """Every ragged row gets its own entry in rowErrors with a reason."""
-        content = (f"a,b\n"
-                   f"1,{self.tag}\n"
-                   f"2,{self.tag},X1,X2\n"
-                   f"3,{self.tag},X3\n")
+        content = f"a,b\n1,{self.tag}\n2,{self.tag},X1,X2\n3,{self.tag},X3\n"
         res = self._upload(content)
         self.assertEqual(res["status"], "ok")
         self.assertEqual(res["failedRows"], 2)
@@ -109,7 +107,8 @@ class RaggedRowsOverTheApi(unittest.TestCase):
             self.assertEqual(
                 res["totalRows"],
                 res["insertedRows"] + res["duplicateRowsSkipped"] + res["failedRows"],
-                f"rows went missing: {res}")
+                f"rows went missing: {res}",
+            )
         self.assertEqual(res["failedRows"], len(ragged_rows))
 
         def by_row(errors):
@@ -127,8 +126,7 @@ class RaggedRowsOverTheApi(unittest.TestCase):
 
     def test_dynamic_mode_accounts_for_every_row_with_a_stored_reason(self):
         t = self.tag
-        res = self._upload(
-            f"a,b\n1,{t}\n1,{t}\n2,{t},LOST1\n3,{t}\n4,{t},LOST2,MORE\n")
+        res = self._upload(f"a,b\n1,{t}\n1,{t}\n2,{t},LOST1\n3,{t}\n4,{t},LOST2,MORE\n")
         self.assertEqual((res["insertedRows"], res["duplicateRowsSkipped"], res["failedRows"]), (2, 1, 2))
         self._assert_accounted(res, {3: "LOST1", 5: "LOST2"})
 
@@ -137,9 +135,11 @@ class RaggedRowsOverTheApi(unittest.TestCase):
         head = "name,org_type,country\n"
         res = self._upload(
             head + f"RAG_{t}_1,government,AU\n"
-                   f"RAG_{t}_2,government,AU,LOST1\n"
-                   f"RAG_{t}_3,government,AU\n"
-                   f"RAG_{t}_4,government,AU,LOST2,MORE\n",
-            mode="te", targetTable="organisations")
+            f"RAG_{t}_2,government,AU,LOST1\n"
+            f"RAG_{t}_3,government,AU\n"
+            f"RAG_{t}_4,government,AU,LOST2,MORE\n",
+            mode="te",
+            targetTable="organisations",
+        )
         self.assertEqual((res["insertedRows"], res["failedRows"]), (0, 2))  # #289: all or nothing
         self._assert_accounted(res, {2: "LOST1", 4: "LOST2"}, rejected=True)

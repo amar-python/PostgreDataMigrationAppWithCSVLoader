@@ -11,18 +11,18 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from psycopg2 import sql
 
 from api import policy
 from api.auth import allow, tenant_scope
-from api.tenancy import uploads_schema
-from api.db import Conn, fetch_one
 from api.config import settings
+from api.db import Conn, fetch_one
 from api.services.audit import VALID_ACTIONS, verify_chain
 from api.services.reports import csv_text, like_pattern
-from typing import Any
+from api.tenancy import uploads_schema
 
 router = APIRouter(
     prefix="/api/audit",
@@ -37,11 +37,7 @@ def audit_log(limit: int = 50, offset: int = 0) -> dict[str, Any]:
     offset = max(0, offset)
     with Conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                sql.SQL("SELECT COUNT(*) FROM {}.audit_log").format(
-                    sql.Identifier(uploads_schema())
-                )
-            )
+            cur.execute(sql.SQL("SELECT COUNT(*) FROM {}.audit_log").format(sql.Identifier(uploads_schema())))
             total = fetch_one(cur)[0]
             cur.execute(
                 sql.SQL(
@@ -75,8 +71,18 @@ def audit_verify() -> dict[str, Any]:
             return verify_chain(cur)
 
 
-_EVENT_COLUMNS = ("id", "performed_at", "actor", "action", "file_id", "file_name", "table_name", "mode",
-                  "before_value", "after_value")
+_EVENT_COLUMNS = (
+    "id",
+    "performed_at",
+    "actor",
+    "action",
+    "file_id",
+    "file_name",
+    "table_name",
+    "mode",
+    "before_value",
+    "after_value",
+)
 
 
 @router.get("/events", dependencies=[Depends(allow("read_audit"))], response_model=None)
@@ -122,18 +128,47 @@ def audit_events(
     with Conn() as conn, conn.cursor() as cur:
         cur.execute(sql.SQL("SELECT count(*) FROM {}.audit_log{}").format(schema, clause), params)
         total = fetch_one(cur)[0]
-        cur.execute(sql.SQL("SELECT {} FROM {}.audit_log{} ORDER BY id DESC LIMIT %s OFFSET %s").format(
-            sql.SQL(", ").join(sql.Identifier(c) for c in _EVENT_COLUMNS), schema, clause), [*params, limit, offset])
+        cur.execute(
+            sql.SQL("SELECT {} FROM {}.audit_log{} ORDER BY id DESC LIMIT %s OFFSET %s").format(
+                sql.SQL(", ").join(sql.Identifier(c) for c in _EVENT_COLUMNS), schema, clause
+            ),
+            [*params, limit, offset],
+        )
         rows = cur.fetchall()
     marking = {policy.HEADER: settings.DATA_CLASSIFICATION}
     if format == "csv":
-        table_rows = [[r[0], r[1].isoformat(), *r[2:8], *(None if v is None else json.dumps(v) for v in r[8:])]
-                      for r in rows]
+        table_rows = [
+            [r[0], r[1].isoformat(), *r[2:8], *(None if v is None else json.dumps(v) for v in r[8:])] for r in rows
+        ]
         text = csv_text(list(_EVENT_COLUMNS), table_rows)
-        return Response(text, media_type="text/csv", headers={
-            **marking, "Content-Disposition": 'attachment; filename="audit-events.csv"',
-            "X-Total-Count": str(total)})
-    entries = [{"id": str(r[0]), "performedAt": r[1].isoformat(), "actor": r[2], "action": r[3], "fileId": r[4],
-                "fileName": r[5], "tableName": r[6], "mode": r[7], "before": r[8], "after": r[9]} for r in rows]
-    return {"classification": settings.DATA_CLASSIFICATION, "total": total, "limit": limit, "offset": offset,
-            "entries": entries}
+        return Response(
+            text,
+            media_type="text/csv",
+            headers={
+                **marking,
+                "Content-Disposition": 'attachment; filename="audit-events.csv"',
+                "X-Total-Count": str(total),
+            },
+        )
+    entries = [
+        {
+            "id": str(r[0]),
+            "performedAt": r[1].isoformat(),
+            "actor": r[2],
+            "action": r[3],
+            "fileId": r[4],
+            "fileName": r[5],
+            "tableName": r[6],
+            "mode": r[7],
+            "before": r[8],
+            "after": r[9],
+        }
+        for r in rows
+    ]
+    return {
+        "classification": settings.DATA_CLASSIFICATION,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "entries": entries,
+    }

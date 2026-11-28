@@ -4,7 +4,7 @@ import csv
 import os
 import sys
 
-GREEN, YELLOW, RED, NC = '\033[0;32m', '\033[1;33m', '\033[0;31m', '\033[0m'
+GREEN, YELLOW, RED, NC = "\033[0;32m", "\033[1;33m", "\033[0;31m", "\033[0m"
 
 
 def log(m):
@@ -36,10 +36,7 @@ VALID_CSV = os.environ.get("VALID_CSV", "")
 SKIP_FILE = os.environ.get("SKIP_FILE", "")
 FORCE_DELIM = os.environ.get("CSV_DELIMITER", "")
 
-missing = [
-    v for v in ("CSV_FILE", "VALID_CSV", "SKIP_FILE")
-    if not os.environ.get(v)
-]
+missing = [v for v in ("CSV_FILE", "VALID_CSV", "SKIP_FILE") if not os.environ.get(v)]
 if missing:
     err(f"Missing required environment variables: {', '.join(missing)}")
     sys.exit(1)
@@ -54,8 +51,7 @@ def detect_delimiter(path):
     if FORCE_DELIM:
         return FORCE_DELIM.encode().decode("unicode_escape")
     try:
-        with open(path, "r", encoding="utf-8-sig",
-                  errors="surrogateescape", newline="") as fh:
+        with open(path, "r", encoding="utf-8-sig", errors="surrogateescape", newline="") as fh:
             sample = fh.read(8192)
         if not sample:
             return ","
@@ -66,14 +62,18 @@ def detect_delimiter(path):
 
 DELIM = detect_delimiter(CSV_FILE)
 label = {
-    ",": "comma", ";": "semicolon", "\t": "tab", "|": "pipe",
+    ",": "comma",
+    ";": "semicolon",
+    "\t": "tab",
+    "|": "pipe",
 }.get(DELIM, repr(DELIM))
 
 try:
-    with open(CSV_FILE, "r", encoding="utf-8-sig",
-              errors="surrogateescape", newline="") as src, \
-         open(VALID_CSV, "w", encoding="utf-8", newline="") as vf, \
-         open(SKIP_FILE, "w", encoding="utf-8", newline="") as sf:
+    with (
+        open(CSV_FILE, "r", encoding="utf-8-sig", errors="surrogateescape", newline="") as src,
+        open(VALID_CSV, "w", encoding="utf-8", newline="") as vf,
+        open(SKIP_FILE, "w", encoding="utf-8", newline="") as sf,
+    ):
         reader = csv.reader(src, delimiter=DELIM)
         wv = csv.writer(vf, delimiter=DELIM)
         ws = csv.writer(sf, delimiter=DELIM)
@@ -88,8 +88,7 @@ try:
             err("Header row is empty.")
             sys.exit(1)
         if any(has_bad_bytes(h) for h in headers):
-            err("Header row contains invalid UTF-8 bytes — "
-                "cannot process file.")
+            err("Header row contains invalid UTF-8 bytes — cannot process file.")
             sys.exit(1)
         log(f"Delimiter: {label}")
         log(f"Header: {ncols} columns — {' | '.join(headers)}")
@@ -101,25 +100,15 @@ try:
         valid = skip = 0
         for n, row in enumerate(reader, start=2):
             if not any(c.strip() for c in row):
-                ws.writerow(
-                    [clean(c) for c in row]
-                    + ["empty row — all values blank"]
-                )
+                ws.writerow([clean(c) for c in row] + ["empty row — all values blank"])
                 skip += 1
                 continue
             if any(has_bad_bytes(c) for c in row):
-                ws.writerow(
-                    [clean(c) for c in row]
-                    + [f"invalid UTF-8 bytes at line {n}"]
-                )
+                ws.writerow([clean(c) for c in row] + [f"invalid UTF-8 bytes at line {n}"])
                 skip += 1
                 continue
             if len(row) != ncols:
-                ws.writerow(
-                    [clean(c) for c in row]
-                    + [f"column mismatch — expected {ncols}, "
-                       f"got {len(row)}"]
-                )
+                ws.writerow([clean(c) for c in row] + [f"column mismatch — expected {ncols}, got {len(row)}"])
                 skip += 1
                 continue
             wv.writerow(row)

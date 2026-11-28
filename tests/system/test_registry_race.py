@@ -62,17 +62,21 @@ def _race(uploads: list[tuple[str, str]]) -> list[dict]:
 
 def _registry(names: list[str], hashes: list[str]) -> list[tuple]:
     with Conn() as conn, conn.cursor() as cur:
-        cur.execute(sql.SQL(
-            "SELECT file_name, file_hash, table_name FROM {}.csv_files "
-            "WHERE file_name = ANY(%s) OR file_hash = ANY(%s)").format(sql.Identifier(uploads_schema())),
-            (names, hashes))
+        cur.execute(
+            sql.SQL(
+                "SELECT file_name, file_hash, table_name FROM {}.csv_files "
+                "WHERE file_name = ANY(%s) OR file_hash = ANY(%s)"
+            ).format(sql.Identifier(uploads_schema())),
+            (names, hashes),
+        )
         return cur.fetchall()
 
 
 def _table_rows(table: str) -> int:
     with Conn() as conn, conn.cursor() as cur:
-        cur.execute(sql.SQL("SELECT count(*) FROM {}.{}").format(
-            sql.Identifier(uploads_schema()), sql.Identifier(table)))
+        cur.execute(
+            sql.SQL("SELECT count(*) FROM {}.{}").format(sql.Identifier(uploads_schema()), sql.Identifier(table))
+        )
         return cur.fetchone()[0]
 
 
@@ -84,8 +88,9 @@ class RegistryRace(unittest.TestCase):
 
     def _assert_one_winner(self, results: list[dict], round_no: int) -> tuple[int, dict]:
         ok = [(i, r) for i, r in enumerate(results) if r["status"] == "ok"]
-        self.assertEqual(len(ok), 1, f"round {round_no}: expected exactly one winner, "
-                                     f"got {[r['status'] for r in results]}")
+        self.assertEqual(
+            len(ok), 1, f"round {round_no}: expected exactly one winner, got {[r['status'] for r in results]}"
+        )
         return ok[0]
 
     def _assert_attributable(self, res: dict, winner_name: str, round_no: int):
@@ -139,10 +144,16 @@ class RegistryRace(unittest.TestCase):
 
             results = _race(uploads)
 
-            self.assertEqual([r["status"] for r in results], ["ok"] * RACERS,
-                             f"round {n}: every version must be stored, got {results}")
-            self.assertEqual(sorted(r["version"] for r in results), list(range(1, RACERS + 1)),
-                             f"round {n}: versions must be distinct and gapless")
+            self.assertEqual(
+                [r["status"] for r in results],
+                ["ok"] * RACERS,
+                f"round {n}: every version must be stored, got {results}",
+            )
+            self.assertEqual(
+                sorted(r["version"] for r in results),
+                list(range(1, RACERS + 1)),
+                f"round {n}: versions must be distinct and gapless",
+            )
             self.assertEqual(len({r["dataset"] for r in results}), 1)
             digests = [hashlib.sha256(c.encode()).hexdigest() for _, c in uploads]
             self.assertEqual(len(_registry([name], digests)), RACERS, f"round {n}: registry rows")

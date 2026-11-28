@@ -8,6 +8,7 @@ tests.
 
 Exit code 0 when all checks pass; 1 if any check fails.
 """
+
 from __future__ import annotations
 
 import ast
@@ -17,11 +18,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-GREEN  = "\033[0;32m"
+GREEN = "\033[0;32m"
 YELLOW = "\033[1;33m"
-RED    = "\033[0;31m"
-CYAN   = "\033[0;36m"
-NC     = "\033[0m"
+RED = "\033[0;31m"
+CYAN = "\033[0;36m"
+NC = "\033[0m"
 
 _results: list[tuple[str, str, str]] = []  # (status, label, detail)
 
@@ -59,10 +60,11 @@ def _check_py_syntax(label: str, path: Path) -> None:
 
 # ── Core Python source ────────────────────────────────────────────────────────
 
+
 def check_core_python() -> None:
     files = {
-        "validator.py syntax":  ROOT / "build" / "csv" / "validator.py",
-        "runner.py syntax":     ROOT / "evals" / "runner.py",
+        "validator.py syntax": ROOT / "build" / "csv" / "validator.py",
+        "runner.py syntax": ROOT / "evals" / "runner.py",
         "gap_report.py syntax": ROOT / "evals" / "gap_report.py",
     }
     for label, path in files.items():
@@ -70,6 +72,7 @@ def check_core_python() -> None:
 
 
 # ── Shell scripts ─────────────────────────────────────────────────────────────
+
 
 def check_shell_scripts() -> None:
     scripts = [
@@ -79,13 +82,14 @@ def check_shell_scripts() -> None:
         ROOT / "preflight.sh",
     ]
     adapters = (ROOT / "build" / "adapters").glob("adapter_*.sh")
-    loaders  = (ROOT / "build" / "csv").glob("loader_*.sh")
+    loaders = (ROOT / "build" / "csv").glob("loader_*.sh")
     for path in [*scripts, *adapters, *loaders]:
         rel = path.relative_to(ROOT)
         _check_file(str(rel), path)
 
 
 # ── SQL schema & environment files ───────────────────────────────────────────
+
 
 def check_sql_files() -> None:
     pg_schema = ROOT / "build" / "schema" / "postgresql" / "te_core_schema.sql"
@@ -114,6 +118,7 @@ def check_sql_files() -> None:
 
 
 # ── Eval datasets & expected files ────────────────────────────────────────────
+
 
 def check_eval_coverage() -> None:
     datasets_root = ROOT / "evals" / "datasets"
@@ -149,6 +154,7 @@ def check_eval_coverage() -> None:
                     exp_action = ""
                     if exp_file.exists():
                         import json
+
                         try:
                             d = json.loads(exp_file.read_text(encoding="utf-8"))
                             exp_action = d.get("runner_action", "default")
@@ -162,13 +168,14 @@ def check_eval_coverage() -> None:
 
 # ── Test infrastructure ───────────────────────────────────────────────────────
 
+
 def check_test_infra() -> None:
     files = {
-        "pytest.ini":        ROOT / "pytest.ini",
-        "conftest.py":       ROOT / "tests" / "conftest.py",
-        "requirements-dev":  ROOT / "requirements-dev.txt",
-        "Makefile":          ROOT / "Makefile",
-        "run_qa.ps1":        ROOT / "scripts" / "run_qa.ps1",
+        "pytest.ini": ROOT / "pytest.ini",
+        "conftest.py": ROOT / "tests" / "conftest.py",
+        "requirements-dev": ROOT / "requirements-dev.txt",
+        "Makefile": ROOT / "Makefile",
+        "run_qa.ps1": ROOT / "scripts" / "run_qa.ps1",
     }
     for label, path in files.items():
         _check_file(label, path)
@@ -182,6 +189,7 @@ def check_test_infra() -> None:
 
 
 # ── Config template ───────────────────────────────────────────────────────────
+
 
 def check_config() -> None:
     example = ROOT / "build" / "config.env.example"
@@ -206,6 +214,7 @@ def check_config() -> None:
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
 
 def main() -> int:
     print(f"\n{CYAN}PostgreDataMigrationApp — Health Dashboard{NC}")

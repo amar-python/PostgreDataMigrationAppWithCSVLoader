@@ -8,6 +8,7 @@ pip-audit and npm audit need the network, so these tests feed the script canned 
     result is "could not audit" (exit 2), never a pass. (test_report.py once printed PASS with 0 tests run.)
   * the requirements files come from git, not from a list, so a new one is audited without anyone remembering.
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -32,9 +33,19 @@ def pip_json(*deps: dict) -> str:
 CLEAN = pip_json({"name": "fastapi", "version": "0.162.5", "vulns": []})
 VULNERABLE = pip_json(
     {"name": "fastapi", "version": "0.162.5", "vulns": []},
-    {"name": "requests", "version": "2.30.0", "vulns": [
-        {"id": "PYSEC-2023-74", "aliases": ["CVE-2023-32681", "GHSA-j8r2-6x86-q33q"], "fix_versions": ["2.31.0"],
-         "description": "Unintended leak of Proxy-Authorization header"}]})
+    {
+        "name": "requests",
+        "version": "2.30.0",
+        "vulns": [
+            {
+                "id": "PYSEC-2023-74",
+                "aliases": ["CVE-2023-32681", "GHSA-j8r2-6x86-q33q"],
+                "fix_versions": ["2.31.0"],
+                "description": "Unintended leak of Proxy-Authorization header",
+            }
+        ],
+    },
+)
 
 
 def npm_json(**vulns) -> str:
@@ -42,15 +53,39 @@ def npm_json(**vulns) -> str:
 
 
 NPM_HIGH = npm_json(
-    lodash={"name": "lodash", "severity": "high", "via": [
-        {"source": 1, "name": "lodash", "title": "Prototype pollution", "severity": "high",
-         "url": "https://github.com/advisories/GHSA-p6mc-m468-83gw"}], "fixAvailable": True},
-    left_pad={"name": "left-pad", "severity": "moderate", "via": [
-        {"source": 2, "name": "left-pad", "title": "Meh", "severity": "moderate",
-         "url": "https://github.com/advisories/GHSA-aaaa-bbbb-cccc"}], "fixAvailable": False})
+    lodash={
+        "name": "lodash",
+        "severity": "high",
+        "via": [
+            {
+                "source": 1,
+                "name": "lodash",
+                "title": "Prototype pollution",
+                "severity": "high",
+                "url": "https://github.com/advisories/GHSA-p6mc-m468-83gw",
+            }
+        ],
+        "fixAvailable": True,
+    },
+    left_pad={
+        "name": "left-pad",
+        "severity": "moderate",
+        "via": [
+            {
+                "source": 2,
+                "name": "left-pad",
+                "title": "Meh",
+                "severity": "moderate",
+                "url": "https://github.com/advisories/GHSA-aaaa-bbbb-cccc",
+            }
+        ],
+        "fixAvailable": False,
+    },
+)
 
 
 # --- parsing -----------------------------------------------------------------------------------------------------
+
 
 def test_pip_audit_output_with_a_vulnerable_package_yields_one_finding_with_its_aliases():
     findings = sa.parse_pip_audit(VULNERABLE, "api/requirements.txt")
@@ -109,11 +144,15 @@ GHSA-old-old-old 2026-01-01  an exception that has expired
 def test_the_allowlist_reads_id_expiry_and_reason():
     entries = sa.parse_allowlist(ALLOW)
     assert [(e.advisory, e.expires.isoformat()) for e in entries] == [
-        ("PYSEC-2023-74", "2026-12-31"), ("GHSA-old-old-old", "2026-01-01")]
+        ("PYSEC-2023-74", "2026-12-31"),
+        ("GHSA-old-old-old", "2026-01-01"),
+    ]
     assert "not reachable" in entries[0].reason
 
 
-@pytest.mark.parametrize("line", ["PYSEC-1", "PYSEC-1 not-a-date because", "PYSEC-1 2026-12-31", "2026-12-31 PYSEC-1 why"])
+@pytest.mark.parametrize(
+    "line", ["PYSEC-1", "PYSEC-1 not-a-date because", "PYSEC-1 2026-12-31", "2026-12-31 PYSEC-1 why"]
+)
 def test_a_malformed_allowlist_line_is_an_error(line):
     with pytest.raises(sa.AuditError, match="allow-list"):
         sa.parse_allowlist(line)
@@ -140,6 +179,7 @@ def test_an_expired_allowlist_entry_is_reported_even_when_it_matches_nothing():
 
 # --- the whole run, with the auditors stubbed ---------------------------------------------------------------------
 
+
 def run(pip_out=CLEAN, npm_out=npm_json(), allow="", files=("api/requirements.txt",), pip_exc=None, npm_exc=None):
     def pip_runner(_path):
         if pip_exc:
@@ -151,8 +191,15 @@ def run(pip_out=CLEAN, npm_out=npm_json(), allow="", files=("api/requirements.tx
             raise npm_exc
         return npm_out
 
-    return sa.main([], pip_runner=pip_runner, npm_runner=npm_runner, today=TODAY, requirements=list(files),
-                   allowlist_text=allow, npm_dir="csv-table-hub-main")
+    return sa.main(
+        [],
+        pip_runner=pip_runner,
+        npm_runner=npm_runner,
+        today=TODAY,
+        requirements=list(files),
+        allowlist_text=allow,
+        npm_dir="csv-table-hub-main",
+    )
 
 
 def test_a_clean_run_exits_zero(capsys):
@@ -172,7 +219,10 @@ def test_a_high_npm_vulnerability_exits_one(capsys):
 
 
 def test_an_allowlisted_finding_exits_zero_and_says_it_was_allowed(capsys):
-    assert run(pip_out=VULNERABLE, allow=ALLOW.replace("GHSA-old-old-old 2026-01-01  an exception that has expired", "")) == 0
+    assert (
+        run(pip_out=VULNERABLE, allow=ALLOW.replace("GHSA-old-old-old 2026-01-01  an exception that has expired", ""))
+        == 0
+    )
     assert "allowed" in capsys.readouterr().out.lower()
 
 
@@ -193,8 +243,10 @@ def test_when_there_are_no_requirements_files_the_result_is_could_not_audit(caps
 
 # --- discovery ---------------------------------------------------------------------------------------------------
 
+
 def test_every_tracked_requirements_file_is_audited():
-    tracked = subprocess.run(["git", "ls-files", "*requirements*.txt"], cwd=ROOT, capture_output=True, text=True,
-                             check=True).stdout.split()
+    tracked = subprocess.run(
+        ["git", "ls-files", "*requirements*.txt"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout.split()
     assert tracked, "expected at least one tracked requirements file"
     assert sorted(sa.discover_requirements(ROOT)) == sorted(tracked)

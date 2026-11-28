@@ -12,6 +12,7 @@ or moved, so a committed copy conflicted whenever two branches touched tests.
 CI generates it on every run and attaches it as the `test-catalogue` artifact;
 run this script to get a local copy.
 """
+
 from __future__ import annotations
 
 import ast
@@ -22,9 +23,20 @@ ROOT = Path(__file__).resolve().parents[1]
 TESTS_DIR = ROOT / "tests"
 OUTPUT = ROOT / "docs" / "TEST_CASES.md"
 
-MARKER_NAMES = {"unit", "integration", "e2e", "regression", "security",
-                "snapshot", "parity", "system", "sit", "performance",
-                "accessibility", "uat"}
+MARKER_NAMES = {
+    "unit",
+    "integration",
+    "e2e",
+    "regression",
+    "security",
+    "snapshot",
+    "parity",
+    "system",
+    "sit",
+    "performance",
+    "accessibility",
+    "uat",
+}
 
 
 def _extract_markers(decorators: list[ast.expr]) -> list[str]:
@@ -32,16 +44,16 @@ def _extract_markers(decorators: list[ast.expr]) -> list[str]:
     markers: list[str] = []
     for dec in decorators:
         if isinstance(dec, ast.Attribute) and isinstance(dec.value, ast.Attribute):
-            if (isinstance(dec.value.value, ast.Name)
-                    and dec.value.value.id == "pytest"
-                    and dec.value.attr == "mark"):
+            if isinstance(dec.value.value, ast.Name) and dec.value.value.id == "pytest" and dec.value.attr == "mark":
                 markers.append(dec.attr)
         elif isinstance(dec, ast.Call) and isinstance(dec.func, ast.Attribute):
             attr = dec.func
             if isinstance(attr.value, ast.Attribute):
-                if (isinstance(attr.value.value, ast.Name)
-                        and attr.value.value.id == "pytest"
-                        and attr.value.attr == "mark"):
+                if (
+                    isinstance(attr.value.value, ast.Name)
+                    and attr.value.value.id == "pytest"
+                    and attr.value.attr == "mark"
+                ):
                     markers.append(attr.attr)
     return markers
 
@@ -74,24 +86,28 @@ def _collect_tests(filepath: Path) -> list[dict]:
             for item in node.body:
                 if isinstance(item, ast.FunctionDef) and item.name.startswith("test"):
                     markers = class_markers + _extract_markers(item.decorator_list)
-                    tests.append({
-                        "file": rel.as_posix(),
-                        "class": node.name,
-                        "name": item.name,
-                        "line": item.lineno,
-                        "markers": sorted(set(m for m in markers if m in MARKER_NAMES)),
-                        "objective": _first_line_of_docstring(item),
-                    })
+                    tests.append(
+                        {
+                            "file": rel.as_posix(),
+                            "class": node.name,
+                            "name": item.name,
+                            "line": item.lineno,
+                            "markers": sorted(set(m for m in markers if m in MARKER_NAMES)),
+                            "objective": _first_line_of_docstring(item),
+                        }
+                    )
         elif isinstance(item := node, ast.FunctionDef) and item.name.startswith("test"):
             markers = _extract_markers(item.decorator_list)
-            tests.append({
-                "file": rel.as_posix(),
-                "class": "",
-                "name": item.name,
-                "line": item.lineno,
-                "markers": sorted(set(m for m in markers if m in MARKER_NAMES)),
-                "objective": _first_line_of_docstring(item),
-            })
+            tests.append(
+                {
+                    "file": rel.as_posix(),
+                    "class": "",
+                    "name": item.name,
+                    "line": item.lineno,
+                    "markers": sorted(set(m for m in markers if m in MARKER_NAMES)),
+                    "objective": _first_line_of_docstring(item),
+                }
+            )
 
     return tests
 

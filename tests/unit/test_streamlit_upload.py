@@ -7,6 +7,7 @@ what must not happen (a re-send, a link built from a cell, "can't reach the API"
 
 The preview and the files are the real server's: the fake calls api.services.csv_parse.build_preview.
 """
+
 import base64
 
 import pytest
@@ -14,6 +15,9 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from tests.unit.streamlit_harness import APP_DIR, ROLES, errors, later, widget
+
+# The imports below need the path the import above sets up, so the import sort must not move them up.
+# isort: split
 
 import api_client  # noqa: E402
 import upload_model as u  # noqa: E402
@@ -37,10 +41,24 @@ if auth.signed_in():
 """
 
 PEOPLE = b"id,name,amount\n1,ann,10\n2,bob,20\n3,cy,30\n"
-OK = {"status": "ok", "fileId": "1", "tableName": "csv_people_v1", "totalRows": 3, "insertedRows": 3,
-      "duplicateRowsSkipped": 0, "failedRows": 0, "columns": ["id", "name", "amount"],
-      "types": ["int8", "text", "int8"], "rowErrors": [], "logs": [], "dataset": "people", "version": 1,
-      "schemaCheck": None, "duplicateRowsAcrossUploads": 0, "uploadId": "5"}
+OK = {
+    "status": "ok",
+    "fileId": "1",
+    "tableName": "csv_people_v1",
+    "totalRows": 3,
+    "insertedRows": 3,
+    "duplicateRowsSkipped": 0,
+    "failedRows": 0,
+    "columns": ["id", "name", "amount"],
+    "types": ["int8", "text", "int8"],
+    "rowErrors": [],
+    "logs": [],
+    "dataset": "people",
+    "version": 1,
+    "schemaCheck": None,
+    "duplicateRowsAcrossUploads": 0,
+    "uploadId": "5",
+}
 
 
 class FakeApi:
@@ -52,8 +70,11 @@ class FakeApi:
         self.upload_timeouts: list = []
         self.reply = dict(OK)  # what the next upload answers: a dict, an Exception, or a callable of the payload
         self.te_match: str | None = None
-        self.te_tables = [{"table": "orgs", "exists": True, "rowCount": 0}, {"table": "people", "exists": True, "rowCount": 0},
-                          {"table": "unbuilt", "exists": False, "rowCount": 0}]
+        self.te_tables = [
+            {"table": "orgs", "exists": True, "rowCount": 0},
+            {"table": "people", "exists": True, "rowCount": 0},
+            {"table": "unbuilt", "exists": False, "rowCount": 0},
+        ]
         self.dead: set[str] = set()
         self.preview_raises: Exception | None = None
 
@@ -98,8 +119,13 @@ def api(monkeypatch):
 
 def _screen(api, files, who="alice", token="tok-1") -> AppTest:
     at = AppTest.from_string(HARNESS.format(app_dir=str(APP_DIR)), default_timeout=30)
-    at.session_state["session"] = {"token": token, "expiresAt": later(), "username": who, "tenant": "acme",
-                                   "role": ROLES[who]}
+    at.session_state["session"] = {
+        "token": token,
+        "expiresAt": later(),
+        "username": who,
+        "tenant": "acme",
+        "role": ROLES[who],
+    }
     at.session_state["test_files"] = files
     at.run()
     assert not at.exception, at.exception
@@ -123,15 +149,30 @@ def _texts(at):
 
 # ── the preview ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_a_chosen_file_is_previewed_by_the_server_and_its_columns_are_offered_for_checking(api):
     at = _screen(api, [("people.csv", PEOPLE)])
 
     assert [c.value for c in at.caption][0] == "3 columns · 3 data rows"
     sample = at.table[0].value
-    assert list(sample.columns) == ["` id `", "` name `", "` amount `"] and list(sample["` name `"]) == ["` ann `", "` bob `", "` cy `"]
-    assert [t.label for t in at.text_input] == ["Rename column 1 (id)", "Rename column 2 (name)", "Rename column 3 (amount)"]
-    assert [s.label for s in at.selectbox] == ["Type of column 1 (id)", "Type of column 2 (name)", "Type of column 3 (amount)"]
-    assert [s.value for s in at.selectbox if s.label.startswith("Type")] == ["int8", "text", "int8"], "the server's inference"
+    assert list(sample.columns) == ["` id `", "` name `", "` amount `"] and list(sample["` name `"]) == [
+        "` ann `",
+        "` bob `",
+        "` cy `",
+    ]
+    assert [t.label for t in at.text_input] == [
+        "Rename column 1 (id)",
+        "Rename column 2 (name)",
+        "Rename column 3 (amount)",
+    ]
+    assert [s.label for s in at.selectbox] == [
+        "Type of column 1 (id)",
+        "Type of column 2 (name)",
+        "Type of column 3 (amount)",
+    ]
+    assert [s.value for s in at.selectbox if s.label.startswith("Type")] == ["int8", "text", "int8"], (
+        "the server's inference"
+    )
     assert api.previews()[0][3] == {"fileName": "people.csv", "content": PEOPLE.decode()}
 
 
@@ -177,6 +218,7 @@ def test_a_preview_the_api_refuses_says_why_and_the_other_files_still_show(api):
 
 # ── files the screen will not send ──────────────────────────────────────────────────────────
 
+
 def test_a_file_that_is_not_utf8_is_refused_with_the_reason_and_nothing_is_sent_for_it(api):
     latin = "name\n\xe9t\xe9\n".encode("latin-1")
 
@@ -198,7 +240,10 @@ def test_a_file_over_the_limit_is_refused_before_anything_is_sent(api, monkeypat
 def test_an_empty_file_and_a_wrong_extension_are_refused(api):
     at = _screen(api, [("empty.csv", b""), ("notes.txt", b"a,b\n")])
 
-    assert errors(at) == ["` empty.csv ` is empty.", "` notes.txt ` is not a .csv file. Only CSV files can be imported."]
+    assert errors(at) == [
+        "` empty.csv ` is empty.",
+        "` notes.txt ` is not a .csv file. Only CSV files can be imported.",
+    ]
     assert not api.calls
 
 
@@ -209,6 +254,7 @@ def test_a_file_name_that_looks_like_a_link_is_quoted_in_the_refusal(api):
 
 
 # ── who may send, and when ──────────────────────────────────────────────────────────────────
+
 
 def test_a_new_table_cannot_be_sent_until_the_columns_and_types_are_confirmed(api):
     at = _screen(api, [("people.csv", PEOPLE)])
@@ -228,6 +274,7 @@ def test_the_no_cancel_wording_is_shown_before_the_click(api):
 
 # ── what is sent ────────────────────────────────────────────────────────────────────────────
 
+
 def test_the_click_sends_the_file_the_original_bytes_the_confirmed_types_and_only_the_renames(api):
     at = _screen(api, [("people.csv", PEOPLE)])
     widget(at.text_input, "Rename column 2 (name)").input("who")
@@ -238,9 +285,15 @@ def test_the_click_sends_the_file_the_original_bytes_the_confirmed_types_and_onl
 
     assert not at.exception, at.exception
     [sent] = api.uploads
-    assert sent == {"fileName": "people.csv", "content": PEOPLE.decode(), "contentBase64": base64.b64encode(PEOPLE).decode(),
-                    "mode": "dynamic", "types": ["int8", "text", "numeric"], "typesConfirmed": True,
-                    "headerMapping": [{"original": "name", "renamed": "who"}]}
+    assert sent == {
+        "fileName": "people.csv",
+        "content": PEOPLE.decode(),
+        "contentBase64": base64.b64encode(PEOPLE).decode(),
+        "mode": "dynamic",
+        "types": ["int8", "text", "numeric"],
+        "typesConfirmed": True,
+        "headerMapping": [{"original": "name", "renamed": "who"}],
+    }
     assert api.upload_timeouts == [u.UPLOAD_TIMEOUT_SECONDS], "an import is given far longer than a read"
 
 
@@ -259,6 +312,7 @@ def test_the_payload_is_built_only_at_the_click_because_encoding_a_big_file_on_e
 
 
 # ── what is said back ───────────────────────────────────────────────────────────────────────
+
 
 def test_a_successful_import_is_reported_and_the_chooser_is_emptied_so_it_cannot_be_sent_twice(api):
     at = _screen(api, [("people.csv", PEOPLE)])
@@ -290,9 +344,13 @@ def test_the_same_file_chosen_again_after_an_import_is_previewed_again_because_t
 
 
 def test_a_partial_import_is_a_warning_with_its_row_errors_and_the_reports(api):
-    api.reply = {**OK, "insertedRows": 2, "failedRows": 1, "rowErrors": [
-        {"rowNumber": 3, "column": "amount", "value": "=1+1", "reason": '"=1+1" is not a whole number'}],
-        "logs": [{"ts": 1_795_000_000_000, "step": "cast_rows", "level": "warn", "message": "1 row failed"}]}
+    api.reply = {
+        **OK,
+        "insertedRows": 2,
+        "failedRows": 1,
+        "rowErrors": [{"rowNumber": 3, "column": "amount", "value": "=1+1", "reason": '"=1+1" is not a whole number'}],
+        "logs": [{"ts": 1_795_000_000_000, "step": "cast_rows", "level": "warn", "message": "1 row failed"}],
+    }
     at = _screen(api, [("people.csv", PEOPLE)])
     _confirm(at)
 
@@ -301,11 +359,16 @@ def test_a_partial_import_is_a_warning_with_its_row_errors_and_the_reports(api):
     assert at.warning[0].value.startswith("` people.csv `: 2 of 3 rows imported · 1 failed")
     rows = at.table[-1].value
     assert list(rows.index) == [3] and list(rows["Value"]) == ["` =1+1 `"]
-    assert [b.label for b in at.get("download_button")] == ["Error report (CSV)", "Error report (XLSX)", "Processing logs (JSON)"]
+    assert [b.label for b in at.get("download_button")] == [
+        "Error report (CSV)",
+        "Error report (XLSX)",
+        "Processing logs (JSON)",
+    ]
 
 
 def test_the_error_report_carries_the_renames_that_were_sent(api, monkeypatch):
     import exports
+
     built = []
     real = exports.to_csv
     monkeypatch.setattr(exports, "to_csv", lambda headers, rows: built.append(rows) or real(headers, rows))
@@ -320,8 +383,13 @@ def test_the_error_report_carries_the_renames_that_were_sent(api, monkeypatch):
 
 
 def test_the_same_bytes_again_is_reported_as_already_imported_and_nothing_pretends_it_was_loaded(api):
-    api.reply = {"status": "duplicate_file", "reason": "content", "existingFileName": "people.csv",
-                 "tableName": "csv_people_v1", "logs": []}
+    api.reply = {
+        "status": "duplicate_file",
+        "reason": "content",
+        "existingFileName": "people.csv",
+        "tableName": "csv_people_v1",
+        "logs": [],
+    }
     at = _screen(api, [("again.csv", PEOPLE)])
     _confirm(at)
 
@@ -400,10 +468,16 @@ def test_the_report_can_be_cleared(api):
 
     widget(at.button, "Clear this report").click().run()
 
-    assert not at.success and not at.warning and "upload_results" in at.session_state and at.session_state["upload_results"] == []
+    assert (
+        not at.success
+        and not at.warning
+        and "upload_results" in at.session_state
+        and at.session_state["upload_results"] == []
+    )
 
 
 # ── Test and Evaluation mode ────────────────────────────────────────────────────────────────
+
 
 def test_a_te_shaped_file_starts_as_a_te_load_into_the_matching_table(api):
     api.te_match = "orgs"
@@ -411,7 +485,10 @@ def test_a_te_shaped_file_starts_as_a_te_load_into_the_matching_table(api):
     at = _screen(api, [("orgs.csv", b"name\nacme\n")])
 
     assert at.radio[0].value == u.TE
-    assert widget(at.selectbox, "Into table").value == "orgs" and widget(at.selectbox, "Into table").options == ["orgs", "people"]
+    assert widget(at.selectbox, "Into table").value == "orgs" and widget(at.selectbox, "Into table").options == [
+        "orgs",
+        "people",
+    ]
     assert not at.checkbox and not at.text_input, "no mapping and no confirmation in T&E mode"
     assert not _upload_button(at, "orgs.csv").disabled
 
@@ -453,6 +530,7 @@ def test_a_te_load_with_no_te_tables_says_so_and_cannot_be_sent(api):
 
 # ── several files ───────────────────────────────────────────────────────────────────────────
 
+
 def test_upload_all_waits_for_every_file_to_be_confirmed_then_sends_them_in_turn(api):
     other = b"city,pop\nperth,2\n"
     at = _screen(api, [("people.csv", PEOPLE), ("cities.csv", other)])
@@ -467,11 +545,15 @@ def test_upload_all_waits_for_every_file_to_be_confirmed_then_sends_them_in_turn
     assert not at.exception, at.exception
     assert [x["fileName"] for x in api.uploads] == ["people.csv", "cities.csv"]
     assert [r.value.split("  \n")[0] for r in at.success] == [
-        "` cities.csv `: 3 of 3 rows imported", "` people.csv `: 3 of 3 rows imported"], "newest first"
+        "` cities.csv `: 3 of 3 rows imported",
+        "` people.csv `: 3 of 3 rows imported",
+    ], "newest first"
 
 
 def test_one_file_failing_does_not_stop_the_rest(api):
-    api.reply = lambda payload: {"status": "error", "message": "boom", "logs": []} if payload["fileName"] == "bad.csv" else dict(OK)
+    api.reply = lambda payload: (
+        {"status": "error", "message": "boom", "logs": []} if payload["fileName"] == "bad.csv" else dict(OK)
+    )
     at = _screen(api, [("bad.csv", PEOPLE), ("good.csv", b"city,pop\nperth,2\n")])
     for box in [c for c in at.checkbox if c.label == u.CONFIRM]:
         box.check().run()
@@ -486,8 +568,13 @@ def test_two_copies_of_the_same_bytes_under_two_names_are_two_files_with_their_o
     """Found by this test: widget keys were made from the content alone, so two copies crashed the page."""
     at = _screen(api, [("orig.csv", PEOPLE), ("copy.csv", PEOPLE)])
 
-    assert len(at.expander) == 2 and len(at.checkbox) == 2 and len(api.previews()) == 1, "one preview, two sets of boxes"
-    assert [b.label for b in at.button if b.label.startswith("Upload `")] == ["Upload ` orig.csv `", "Upload ` copy.csv `"]
+    assert len(at.expander) == 2 and len(at.checkbox) == 2 and len(api.previews()) == 1, (
+        "one preview, two sets of boxes"
+    )
+    assert [b.label for b in at.button if b.label.startswith("Upload `")] == [
+        "Upload ` orig.csv `",
+        "Upload ` copy.csv `",
+    ]
 
 
 def test_the_same_file_chosen_twice_is_shown_once_and_says_so(api):
@@ -498,21 +585,32 @@ def test_the_same_file_chosen_twice_is_shown_once_and_says_so(api):
 
 # ── who may use the page ────────────────────────────────────────────────────────────────────
 
+
 def test_the_page_itself_is_only_for_roles_that_may_upload():
     from api.auth import PERMISSIONS
+
     assert {r for r, role in ROLES.items() if role in PERMISSIONS["upload"]} == {"alice", "ada"}
 
 
 def test_a_role_that_may_not_upload_is_told_so_instead_of_being_shown_a_chooser(api):
-    at = AppTest.from_string(f"""
+    at = AppTest.from_string(
+        f"""
 import sys
 sys.path.insert(0, {str(APP_DIR)!r})
 import auth
 from views import upload
 if auth.signed_in():
     upload.render()
-""", default_timeout=30)
-    at.session_state["session"] = {"token": "t", "expiresAt": later(), "username": "audrey", "tenant": "acme", "role": "auditor"}
+""",
+        default_timeout=30,
+    )
+    at.session_state["session"] = {
+        "token": "t",
+        "expiresAt": later(),
+        "username": "audrey",
+        "tenant": "acme",
+        "role": "auditor",
+    }
 
     at.run()
 
@@ -520,6 +618,7 @@ if auth.signed_in():
 
 
 # ── text from a file is shown as written ───────────────────────────────────────────────────
+
 
 def test_headers_cells_and_the_file_name_that_look_like_links_are_code_spans_everywhere(api):
     evil = "[click](https://evil.example/x)"
@@ -536,7 +635,11 @@ def test_headers_cells_and_the_file_name_that_look_like_links_are_code_spans_eve
 
 def test_a_row_error_with_a_link_in_it_is_a_code_span(api):
     evil = "[click](https://evil.example/x)"
-    api.reply = {**OK, "failedRows": 1, "rowErrors": [{"rowNumber": 1, "column": "a", "value": evil, "reason": f'"{evil}" bad'}]}
+    api.reply = {
+        **OK,
+        "failedRows": 1,
+        "rowErrors": [{"rowNumber": 1, "column": "a", "value": evil, "reason": f'"{evil}" bad'}],
+    }
     at = _screen(api, [("people.csv", PEOPLE)])
     _confirm(at)
 

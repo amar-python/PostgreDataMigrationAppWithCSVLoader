@@ -33,15 +33,14 @@ from psycopg2 import sql
 from psycopg2.extensions import connection, cursor
 
 from api.config import TE_TABLES
-from api.tenancy import te_schema, uploads_schema
 from api.db import Conn, fetch_one
-from api.services.destructive_ops import _require_delete
 from api.services.csv_parse import (
     cast_value,
     parse_csv,
     pg_type_to_allowed_type,
     sanitize_columns,
 )
+from api.services.destructive_ops import _require_delete
 from api.services.load_common import (
     RowErrors,
     insert_with_row_fallback,
@@ -52,6 +51,7 @@ from api.services.load_common import (
 )
 from api.services.load_common import log as _log
 from api.services.results import LoadResult, LogEntry, RowError
+from api.tenancy import te_schema, uploads_schema
 
 
 def te_table_columns(table: str) -> list[str]:
@@ -102,15 +102,21 @@ def _cleanup_prior_registry_entries(cur: cursor, file_name: str, file_hash: str)
     upload whose content is already a dynamic dataset before reaching here.
     """
     cur.execute(
-        sql.SQL(
-            "DELETE FROM {s}.csv_files WHERE mode <> 'dynamic' AND (file_name = %s OR file_hash = %s)"
-        ).format(s=sql.Identifier(uploads_schema())),
+        sql.SQL("DELETE FROM {s}.csv_files WHERE mode <> 'dynamic' AND (file_name = %s OR file_hash = %s)").format(
+            s=sql.Identifier(uploads_schema())
+        ),
         (file_name, file_hash),
     )
 
 
-def upload_te(file_name: str, content: str, target_table: str, *, session: dict[str, Any] | None = None,
-              on_commit: Callable[[cursor, LoadResult], None] | None = None) -> LoadResult:
+def upload_te(
+    file_name: str,
+    content: str,
+    target_table: str,
+    *,
+    session: dict[str, Any] | None = None,
+    on_commit: Callable[[cursor, LoadResult], None] | None = None,
+) -> LoadResult:
     """Load ``content`` into a T&E table.
 
     ``on_commit(cur, result)`` runs on the load's cursor just before the commit, given the "ok" result
@@ -144,8 +150,7 @@ def upload_te(file_name: str, content: str, target_table: str, *, session: dict[
             _log(
                 logs,
                 "cast_rows",
-                f"Client-side validated {len(data_rows)} rows → "
-                f"{len(to_insert)} valid, {errors.failed} type errors",
+                f"Client-side validated {len(data_rows)} rows → {len(to_insert)} valid, {errors.failed} type errors",
                 "warn" if errors.failed else "info",
                 count=len(to_insert),
             )
@@ -166,20 +171,24 @@ def upload_te(file_name: str, content: str, target_table: str, *, session: dict[
             # Register the load in the shared registry (mode='te'), replacing any
             # earlier entry for this file. Only reached once a row has landed.
             _cleanup_prior_registry_entries(cur, file_name, file_hash)
-            file_id = _register(conn, cur, file_name, file_hash, target_table, inserted, columns,
-                                len(data_rows), errors.failed, logs)
+            file_id = _register(
+                conn, cur, file_name, file_hash, target_table, inserted, columns, len(data_rows), errors.failed, logs
+            )
             if isinstance(file_id, dict):
                 return file_id
             _log(logs, "done", f"T&E load complete: {inserted} rows into {target_table}", count=inserted)
-            result = _ok_result(file_id, target_table, data_rows, inserted, errors.failed, columns,
-                                col_types, errors.items, logs)
+            result = _ok_result(
+                file_id, target_table, data_rows, inserted, errors.failed, columns, col_types, errors.items, logs
+            )
             if on_commit is not None:
                 on_commit(cur, result)
         conn.commit()
     return result
 
 
-def _check_file(content: str, target_table: str, logs: list[LogEntry]) -> tuple[list[list[str]], list[str]] | LoadResult:
+def _check_file(
+    content: str, target_table: str, logs: list[LogEntry]
+) -> tuple[list[list[str]], list[str]] | LoadResult:
     """The parsed rows and sanitized columns, or the error response if the file cannot load into ``target_table``.
 
     The CSV's sanitized headers must all be existing columns of the target table.
@@ -210,15 +219,14 @@ def _check_file(content: str, target_table: str, logs: list[LogEntry]) -> tuple[
     if not table_cols:
         return {
             "status": "error",
-            "message": f'T&E table "{target_table}" not found in schema {te_schema()}. '
-            "Run deploy_all.sh dev first.",
+            "message": f'T&E table "{target_table}" not found in schema {te_schema()}. Run deploy_all.sh dev first.',
             "logs": logs,
         }
     unknown = [c for c in columns if c not in table_cols]
     if unknown:
         return {
             "status": "error",
-            "message": f'CSV columns not present in {te_schema()}.{target_table}: {", ".join(unknown)}',
+            "message": f"CSV columns not present in {te_schema()}.{target_table}: {', '.join(unknown)}",
             "logs": logs,
         }
     _log(logs, "validate_columns", f"All {len(columns)} CSV columns exist on {target_table}")
@@ -244,10 +252,7 @@ def _insert_statements(target_table: str, columns: list[str]) -> tuple[sql.Compo
 def _cast_types(cur: cursor, target_table: str, columns: list[str], logs: list[LogEntry]) -> list[str | None]:
     """BUG-028: each column's type to validate against, from one lookup; None where Postgres must cast it."""
     col_pg_types = _te_column_types(cur, target_table)
-    col_types: list[str | None] = [
-        pg_type_to_allowed_type(col_pg_types.get(c, "text"))
-        for c in columns
-    ]
+    col_types: list[str | None] = [pg_type_to_allowed_type(col_pg_types.get(c, "text")) for c in columns]
     unmapped = [c for c, t in zip(columns, col_types) if t is None]
     if unmapped:
         _log(
@@ -259,8 +264,9 @@ def _cast_types(cur: cursor, target_table: str, columns: list[str], logs: list[L
     return col_types
 
 
-def _check_earlier_loads(cur: cursor, file_name: str, file_hash: str, session: dict[str, Any] | None,
-                         logs: list[LogEntry]) -> LoadResult | None:
+def _check_earlier_loads(
+    cur: cursor, file_name: str, file_hash: str, session: dict[str, Any] | None, logs: list[LogEntry]
+) -> LoadResult | None:
     """Refuse content that is already a dynamic dataset; require delete permission to replace an earlier load."""
     cur.execute(
         sql.SQL(
@@ -275,8 +281,12 @@ def _check_earlier_loads(cur: cursor, file_name: str, file_hash: str, session: d
     # whatever API_ALLOW_DESTRUCTIVE says. Nothing has been written yet.
     dataset = next((p for p in prior if p[0] == "dynamic"), None)
     if dataset is not None:
-        _log(logs, "duplicate_check",
-             f'Identical content is already the dataset "{dataset[1]}"; nothing was imported', "warn")
+        _log(
+            logs,
+            "duplicate_check",
+            f'Identical content is already the dataset "{dataset[1]}"; nothing was imported',
+            "warn",
+        )
         return {
             "status": "duplicate_file",
             "reason": "content",
@@ -284,8 +294,10 @@ def _check_earlier_loads(cur: cursor, file_name: str, file_hash: str, session: d
             "existingFileName": dataset[1],
             "tableName": dataset[2],
             "existingRowCount": dataset[3],
-            "message": (f'This file\'s content is already stored as the dataset "{dataset[1]}". '
-                        "A T&E upload cannot replace a dataset, so nothing was imported."),
+            "message": (
+                f'This file\'s content is already stored as the dataset "{dataset[1]}". '
+                "A T&E upload cannot replace a dataset, so nothing was imported."
+            ),
             "logs": logs,
         }
     if prior:
@@ -293,8 +305,9 @@ def _check_earlier_loads(cur: cursor, file_name: str, file_hash: str, session: d
     return None
 
 
-def cast_te_rows(data_rows: list[list[str]], columns: list[str], col_types: list[str | None],
-                 errors: RowErrors) -> list[tuple[int, list[Any]]]:
+def cast_te_rows(
+    data_rows: list[list[str]], columns: list[str], col_types: list[str | None], errors: RowErrors
+) -> list[tuple[int, list[Any]]]:
     """``(source row number, values)`` for each row that passes the client-side check; failures go to ``errors``."""
     to_insert: list[tuple[int, list[Any]]] = []
     for r, raw in enumerate(data_rows):
@@ -307,8 +320,9 @@ def cast_te_rows(data_rows: list[list[str]], columns: list[str], col_types: list
     return to_insert
 
 
-def _cast_te_cells(raw: list[str], columns: list[str], col_types: list[str | None], row_number: int,
-                   errors: RowErrors) -> list[Any] | None:
+def _cast_te_cells(
+    raw: list[str], columns: list[str], col_types: list[str | None], row_number: int, errors: RowErrors
+) -> list[Any] | None:
     """One row's values: an empty cell is NULL, an unmapped type goes to Postgres as text. None if a cell failed."""
     values: list[Any] = []
     for c, col_type in enumerate(col_types):
@@ -327,22 +341,34 @@ def _cast_te_cells(raw: list[str], columns: list[str], col_types: list[str | Non
     return values
 
 
-def _not_imported(errors: RowErrors, total_rows: int, target_table: str, columns: list[str],
-                  logs: list[LogEntry]) -> LoadResult:
+def _not_imported(
+    errors: RowErrors, total_rows: int, target_table: str, columns: list[str], logs: list[LogEntry]
+) -> LoadResult:
     if errors.failed >= total_rows:
-        msg = (f"None of the {total_rows} rows could be imported into {target_table}, "
-               "so nothing was saved.")
+        msg = f"None of the {total_rows} rows could be imported into {target_table}, so nothing was saved."
     else:
-        msg = (f"{errors.failed} of the {total_rows} rows could not be imported into "
-               f"{target_table}, so nothing was saved. Fix them and upload the file again.")
+        msg = (
+            f"{errors.failed} of the {total_rows} rows could not be imported into "
+            f"{target_table}, so nothing was saved. Fix them and upload the file again."
+        )
     e = errors.first()
     if e:
-        msg += f' First problem: row {e["rowNumber"]}, {e.get("column", "")}: {e.get("reason", "")}'
+        msg += f" First problem: row {e['rowNumber']}, {e.get('column', '')}: {e.get('reason', '')}"
     return rows_failed(msg, errors, total_rows, logs, insertedRows=0, columns=columns)
 
 
-def _register(conn: connection, cur: cursor, file_name: str, file_hash: str, target_table: str, inserted: int, columns: list[str],
-              total_rows: int, failed: int, logs: list[LogEntry]) -> int | LoadResult:
+def _register(
+    conn: connection,
+    cur: cursor,
+    file_name: str,
+    file_hash: str,
+    target_table: str,
+    inserted: int,
+    columns: list[str],
+    total_rows: int,
+    failed: int,
+    logs: list[LogEntry],
+) -> int | LoadResult:
     """Add the load to csv_files and return its id, or the error response if a concurrent load got there first."""
     try:
         cur.execute(
@@ -351,8 +377,7 @@ def _register(conn: connection, cur: cursor, file_name: str, file_hash: str, tar
                 "total_rows, duplicate_rows_skipped, failed_rows) "
                 "VALUES (%s, %s, %s, 'te', %s, %s, %s, 0, %s) RETURNING id"
             ).format(sql.Identifier(uploads_schema())),
-            (file_name, file_hash, f"{te_schema()}.{target_table}", inserted, columns,
-             total_rows, failed),
+            (file_name, file_hash, f"{te_schema()}.{target_table}", inserted, columns, total_rows, failed),
         )
     except psycopg2.errors.UniqueViolation:
         # #81: a concurrent load of the same file registered first.
@@ -367,11 +392,25 @@ def _register(conn: connection, cur: cursor, file_name: str, file_hash: str, tar
     return int(fetch_one(cur)[0])
 
 
-def _ok_result(file_id: object, target_table: str, data_rows: list[list[str]], inserted: int, failed_row_count: int,
-               columns: list[str], col_types: list[str | None], row_errors: list[RowError],
-               logs: list[LogEntry]) -> LoadResult:
+def _ok_result(
+    file_id: object,
+    target_table: str,
+    data_rows: list[list[str]],
+    inserted: int,
+    failed_row_count: int,
+    columns: list[str],
+    col_types: list[str | None],
+    row_errors: list[RowError],
+    logs: list[LogEntry],
+) -> LoadResult:
     return ok_result(
-        file_id, f"{te_schema()}.{target_table}", len(data_rows), inserted, 0, failed_row_count, columns,
+        file_id,
+        f"{te_schema()}.{target_table}",
+        len(data_rows),
+        inserted,
+        0,
+        failed_row_count,
+        columns,
         # #190: stored with the upload so review revalidates against the target's types.
         # Columns Postgres casts itself (uuid, enums, ...) review as text.
         [t or "text" for t in col_types],

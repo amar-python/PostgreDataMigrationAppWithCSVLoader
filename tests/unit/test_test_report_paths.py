@@ -3,6 +3,7 @@
 Until now it ran pytest with no path, so it could only see tests/ and the browser tier was invisible to its final
 block and to --strict. `--paths` hands the same paths to the collection pass and to the run.
 """
+
 from __future__ import annotations
 
 import importlib.util

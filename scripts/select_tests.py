@@ -7,6 +7,7 @@ Usage:
     python3 scripts/select_tests.py          # compare vs origin/main
     python3 scripts/select_tests.py HEAD~1   # compare vs previous commit
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -15,31 +16,35 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-GREEN  = "\033[0;32m"
+GREEN = "\033[0;32m"
 YELLOW = "\033[1;33m"
-CYAN   = "\033[0;36m"
-DIM    = "\033[2m"
-NC     = "\033[0m"
+CYAN = "\033[0;36m"
+DIM = "\033[2m"
+NC = "\033[0m"
 
 # Map of changed path patterns → pytest marks / files to run
 _RULES: list[tuple[str, str, str]] = [
     # (path_fragment, mark_expression, human_label)
-    ("build/csv/validator",      "unit or snapshot or regression",  "validator changed → unit + snapshot + regression"),
-    ("evals/runner",             "unit",                             "runner changed → unit"),
-    ("evals/gap_report",         "unit",                             "gap_report changed → unit"),
-    ("evals/datasets/",          "unit",                             "eval dataset changed → unit (tier_p)"),
-    ("evals/expected/",          "unit",                             "expected file changed → unit (tier_p)"),
-    ("build/environments/",      "integration or e2e or parity",    "env SQL changed → integration + parity"),
-    ("build/schema/",            "integration or e2e or parity",    "schema changed → integration + parity"),
-    ("tests/suites/",            "integration",                      "SQL test suite changed → integration"),
-    ("tests/unit/",              "unit or regression or security or snapshot", "unit test changed → free tier"),
-    ("tests/system/",            "integration",                      "system test changed → integration"),
-    ("tests/system_integration/", "e2e or integration or parity",    "system-integration test changed → e2e + integration + parity"),
-    ("tests/accessibility/",     "accessibility",                    "accessibility test changed → accessibility"),
-    ("csv-table-hub-main/src/", "accessibility",                    "frontend changed → accessibility scans (CI job only)"),
-    ("scripts/",                 "security",                         "scripts changed → security scan"),
-    ("build/adapters/",          "security",                         "adapter changed → security scan"),
-    ("build/csv/loader_",        "e2e",                              "loader changed → e2e"),
+    ("build/csv/validator", "unit or snapshot or regression", "validator changed → unit + snapshot + regression"),
+    ("evals/runner", "unit", "runner changed → unit"),
+    ("evals/gap_report", "unit", "gap_report changed → unit"),
+    ("evals/datasets/", "unit", "eval dataset changed → unit (tier_p)"),
+    ("evals/expected/", "unit", "expected file changed → unit (tier_p)"),
+    ("build/environments/", "integration or e2e or parity", "env SQL changed → integration + parity"),
+    ("build/schema/", "integration or e2e or parity", "schema changed → integration + parity"),
+    ("tests/suites/", "integration", "SQL test suite changed → integration"),
+    ("tests/unit/", "unit or regression or security or snapshot", "unit test changed → free tier"),
+    ("tests/system/", "integration", "system test changed → integration"),
+    (
+        "tests/system_integration/",
+        "e2e or integration or parity",
+        "system-integration test changed → e2e + integration + parity",
+    ),
+    ("tests/accessibility/", "accessibility", "accessibility test changed → accessibility"),
+    ("csv-table-hub-main/src/", "accessibility", "frontend changed → accessibility scans (CI job only)"),
+    ("scripts/", "security", "scripts changed → security scan"),
+    ("build/adapters/", "security", "adapter changed → security scan"),
+    ("build/csv/loader_", "e2e", "loader changed → e2e"),
 ]
 
 _DEFAULT_MARKS = "unit"  # always run at minimum when diff is unclear
@@ -68,7 +73,7 @@ def main() -> None:
 
     if not changed:
         print(f"  {YELLOW}No changed files detected — running default tier: {_DEFAULT_MARKS}{NC}")
-        print(f"\n  pytest -m \"{_DEFAULT_MARKS}\" tests/\n")
+        print(f'\n  pytest -m "{_DEFAULT_MARKS}" tests/\n')
         return
 
     print(f"  {DIM}Changed files:{NC}")
@@ -99,7 +104,7 @@ def main() -> None:
         print(f"    • {label}")
 
     print(f"\n  {GREEN}Recommended command:{NC}")
-    print(f"    pytest -m \"{mark_expr}\" tests/\n")
+    print(f'    pytest -m "{mark_expr}" tests/\n')
 
 
 if __name__ == "__main__":

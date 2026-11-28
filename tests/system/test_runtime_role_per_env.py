@@ -68,21 +68,26 @@ class PerEnvironmentNaming(unittest.TestCase):
     def test_no_environment_reuses_the_pre_fix_names(self):
         """The cluster-wide names are what made provisioning cross-contaminate."""
         for env in ENVIRONMENTS:
-            self.assertNotEqual(role_for(env), LEGACY_ROLE,
-                                f"--env {env} still resolves to the shared role {LEGACY_ROLE}")
-            self.assertNotEqual(env_file_for(env), LEGACY_ENV_FILE,
-                                f"--env {env} still resolves to the shared file {LEGACY_ENV_FILE}")
+            self.assertNotEqual(
+                role_for(env), LEGACY_ROLE, f"--env {env} still resolves to the shared role {LEGACY_ROLE}"
+            )
+            self.assertNotEqual(
+                env_file_for(env), LEGACY_ENV_FILE, f"--env {env} still resolves to the shared file {LEGACY_ENV_FILE}"
+            )
 
     def test_env_is_mandatory(self):
         """Without --env the script must refuse, not fall back to a shared default."""
-        run = subprocess.run([sys.executable, "scripts/create_app_role.py"],
-                             cwd=_ROOT, capture_output=True, text=True)
+        run = subprocess.run([sys.executable, "scripts/create_app_role.py"], cwd=_ROOT, capture_output=True, text=True)
         self.assertNotEqual(run.returncode, 0, "the script ran without --env")
         self.assertIn("--env", run.stderr, run.stderr)
 
     def test_an_unknown_environment_is_refused(self):
-        run = subprocess.run([sys.executable, "scripts/create_app_role.py", "--env", "producton"],
-                             cwd=_ROOT, capture_output=True, text=True)
+        run = subprocess.run(
+            [sys.executable, "scripts/create_app_role.py", "--env", "producton"],
+            cwd=_ROOT,
+            capture_output=True,
+            text=True,
+        )
         self.assertNotEqual(run.returncode, 0, "a misspelled environment was accepted")
 
 
@@ -105,6 +110,7 @@ class UpgradingAPreFixDevPC(unittest.TestCase):
     def _retire(self, env: str):
         with unittest.mock.patch("scripts.create_app_role.LEGACY_ENV_FILE", self.legacy):
             from scripts.create_app_role import retire_legacy_credentials
+
             return retire_legacy_credentials(env)
 
     def test_a_legacy_file_is_moved_aside_and_kept(self):
@@ -113,8 +119,9 @@ class UpgradingAPreFixDevPC(unittest.TestCase):
         self.assertIsNotNone(moved, "the legacy credential file was left in place")
         self.assertFalse(self.legacy.exists(), "start-api.ps1 would still read the legacy file")
         self.assertTrue(Path(moved).exists(), "the legacy file was deleted rather than moved aside")
-        self.assertIn("te_app", Path(moved).read_text(),
-                      "the move must preserve the file, so it can be put back with one mv")
+        self.assertIn(
+            "te_app", Path(moved).read_text(), "the move must preserve the file, so it can be put back with one mv"
+        )
 
     def test_a_clean_dev_pc_is_untouched(self):
         self.assertIsNone(self._retire("dev"), "reported a migration where there was no legacy file")
@@ -162,8 +169,13 @@ class ProvisioningOneEnvironmentLeavesAnotherAlone(unittest.TestCase):
 
     @staticmethod
     def _owner():
-        return psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                                password=settings.PG_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
+        return psycopg2.connect(
+            host=settings.PG_HOST,
+            port=settings.PG_PORT,
+            user=settings.PG_USER,
+            password=settings.PG_PASSWORD.get_secret_value(),
+            dbname=settings.PG_DATABASE,
+        )
 
     @classmethod
     def _role_exists(cls, role: str) -> bool:
@@ -178,20 +190,29 @@ class ProvisioningOneEnvironmentLeavesAnotherAlone(unittest.TestCase):
         if not path.exists():
             run = subprocess.run(
                 [sys.executable, "scripts/create_app_role.py", "--env", env, "--env-file", str(path)],
-                cwd=_ROOT, capture_output=True, text=True)
+                cwd=_ROOT,
+                capture_output=True,
+                text=True,
+            )
             assert run.returncode == 0, run.stderr
         return dict(line.split("=", 1) for line in path.read_text().splitlines())
 
     def _connect_as(self, creds: dict[str, str]):
-        return psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT,
-                                user=creds["APP_DB_USER"], password=creds["APP_DB_PASSWORD"],
-                                dbname=settings.PG_DATABASE)
+        return psycopg2.connect(
+            host=settings.PG_HOST,
+            port=settings.PG_PORT,
+            user=creds["APP_DB_USER"],
+            password=creds["APP_DB_PASSWORD"],
+            dbname=settings.PG_DATABASE,
+        )
 
     def test_the_two_environments_got_different_roles(self):
-        self.assertNotEqual(self.credentials(self.FIRST)["APP_DB_USER"],
-                            self.credentials(self.SECOND)["APP_DB_USER"],
-                            "both environments were given the same role, so provisioning one "
-                            "rotates the other's password (RV-S3, #173)")
+        self.assertNotEqual(
+            self.credentials(self.FIRST)["APP_DB_USER"],
+            self.credentials(self.SECOND)["APP_DB_USER"],
+            "both environments were given the same role, so provisioning one "
+            "rotates the other's password (RV-S3, #173)",
+        )
 
     def test_the_first_environments_credentials_still_work(self):
         """The regression: this failed once the second environment was provisioned."""
@@ -215,6 +236,7 @@ class ProvisioningOneEnvironmentLeavesAnotherAlone(unittest.TestCase):
     def test_the_credential_files_are_owner_readable_only(self):
         """Unchanged from M3d, re-asserted because the write path moved."""
         import os
+
         if os.name != "posix":
             self.skipTest("file modes are a POSIX concern")
         for env in (self.FIRST, self.SECOND):

@@ -9,6 +9,7 @@ the job counts the refused packets and fails if the count is not zero.
 They only make sense behind that firewall, so ``tests/conftest.py`` leaves them out of every other run (marker
 ``egress_network``, set ``EGRESS_NETWORK_BLOCKED=1`` to include them). On an open network they would connect.
 """
+
 from __future__ import annotations
 
 import errno
@@ -22,7 +23,7 @@ from api.config import settings
 
 pytestmark = pytest.mark.egress_network
 
-OUTSIDE = "93.184.216.34"   # a public address; the firewall must refuse before anything is sent
+OUTSIDE = "93.184.216.34"  # a public address; the firewall must refuse before anything is sent
 REFUSED = {errno.ECONNREFUSED, errno.ENETUNREACH, errno.EHOSTUNREACH, errno.EPERM, errno.EACCES}
 
 SOCKET_CHILD = f"""

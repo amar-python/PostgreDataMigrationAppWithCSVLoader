@@ -13,9 +13,9 @@ Revises: 0001
 Create Date: 2026-10-26
 """
 
-from alembic import op
 from sqlalchemy import text
 
+from alembic import op
 from api.config import settings
 
 revision = "0002"

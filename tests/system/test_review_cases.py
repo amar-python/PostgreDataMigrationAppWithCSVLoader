@@ -50,8 +50,9 @@ class ReviewCases(unittest.TestCase):
         for key, slug in cls.tenants.items():
             migrate_tenant(slug)
             for role in ROLES:
-                res = cls.client.post("/api/auth/login", json={
-                    "tenant": slug, "username": cls.users[(key, role)], "password": _PW})
+                res = cls.client.post(
+                    "/api/auth/login", json={"tenant": slug, "username": cls.users[(key, role)], "password": _PW}
+                )
                 assert res.status_code == 200, res.text
                 cls.headers[(key, role)] = {"Authorization": f"Bearer {res.json()['token']}"}
 
@@ -61,10 +62,18 @@ class ReviewCases(unittest.TestCase):
             with conn.cursor() as cur:
                 for slug in cls.tenants.values():
                     cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_for(slug))))
-                    cur.execute(sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(
-                        sql.Identifier(settings.CONTROL_SCHEMA)), (slug,))
-                    cur.execute(sql.SQL("DELETE FROM {}.users WHERE username LIKE %s").format(
-                        sql.Identifier(settings.CONTROL_SCHEMA)), (f"{slug}_%",))
+                    cur.execute(
+                        sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(
+                            sql.Identifier(settings.CONTROL_SCHEMA)
+                        ),
+                        (slug,),
+                    )
+                    cur.execute(
+                        sql.SQL("DELETE FROM {}.users WHERE username LIKE %s").format(
+                            sql.Identifier(settings.CONTROL_SCHEMA)
+                        ),
+                        (f"{slug}_%",),
+                    )
             conn.commit()
         cls.ctx.__exit__(None, None, None)
 
@@ -74,8 +83,11 @@ class ReviewCases(unittest.TestCase):
 
     def _upload(self, content: str, types: list[str], tenant: str = "a") -> dict:
         tag = uuid.uuid4().hex[:10]
-        return self.client.post("/api/csv/upload", headers=self._h(tenant=tenant), json={
-            "fileName": f"case_{tag}.csv", "content": content.replace("{tag}", tag), "types": types}).json()
+        return self.client.post(
+            "/api/csv/upload",
+            headers=self._h(tenant=tenant),
+            json={"fileName": f"case_{tag}.csv", "content": content.replace("{tag}", tag), "types": types},
+        ).json()
 
     def _three(self, tenant: str = "a") -> str:
         res = self._upload("n,t\n1,{tag}\nx,b\n3,c\n", ["int8", "text"], tenant)
@@ -89,12 +101,14 @@ class ReviewCases(unittest.TestCase):
         return self.client.put(path, headers=self._h(role, tenant), json=body)
 
     def _decide(self, uid, row, decision="exclude", reason="case reason", role="tenant_admin", tenant="a"):
-        return self._put(f"/api/csv/uploads/{uid}/rows/{row}/decision",
-                         {"decision": decision, "reason": reason}, role, tenant)
+        return self._put(
+            f"/api/csv/uploads/{uid}/rows/{row}/decision", {"decision": decision, "reason": reason}, role, tenant
+        )
 
     def _edit(self, uid, row, column, value, reason="case reason", role="tenant_admin", tenant="a"):
-        return self._put(f"/api/csv/uploads/{uid}/rows/{row}/cells/{column}",
-                         {"value": value, "reason": reason}, role, tenant)
+        return self._put(
+            f"/api/csv/uploads/{uid}/rows/{row}/cells/{column}", {"value": value, "reason": reason}, role, tenant
+        )
 
     # positive ------------------------------------------------------------
     def test_P02_paging_bounds(self):
@@ -140,10 +154,10 @@ class ReviewCases(unittest.TestCase):
         uid = self._three()
         self._decide(uid, 1, role="reviewer")
         self._edit(uid, 2, "n", "2", role="tenant_admin")
-        actors = {h["kind"]: h["actor"] for r in (1, 2)
-                  for h in self._get(f"/api/csv/uploads/{uid}/rows/{r}/history").json()}
-        self.assertEqual(actors, {"decision": self.users[("a", "reviewer")],
-                                  "edit": self.users[("a", "tenant_admin")]})
+        actors = {
+            h["kind"]: h["actor"] for r in (1, 2) for h in self._get(f"/api/csv/uploads/{uid}/rows/{r}/history").json()
+        }
+        self.assertEqual(actors, {"decision": self.users[("a", "reviewer")], "edit": self.users[("a", "tenant_admin")]})
 
     def test_P12_every_role_can_view_rows_and_history(self):
         uid = self._three()
@@ -166,8 +180,11 @@ class ReviewCases(unittest.TestCase):
         self.assertEqual(self._edit(uid, 1, "2", "x").status_code, 404)
 
     def test_N07_unknown_upload_on_every_route(self):
-        for res in (self._decide(999_999_999, 1), self._edit(999_999_999, 1, "n", "1"),
-                    self._get("/api/csv/uploads/999999999/rows/1/history")):
+        for res in (
+            self._decide(999_999_999, 1),
+            self._edit(999_999_999, 1, "n", "1"),
+            self._get("/api/csv/uploads/999999999/rows/1/history"),
+        ):
             with self.subTest(url=str(res.url)):
                 self.assertEqual(res.status_code, 404)
 
@@ -183,8 +200,12 @@ class ReviewCases(unittest.TestCase):
         uid = self._three()
         bad = {"Authorization": "Bearer not-a-real-token"}
         self.assertEqual(self.client.get(f"/api/csv/uploads/{uid}/rows", headers=bad).status_code, 401)
-        self.assertEqual(self.client.put(f"/api/csv/uploads/{uid}/rows/1/decision", headers=bad,
-                                         json={"decision": "exclude", "reason": "x"}).status_code, 401)
+        self.assertEqual(
+            self.client.put(
+                f"/api/csv/uploads/{uid}/rows/1/decision", headers=bad, json={"decision": "exclude", "reason": "x"}
+            ).status_code,
+            401,
+        )
 
     def test_N11_another_tenant_cannot_see_or_change_the_upload(self):
         uid = self._three(tenant="a")
@@ -196,10 +217,12 @@ class ReviewCases(unittest.TestCase):
 
     def test_N12_missing_or_wrong_body_fields(self):
         uid = self._three()
-        for path, body in ((f"/api/csv/uploads/{uid}/rows/1/decision", {"decision": "exclude"}),
-                           (f"/api/csv/uploads/{uid}/rows/1/decision", {"reason": "r"}),
-                           (f"/api/csv/uploads/{uid}/rows/1/cells/n", {"reason": "r"}),
-                           (f"/api/csv/uploads/{uid}/rows/1/cells/n", {"value": 5, "reason": "r"})):
+        for path, body in (
+            (f"/api/csv/uploads/{uid}/rows/1/decision", {"decision": "exclude"}),
+            (f"/api/csv/uploads/{uid}/rows/1/decision", {"reason": "r"}),
+            (f"/api/csv/uploads/{uid}/rows/1/cells/n", {"reason": "r"}),
+            (f"/api/csv/uploads/{uid}/rows/1/cells/n", {"value": 5, "reason": "r"}),
+        ):
             with self.subTest(body=body):
                 self.assertEqual(self._put(path, body).status_code, 422)
 
@@ -208,9 +231,14 @@ class ReviewCases(unittest.TestCase):
         self._decide(uid, 1)
         self._edit(uid, 2, "n", "2")
         s = sql.Identifier(schema_for(self.tenants["a"]))
-        for statement in ("UPDATE {}.row_decisions SET reason = 'x'", "DELETE FROM {}.row_decisions",
-                          "TRUNCATE {}.row_decisions", "UPDATE {}.cell_edits SET new_value = 'x'",
-                          "DELETE FROM {}.cell_edits", "TRUNCATE {}.cell_edits"):
+        for statement in (
+            "UPDATE {}.row_decisions SET reason = 'x'",
+            "DELETE FROM {}.row_decisions",
+            "TRUNCATE {}.row_decisions",
+            "UPDATE {}.cell_edits SET new_value = 'x'",
+            "DELETE FROM {}.cell_edits",
+            "TRUNCATE {}.cell_edits",
+        ):
             with self.subTest(statement=statement), Conn() as conn, conn.cursor() as cur:
                 with self.assertRaises(psycopg2.errors.InsufficientPrivilege):
                     cur.execute(sql.SQL(statement).format(s))
@@ -220,10 +248,16 @@ class ReviewCases(unittest.TestCase):
         uid = self._three()
         s = sql.Identifier(schema_for(self.tenants["a"]))
         for statement, args in (
-                ("INSERT INTO {}.row_decisions (upload_id, row_number, decision, reason) VALUES (%s, 1, 'exclude', ' ')",
-                 (int(uid),)),
-                ("INSERT INTO {}.cell_edits (upload_id, row_number, column_index, old_value, new_value, reason) "
-                 "VALUES (%s, 1, 0, '1', '2', '')", (int(uid),))):
+            (
+                "INSERT INTO {}.row_decisions (upload_id, row_number, decision, reason) VALUES (%s, 1, 'exclude', ' ')",
+                (int(uid),),
+            ),
+            (
+                "INSERT INTO {}.cell_edits (upload_id, row_number, column_index, old_value, new_value, reason) "
+                "VALUES (%s, 1, 0, '1', '2', '')",
+                (int(uid),),
+            ),
+        ):
             with self.subTest(statement=statement[:40]), Conn() as conn, conn.cursor() as cur:
                 with self.assertRaises(psycopg2.errors.CheckViolation):
                     cur.execute(sql.SQL(statement).format(s), args)

@@ -12,8 +12,9 @@ from __future__ import annotations
 
 from typing import Any, Literal, NotRequired, Required, TypedDict
 
-
-Status = Literal["ok", "error", "duplicate_file", "invalid_structure", "staged"]  # "staged": api/services/staged_import.stage
+Status = Literal[
+    "ok", "error", "duplicate_file", "invalid_structure", "staged"
+]  # "staged": api/services/staged_import.stage
 
 
 class LogEntry(TypedDict):

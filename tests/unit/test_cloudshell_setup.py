@@ -61,8 +61,13 @@ exit 1
 
 # Calls that change something in Azure. A dry run must make none of them.
 MUTATING = (
-    "group create", "storage account create", "storage container create", "ad app create",
-    "ad sp create", "role assignment create", "federated-credential create",
+    "group create",
+    "storage account create",
+    "storage container create",
+    "ad app create",
+    "ad sp create",
+    "role assignment create",
+    "federated-credential create",
 )
 
 
@@ -80,10 +85,8 @@ class CloudShellSetup(unittest.TestCase):
             path.chmod(0o755)
 
     def run_script(self, *args: str, **env: str) -> subprocess.CompletedProcess:
-        full = {**os.environ, "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}",
-                "STUB_LOG": str(self.log), **env}
-        return subprocess.run(["bash", str(SCRIPT), *args], capture_output=True, text=True,
-                              env=full, timeout=60)
+        full = {**os.environ, "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}", "STUB_LOG": str(self.log), **env}
+        return subprocess.run(["bash", str(SCRIPT), *args], capture_output=True, text=True, env=full, timeout=60)
 
     @property
     def calls(self) -> list[str]:
@@ -148,13 +151,15 @@ class CloudShellSetup(unittest.TestCase):
         self.assertTrue(any("--location australiasoutheast" in c for c in self.mutating()), self.mutating())
 
     def test_the_account_name_is_valid_stable_and_per_environment_and_subscription(self):
-        names = {key: self.account_name(self.run_script(*args, **env))
-                 for key, args, env in (
-                     ("test", ("test",), {}),
-                     ("test again", ("test",), {}),
-                     ("staging", ("staging",), {}),
-                     ("other sub", ("test",), {"STUB_SUB_ID": "99999999-9999-9999-9999-999999999999"}),
-                 )}
+        names = {
+            key: self.account_name(self.run_script(*args, **env))
+            for key, args, env in (
+                ("test", ("test",), {}),
+                ("test again", ("test",), {}),
+                ("staging", ("staging",), {}),
+                ("other sub", ("test",), {"STUB_SUB_ID": "99999999-9999-9999-9999-999999999999"}),
+            )
+        }
         self.assertEqual(names["test"], names["test again"], "a re-run must find the same account")
         self.assertEqual(len({names["test"], names["staging"], names["other sub"]}), 3)
         for name in names.values():
@@ -181,9 +186,15 @@ class CloudShellSetup(unittest.TestCase):
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertEqual(self.mutating(), [], "a dry run must not change anything")
         self.assertIn("DRY RUN", res.stdout)
-        for expected in ("+ az group create", "+ az storage account create", "+ az storage container create",
-                         "+ az ad app create", "+ az ad sp create", "+ az role assignment create",
-                         "+ az ad app federated-credential create"):
+        for expected in (
+            "+ az group create",
+            "+ az storage account create",
+            "+ az storage container create",
+            "+ az ad app create",
+            "+ az ad sp create",
+            "+ az role assignment create",
+            "+ az ad app federated-credential create",
+        ):
             self.assertIn(expected, res.stdout + res.stderr)
 
     # -- the backend hand-off ----------------------------------------------------
@@ -220,8 +231,16 @@ class CloudShellSetup(unittest.TestCase):
         self.assertRegex(res.stdout, r"AZURE_TENANT_ID\s+= 22222222-2222-2222-2222-222222222222")
 
     def test_oidc_reuses_what_exists(self):
-        res = self.run_script("test", "--with-oidc", "octo/app", STUB_APP_EXISTS="1", STUB_SP_EXISTS="1",
-                              STUB_ROLE_EXISTS="1", STUB_CRED_EXISTS="1", STUB_ENV="test")
+        res = self.run_script(
+            "test",
+            "--with-oidc",
+            "octo/app",
+            STUB_APP_EXISTS="1",
+            STUB_SP_EXISTS="1",
+            STUB_ROLE_EXISTS="1",
+            STUB_CRED_EXISTS="1",
+            STUB_ENV="test",
+        )
         self.assertEqual(res.returncode, 0, res.stderr)
         made = self.mutating()
         for call in ("ad app create", "ad sp create", "role assignment create", "federated-credential create"):

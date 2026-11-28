@@ -33,30 +33,36 @@ ROOT = Path(__file__).resolve().parents[2]  # tests/unit/ -> repo root
 def _between(text: str, start: str, end: str, *, include_end: bool = False) -> str:
     i = text.index(start)
     j = text.index(end, i)
-    return text[i:j + (len(end) if include_end else 0)]
+    return text[i : j + (len(end) if include_end else 0)]
 
 
 def _bash(script: str, **env: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["bash", "-c", script], capture_output=True, text=True,
-                          env={**os.environ, **env}, timeout=60)
+    return subprocess.run(["bash", "-c", script], capture_output=True, text=True, env={**os.environ, **env}, timeout=60)
 
 
 # ── #171 ─────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.tooling
 class SetupKeepsPriorConfigOnFailure(unittest.TestCase):
     """#171: the config is written to a temp file and moved into place only once complete."""
 
-    BLOCK = _between((ROOT / "build/setup.sh").read_text(encoding="utf-8"),
-                     '_config_tmp="${CONFIG_LOCAL}.new"', 'mv -f "$_config_tmp" "$CONFIG_LOCAL"', include_end=True)
+    BLOCK = _between(
+        (ROOT / "build/setup.sh").read_text(encoding="utf-8"),
+        '_config_tmp="${CONFIG_LOCAL}.new"',
+        'mv -f "$_config_tmp" "$CONFIG_LOCAL"',
+        include_end=True,
+    )
     VARS = sorted(set(re.findall(r"\$\{([A-Z][A-Z0-9_]*)\}", BLOCK)) - {"CONFIG_LOCAL"})
 
     def _run(self, omit: str | None):
         with tempfile.TemporaryDirectory() as d:
             config = Path(d) / "config.local.env"
             config.write_text("PRIOR=keep-me\n")
-            exports = "".join(f'{v}=x; ' for v in self.VARS if v != omit)
-            script = f'set -euo pipefail; error(){{ echo "$@" >&2; }}; CONFIG_LOCAL="{config}"; {exports}\n{self.BLOCK}\n'
+            exports = "".join(f"{v}=x; " for v in self.VARS if v != omit)
+            script = (
+                f'set -euo pipefail; error(){{ echo "$@" >&2; }}; CONFIG_LOCAL="{config}"; {exports}\n{self.BLOCK}\n'
+            )
             res = _bash(script)
             return res, config.read_text(), sorted(p.name for p in Path(d).iterdir())
 
@@ -79,11 +85,16 @@ class SetupKeepsPriorConfigOnFailure(unittest.TestCase):
 
 # ── #180 ─────────────────────────────────────────────────────────────────────
 
+
 def _psql_calls(function: str | None = None) -> list[str]:
     tree = ast.parse((ROOT / "evals/runner.py").read_text(encoding="utf-8"))
     scope = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == function] if function else [tree]
-    return [ast.unparse(n) for root in scope for n in ast.walk(root)
-            if isinstance(n, ast.List) and n.elts and isinstance(n.elts[0], ast.Constant) and n.elts[0].value == "psql"]
+    return [
+        ast.unparse(n)
+        for root in scope
+        for n in ast.walk(root)
+        if isinstance(n, ast.List) and n.elts and isinstance(n.elts[0], ast.Constant) and n.elts[0].value == "psql"
+    ]
 
 
 @pytest.mark.unit
@@ -97,20 +108,26 @@ class EvalRunnerStopsOnSqlErrors(unittest.TestCase):
 
 # ── #181 ─────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.tooling
 class SqlWrapperFailsOnAssertionFailures(unittest.TestCase):
     """#181: psql exits 0 even when assertions record FAIL rows; the wrapper must read the output."""
 
-    BLOCK = _between((ROOT / "tests/run_tests.sh").read_text(encoding="utf-8"),
-                     "if grep -qiE 'FAIL|TEST\\(S\\) FAILED'", 'rm -f "${outfile}"')
+    BLOCK = _between(
+        (ROOT / "tests/run_tests.sh").read_text(encoding="utf-8"),
+        "if grep -qiE 'FAIL|TEST\\(S\\) FAILED'",
+        'rm -f "${outfile}"',
+    )
 
     def _failed_envs(self, output: str) -> str:
         with tempfile.NamedTemporaryFile("w", suffix=".out", delete=False) as f:
             f.write(output)
         try:
             # The block uses `local`, as it does inside run_suite().
-            script = ('set -euo pipefail; error(){ :; }; FAILED_ENVS=(); check(){ local env=dev outfile="%s"\n%s\n}; '
-                      'check; echo "failed:${FAILED_ENVS[*]:-}"' % (f.name, self.BLOCK))
+            script = (
+                'set -euo pipefail; error(){ :; }; FAILED_ENVS=(); check(){ local env=dev outfile="%s"\n%s\n}; '
+                'check; echo "failed:${FAILED_ENVS[*]:-}"' % (f.name, self.BLOCK)
+            )
             res = _bash(script)
             self.assertEqual(res.returncode, 0, res.stderr)
             return res.stdout.strip()
@@ -126,10 +143,11 @@ class SqlWrapperFailsOnAssertionFailures(unittest.TestCase):
 
 # ── #182 ─────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.tooling
 class OfflineBundleStopsOnDownloadFailure(unittest.TestCase):
     SCRIPT = (ROOT / "scripts/offline/build_bundle.sh").read_text(encoding="utf-8")
-    BLOCK = _between(SCRIPT, "REAL=()", "( cd \"$OUT/debs\" && apt-ftparchive", include_end=False)
+    BLOCK = _between(SCRIPT, "REAL=()", '( cd "$OUT/debs" && apt-ftparchive', include_end=False)
 
     def _run(self, apt_get_body: str) -> subprocess.CompletedProcess:
         with tempfile.TemporaryDirectory() as d:
@@ -140,7 +158,7 @@ class OfflineBundleStopsOnDownloadFailure(unittest.TestCase):
             (bin_dir / "apt-get").write_text("#!/bin/bash\n" + apt_get_body)
             for f in bin_dir.iterdir():
                 f.chmod(0o755)
-            script = (f'set -euo pipefail; DEPS="pkg-a pkg-b"; PKGS="pkg-a pkg-b"; OUT="{out}"\n{self.BLOCK}\necho BUILT')
+            script = f'set -euo pipefail; DEPS="pkg-a pkg-b"; PKGS="pkg-a pkg-b"; OUT="{out}"\n{self.BLOCK}\necho BUILT'
             return _bash(script, PATH=f"{bin_dir}:{os.environ['PATH']}")
 
     def test_the_old_swallow_is_gone(self):
@@ -164,6 +182,7 @@ class OfflineBundleStopsOnDownloadFailure(unittest.TestCase):
 
 # ── #130 ─────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.unit
 class FrontendLockFileMatchesPackageJson(unittest.TestCase):
     """#130: `npm ci` refuses a lock file that disagrees with package.json."""
@@ -182,6 +201,7 @@ class FrontendLockFileMatchesPackageJson(unittest.TestCase):
 
 # ── #169 ─────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.unit
 class TestCatalogueGenerator(unittest.TestCase):
     """The catalogue is generated in CI, not committed, so nothing else notices if the
@@ -194,8 +214,7 @@ class TestCatalogueGenerator(unittest.TestCase):
         missing = []
         for path in sorted((ROOT / "tests").rglob("test_*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            has_tests = any(isinstance(n, ast.FunctionDef) and n.name.startswith("test")
-                            for n in ast.walk(tree))
+            has_tests = any(isinstance(n, ast.FunctionDef) and n.name.startswith("test") for n in ast.walk(tree))
             rel = path.relative_to(ROOT).as_posix()
             if has_tests and f"## `{rel}`" not in text:
                 missing.append(rel)
@@ -204,10 +223,15 @@ class TestCatalogueGenerator(unittest.TestCase):
 
 # ── #194 ─────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.unit
 class CoverageFloorGate(unittest.TestCase):
-    FILES = ("api/services/csv_parse.py", "api/services/dynamic_loader.py", "api/services/load_common.py",
-             "api/services/te_loader.py")
+    FILES = (
+        "api/services/csv_parse.py",
+        "api/services/dynamic_loader.py",
+        "api/services/load_common.py",
+        "api/services/te_loader.py",
+    )
 
     # Package floors (#274, #278): the report must also hold files from these packages, with statement counts.
     PACKAGE_FILES = {"api/main.py": 100, "streamlit_app/app.py": 100}
@@ -221,16 +245,21 @@ class CoverageFloorGate(unittest.TestCase):
     def _gate(self, pct: dict[str, float], drop: str | None = None, packages: dict | None = None) -> int:
         report = {"files": {f: {"summary": self._summary(pct[f])} for f in self.FILES if f != drop}}
         for name, value in {**self.OTHER_PACKAGES, **(self.PACKAGE_FILES if packages is None else packages)}.items():
-            if value is None:   # None: leave this file out of the report
+            if value is None:  # None: leave this file out of the report
                 continue
             report["files"][name] = {"summary": value if isinstance(value, dict) else self._summary(value)}
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             json.dump(report, f)
         try:
             # The gate prints box-drawing characters; a Windows console's default encoding can't.
-            return subprocess.run([sys.executable, "scripts/check_coverage_floors.py", f.name], cwd=ROOT,
-                                  capture_output=True, text=True, timeout=30,
-                                  env={**os.environ, "PYTHONIOENCODING": "utf-8"}).returncode
+            return subprocess.run(
+                [sys.executable, "scripts/check_coverage_floors.py", f.name],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+            ).returncode
         finally:
             os.unlink(f.name)
 
@@ -263,18 +292,21 @@ class CoverageFloorGate(unittest.TestCase):
 
     def test_fails_when_the_validator_drops_below_its_package_floor(self):
         """#304"""
-        self.assertEqual(self._gate({f: 100.0 for f in self.FILES}, packages={**self.PACKAGE_FILES,
-                                                                              "build/csv/validator.py": 50}), 1)
+        self.assertEqual(
+            self._gate({f: 100.0 for f in self.FILES}, packages={**self.PACKAGE_FILES, "build/csv/validator.py": 50}), 1
+        )
 
     def test_fails_when_the_evals_runner_drops_below_its_package_floor(self):
         """#304"""
-        self.assertEqual(self._gate({f: 100.0 for f in self.FILES}, packages={**self.PACKAGE_FILES,
-                                                                              "evals/runner.py": 30}), 1)
+        self.assertEqual(
+            self._gate({f: 100.0 for f in self.FILES}, packages={**self.PACKAGE_FILES, "evals/runner.py": 30}), 1
+        )
 
     def test_fails_when_evals_is_not_in_the_report_at_all(self):
         """#304: taking --cov=evals out must fail the gate, not quietly stop gating it."""
-        self.assertEqual(self._gate({f: 100.0 for f in self.FILES}, packages={**self.PACKAGE_FILES,
-                                                                              "evals/runner.py": None}), 1)
+        self.assertEqual(
+            self._gate({f: 100.0 for f in self.FILES}, packages={**self.PACKAGE_FILES, "evals/runner.py": None}), 1
+        )
 
     def test_fails_when_the_streamlit_app_drops_below_its_package_floor(self):
         full = {f: 100.0 for f in self.FILES}
@@ -293,23 +325,33 @@ class CoverageFloorGate(unittest.TestCase):
 
     def test_a_package_floor_is_weighted_by_statements_not_an_average_of_files(self):
         full = {f: 100.0 for f in self.FILES}
-        big_and_good = {"api/main.py": 100, "streamlit_app/app.py": 100,
-                        "streamlit_app/views/a.py": self._summary(100, 1000), "streamlit_app/views/b.py": self._summary(0, 10)}
+        big_and_good = {
+            "api/main.py": 100,
+            "streamlit_app/app.py": 100,
+            "streamlit_app/views/a.py": self._summary(100, 1000),
+            "streamlit_app/views/b.py": self._summary(0, 10),
+        }
         self.assertEqual(self._gate(full, packages=big_and_good), 0, "1000 of 1110 statements is above the floor")
-        small_and_good = {"api/main.py": 100, "streamlit_app/app.py": self._summary(100, 10),
-                          "streamlit_app/views/a.py": self._summary(0, 1000)}
+        small_and_good = {
+            "api/main.py": 100,
+            "streamlit_app/app.py": self._summary(100, 10),
+            "streamlit_app/views/a.py": self._summary(0, 1000),
+        }
         self.assertEqual(self._gate(full, packages=small_and_good), 1, "10 of 1010 statements is far below it")
 
 
 # ── #207 ─────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.unit
 class ApiDocDefersToTheGeneratedSchema(unittest.TestCase):
     DOC = (ROOT / "docs/API_INTEGRATION.md").read_text(encoding="utf-8")
 
     def test_no_hand_kept_route_table(self):
-        self.assertIsNone(re.search(r"^\|\s*`?(GET|POST|PUT|DELETE)\b", self.DOC, re.M),
-                          "a hand-kept route table drifts from the code (#207)")
+        self.assertIsNone(
+            re.search(r"^\|\s*`?(GET|POST|PUT|DELETE)\b", self.DOC, re.M),
+            "a hand-kept route table drifts from the code (#207)",
+        )
 
     def test_points_at_the_real_schema_urls_not_the_old_404(self):
         self.assertIn("/docs", self.DOC)
@@ -318,7 +360,9 @@ class ApiDocDefersToTheGeneratedSchema(unittest.TestCase):
 
     def test_the_documented_urls_are_served_without_a_key(self):
         from fastapi.testclient import TestClient
+
         from api.main import app
+
         client = TestClient(app)
         self.assertEqual(client.get("/docs").status_code, 200)
         paths = client.get("/openapi.json").json()["paths"]

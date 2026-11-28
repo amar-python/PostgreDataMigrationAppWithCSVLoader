@@ -15,7 +15,6 @@ Create Date: 2026-11-09
 """
 
 from alembic import op
-
 from api.config import settings
 
 revision = "0009"
@@ -30,11 +29,15 @@ def _schema() -> str:
 
 def upgrade() -> None:
     s = _schema()
-    op.execute(f"ALTER TABLE {s}.csv_files ADD COLUMN IF NOT EXISTS types_provenance TEXT "
-               "CHECK (types_provenance IN ('inferred_unconfirmed', 'user_confirmed'))")
+    op.execute(
+        f"ALTER TABLE {s}.csv_files ADD COLUMN IF NOT EXISTS types_provenance TEXT "
+        "CHECK (types_provenance IN ('inferred_unconfirmed', 'user_confirmed'))"
+    )
     # s is the dialect-quoted schema identifier from settings, never request input.
-    op.execute(f"UPDATE {s}.csv_files SET types_provenance = 'inferred_unconfirmed' "  # nosec B608
-               "WHERE mode = 'dynamic' AND types_provenance IS NULL")
+    op.execute(
+        f"UPDATE {s}.csv_files SET types_provenance = 'inferred_unconfirmed' "  # nosec B608
+        "WHERE mode = 'dynamic' AND types_provenance IS NULL"
+    )
 
 
 def downgrade() -> None:

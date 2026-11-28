@@ -3,21 +3,22 @@
 
 Mirrors `bun run eval:summary` in gstack.
 """
+
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
 
-ROOT        = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1]
 REPORTS_DIR = ROOT / "evals" / "reports"
 
-GREEN  = "\033[0;32m"
-RED    = "\033[0;31m"
+GREEN = "\033[0;32m"
+RED = "\033[0;31m"
 YELLOW = "\033[1;33m"
-CYAN   = "\033[0;36m"
-DIM    = "\033[2m"
-NC     = "\033[0m"
+CYAN = "\033[0;36m"
+DIM = "\033[2m"
+NC = "\033[0m"
 
 
 def main() -> None:
@@ -45,9 +46,9 @@ def main() -> None:
 
         total_runs += 1
         t = summary.get("totals", {})
-        grand_total   += t.get("total",   0)
-        grand_passed  += t.get("passed",  0)
-        grand_failed  += t.get("failed",  0)
+        grand_total += t.get("total", 0)
+        grand_passed += t.get("passed", 0)
+        grand_failed += t.get("failed", 0)
         grand_skipped += t.get("skipped", 0)
 
         for s in summary.get("scenarios", []):
@@ -80,7 +81,7 @@ def main() -> None:
 
     print(f"\n  {CYAN}Per-scenario pass rate{NC}")
     print(f"  {'Scenario':<40}  {'Pass%':>6}  {'Runs':>5}  {'Fail':>5}")
-    print(f"  {'-'*40}  {'-'*6}  {'-'*5}  {'-'*5}")
+    print(f"  {'-' * 40}  {'-' * 6}  {'-' * 5}  {'-' * 5}")
 
     for key in sorted(scenario_stats):
         st = scenario_stats[key]
@@ -88,8 +89,7 @@ def main() -> None:
         col = GREEN if pct >= 90 else (YELLOW if pct >= 50 else RED)
         fail_count = st["fail"]
         print(
-            f"  {key:<40}  {col}{pct:>5.0f}%{NC}  {st['total']:>5}  "
-            f"{(RED if fail_count else DIM)}{fail_count:>5}{NC}"
+            f"  {key:<40}  {col}{pct:>5.0f}%{NC}  {st['total']:>5}  {(RED if fail_count else DIM)}{fail_count:>5}{NC}"
         )
 
     print()

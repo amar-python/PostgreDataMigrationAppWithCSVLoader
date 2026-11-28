@@ -3,6 +3,7 @@
 Without a database: a setting nobody can find is as good as none. Both are read from the environment with a default
 the table must state, and the purge script an operator schedules must be named in the operator guide.
 """
+
 from __future__ import annotations
 
 import re

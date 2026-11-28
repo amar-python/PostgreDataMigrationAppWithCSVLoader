@@ -37,6 +37,7 @@ Then verify::
     python -c "from api.main import app; print('ok')"
     python -m pytest tests/test_api.py -m unit
 """
+
 from __future__ import annotations
 
 import argparse
@@ -54,20 +55,21 @@ LOCAL = ("config", "db", "routers", "services")
 PATTERNS = [
     # from config import settings      -> from api.config import settings
     # from services.csv_parse import x -> from api.services.csv_parse import x
-    (re.compile(rf"^(\s*)from\s+({'|'.join(LOCAL)})(\.[\w.]+)?\s+import\s",
-                re.MULTILINE),
-     lambda m: f"{m.group(1)}from api.{m.group(2)}{m.group(3) or ''} import "),
+    (
+        re.compile(rf"^(\s*)from\s+({'|'.join(LOCAL)})(\.[\w.]+)?\s+import\s", re.MULTILINE),
+        lambda m: f"{m.group(1)}from api.{m.group(2)}{m.group(3) or ''} import ",
+    ),
     # import db                        -> from api import db
-    (re.compile(rf"^(\s*)import\s+({'|'.join(LOCAL)})\s*$", re.MULTILINE),
-     lambda m: f"{m.group(1)}from api import {m.group(2)}"),
+    (
+        re.compile(rf"^(\s*)import\s+({'|'.join(LOCAL)})\s*$", re.MULTILINE),
+        lambda m: f"{m.group(1)}from api import {m.group(2)}",
+    ),
 ]
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dry-run", action="store_true",
-                    help="show what would change without writing")
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--dry-run", action="store_true", help="show what would change without writing")
     args = ap.parse_args()
 
     if not API.is_dir():
@@ -80,8 +82,7 @@ def main() -> int:
     elif args.dry_run:
         print("  would create api/__init__.py")
     else:
-        init.write_text('"""FastAPI backend for the CSV Table Hub frontend."""\n',
-                        encoding="utf-8")
+        init.write_text('"""FastAPI backend for the CSV Table Hub frontend."""\n', encoding="utf-8")
         print("  created api/__init__.py")
 
     changed = 0
@@ -108,7 +109,7 @@ def main() -> int:
     print(f"\n{changed} file(s) {'would be ' if args.dry_run else ''}changed")
     if not args.dry_run and changed:
         print("\nNow verify:")
-        print('  python -c "from api.main import app; print(\'ok\')"')
+        print("  python -c \"from api.main import app; print('ok')\"")
         print("  python -m pytest tests/test_api.py -m unit")
         print("\nAnd update scripts/start-api.ps1 to run from the repo root:")
         print("  Set-Location $PSScriptRoot\\..")

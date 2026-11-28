@@ -23,15 +23,17 @@ from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from psycopg2 import sql
 
-from api.config import TE_TABLES, settings
 from api import db
+from api.config import TE_TABLES, settings
 from api.db import Conn
 from api.main import app
 from api.services import accounts
 from api.tenancy import drop_tenant_role, migrate_tenant, role_for, schema_for, tenant
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
-         "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1.")
+_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/"
+    "PGPASSWORD/PGDATABASE). See scripts/start-api.ps1."
+)
 _PW = "correct horse battery staple"
 _ALEMBIC_INI = str(Path(__file__).resolve().parents[2] / "alembic.ini")
 
@@ -62,8 +64,7 @@ class CrossTenantIsolation(unittest.TestCase):
             migrate_tenant(slug)
         cls.headers = {}
         for key, slug in cls.slugs.items():
-            res = cls.client.post("/api/auth/login", json={
-                "tenant": slug, "username": f"{slug}_user", "password": _PW})
+            res = cls.client.post("/api/auth/login", json={"tenant": slug, "username": f"{slug}_user", "password": _PW})
             assert res.status_code == 200, res.text
             cls.headers[key] = {"Authorization": f"Bearer {res.json()['token']}"}
 
@@ -74,17 +75,26 @@ class CrossTenantIsolation(unittest.TestCase):
             with conn.cursor() as cur:
                 for slug in cls.slugs.values():
                     cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_for(slug))))
-                    cur.execute(sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(
-                        sql.Identifier(settings.CONTROL_SCHEMA)), (slug,))
-                    cur.execute(sql.SQL("DELETE FROM {}.users WHERE username = %s").format(
-                        sql.Identifier(settings.CONTROL_SCHEMA)), (f"{slug}_user",))
+                    cur.execute(
+                        sql.SQL("DELETE FROM {}.tenants WHERE slug = %s").format(
+                            sql.Identifier(settings.CONTROL_SCHEMA)
+                        ),
+                        (slug,),
+                    )
+                    cur.execute(
+                        sql.SQL("DELETE FROM {}.users WHERE username = %s").format(
+                            sql.Identifier(settings.CONTROL_SCHEMA)
+                        ),
+                        (f"{slug}_user",),
+                    )
                     drop_tenant_role(cur, slug)
             conn.commit()
         cls.ctx.__exit__(None, None, None)
 
     def _upload(self, who: str, name: str, content: str) -> dict:
-        res = self.client.post("/api/csv/upload", headers=self.headers[who],
-                               json={"fileName": name, "content": content})
+        res = self.client.post(
+            "/api/csv/upload", headers=self.headers[who], json={"fileName": name, "content": content}
+        )
         self.assertEqual(res.status_code, 200, res.text)
         return res.json()
 
@@ -102,8 +112,7 @@ class CrossTenantIsolation(unittest.TestCase):
         res = self._upload("a", name, content)
         self.assertEqual(res["status"], "ok", res)
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute("SELECT table_schema FROM information_schema.tables WHERE table_name = %s",
-                        (res["tableName"],))
+            cur.execute("SELECT table_schema FROM information_schema.tables WHERE table_name = %s", (res["tableName"],))
             self.assertEqual([r[0] for r in cur.fetchall()], [schema_for(self.slugs["a"])])
 
     def test_other_tenant_cannot_list_read_or_delete(self):
@@ -131,8 +140,9 @@ class CrossTenantIsolation(unittest.TestCase):
         name, content = self._fresh()
         self.assertEqual(self._upload("a", name, content)["status"], "ok")
         self.assertEqual(self._upload("a", "again_" + name, content)["status"], "duplicate_file")
-        self.assertEqual(self._upload("b", name, content)["status"], "ok",
-                         "the same file in another tenant is not a duplicate")
+        self.assertEqual(
+            self._upload("b", name, content)["status"], "ok", "the same file in another tenant is not a duplicate"
+        )
 
     def test_audit_log_is_per_tenant(self):
         name, content = self._fresh()
@@ -148,9 +158,16 @@ class CrossTenantIsolation(unittest.TestCase):
         self.assertNotIn(name, names(None))
 
     def _te_upload(self, who: str, org: str) -> dict:
-        res = self.client.post("/api/csv/upload", headers=self.headers[who], json={
-            "fileName": f"{org}.csv", "content": f"name,org_type,country\n{org},government,AU\n",
-            "mode": "te", "targetTable": "organisations"})
+        res = self.client.post(
+            "/api/csv/upload",
+            headers=self.headers[who],
+            json={
+                "fileName": f"{org}.csv",
+                "content": f"name,org_type,country\n{org},government,AU\n",
+                "mode": "te",
+                "targetTable": "organisations",
+            },
+        )
         self.assertEqual(res.status_code, 200, res.text)
         return res.json()
 
@@ -181,24 +198,35 @@ class CrossTenantIsolation(unittest.TestCase):
     def test_tenant_te_tables_keep_their_foreign_keys_and_triggers(self):
         schema = schema_for(self.slugs["b"])
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute("SELECT count(*) FROM information_schema.table_constraints "
-                        "WHERE table_schema = %s AND constraint_type = 'FOREIGN KEY' AND table_name = ANY(%s)",
-                        (schema, TE_TABLES))   # the T&E tables only; 0007's upload tables have their own
+            cur.execute(
+                "SELECT count(*) FROM information_schema.table_constraints "
+                "WHERE table_schema = %s AND constraint_type = 'FOREIGN KEY' AND table_name = ANY(%s)",
+                (schema, TE_TABLES),
+            )  # the T&E tables only; 0007's upload tables have their own
             tenant_fks = cur.fetchone()[0]
-            cur.execute("SELECT count(*) FROM information_schema.table_constraints "
-                        "WHERE table_schema = %s AND constraint_type = 'FOREIGN KEY'", (settings.TE_SCHEMA,))
+            cur.execute(
+                "SELECT count(*) FROM information_schema.table_constraints "
+                "WHERE table_schema = %s AND constraint_type = 'FOREIGN KEY'",
+                (settings.TE_SCHEMA,),
+            )
             self.assertEqual(tenant_fks, cur.fetchone()[0])
-            cur.execute("SELECT count(*) FROM information_schema.referential_constraints rc "
-                        "JOIN information_schema.table_constraints tc USING (constraint_schema, constraint_name) "
-                        "WHERE rc.constraint_schema = %s AND rc.unique_constraint_schema <> %s", (schema, schema))
+            cur.execute(
+                "SELECT count(*) FROM information_schema.referential_constraints rc "
+                "JOIN information_schema.table_constraints tc USING (constraint_schema, constraint_name) "
+                "WHERE rc.constraint_schema = %s AND rc.unique_constraint_schema <> %s",
+                (schema, schema),
+            )
             self.assertEqual(cur.fetchone()[0], 0, "foreign keys must point inside the tenant schema")
             cur.execute("SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = %s", (schema,))
             self.assertGreater(cur.fetchone()[0], 0)
             with self.assertRaises(psycopg2.errors.ForeignKeyViolation):
-                cur.execute(sql.SQL(
-                    "INSERT INTO {}.personnel (org_id, full_name, email, te_role, password_hash) "
-                    "VALUES (gen_random_uuid(), 'x', %s, 'observer', 'x')").format(sql.Identifier(schema)),
-                    (f"{uuid.uuid4().hex}@example.com",))
+                cur.execute(
+                    sql.SQL(
+                        "INSERT INTO {}.personnel (org_id, full_name, email, te_role, password_hash) "
+                        "VALUES (gen_random_uuid(), 'x', %s, 'observer', 'x')"
+                    ).format(sql.Identifier(schema)),
+                    (f"{uuid.uuid4().hex}@example.com",),
+                )
             conn.rollback()
 
     def test_invalid_session_is_401_not_a_fallback_to_default(self):
@@ -207,11 +235,16 @@ class CrossTenantIsolation(unittest.TestCase):
 
     def test_tenant_schema_is_at_head_with_its_own_registry(self):
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("SELECT version_num FROM {}.alembic_version").format(
-                sql.Identifier(schema_for(self.slugs["b"]))))
+            cur.execute(
+                sql.SQL("SELECT version_num FROM {}.alembic_version").format(
+                    sql.Identifier(schema_for(self.slugs["b"]))
+                )
+            )
             self.assertEqual(cur.fetchone()[0], ScriptDirectory.from_config(Config(_ALEMBIC_INI)).get_current_head())
-            cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = %s",
-                        (schema_for(self.slugs["b"]),))
+            cur.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = %s",
+                (schema_for(self.slugs["b"]),),
+            )
             self.assertTrue({"csv_files", "audit_log"} <= {r[0] for r in cur.fetchall()})
 
     def test_concurrent_requests_never_see_another_tenants_schema(self):
@@ -257,10 +290,11 @@ class CrossTenantIsolation(unittest.TestCase):
             for schema, table in targets:
                 with self.subTest(schema=schema, table=table):
                     with self.assertRaises(psycopg2.errors.InsufficientPrivilege):
-                        cur.execute(sql.SQL("SELECT * FROM {}.{} LIMIT 1").format(
-                            sql.Identifier(schema), sql.Identifier(table)))
+                        cur.execute(
+                            sql.SQL("SELECT * FROM {}.{} LIMIT 1").format(sql.Identifier(schema), sql.Identifier(table))
+                        )
                     conn.rollback()
-                    cur.execute("SELECT current_user")   # a rollback must not undo the switch
+                    cur.execute("SELECT current_user")  # a rollback must not undo the switch
                     self.assertEqual(cur.fetchone()[0], role_for(a))
             cur.execute(sql.SQL("SELECT count(*) FROM {}.csv_files").format(sql.Identifier(schema_for(a))))
             self.assertIsNotNone(cur.fetchone(), "the tenant's own schema stays readable")
@@ -268,10 +302,13 @@ class CrossTenantIsolation(unittest.TestCase):
     def test_tenant_role_has_rights_only_on_its_own_schema(self):
         a, b = self.slugs["a"], self.slugs["b"]
         with Conn() as conn, conn.cursor() as cur:
-            for role, schema, expected in ((role_for(a), schema_for(a), True), (role_for(a), schema_for(b), False),
-                                           (role_for(b), schema_for(a), False),
-                                           (role_for(a), settings.CONTROL_SCHEMA, False),
-                                           (role_for(a), settings.UPLOADS_SCHEMA, False)):
+            for role, schema, expected in (
+                (role_for(a), schema_for(a), True),
+                (role_for(a), schema_for(b), False),
+                (role_for(b), schema_for(a), False),
+                (role_for(a), settings.CONTROL_SCHEMA, False),
+                (role_for(a), settings.UPLOADS_SCHEMA, False),
+            ):
                 with self.subTest(role=role, schema=schema):
                     cur.execute("SELECT has_schema_privilege(%s, %s, 'USAGE')", (role, schema))
                     self.assertIs(cur.fetchone()[0], expected)
@@ -282,8 +319,10 @@ class CrossTenantIsolation(unittest.TestCase):
         """The csv_* table an upload creates is owned by the tenant's role: the request ran as it."""
         res = self._upload("a", *self._fresh())
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute("SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = to_regclass(%s)",
-                        (f'"{schema_for(self.slugs["a"])}"."{res["tableName"]}"',))
+            cur.execute(
+                "SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = to_regclass(%s)",
+                (f'"{schema_for(self.slugs["a"])}"."{res["tableName"]}"',),
+            )
             self.assertEqual(cur.fetchone()[0], role_for(self.slugs["a"]))
 
     def test_a_connection_goes_back_to_the_pool_as_the_login_role(self):
@@ -302,12 +341,12 @@ class CrossTenantIsolation(unittest.TestCase):
                     self.assertTrue(fail)
                 self.assertFalse(raw.closed, "the connection should have been reset and pooled, not closed")
                 self.assertIn(raw, db._pool._pool, "the connection is back in the pool")
-                with raw.cursor() as cur:   # the pooled connection itself, as the next borrower would get it
+                with raw.cursor() as cur:  # the pooled connection itself, as the next borrower would get it
                     cur.execute("SELECT current_user = session_user, current_user")
                     same, who = cur.fetchone()
                 raw.rollback()
                 self.assertTrue(same, f"pooled connection still runs as {who}")
-                with Conn() as conn, conn.cursor() as cur:   # and an unscoped borrow is the login role
+                with Conn() as conn, conn.cursor() as cur:  # and an unscoped borrow is the login role
                     cur.execute("SELECT current_user = session_user")
                     self.assertTrue(cur.fetchone()[0])
 

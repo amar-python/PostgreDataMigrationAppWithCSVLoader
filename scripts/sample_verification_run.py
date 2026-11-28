@@ -62,7 +62,9 @@ class Api:
         if self.token:
             headers["Authorization"] = "Bearer " + self.token
         req = urllib.request.Request(
-            self.base + path, method=method, headers=headers,
+            self.base + path,
+            method=method,
+            headers=headers,
             data=json.dumps(body).encode() if body is not None else None,
         )
         try:
@@ -84,7 +86,11 @@ def upload(api: Api, name: str, content: str, mode: str, target: str | None = No
         body["targetTable"] = target
     status, resp = api.call("POST", "/api/csv/upload", body)
     resp.pop("logs", None)  # per-step timestamps are noise in a report
-    return {"http": status, "preview": {k: prev.get(k) for k in ("status", "inferredTypes", "teTableMatch")}, "response": resp}
+    return {
+        "http": status,
+        "preview": {k: prev.get(k) for k in ("status", "inferredTypes", "teTableMatch")},
+        "response": resp,
+    }
 
 
 def loaded_table(result: dict, what: str) -> str:
@@ -97,7 +103,8 @@ def loaded_table(result: dict, what: str) -> str:
     raise NotFresh(
         f"The {what} upload was refused (HTTP {result['http']}, status {resp.get('status')!r}: {why}).\n"
         "This run needs a FRESH database, where nothing has been loaded, so that every count starts at zero "
-        "(see the prerequisites at the top of this file). Nothing was written.")
+        "(see the prerequisites at the top of this file). Nothing was written."
+    )
 
 
 def collect(api: Api, conn) -> dict:
@@ -121,15 +128,29 @@ def collect(api: Api, conn) -> dict:
     schema, table = loaded_table(a, "orgs_sample.csv (Test and Evaluation)").split(".")
     cur.execute(f'SELECT name, org_type, country FROM "{schema}"."{table}" ORDER BY name')  # nosec B608 # schema and table are double-quoted names from this deployment's own API response (operator tool)
     db_rows = [list(r) for r in cur.fetchall()]
-    cur.execute(f'SELECT file_hash, row_count, total_rows, failed_rows, id FROM "{schema}".csv_files WHERE file_name=%s',  # nosec B608 # schema and table are double-quoted names from this deployment's own API response (operator tool)
-                ("orgs_sample.csv",))
+    cur.execute(
+        f'SELECT file_hash, row_count, total_rows, failed_rows, id FROM "{schema}".csv_files WHERE file_name=%s',  # nosec B608 # schema and table are double-quoted names from this deployment's own API response (operator tool)
+        ("orgs_sample.csv",),
+    )
     reg = cur.fetchone()
     expected_loaded = sorted(r for i, r in enumerate(src_rows, 1) if i not in EXPECTED_REJECTS)
     ev["te"] = {
-        "file": "orgs_sample.csv", "bytes": len(orgs_bytes), "sha256": hashlib.sha256(orgs_bytes).hexdigest(),
-        "source_rows": len(src_rows), "source_lines": {i: ",".join(r) for i, r in enumerate(src_rows, 1)},
-        "api": a, "target": resp["tableName"], "db_row_count": len(db_rows), "db_rows": db_rows,
-        "registry": {"file_hash": reg[0], "row_count": reg[1], "total_rows": reg[2], "failed_rows": reg[3], "id": reg[4]},
+        "file": "orgs_sample.csv",
+        "bytes": len(orgs_bytes),
+        "sha256": hashlib.sha256(orgs_bytes).hexdigest(),
+        "source_rows": len(src_rows),
+        "source_lines": {i: ",".join(r) for i, r in enumerate(src_rows, 1)},
+        "api": a,
+        "target": resp["tableName"],
+        "db_row_count": len(db_rows),
+        "db_rows": db_rows,
+        "registry": {
+            "file_hash": reg[0],
+            "row_count": reg[1],
+            "total_rows": reg[2],
+            "failed_rows": reg[3],
+            "id": reg[4],
+        },
         "expected_rejects": EXPECTED_REJECTS,
         "rejected_row_numbers": sorted(e["rowNumber"] for e in resp.get("rowErrors", [])),
         "loaded_matches_source": sorted(db_rows) == expected_loaded,
@@ -143,14 +164,23 @@ def collect(api: Api, conn) -> dict:
     bs = ev["te"]["target"].split(".")[0]  # dynamic tables live in the same tenant schema
     cur.execute(f'SELECT count(*) FROM "{bs}"."{bt}"')  # nosec B608 # schema and table are double-quoted names from this deployment's own API response (operator tool)
     b_count = cur.fetchone()[0]
-    cur.execute("SELECT column_name, data_type FROM information_schema.columns "
-                "WHERE table_schema=%s AND table_name=%s ORDER BY ordinal_position", (bs, bt))
+    cur.execute(
+        "SELECT column_name, data_type FROM information_schema.columns "
+        "WHERE table_schema=%s AND table_name=%s ORDER BY ordinal_position",
+        (bs, bt),
+    )
     cols = [list(r) for r in cur.fetchall() if not r[0].startswith("_")]
     cur.execute(f'SELECT file_hash FROM "{bs}".csv_files WHERE file_name=%s', ("equipment_register.csv",))  # nosec B608 # schema and table are double-quoted names from this deployment's own API response (operator tool)
     ev["dynamic"] = {
-        "file": "equipment_register.csv", "bytes": len(eq_bytes), "sha256": hashlib.sha256(eq_bytes).hexdigest(),
-        "source_rows": len(eq.splitlines()) - 1, "api": b, "table": bt, "db_row_count": b_count,
-        "db_columns": cols, "registry_file_hash": cur.fetchone()[0],
+        "file": "equipment_register.csv",
+        "bytes": len(eq_bytes),
+        "sha256": hashlib.sha256(eq_bytes).hexdigest(),
+        "source_rows": len(eq.splitlines()) - 1,
+        "api": b,
+        "table": bt,
+        "db_row_count": b_count,
+        "db_columns": cols,
+        "registry_file_hash": cur.fetchone()[0],
         "duplicate_same_name": upload(api, "equipment_register.csv", eq, "dynamic")["response"],
         "duplicate_renamed": upload(api, "equipment_register_copy.csv", eq, "dynamic")["response"],
     }
@@ -160,8 +190,12 @@ def collect(api: Api, conn) -> dict:
     cur.execute(f'SELECT id, row_count, failed_rows FROM "{schema}".csv_files WHERE file_name=%s', ("orgs_sample.csv",))  # nosec B608 # schema and table are double-quoted names from this deployment's own API response (operator tool)
     after = cur.fetchall()
     cur.execute(f'SELECT count(*) FROM "{schema}"."{table}"')  # nosec B608 # schema and table are double-quoted names from this deployment's own API response (operator tool)
-    ev["te_reupload"] = {"status": again.get("status"), "inserted": again.get("insertedRows"),
-                         "registry_after": [list(r) for r in after], "db_row_count_after": cur.fetchone()[0]}
+    ev["te_reupload"] = {
+        "status": again.get("status"),
+        "inserted": again.get("insertedRows"),
+        "registry_after": [list(r) for r in after],
+        "db_row_count_after": cur.fetchone()[0],
+    }
 
     # --- Observed deployment posture (read from the running system, not from our env) --
     unauth = urllib.request.Request(api.base + "/api/csv/files")
@@ -170,12 +204,17 @@ def collect(api: Api, conn) -> dict:
             unauth_status = r.status
     except urllib.error.HTTPError as e:
         unauth_status = e.code
-    cur.execute("SELECT DISTINCT usename FROM pg_stat_activity WHERE datname=current_database() "
-                "AND pid<>pg_backend_pid() AND usename IS NOT NULL")
+    cur.execute(
+        "SELECT DISTINCT usename FROM pg_stat_activity WHERE datname=current_database() "
+        "AND pid<>pg_backend_pid() AND usename IS NOT NULL"
+    )
     api_roles = sorted(r[0] for r in cur.fetchall())
     cur.execute("SELECT tableowner FROM pg_tables WHERE schemaname=%s AND tablename='audit_log'", (bs,))
-    ev["posture"] = {"unauthenticated_request_status": unauth_status, "database_roles_connected": api_roles,
-                     "audit_log_owner": cur.fetchone()[0]}
+    ev["posture"] = {
+        "unauthenticated_request_status": unauth_status,
+        "database_roles_connected": api_roles,
+        "audit_log_owner": cur.fetchone()[0],
+    }
 
     # --- Audit trail ----------------------------------------------------------------
     ev["audit"] = {
@@ -192,42 +231,77 @@ def checks(ev: dict) -> list[tuple[str, str, bool]]:
     r = te["api"]["response"]
     entries = au["log"]["entries"]
     return [
-        ("T&E: every source row is accounted for (loaded + rejected = source)",
-         f"{r['insertedRows']} + {r['failedRows']} + {r['duplicateRowsSkipped']} = {r['insertedRows'] + r['failedRows'] + r['duplicateRowsSkipped']} of {te['source_rows']}",
-         r["insertedRows"] + r["failedRows"] + r["duplicateRowsSkipped"] == te["source_rows"]),
-        ("T&E: rows in the database equal the rows the API reported loaded",
-         f"database {te['db_row_count']}, API {r['insertedRows']}", te["db_row_count"] == r["insertedRows"]),
-        ("T&E: the rows rejected are exactly the rows the fixture was designed to produce",
-         f"rejected {te['rejected_row_numbers']}, expected {sorted(te['expected_rejects'])}",
-         te["rejected_row_numbers"] == sorted(int(k) for k in te["expected_rejects"])),
-        ("T&E: every loaded row matches its source row, field for field",
-         f"{te['db_row_count']} of {te['db_row_count']} match" if te["loaded_matches_source"] else "mismatch",
-         te["loaded_matches_source"]),
-        ("T&E: file hash recorded by the system equals an independently computed SHA-256",
-         te["registry"]["file_hash"][:16] + "…", te["registry"]["file_hash"] == te["sha256"]),
-        ("T&E: registry counts equal the API response",
-         f"registry loaded {te['registry']['row_count']} / failed {te['registry']['failed_rows']}",
-         te["registry"]["row_count"] == r["insertedRows"] and te["registry"]["failed_rows"] == r["failedRows"]),
-        ("Dynamic: rows in the new table equal source rows",
-         f"database {dy['db_row_count']}, source {dy['source_rows']}", dy["db_row_count"] == dy["source_rows"]),
-        ("Dynamic: file hash recorded by the system equals an independently computed SHA-256",
-         dy["registry_file_hash"][:16] + "…", dy["registry_file_hash"] == dy["sha256"]),
-        ("Dynamic: re-upload of the same file is refused",
-         dy["duplicate_same_name"].get("status"), dy["duplicate_same_name"].get("status") == "duplicate_file"),
-        ("Dynamic: the same content under a new filename is refused",
-         f"{dy['duplicate_renamed'].get('status')} (reason: {dy['duplicate_renamed'].get('reason')})",
-         dy["duplicate_renamed"].get("status") == "duplicate_file" and dy["duplicate_renamed"].get("reason") == "content"),
-        ("Audit: one entry per successful load; refused or fully failed uploads leave none",
-         f"{au['log']['total']} entries for 2 loads", au["log"]["total"] == 2 and len(entries) == 2),
-        ("Audit: hash chain recomputed and intact",
-         f"intact={au['verify'].get('intact')}, rows checked={au['verify'].get('rows')}", au["verify"].get("intact") is True),
-        ("T&E: re-uploading the same file, where every row now fails, is refused and changes nothing",
-         f"status {ev['te_reupload']['status']}; registry (id, loaded, failed) {ev['te_reupload']['registry_after']} "
-         f"vs before {[[te['registry']['id'], te['registry']['row_count'], te['registry']['failed_rows']]]}; "
-         f"database rows {ev['te_reupload']['db_row_count_after']}",
-         ev["te_reupload"]["status"] == "error"
-         and ev["te_reupload"]["registry_after"] == [[te["registry"]["id"], te["registry"]["row_count"], te["registry"]["failed_rows"]]]
-         and ev["te_reupload"]["db_row_count_after"] == te["db_row_count"]),
+        (
+            "T&E: every source row is accounted for (loaded + rejected = source)",
+            f"{r['insertedRows']} + {r['failedRows']} + {r['duplicateRowsSkipped']} = {r['insertedRows'] + r['failedRows'] + r['duplicateRowsSkipped']} of {te['source_rows']}",
+            r["insertedRows"] + r["failedRows"] + r["duplicateRowsSkipped"] == te["source_rows"],
+        ),
+        (
+            "T&E: rows in the database equal the rows the API reported loaded",
+            f"database {te['db_row_count']}, API {r['insertedRows']}",
+            te["db_row_count"] == r["insertedRows"],
+        ),
+        (
+            "T&E: the rows rejected are exactly the rows the fixture was designed to produce",
+            f"rejected {te['rejected_row_numbers']}, expected {sorted(te['expected_rejects'])}",
+            te["rejected_row_numbers"] == sorted(int(k) for k in te["expected_rejects"]),
+        ),
+        (
+            "T&E: every loaded row matches its source row, field for field",
+            f"{te['db_row_count']} of {te['db_row_count']} match" if te["loaded_matches_source"] else "mismatch",
+            te["loaded_matches_source"],
+        ),
+        (
+            "T&E: file hash recorded by the system equals an independently computed SHA-256",
+            te["registry"]["file_hash"][:16] + "…",
+            te["registry"]["file_hash"] == te["sha256"],
+        ),
+        (
+            "T&E: registry counts equal the API response",
+            f"registry loaded {te['registry']['row_count']} / failed {te['registry']['failed_rows']}",
+            te["registry"]["row_count"] == r["insertedRows"] and te["registry"]["failed_rows"] == r["failedRows"],
+        ),
+        (
+            "Dynamic: rows in the new table equal source rows",
+            f"database {dy['db_row_count']}, source {dy['source_rows']}",
+            dy["db_row_count"] == dy["source_rows"],
+        ),
+        (
+            "Dynamic: file hash recorded by the system equals an independently computed SHA-256",
+            dy["registry_file_hash"][:16] + "…",
+            dy["registry_file_hash"] == dy["sha256"],
+        ),
+        (
+            "Dynamic: re-upload of the same file is refused",
+            dy["duplicate_same_name"].get("status"),
+            dy["duplicate_same_name"].get("status") == "duplicate_file",
+        ),
+        (
+            "Dynamic: the same content under a new filename is refused",
+            f"{dy['duplicate_renamed'].get('status')} (reason: {dy['duplicate_renamed'].get('reason')})",
+            dy["duplicate_renamed"].get("status") == "duplicate_file"
+            and dy["duplicate_renamed"].get("reason") == "content",
+        ),
+        (
+            "Audit: one entry per successful load; refused or fully failed uploads leave none",
+            f"{au['log']['total']} entries for 2 loads",
+            au["log"]["total"] == 2 and len(entries) == 2,
+        ),
+        (
+            "Audit: hash chain recomputed and intact",
+            f"intact={au['verify'].get('intact')}, rows checked={au['verify'].get('rows')}",
+            au["verify"].get("intact") is True,
+        ),
+        (
+            "T&E: re-uploading the same file, where every row now fails, is refused and changes nothing",
+            f"status {ev['te_reupload']['status']}; registry (id, loaded, failed) {ev['te_reupload']['registry_after']} "
+            f"vs before {[[te['registry']['id'], te['registry']['row_count'], te['registry']['failed_rows']]]}; "
+            f"database rows {ev['te_reupload']['db_row_count_after']}",
+            ev["te_reupload"]["status"] == "error"
+            and ev["te_reupload"]["registry_after"]
+            == [[te["registry"]["id"], te["registry"]["row_count"], te["registry"]["failed_rows"]]]
+            and ev["te_reupload"]["db_row_count_after"] == te["db_row_count"],
+        ),
     ]
 
 
@@ -274,9 +348,11 @@ def render(ev: dict, rows: list[tuple[str, str, bool]]) -> str:
         "`scripts/sample_verification_run.py` before the run. The reason column is the database's own message.",
         "",
         "| Data row | Source line | Designed defect | Database message |\n|---|---|---|---|",
-        *[f"| {e['rowNumber']} | `{te['source_lines'][e['rowNumber']]}` "
-          f"| {te['expected_rejects'].get(e['rowNumber'], 'not expected')} | {e['reason']} |"
-          for e in r.get("rowErrors", [])],
+        *[
+            f"| {e['rowNumber']} | `{te['source_lines'][e['rowNumber']]}` "
+            f"| {te['expected_rejects'].get(e['rowNumber'], 'not expected')} | {e['reason']} |"
+            for e in r.get("rowErrors", [])
+        ],
         "",
         "## 5. Rows loaded (T&E file)",
         "",
@@ -303,8 +379,10 @@ def render(ev: dict, rows: list[tuple[str, str, bool]]) -> str:
         f"**intact = {au['verify'].get('intact')}** over {au['verify'].get('rows')} rows.",
         "",
         "| Action | File | Target | Mode | Actor | Time (UTC) |\n|---|---|---|---|---|---|",
-        *[f"| {e['action']} | {e['fileName']} | {e['tableName']} | {e['mode']} | {e['actor']} | {e['performedAt']} |"
-          for e in au["log"]["entries"]],
+        *[
+            f"| {e['action']} | {e['fileName']} | {e['tableName']} | {e['mode']} | {e['actor']} | {e['performedAt']} |"
+            for e in au["log"]["entries"]
+        ],
         "",
         "## 8. What this report does and does not show",
         "",
@@ -344,16 +422,21 @@ def main() -> int:
         return 2
 
     api = Api(args.api)
-    status, login = api.call("POST", "/api/auth/login",
-                             {"tenant": args.tenant, "username": args.username, "password": password})
+    status, login = api.call(
+        "POST", "/api/auth/login", {"tenant": args.tenant, "username": args.username, "password": password}
+    )
     if status != 200:
         print(f"Sign-in failed ({status}): {login}", file=sys.stderr)
         return 2
     api.token = login["token"]
 
-    conn = psycopg2.connect(host=os.environ.get("PGHOST", "localhost"), port=os.environ.get("PGPORT", "5432"),
-                            user=os.environ.get("PGUSER", "postgres"), password=os.environ.get("PGPASSWORD", ""),
-                            dbname=os.environ.get("PGDATABASE", "te_mgmt_dev"))
+    conn = psycopg2.connect(
+        host=os.environ.get("PGHOST", "localhost"),
+        port=os.environ.get("PGPORT", "5432"),
+        user=os.environ.get("PGUSER", "postgres"),
+        password=os.environ.get("PGPASSWORD", ""),
+        dbname=os.environ.get("PGDATABASE", "te_mgmt_dev"),
+    )
     conn.autocommit = True
     try:
         ev = collect(api, conn)
@@ -362,7 +445,9 @@ def main() -> int:
         return 2
     rows = checks(ev)
 
-    (SAMPLES / "verification-run-evidence.json").write_text(json.dumps(ev, indent=2, default=str) + "\n", encoding="utf-8")
+    (SAMPLES / "verification-run-evidence.json").write_text(
+        json.dumps(ev, indent=2, default=str) + "\n", encoding="utf-8"
+    )
     (SAMPLES / "MIGRATION_VERIFICATION_REPORT_SAMPLE.md").write_text(render(ev, rows), encoding="utf-8")
     for c, o, p in rows:
         print(("PASS" if p else "FAIL"), "-", c, "->", o)

@@ -17,6 +17,7 @@ Asserted here, with no network and no database:
     the egress steps are intact, the check keeps its name, a push to ``main`` always runs everything, and a newer push
     to a pull request cancels the older run.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -42,6 +43,7 @@ finally:
 
 # -- scripts/ci_changes.py: when may the database jobs be skipped? -----------------------------------------------------
 
+
 @pytest.fixture
 def tree(tmp_path):
     """A small repository: docs nothing reads, a doc a test reads, a doc a workflow names, code."""
@@ -65,12 +67,24 @@ def tree(tmp_path):
 
 def test_a_change_to_documents_nothing_reads_skips_the_database_jobs(tree):
     assert ci_changes.is_docs_only(["docs/audit/example_report.md"], tree) is True
-    assert ci_changes.is_docs_only(["docs/audit/example_report.md", "DECISIONS/2026-11-23-x.md", "docs/NOTES_EXAMPLE.md"], tree) is True
+    assert (
+        ci_changes.is_docs_only(
+            ["docs/audit/example_report.md", "DECISIONS/2026-11-23-x.md", "docs/NOTES_EXAMPLE.md"], tree
+        )
+        is True
+    )
 
 
 def test_code_always_runs_everything(tree):
-    for path in ("api/main.py", "scripts/x.sh", "requirements-dev.txt", ".github/workflows/quality-gate.yml",
-                 "tests/unit/test_x.py", "csv-table-hub-main/src/a.ts", "Makefile"):
+    for path in (
+        "api/main.py",
+        "scripts/x.sh",
+        "requirements-dev.txt",
+        ".github/workflows/quality-gate.yml",
+        "tests/unit/test_x.py",
+        "csv-table-hub-main/src/a.ts",
+        "Makefile",
+    ):
         assert ci_changes.is_docs_only([path], tree) is False, path
 
 
@@ -124,8 +138,13 @@ def test_any_other_event_or_no_files_runs_everything(tree):
 
 
 def test_the_real_repository_runs_everything_for_its_own_ci_files():
-    for path in ("scripts/ci_changes.py", "scripts/ci_gate.py", "scripts/ci_shards.py", "ci/shard_weights.json",
-                 ".github/workflows/quality-gate.yml"):
+    for path in (
+        "scripts/ci_changes.py",
+        "scripts/ci_gate.py",
+        "scripts/ci_shards.py",
+        "ci/shard_weights.json",
+        ".github/workflows/quality-gate.yml",
+    ):
         assert ci_changes.is_docs_only([path], ROOT) is False, path
 
 
@@ -136,6 +155,7 @@ def test_the_real_documents_the_tests_read_are_not_skippable():
 
 
 # -- scripts/ci_gate.py: one verdict from the jobs' results -------------------------------------------------------------
+
 
 def gate(changed: str, **results: str) -> int:
     return ci_gate.verdict(changed, results)[0]
@@ -183,14 +203,21 @@ def test_the_message_names_every_job_and_what_happened():
 
 
 def test_the_cli_exits_with_the_verdict():
-    ok = subprocess.run([sys.executable, str(ROOT / "scripts" / "ci_gate.py"), "true", "shards=success", "coverage=success"],
-                        capture_output=True, text=True)
-    bad = subprocess.run([sys.executable, str(ROOT / "scripts" / "ci_gate.py"), "true", "shards=success", "coverage=failure"],
-                         capture_output=True, text=True)
+    ok = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "ci_gate.py"), "true", "shards=success", "coverage=success"],
+        capture_output=True,
+        text=True,
+    )
+    bad = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "ci_gate.py"), "true", "shards=success", "coverage=failure"],
+        capture_output=True,
+        text=True,
+    )
     assert (ok.returncode, bad.returncode) == (0, 1), (ok.stdout, bad.stdout)
 
 
 # -- the workflow --------------------------------------------------------------------------------------------------------
+
 
 def load() -> dict:
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
@@ -212,7 +239,8 @@ def test_the_parallel_jobs_exist_and_the_check_keeps_its_name():
     for job_id in ("changes", "free-tier", *HEAVY, "integration-postgres", "accessibility", "browser"):
         assert job_id in j, job_id
     assert j["integration-postgres"]["name"] == "integration (postgres service)", (
-        "the aggregate check keeps the name the owner's branch protection would require")
+        "the aggregate check keeps the name the owner's branch protection would require"
+    )
 
 
 def test_the_heavy_jobs_wait_for_the_changes_job_and_skip_for_documentation_only():
@@ -279,9 +307,14 @@ def test_each_shard_measures_coverage_and_hands_its_data_to_the_coverage_job():
         assert f"--cov={scope}" in opts, scope
     assert "--cov-branch" in opts and "--cov-report=" in opts
     assert "coverage-shard-${{ matrix.shard }}.dat" in step["run"] or any(
-        "coverage-shard-${{ matrix.shard }}.dat" in (s.get("run") or "") for s in job["steps"])
-    uploads = [s for s in job["steps"] if "upload-artifact" in (s.get("uses") or "") and
-               "coverage-shard-${{ matrix.shard }}" in str((s.get("with") or {}).get("name", ""))]
+        "coverage-shard-${{ matrix.shard }}.dat" in (s.get("run") or "") for s in job["steps"]
+    )
+    uploads = [
+        s
+        for s in job["steps"]
+        if "upload-artifact" in (s.get("uses") or "")
+        and "coverage-shard-${{ matrix.shard }}" in str((s.get("with") or {}).get("name", ""))
+    ]
     assert len(uploads) == 1, "each shard uploads its own coverage data under a name that is unique per shard"
     assert "coverage-shard-${{ matrix.shard }}.dat" in str(uploads[0]["with"]["path"])
 
@@ -293,7 +326,8 @@ def test_the_coverage_job_combines_the_shards_and_applies_the_floors_and_needs_n
     assert {"changes", "integration-shards"} <= set(needs)
     assert "needs.changes.outputs.code == 'true'" in str(job.get("if"))
     assert "needs.integration-shards.result == 'success'" in str(job.get("if")), (
-        "no coverage verdict from a run in which a shard failed")
+        "no coverage verdict from a run in which a shard failed"
+    )
     download = next(s for s in job["steps"] if "download-artifact" in (s.get("uses") or ""))
     assert "coverage-shard-*" in str(download["with"].get("pattern"))
     assert download["with"].get("merge-multiple") in (True, "true")
@@ -309,15 +343,20 @@ def test_the_egress_pass_is_sharded_and_keeps_its_firewall_steps():
     assert job["strategy"]["matrix"]["shard"] == list(range(1, ci_shards.EGRESS_SHARDS + 1))
     assert job["strategy"].get("fail-fast") is False
     text = run_text(job)
-    for needed in ("egress_firewall.sh install egresstest", "egress_firewall.sh check", "--block-egress",
-                   "egress_firewall.sh remove"):
+    for needed in (
+        "egress_firewall.sh install egresstest",
+        "egress_firewall.sh check",
+        "--block-egress",
+        "egress_firewall.sh remove",
+    ):
         assert needed in text, needed
     assert "test_report.py" not in text, "the egress job does not re-run the whole suite on the open network"
     assert "ci_shards.py files --shard ${{ matrix.shard }}" in text
     assert f"--of {ci_shards.EGRESS_SHARDS}" in text and "--only tests/system/" in text
     uploads = [s for s in job["steps"] if "upload-artifact" in (s.get("uses") or "")]
     assert uploads and all("${{ matrix.shard }}" in str(s["with"]["name"]) for s in uploads), (
-        "artifact names must be unique per shard or the uploads collide")
+        "artifact names must be unique per shard or the uploads collide"
+    )
 
 
 def test_the_egress_shards_hold_every_system_test_file_once():
@@ -353,11 +392,13 @@ def test_the_triggers_are_unchanged_and_nothing_is_skipped_by_path_at_the_workfl
     on = wf.get("on") if "on" in wf else wf[True]
     assert set(on) == {"push", "pull_request"}
     assert "paths-ignore" not in str(on) and "paths" not in (on.get("pull_request") or {}), (
-        "a workflow-level path filter would leave the required check pending forever; the changes job decides instead")
+        "a workflow-level path filter would leave the required check pending forever; the changes job decides instead"
+    )
     assert on["push"]["branches"] == ["main", "master"]
 
 
 # -- the sample documents must not be real ones -------------------------------------------------------------------------
+
 
 def test_the_sample_documents_in_the_fixture_are_not_real_documents_of_this_repository(tree):
     """A test file naming a real document makes that document count as 'read by a test', so a change to it could never
@@ -371,4 +412,6 @@ def test_the_sample_documents_in_the_fixture_are_not_real_documents_of_this_repo
     real_report = "2026" + "1123.md"
     assert not (tree / "docs" / "audit" / real_report).exists(), "the fixture must not use the real report's name"
     assert not (tree / "docs" / ("NOTES" + ".md")).exists()
-    assert (real_root / "docs" / "audit" / real_report).is_file(), "the real report this guard protects was renamed: update it"
+    assert (real_root / "docs" / "audit" / real_report).is_file(), (
+        "the real report this guard protects was renamed: update it"
+    )

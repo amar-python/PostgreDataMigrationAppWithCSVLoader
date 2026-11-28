@@ -90,8 +90,9 @@ def try_login(host: str, port: str, user: str, password: str, timeout: int = 5) 
     """(OK | REFUSED | UNREACHABLE, a one-line reason). Connects to the always-present `postgres`
     database, so only the credentials are tested, not whether a particular database exists."""
     try:
-        psycopg2.connect(host=host, port=port, user=user, password=password,
-                         dbname="postgres", connect_timeout=timeout).close()
+        psycopg2.connect(
+            host=host, port=port, user=user, password=password, dbname="postgres", connect_timeout=timeout
+        ).close()
     except psycopg2.OperationalError as exc:
         reason = str(exc).strip().splitlines()[0] if str(exc).strip() else "connection failed"
         return (REFUSED if db._is_permanent(exc) else UNREACHABLE), reason
@@ -99,19 +100,26 @@ def try_login(host: str, port: str, user: str, password: str, timeout: int = 5) 
 
 
 def _login_from_env() -> tuple[str, str, str, str]:
-    return (os.environ.get("PGHOST") or DEFAULT_HOST, os.environ.get("PGPORT") or DEFAULT_PORT,
-            os.environ.get("PGUSER") or DEFAULT_USER, os.environ.get("PGPASSWORD", ""))
+    return (
+        os.environ.get("PGHOST") or DEFAULT_HOST,
+        os.environ.get("PGPORT") or DEFAULT_PORT,
+        os.environ.get("PGUSER") or DEFAULT_USER,
+        os.environ.get("PGPASSWORD", ""),
+    )
 
 
 def _not_reachable(host: str, port: str, reason: str) -> int:
-    print(f"Could not reach PostgreSQL at {host}:{port}.\n  {reason}\n"
-          "Check that the server is running on that host and port.", file=sys.stderr)
+    print(
+        f"Could not reach PostgreSQL at {host}:{port}.\n  {reason}\n"
+        "Check that the server is running on that host and port.",
+        file=sys.stderr,
+    )
     return 3
 
 
 def cmd_check(args) -> int:
     host, port, user, password = _login_from_env()
-    up, why = server_available(host, port)          # first: is anything there to log in to?
+    up, why = server_available(host, port)  # first: is anything there to log in to?
     if not up:
         return _not_reachable(host, port, why)
     if args.server_only:
@@ -125,7 +133,7 @@ def cmd_check(args) -> int:
     if status == REFUSED:
         print(f"PostgreSQL refused the login for {who}.\n  {reason}", file=sys.stderr)
         return 2
-    return _not_reachable(host, port, reason)       # it went away, or is still starting up
+    return _not_reachable(host, port, reason)  # it went away, or is still starting up
 
 
 def cmd_save(args) -> int:
@@ -136,16 +144,19 @@ def cmd_save(args) -> int:
         # Before asking for a password: with no server there is nothing to test it against.
         up, why = server_available(host, port)
         if not up:
-            print(f"PostgreSQL could not be reached at {host}:{port}, so nothing was saved and no "
-                  f"password was asked for.\n  {why}\n"
-                  "Check that the server is running on that host and port, then run this again.",
-                  file=sys.stderr)
+            print(
+                f"PostgreSQL could not be reached at {host}:{port}, so nothing was saved and no "
+                f"password was asked for.\n  {why}\n"
+                "Check that the server is running on that host and port, then run this again.",
+                file=sys.stderr,
+            )
             return 1
     if args.from_env:
         password = os.environ.get("PGPASSWORD", "")
     else:
         password = os.environ.get("TE_PG_PASSWORD") or getpass.getpass(
-            f"Password for {user}@{host}:{port} (input hidden): ")
+            f"Password for {user}@{host}:{port} (input hidden): "
+        )
     if not password:
         print("No password given; nothing was saved.", file=sys.stderr)
         return 2
@@ -156,14 +167,15 @@ def cmd_save(args) -> int:
         status, reason = try_login(host, port, user, password)
         if status != OK:
             what = "refused the login" if status == REFUSED else "could not be reached"
-            print(f"PostgreSQL {what} for {user}@{host}:{port}, so nothing was saved.\n  {reason}",
-                  file=sys.stderr)
+            print(f"PostgreSQL {what} for {user}@{host}:{port}, so nothing was saved.\n  {reason}", file=sys.stderr)
             return 1
     path = env_file_for(args.env)
     write_env_file(path, {"PGHOST": host, "PGPORT": port, "PGUSER": user, "PGPASSWORD": password})
-    print(f"Saved the {args.env} login for {user}@{host}:{port} to {path}.\n"
-          "start-api.ps1 will use it. For the other scripts, in a PowerShell window run:  "
-          ". .\\scripts\\dev-env.ps1")
+    print(
+        f"Saved the {args.env} login for {user}@{host}:{port} to {path}.\n"
+        "start-api.ps1 will use it. For the other scripts, in a PowerShell window run:  "
+        ". .\\scripts\\dev-env.ps1"
+    )
     return 0
 
 
@@ -174,8 +186,11 @@ def cmd_where(args) -> int:
         return 0
     held = read_env_file(path)
     shown = {k: v for k, v in held.items() if k != "PGPASSWORD"}
-    print(f"{path}\n  holds: " + ", ".join(f"{k}={v}" for k, v in shown.items())
-          + (", PGPASSWORD=(saved, not shown)" if "PGPASSWORD" in held else ""))
+    print(
+        f"{path}\n  holds: "
+        + ", ".join(f"{k}={v}" for k, v in shown.items())
+        + (", PGPASSWORD=(saved, not shown)" if "PGPASSWORD" in held else "")
+    )
     return 0
 
 
@@ -188,14 +203,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--host")
     p.add_argument("--port")
     p.add_argument("--user")
-    p.add_argument("--from-env", action="store_true",
-                   help="take the login from PGHOST / PGPORT / PGUSER / PGPASSWORD instead of asking")
+    p.add_argument(
+        "--from-env",
+        action="store_true",
+        help="take the login from PGHOST / PGPORT / PGUSER / PGPASSWORD instead of asking",
+    )
     p.add_argument("--no-check", action="store_true", help="save without testing the login first")
     p.set_defaults(func=cmd_save)
 
     p = sub.add_parser("check", help="test the login in the current PG* variables")
-    p.add_argument("--server-only", action="store_true",
-                   help="only check that PostgreSQL is accepting connections; use no password")
+    p.add_argument(
+        "--server-only",
+        action="store_true",
+        help="only check that PostgreSQL is accepting connections; use no password",
+    )
     p.set_defaults(func=cmd_check)
 
     p = sub.add_parser("where", help="say where the saved login is")

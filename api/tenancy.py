@@ -16,19 +16,17 @@ from __future__ import annotations
 import hashlib
 import re
 import threading
-from contextlib import contextmanager
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from psycopg2 import sql
 from psycopg2.errors import InsufficientPrivilege
+from psycopg2.extensions import connection, cursor
 
 from api.config import TE_TABLES, settings
-from typing import Any
-from psycopg2.extensions import connection, cursor
-from collections.abc import Iterator
-from contextlib import AbstractContextManager
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from alembic.config import Config
@@ -92,9 +90,9 @@ def migrate_tenant(slug: str) -> None:
     Swaps settings.UPLOADS_SCHEMA while Alembic runs, so it is serialised and
     must only be called from startup or a CLI, never inside a request.
     """
-    from alembic import command
     from alembic.config import Config
 
+    from alembic import command
     from api.db import alembic_ini_path
 
     with _migrate_lock:
@@ -147,22 +145,33 @@ def provision_tenant_role(cur: cursor, slug: str) -> str:
                 f"Tenant {slug!r}: the owner {settings.PG_USER!r} may not create the tenant's database role {role!r} "
                 f"(#297). Give it CREATEROLE, as a superuser or the server administrator: ALTER ROLE "
                 f"{settings.PG_USER} CREATEROLE; (build/deploy_all.sh does this for the environments it deploys). "
-                "See DECISIONS/2026-11-24-per-tenant-db-roles.md.") from exc
-    cur.execute(sql.SQL("COMMENT ON ROLE {} IS {}").format(r, sql.Literal(
-        f"Tenant {slug} in database {settings.PG_DATABASE}: rights on schema {schema} only (#297)")))
+                "See DECISIONS/2026-11-24-per-tenant-db-roles.md."
+            ) from exc
+    cur.execute(
+        sql.SQL("COMMENT ON ROLE {} IS {}").format(
+            r, sql.Literal(f"Tenant {slug} in database {settings.PG_DATABASE}: rights on schema {schema} only (#297)")
+        )
+    )
     cur.execute(sql.SQL("GRANT {} TO CURRENT_USER WITH INHERIT TRUE, SET TRUE").format(r))
     grant_schema(cur, schema, role, create=True)
-    cur.execute(sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA {} GRANT SELECT, INSERT, UPDATE, DELETE "
-                        "ON TABLES TO {}").format(s, r))
-    cur.execute(sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA {} GRANT USAGE, SELECT, UPDATE "
-                        "ON SEQUENCES TO {}").format(s, r))
+    cur.execute(
+        sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA {} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {}").format(
+            s, r
+        )
+    )
+    cur.execute(
+        sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA {} GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {}").format(s, r)
+    )
     runtime = settings.APP_DB_USER
     if runtime and runtime != settings.PG_USER:
         rt = sql.Identifier(runtime)
         cur.execute(sql.SQL("GRANT {} TO {} WITH INHERIT FALSE, SET TRUE").format(r, rt))
         # Tables the runtime role created before #297 (it owned them, so a REVOKE alone would not stop it).
-        cur.execute("SELECT relname FROM pg_class WHERE relnamespace = %s::regnamespace AND relkind IN ('r', 'p') "
-                    "AND pg_get_userbyid(relowner) = %s", (schema, runtime))
+        cur.execute(
+            "SELECT relname FROM pg_class WHERE relnamespace = %s::regnamespace AND relkind IN ('r', 'p') "
+            "AND pg_get_userbyid(relowner) = %s",
+            (schema, runtime),
+        )
         for (table,) in cur.fetchall():
             cur.execute(sql.SQL("ALTER TABLE {}.{} OWNER TO {}").format(s, sql.Identifier(table), r))
         cur.execute(sql.SQL("REVOKE ALL ON ALL TABLES IN SCHEMA {} FROM {}").format(s, rt))
@@ -216,8 +225,11 @@ def template_te_version(cur: cursor, template: str) -> str | None:
 
 
 def _te_tables_present(cur: cursor, schema: str) -> set[str]:
-    cur.execute("SELECT c.relname FROM pg_class c WHERE c.relnamespace = to_regnamespace(%s) "
-                "AND c.relkind = 'r' AND c.relname = ANY(%s)", (schema, TE_TABLES))
+    cur.execute(
+        "SELECT c.relname FROM pg_class c WHERE c.relnamespace = to_regnamespace(%s) "
+        "AND c.relkind = 'r' AND c.relname = ANY(%s)",
+        (schema, TE_TABLES),
+    )
     return {r[0] for r in cur.fetchall()}
 
 
@@ -235,9 +247,9 @@ def migrate_te_schema(conn: connection, cur: cursor, schema: str) -> str:
     tenant across processes by an advisory lock, so two API workers starting together
     cannot both provision or upgrade the same schema. Commits.
     """
-    from alembic import command
     from alembic.util import CommandError
 
+    from alembic import command
     from api.db import fetch_one
 
     cfg, template = _te_config(schema), settings.TE_SCHEMA
@@ -254,7 +266,8 @@ def migrate_te_schema(conn: connection, cur: cursor, schema: str) -> str:
             if template_version is None:
                 raise RuntimeError(
                     f"T&E template schema {template!r} has no te_schema_version stamp; it was deployed by an "
-                    "older build/te_core_schema.sql. Redeploy it with build/deploy_all.sh first.")
+                    "older build/te_core_schema.sql. Redeploy it with build/deploy_all.sh first."
+                )
             provision_te_tables(cur, schema, template)
             conn.commit()
             action, stamp = "provisioned", template_version
@@ -269,9 +282,11 @@ def migrate_te_schema(conn: connection, cur: cursor, schema: str) -> str:
                     command.stamp(cfg, stamp)
                 command.upgrade(cfg, "head")
         except CommandError as exc:
-            raise RuntimeError(f"Tenant schema {schema!r}: {exc}. If the template is newer than this release, "
-                               "deploy the matching release; if older, redeploy it with "
-                               "build/deploy_all.sh.") from exc
+            raise RuntimeError(
+                f"Tenant schema {schema!r}: {exc}. If the template is newer than this release, "
+                "deploy the matching release; if older, redeploy it with "
+                "build/deploy_all.sh."
+            ) from exc
         return action
     finally:
         conn.rollback()
@@ -287,15 +302,18 @@ def _use_template_names(cur: cursor, schema: str, template: str, tables: list[st
     that drops or renames an index by name would then work on the template and fail on every
     tenant. Matched on what each index is (table, columns, method), since the names differ.
     """
+
     def listing(sch: str) -> list[tuple[Any, ...]]:
         cur.execute(
             "SELECT t.relname, i.relname, pg_get_indexdef(i.oid), c.conname FROM pg_index x "
             "JOIN pg_class i ON i.oid = x.indexrelid JOIN pg_class t ON t.oid = x.indrelid "
             "LEFT JOIN pg_constraint c ON c.conindid = x.indexrelid AND c.contype = 'u' "
             "WHERE t.relnamespace = %s::regnamespace AND t.relname = ANY(%s) AND NOT x.indisprimary",
-            (sch, tables))
-        return [(t, i, re.sub(r"^CREATE (UNIQUE )?INDEX \S+ ON \S+ ", r"\1", d), con)
-                for t, i, d, con in cur.fetchall()]
+            (sch, tables),
+        )
+        return [
+            (t, i, re.sub(r"^CREATE (UNIQUE )?INDEX \S+ ON \S+ ", r"\1", d), con) for t, i, d, con in cur.fetchall()
+        ]
 
     mine = {(t, tail): (i, con) for t, i, tail, con in listing(schema)}
     for table, name, tail, constraint in listing(template):
@@ -303,11 +321,17 @@ def _use_template_names(cur: cursor, schema: str, template: str, tables: list[st
         if have is None or have[0] == name:
             continue
         if constraint and have[1]:  # renaming a unique constraint renames its index too
-            cur.execute(sql.SQL("ALTER TABLE {}.{} RENAME CONSTRAINT {} TO {}").format(
-                sql.Identifier(schema), sql.Identifier(table), sql.Identifier(have[1]), sql.Identifier(constraint)))
+            cur.execute(
+                sql.SQL("ALTER TABLE {}.{} RENAME CONSTRAINT {} TO {}").format(
+                    sql.Identifier(schema), sql.Identifier(table), sql.Identifier(have[1]), sql.Identifier(constraint)
+                )
+            )
         elif not constraint and not have[1]:
-            cur.execute(sql.SQL("ALTER INDEX {}.{} RENAME TO {}").format(
-                sql.Identifier(schema), sql.Identifier(have[0]), sql.Identifier(name)))
+            cur.execute(
+                sql.SQL("ALTER INDEX {}.{} RENAME TO {}").format(
+                    sql.Identifier(schema), sql.Identifier(have[0]), sql.Identifier(name)
+                )
+            )
 
 
 def provision_te_tables(cur: cursor, schema: str, template: str) -> int:
@@ -324,20 +348,30 @@ def provision_te_tables(cur: cursor, schema: str, template: str) -> int:
     cur.execute("SET LOCAL search_path = pg_catalog")  # makes catalog DDL schema-qualified
     cur.execute("SELECT quote_ident(%s), quote_ident(%s)", (template, schema))
     qt, qs = fetch_one(cur)
-    cur.execute("SELECT relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
-                "WHERE n.nspname = %s AND c.relkind = 'r' AND c.relname = ANY(%s)", (template, TE_TABLES))
+    cur.execute(
+        "SELECT relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE n.nspname = %s AND c.relkind = 'r' AND c.relname = ANY(%s)",
+        (template, TE_TABLES),
+    )
     if {r[0] for r in cur.fetchall()} != set(TE_TABLES):
-        raise RuntimeError(f"T&E template schema {template!r} is missing or incomplete; "
-                           "deploy it with build/deploy_all.sh first")
-    cur.execute("SELECT relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
-                "WHERE n.nspname = %s AND c.relname = ANY(%s)", (schema, TE_TABLES))
+        raise RuntimeError(
+            f"T&E template schema {template!r} is missing or incomplete; deploy it with build/deploy_all.sh first"
+        )
+    cur.execute(
+        "SELECT relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE n.nspname = %s AND c.relname = ANY(%s)",
+        (schema, TE_TABLES),
+    )
     present = {r[0] for r in cur.fetchall()}
     missing = [t for t in TE_TABLES if t not in present]
     if not missing:
         return 0
     for table in missing:
-        cur.execute(sql.SQL("CREATE TABLE {}.{} (LIKE {}.{} INCLUDING ALL)").format(
-            sql.Identifier(schema), sql.Identifier(table), sql.Identifier(template), sql.Identifier(table)))
+        cur.execute(
+            sql.SQL("CREATE TABLE {}.{} (LIKE {}.{} INCLUDING ALL)").format(
+                sql.Identifier(schema), sql.Identifier(table), sql.Identifier(template), sql.Identifier(table)
+            )
+        )
     _use_template_names(cur, schema, template, missing)
 
     def defs(query: str) -> list[tuple[Any, ...]]:
@@ -345,20 +379,28 @@ def provision_te_tables(cur: cursor, schema: str, template: str) -> int:
         return cur.fetchall()
 
     for table, name, ddl in defs(
-            "SELECT r.relname, c.conname, pg_get_constraintdef(c.oid) FROM pg_constraint c "
-            "JOIN pg_class r ON r.oid = c.conrelid JOIN pg_namespace n ON n.oid = r.relnamespace "
-            "WHERE n.nspname = %s AND c.contype = 'f' AND r.relname = ANY(%s) ORDER BY c.conname"):
-        cur.execute(sql.SQL("ALTER TABLE {}.{} ADD CONSTRAINT {} ").format(
-            sql.Identifier(schema), sql.Identifier(table), sql.Identifier(name))
-            + sql.SQL(ddl.replace(f"REFERENCES {qt}.", f"REFERENCES {qs}.")))
-    cur.execute("SELECT pg_get_functiondef(p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
-                "WHERE n.nspname = %s AND p.proname IN ('set_updated_at', 'te_fill_program_id')", (template,))
+        "SELECT r.relname, c.conname, pg_get_constraintdef(c.oid) FROM pg_constraint c "
+        "JOIN pg_class r ON r.oid = c.conrelid JOIN pg_namespace n ON n.oid = r.relnamespace "
+        "WHERE n.nspname = %s AND c.contype = 'f' AND r.relname = ANY(%s) ORDER BY c.conname"
+    ):
+        cur.execute(
+            sql.SQL("ALTER TABLE {}.{} ADD CONSTRAINT {} ").format(
+                sql.Identifier(schema), sql.Identifier(table), sql.Identifier(name)
+            )
+            + sql.SQL(ddl.replace(f"REFERENCES {qt}.", f"REFERENCES {qs}."))
+        )
+    cur.execute(
+        "SELECT pg_get_functiondef(p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+        "WHERE n.nspname = %s AND p.proname IN ('set_updated_at', 'te_fill_program_id')",
+        (template,),
+    )
     for (ddl,) in cur.fetchall():
         cur.execute(sql.SQL(ddl.replace(f"FUNCTION {qt}.", f"FUNCTION {qs}.", 1)))
     for (ddl,) in defs(
-            "SELECT pg_get_triggerdef(t.oid) FROM pg_trigger t JOIN pg_class r ON r.oid = t.tgrelid "
-            "JOIN pg_namespace n ON n.oid = r.relnamespace "
-            "WHERE n.nspname = %s AND NOT t.tgisinternal AND r.relname = ANY(%s)"):
+        "SELECT pg_get_triggerdef(t.oid) FROM pg_trigger t JOIN pg_class r ON r.oid = t.tgrelid "
+        "JOIN pg_namespace n ON n.oid = r.relnamespace "
+        "WHERE n.nspname = %s AND NOT t.tgisinternal AND r.relname = ANY(%s)"
+    ):
         cur.execute(sql.SQL(ddl.replace(f" ON {qt}.", f" ON {qs}.").replace(f"FUNCTION {qt}.", f"FUNCTION {qs}.")))
     cur.execute("RESET search_path")
     return len(missing)

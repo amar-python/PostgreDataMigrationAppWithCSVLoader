@@ -34,8 +34,9 @@ class Review(unittest.TestCase):
         self.tag = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
 
     def _upload(self, content: str, types: list[str]) -> dict:
-        return self.client.post("/api/csv/upload", json={
-            "fileName": f"rev_{self.tag}.csv", "content": content, "types": types}).json()
+        return self.client.post(
+            "/api/csv/upload", json={"fileName": f"rev_{self.tag}.csv", "content": content, "types": types}
+        ).json()
 
     def _three_rows(self) -> str:
         res = self._upload(f"n,t\n1,{self.tag}\nx,b\n3,c\n", ["int8", "text"])
@@ -48,12 +49,14 @@ class Review(unittest.TestCase):
         return res.json()
 
     def _decide(self, uid: str, row: int, decision: str, reason: str = "checked with the owner"):
-        return self.client.put(f"/api/csv/uploads/{uid}/rows/{row}/decision",
-                               json={"decision": decision, "reason": reason})
+        return self.client.put(
+            f"/api/csv/uploads/{uid}/rows/{row}/decision", json={"decision": decision, "reason": reason}
+        )
 
     def _edit(self, uid: str, row: int, column: str, value: str, reason: str = "typo in source"):
-        return self.client.put(f"/api/csv/uploads/{uid}/rows/{row}/cells/{column}",
-                               json={"value": value, "reason": reason})
+        return self.client.put(
+            f"/api/csv/uploads/{uid}/rows/{row}/cells/{column}", json={"value": value, "reason": reason}
+        )
 
     def test_pages_through_every_row_with_validation(self):
         uid = self._three_rows()
@@ -80,31 +83,45 @@ class Review(unittest.TestCase):
         self.assertEqual(self._decide(uid, 2, "include", "fixed upstream").json()["decision"], "include")
         self.assertEqual(self._rows(uid)["excludedRows"], 0)
         history = self.client.get(f"/api/csv/uploads/{uid}/rows/2/history").json()
-        self.assertEqual([(h["decision"], h["actor"], h["reason"]) for h in history],
-                         [("exclude", "anonymous", "checked with the owner"), ("include", "anonymous", "fixed upstream")])
+        self.assertEqual(
+            [(h["decision"], h["actor"], h["reason"]) for h in history],
+            [("exclude", "anonymous", "checked with the owner"), ("include", "anonymous", "fixed upstream")],
+        )
 
     def test_cell_edits_are_versions_over_the_unchanged_original(self):
         uid = self._three_rows()
         row = self._edit(uid, 2, "n", "2").json()
-        self.assertEqual((row["original"], row["current"], row["editedColumns"], row["errors"]),
-                         (["x", "b"], ["2", "b"], [0], []))
+        self.assertEqual(
+            (row["original"], row["current"], row["editedColumns"], row["errors"]), (["x", "b"], ["2", "b"], [0], [])
+        )
         self.assertEqual(self._edit(uid, 2, "0", "20", "second look").json()["current"], ["20", "b"])
         edits = [h for h in self.client.get(f"/api/csv/uploads/{uid}/rows/2/history").json() if h["kind"] == "edit"]
-        self.assertEqual([(e["column"], e["oldValue"], e["newValue"], e["reason"]) for e in edits],
-                         [("n", "x", "2", "typo in source"), ("n", "2", "20", "second look")])
-        with Conn() as conn, conn.cursor() as cur:   # M3's original is untouched
-            cur.execute(sql.SQL("SELECT cells FROM {}.source_rows WHERE upload_id = %s AND row_number = 2")
-                        .format(sql.Identifier(settings.UPLOADS_SCHEMA)), (int(uid),))
+        self.assertEqual(
+            [(e["column"], e["oldValue"], e["newValue"], e["reason"]) for e in edits],
+            [("n", "x", "2", "typo in source"), ("n", "2", "20", "second look")],
+        )
+        with Conn() as conn, conn.cursor() as cur:  # M3's original is untouched
+            cur.execute(
+                sql.SQL("SELECT cells FROM {}.source_rows WHERE upload_id = %s AND row_number = 2").format(
+                    sql.Identifier(settings.UPLOADS_SCHEMA)
+                ),
+                (int(uid),),
+            )
             self.assertEqual(cur.fetchone()[0], ["x", "b"])
         listed = [f for f in self.client.get("/api/csv/files").json() if f["upload_id"] == uid]
         self.assertEqual(listed[0]["row_count"], 2, "decision 1: the imported table doesn't change until M6")
 
     def test_refusals(self):
         uid = self._three_rows()
-        for res, code in ((self._decide(uid, 2, "exclude", "  "), 422), (self._edit(uid, 2, "n", "5", ""), 422),
-                          (self._decide(uid, 2, "maybe"), 422), (self._edit(uid, 2, "n", "x"), 422),
-                          (self._decide(uid, 4, "exclude"), 404), (self._edit(uid, 1, "nope", "1"), 404),
-                          (self.client.get("/api/csv/uploads/999999999/rows"), 404)):
+        for res, code in (
+            (self._decide(uid, 2, "exclude", "  "), 422),
+            (self._edit(uid, 2, "n", "5", ""), 422),
+            (self._decide(uid, 2, "maybe"), 422),
+            (self._edit(uid, 2, "n", "x"), 422),
+            (self._decide(uid, 4, "exclude"), 404),
+            (self._edit(uid, 1, "nope", "1"), 404),
+            (self.client.get("/api/csv/uploads/999999999/rows"), 404),
+        ):
             with self.subTest(body=res.text):
                 self.assertEqual(res.status_code, code)
         self.assertEqual(self.client.get(f"/api/csv/uploads/{uid}/rows/2/history").json(), [])
@@ -114,9 +131,15 @@ class Review(unittest.TestCase):
         # #190: T&E uploads stored no types, so review said errors: [] for a row the CHECK rejected.
         good, bad = f"TE_REV_{self.tag}_ok", f"TE_REV_{self.tag}_bad"
         self.te_org_cleanup.extend([good, bad])
-        res = self.client.post("/api/csv/upload", json={
-            "fileName": f"te_rev_{self.tag}.csv", "mode": "te", "targetTable": "organisations",
-            "content": f"name,org_type,country\n{good},government,AU\n{bad},not_a_type,AU\n"}).json()
+        res = self.client.post(
+            "/api/csv/upload",
+            json={
+                "fileName": f"te_rev_{self.tag}.csv",
+                "mode": "te",
+                "targetTable": "organisations",
+                "content": f"name,org_type,country\n{good},government,AU\n{bad},not_a_type,AU\n",
+            },
+        ).json()
         self.assertEqual(res["failedRows"], 1, res)
         page = self._rows(res["uploadId"])
         self.assertEqual(len(page["types"]), 3)
@@ -135,14 +158,20 @@ class Review(unittest.TestCase):
         self._edit(uid, 2, "n", "2")
         with Conn() as conn, conn.cursor() as cur:
             s = sql.Identifier(settings.UPLOADS_SCHEMA)
-            cur.execute(sql.SQL("SELECT action, before_value, after_value FROM {}.audit_log "
-                                "WHERE after_value->>'upload' = %s ORDER BY id").format(s), (uid,))
+            cur.execute(
+                sql.SQL(
+                    "SELECT action, before_value, after_value FROM {}.audit_log "
+                    "WHERE after_value->>'upload' = %s ORDER BY id"
+                ).format(s),
+                (uid,),
+            )
             [(a1, b1, f1), (a2, b2, f2)] = cur.fetchall()
             self.assertEqual((a1, b1["decision"], f1["decision"]), ("row_decision", "include", "exclude"))
             self.assertEqual((a2, b2["value"], f2["value"], f2["column"]), ("cell_edit", "x", "2", "n"))
             for table in ("row_decisions", "cell_edits"):
                 with self.subTest(table=table), self.assertRaises(psycopg2.errors.InsufficientPrivilege):
-                    cur.execute(sql.SQL("DELETE FROM {}.{} WHERE upload_id = %s").format(s, sql.Identifier(table)),
-                                (int(uid),))
+                    cur.execute(
+                        sql.SQL("DELETE FROM {}.{} WHERE upload_id = %s").format(s, sql.Identifier(table)), (int(uid),)
+                    )
                 conn.rollback()
         self.assertTrue(self.client.get("/api/audit/verify").json()["intact"])

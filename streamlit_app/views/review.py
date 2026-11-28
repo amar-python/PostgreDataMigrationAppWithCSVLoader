@@ -86,8 +86,9 @@ def render() -> None:
 
     pages = m.page_count(upload["total_rows"] or 0)
     page_no = st.number_input(f"Page (of {pages})", 1, pages, 1, key=f"review_page_{uid}")
-    data = _read("GET", f"/api/csv/uploads/{uid}/rows",
-                 params={"offset": (page_no - 1) * m.PAGE_SIZE, "limit": m.PAGE_SIZE})
+    data = _read(
+        "GET", f"/api/csv/uploads/{uid}/rows", params={"offset": (page_no - 1) * m.PAGE_SIZE, "limit": m.PAGE_SIZE}
+    )
     columns, types, rows = data["columns"], data["types"], data["rows"]
     can_review = auth.can("review_rows")
 
@@ -105,8 +106,12 @@ def render() -> None:
     picked = st.dataframe(
         frame.style.apply(lambda _: m.tint(rows, frame, columns), axis=None),
         column_config={c: st.column_config.Column(f"{c} ({t})") for c, t in zip(columns, types)},
-        on_select="rerun", selection_mode="single-row", key=f"review_grid_{uid}_{page_no}",
-        width="stretch", height=min(560, 38 + 35 * len(rows)))
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"review_grid_{uid}_{page_no}",
+        width="stretch",
+        height=min(560, 38 + 35 * len(rows)),
+    )
 
     # A click on the table moves the Row number box to that row. Anything else (typing a number) leaves the
     # table alone. A number left from another page needs no handling: the box's range changes with the page,
@@ -118,9 +123,16 @@ def render() -> None:
         if clicked is not None:
             st.session_state[row_key] = clicked
     with chooser:
-        number = st.number_input("Row number", first, last, value=None, step=1, key=row_key,
-                                 placeholder=f"{first} to {last}",
-                                 help="Select a row in the table, or type its number.")
+        number = st.number_input(
+            "Row number",
+            first,
+            last,
+            value=None,
+            step=1,
+            key=row_key,
+            placeholder=f"{first} to {last}",
+            help="Select a row in the table, or type its number.",
+        )
     if number is None:
         st.caption("Select a row in the table, or type its number, to see its problems, original values and history.")
         return
@@ -128,6 +140,7 @@ def render() -> None:
 
 
 # ── one row ─────────────────────────────────────────────────────────────────────────────────
+
 
 def _detail(uid: str, row: dict, columns: list[str], types: list[str], can_review: bool) -> None:
     st.subheader(f"Row {row['rowNumber']}")
@@ -169,10 +182,13 @@ def _history(uid: str, row_number: int) -> None:
 def _edit(uid: str, row: dict, columns: list[str], types: list[str], ver: int) -> None:
     n = row["rowNumber"]
     # Outside the form, so choosing a column shows that column's original value straight away.
-    i = st.selectbox("Column", range(len(columns)), format_func=lambda k: f"{columns[k]} ({types[k]})",
-                     key=f"review_col_{uid}")
-    st.caption(f"Original value: {m.literal(row['original'][i] or '(empty)')} · "
-               f"Current value: {m.literal(row['current'][i] or '(empty)')}")
+    i = st.selectbox(
+        "Column", range(len(columns)), format_func=lambda k: f"{columns[k]} ({types[k]})", key=f"review_col_{uid}"
+    )
+    st.caption(
+        f"Original value: {m.literal(row['original'][i] or '(empty)')} · "
+        f"Current value: {m.literal(row['current'][i] or '(empty)')}"
+    )
     with st.form(f"review_edit_{uid}_{ver}"):
         value = st.text_input("New value", value=row["current"][i], key=f"review_value_{uid}_{n}_{i}_{ver}")
         reason = st.text_input("Reason for the change (required)", key=f"review_why_{uid}_{n}_{i}_{ver}")
@@ -183,8 +199,14 @@ def _edit(uid: str, row: dict, columns: list[str], types: list[str], ver: int) -
         st.error("A reason is required")
         return
     # By position, not name: a column may be called "2024", which the API would read as a position, or hold a "/".
-    _save(uid, ver, "PUT", f"/api/csv/uploads/{uid}/rows/{n}/cells/{i}", {"value": value, "reason": reason},
-          f"Saved: row {n}, {m.literal(columns[i])}.")
+    _save(
+        uid,
+        ver,
+        "PUT",
+        f"/api/csv/uploads/{uid}/rows/{n}/cells/{i}",
+        {"value": value, "reason": reason},
+        f"Saved: row {n}, {m.literal(columns[i])}.",
+    )
 
 
 def _decide(uid: str, row: dict, flip: str, ver: int) -> None:
@@ -197,8 +219,14 @@ def _decide(uid: str, row: dict, flip: str, ver: int) -> None:
     if not reason.strip():
         st.error("A reason is required")
         return
-    _save(uid, ver, "PUT", f"/api/csv/uploads/{uid}/rows/{n}/decision", {"decision": flip, "reason": reason},
-          f"Saved: row {n} {'excluded' if flip == 'exclude' else 'included'}.")
+    _save(
+        uid,
+        ver,
+        "PUT",
+        f"/api/csv/uploads/{uid}/rows/{n}/decision",
+        {"decision": flip, "reason": reason},
+        f"Saved: row {n} {'excluded' if flip == 'exclude' else 'included'}.",
+    )
 
 
 def _save(uid: str, ver: int, method: str, path: str, body: dict, done: str) -> None:

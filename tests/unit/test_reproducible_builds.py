@@ -10,6 +10,7 @@
 
 No database or network needed: these read the files.
 """
+
 from __future__ import annotations
 
 import re
@@ -33,8 +34,12 @@ LOCKS = {
     "api/requirements.lock": ["api/requirements.txt"],
     "streamlit_app/requirements.lock": ["streamlit_app/requirements.txt"],
     "requirements-dev.lock": ["requirements-dev.txt", "api/requirements.txt"],
-    "requirements-a11y.lock": ["requirements-dev.txt", "api/requirements.txt", "requirements-a11y.txt",
-                               "streamlit_app/requirements.txt"],
+    "requirements-a11y.lock": [
+        "requirements-dev.txt",
+        "api/requirements.txt",
+        "requirements-a11y.txt",
+        "streamlit_app/requirements.txt",
+    ],
 }
 
 
@@ -55,6 +60,7 @@ def _steps():
 
 # ── #325 ──────────────────────────────────────────────────────────────────────
 
+
 def test_every_action_is_pinned_to_a_commit_sha_with_its_version_in_a_comment():
     offenders = []
     for path in WORKFLOWS:
@@ -63,7 +69,8 @@ def test_every_action_is_pinned_to_a_commit_sha_with_its_version_in_a_comment():
             if not m or m.group(1).startswith("./"):
                 continue
             ok = re.fullmatch(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}", m.group(1)) and re.fullmatch(
-                r"\s+#\s*v\d+(\.\d+){0,2}\s*", m.group(2))
+                r"\s+#\s*v\d+(\.\d+){0,2}\s*", m.group(2)
+            )
             if not ok:
                 offenders.append(f"{path.name}: {line.strip()}")
     assert not offenders, "pin actions as owner/repo@<40-hex sha> # vX.Y.Z: " + "; ".join(offenders)
@@ -97,6 +104,7 @@ def test_dependabot_covers_pip_actions_npm_and_docker():
 
 
 # ── #328 ──────────────────────────────────────────────────────────────────────
+
 
 def test_python_version_file_names_the_supported_version():
     assert _text(ROOT / ".python-version").strip() == SUPPORTED_PYTHON
@@ -144,6 +152,7 @@ def test_the_locks_are_compiled_for_the_supported_version():
 
 # ── #327: Python locks ────────────────────────────────────────────────────────
 
+
 def _lock_entries(path: str) -> dict[str, tuple[str, int]]:
     """name -> (version, number of hashes)."""
     entries: dict[str, tuple[str, int]] = {}
@@ -188,7 +197,8 @@ def test_each_lock_satisfies_the_requirements_files_it_was_compiled_from(lock):
             version = entries[name][0]
             assert req.specifier.contains(version, prereleases=True), (
                 f"{lock} has {req.name}=={version}, which {source} ({req}) no longer allows: re-run "
-                "scripts/lock_requirements.sh")
+                "scripts/lock_requirements.sh"
+            )
 
 
 def test_a_package_has_the_same_version_in_every_lock():
@@ -232,10 +242,12 @@ def test_the_offline_bundle_downloads_and_installs_only_hashed_locks():
 
 # ── #327: JS lock, image digests, healthchecks ────────────────────────────────
 
+
 def test_the_frontend_has_one_lock_file():
     fe = ROOT / "csv-table-hub-main"
-    present = [n for n in ("package-lock.json", "bun.lock", "bun.lockb", "yarn.lock", "pnpm-lock.yaml")
-               if (fe / n).exists()]
+    present = [
+        n for n in ("package-lock.json", "bun.lock", "bun.lockb", "yarn.lock", "pnpm-lock.yaml") if (fe / n).exists()
+    ]
     assert present == ["package-lock.json"], present
 
 
@@ -276,6 +288,7 @@ def test_the_api_and_frontend_images_have_the_compose_healthcheck(image):
 
 
 # ── #329 ──────────────────────────────────────────────────────────────────────
+
 
 def test_a_ci_job_lints_type_checks_and_builds_the_frontend():
     job = _workflow(ROOT / ".github/workflows/quality-gate.yml")["jobs"]["frontend"]

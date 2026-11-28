@@ -4,6 +4,7 @@ Each test documents a specific failure mode that was found and fixed.
 Adding a test here prevents the same bug from silently re-appearing.
 No database required; all tests run offline.
 """
+
 import os
 import subprocess
 import sys
@@ -40,15 +41,17 @@ class RegressionBomHandling(unittest.TestCase):
     def test_bom_csv_is_accepted(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            csv_file  = tmp_path / "bom_input.csv"
+            csv_file = tmp_path / "bom_input.csv"
             valid_csv = tmp_path / "valid.csv"
-            skip_csv  = tmp_path / "skip.csv"
+            skip_csv = tmp_path / "skip.csv"
             csv_file.write_bytes(b"\xef\xbb\xbfid,name\n1,Alice\n2,Bob\n")
-            env = {**os.environ,
-                   "CSV_FILE":   str(csv_file),
-                   "VALID_CSV":  str(valid_csv),
-                   "SKIP_FILE":  str(skip_csv),
-                   "TABLE_NAME": "people"}
+            env = {
+                **os.environ,
+                "CSV_FILE": str(csv_file),
+                "VALID_CSV": str(valid_csv),
+                "SKIP_FILE": str(skip_csv),
+                "TABLE_NAME": "people",
+            }
             result = _run(env)
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = valid_csv.read_text(encoding="utf-8").strip().splitlines()
@@ -65,15 +68,17 @@ class RegressionCrlfLineEndings(unittest.TestCase):
     def test_crlf_csv_accepted(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            csv_file  = tmp_path / "crlf.csv"
+            csv_file = tmp_path / "crlf.csv"
             valid_csv = tmp_path / "valid.csv"
-            skip_csv  = tmp_path / "skip.csv"
+            skip_csv = tmp_path / "skip.csv"
             csv_file.write_bytes(b"id,name\r\n1,Alice\r\n2,Bob\r\n")
-            env = {**os.environ,
-                   "CSV_FILE":   str(csv_file),
-                   "VALID_CSV":  str(valid_csv),
-                   "SKIP_FILE":  str(skip_csv),
-                   "TABLE_NAME": "people"}
+            env = {
+                **os.environ,
+                "CSV_FILE": str(csv_file),
+                "VALID_CSV": str(valid_csv),
+                "SKIP_FILE": str(skip_csv),
+                "TABLE_NAME": "people",
+            }
             result = _run(env)
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = valid_csv.read_text(encoding="utf-8").strip().splitlines()
@@ -93,19 +98,20 @@ class RegressionHeaderOnlyCsv(unittest.TestCase):
     def test_header_only_exits_cleanly(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            csv_file  = tmp_path / "header_only.csv"
+            csv_file = tmp_path / "header_only.csv"
             valid_csv = tmp_path / "valid.csv"
-            skip_csv  = tmp_path / "skip.csv"
+            skip_csv = tmp_path / "skip.csv"
             csv_file.write_text("id,name\n", encoding="utf-8")
-            env = {**os.environ,
-                   "CSV_FILE":   str(csv_file),
-                   "VALID_CSV":  str(valid_csv),
-                   "SKIP_FILE":  str(skip_csv),
-                   "TABLE_NAME": "people"}
+            env = {
+                **os.environ,
+                "CSV_FILE": str(csv_file),
+                "VALID_CSV": str(valid_csv),
+                "SKIP_FILE": str(skip_csv),
+                "TABLE_NAME": "people",
+            }
             result = _run(env)
             self.assertEqual(result.returncode, 1)
-            self.assertNotIn("Traceback", result.stderr,
-                             "Unhandled exception leaked — must exit cleanly")
+            self.assertNotIn("Traceback", result.stderr, "Unhandled exception leaked — must exit cleanly")
             self.assertIn("No valid rows", result.stderr)
 
 
@@ -119,20 +125,22 @@ class RegressionSingleColumnCsv(unittest.TestCase):
     def test_single_column_valid_rows_pass(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            csv_file  = tmp_path / "single_col.csv"
+            csv_file = tmp_path / "single_col.csv"
             valid_csv = tmp_path / "valid.csv"
-            skip_csv  = tmp_path / "skip.csv"
+            skip_csv = tmp_path / "skip.csv"
             csv_file.write_text("name\nAlice\nBob\n", encoding="utf-8")
-            env = {**os.environ,
-                   "CSV_FILE":   str(csv_file),
-                   "VALID_CSV":  str(valid_csv),
-                   "SKIP_FILE":  str(skip_csv),
-                   "TABLE_NAME": "names"}
+            env = {
+                **os.environ,
+                "CSV_FILE": str(csv_file),
+                "VALID_CSV": str(valid_csv),
+                "SKIP_FILE": str(skip_csv),
+                "TABLE_NAME": "names",
+            }
             result = _run(env)
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = valid_csv.read_text(encoding="utf-8").strip().splitlines()
             self.assertIn("Alice", "\n".join(lines))
-            self.assertIn("Bob",   "\n".join(lines))
+            self.assertIn("Bob", "\n".join(lines))
 
 
 class RegressionNoTraceback(unittest.TestCase):
@@ -151,18 +159,19 @@ class RegressionNoTraceback(unittest.TestCase):
         )
 
     def test_missing_env_vars_no_traceback(self):
-        env = {k: v for k, v in os.environ.items()
-               if k not in ("CSV_FILE", "VALID_CSV", "SKIP_FILE")}
+        env = {k: v for k, v in os.environ.items() if k not in ("CSV_FILE", "VALID_CSV", "SKIP_FILE")}
         self._assert_no_traceback(env, "missing env vars")
 
     def test_nonexistent_file_no_traceback(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            env = {**os.environ,
-                   "CSV_FILE":   str(tmp_path / "does_not_exist.csv"),
-                   "VALID_CSV":  str(tmp_path / "valid.csv"),
-                   "SKIP_FILE":  str(tmp_path / "skip.csv"),
-                   "TABLE_NAME": "t"}
+            env = {
+                **os.environ,
+                "CSV_FILE": str(tmp_path / "does_not_exist.csv"),
+                "VALID_CSV": str(tmp_path / "valid.csv"),
+                "SKIP_FILE": str(tmp_path / "skip.csv"),
+                "TABLE_NAME": "t",
+            }
             self._assert_no_traceback(env, "nonexistent file")
 
     def test_invalid_utf8_no_traceback(self):
@@ -170,11 +179,13 @@ class RegressionNoTraceback(unittest.TestCase):
             tmp_path = Path(tmp)
             csv_file = tmp_path / "bad.csv"
             csv_file.write_bytes(b"id,name\n1,\xe9\n")
-            env = {**os.environ,
-                   "CSV_FILE":   str(csv_file),
-                   "VALID_CSV":  str(tmp_path / "valid.csv"),
-                   "SKIP_FILE":  str(tmp_path / "skip.csv"),
-                   "TABLE_NAME": "t"}
+            env = {
+                **os.environ,
+                "CSV_FILE": str(csv_file),
+                "VALID_CSV": str(tmp_path / "valid.csv"),
+                "SKIP_FILE": str(tmp_path / "skip.csv"),
+                "TABLE_NAME": "t",
+            }
             self._assert_no_traceback(env, "invalid UTF-8")
 
 

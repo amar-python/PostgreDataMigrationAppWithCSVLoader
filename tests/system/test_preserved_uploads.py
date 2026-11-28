@@ -54,8 +54,12 @@ class PreservedUploads(unittest.TestCase):
 
     def _source_rows(self, upload_id: str) -> list[list[str]]:
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("SELECT cells FROM {}.source_rows WHERE upload_id = %s ORDER BY row_number")
-                        .format(sql.Identifier(settings.UPLOADS_SCHEMA)), (int(upload_id),))
+            cur.execute(
+                sql.SQL("SELECT cells FROM {}.source_rows WHERE upload_id = %s ORDER BY row_number").format(
+                    sql.Identifier(settings.UPLOADS_SCHEMA)
+                ),
+                (int(upload_id),),
+            )
             return [r[0] for r in cur.fetchall()]
 
     def test_original_bytes_and_rows_are_kept_with_the_outcome(self):
@@ -63,14 +67,16 @@ class PreservedUploads(unittest.TestCase):
         res = self._upload(content)
         self.assertEqual(res["status"], "ok", res)
         row = self._upload_row(res["uploadId"])
-        self.assertEqual((row["status"], row["uploader"], row["total_rows"], row["imported_rows"]),
-                         ("imported", "anonymous", 2, 2))
+        self.assertEqual(
+            (row["status"], row["uploader"], row["total_rows"], row["imported_rows"]), ("imported", "anonymous", 2, 2)
+        )
         self.assertEqual(row["csv_file_id"], res["fileId"])
         original = self.client.get(f"/api/csv/uploads/{res['uploadId']}/original")
         self.assertEqual(original.content, content.encode("utf-8"))
         self.assertEqual(original.headers["x-content-sha256"], hashlib.sha256(content.encode()).hexdigest())
-        self.assertEqual(self._source_rows(res["uploadId"]),
-                         [["name", "note"], [self.tag, "a, b"], ["second", "line\nbreak"]])
+        self.assertEqual(
+            self._source_rows(res["uploadId"]), [["name", "note"], [self.tag, "a, b"], ["second", "line\nbreak"]]
+        )
         [listed] = [f for f in self.client.get("/api/csv/files").json() if f["file_name"] == self.name]
         self.assertEqual((listed["uploader"], listed["upload_id"]), ("anonymous", res["uploadId"]))
 
@@ -85,8 +91,8 @@ class PreservedUploads(unittest.TestCase):
     def test_failure_reasons_and_log_are_readable_from_another_session(self):
         """M3c (#107): the reasons rows failed live on the server, not only in the uploading browser."""
         res = self._upload(f"n,t\n1,{self.tag}\nx,{self.tag}\n", ["int8", "text"])
-        other = TestClient(app)   # a separate client with no state shared with the uploader; no
-        detail = other.get(f"/api/csv/uploads/{res['uploadId']}").json()   # lifespan, so the pool stays up
+        other = TestClient(app)  # a separate client with no state shared with the uploader; no
+        detail = other.get(f"/api/csv/uploads/{res['uploadId']}").json()  # lifespan, so the pool stays up
         self.assertEqual((detail["status"], detail["failedRows"]), ("partly_imported", 1))
         self.assertEqual(detail["rowErrors"], res["rowErrors"])
         self.assertEqual(detail["rowErrors"][0]["rowNumber"], 2)
@@ -103,16 +109,19 @@ class PreservedUploads(unittest.TestCase):
         first = self._upload(f"v\nold_{self.tag}\n")
         second = self._upload(f"v\nnew_{self.tag}\n", overwrite=True)
         self.assertEqual(second["status"], "ok", second)
-        self.assertEqual(self.client.get(f"/api/csv/uploads/{first['uploadId']}/original").content,
-                         f"v\nold_{self.tag}\n".encode())
+        self.assertEqual(
+            self.client.get(f"/api/csv/uploads/{first['uploadId']}/original").content, f"v\nold_{self.tag}\n".encode()
+        )
         self.assertEqual(self._source_rows(first["uploadId"]), [["v"], [f"old_{self.tag}"]])
 
     def test_preserved_tables_reject_update_and_delete(self):
         res = self._upload(f"v\n{self.tag}\n")
         uid = int(res["uploadId"])
         for table, column in (("uploads", "file_name"), ("upload_blobs", "content"), ("source_rows", "cells")):
-            for statement in (f"UPDATE {{}}.{table} SET {column} = {column} WHERE {'id' if table == 'uploads' else 'upload_id'} = %s",
-                              f"DELETE FROM {{}}.{table} WHERE {'id' if table == 'uploads' else 'upload_id'} = %s"):
+            for statement in (
+                f"UPDATE {{}}.{table} SET {column} = {column} WHERE {'id' if table == 'uploads' else 'upload_id'} = %s",
+                f"DELETE FROM {{}}.{table} WHERE {'id' if table == 'uploads' else 'upload_id'} = %s",
+            ):
                 with self.subTest(statement=statement), Conn() as conn, conn.cursor() as cur:
                     with self.assertRaises(psycopg2.errors.InsufficientPrivilege):
                         cur.execute(sql.SQL(statement).format(sql.Identifier(settings.UPLOADS_SCHEMA)), (uid,))

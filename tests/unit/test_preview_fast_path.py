@@ -17,12 +17,14 @@ from api.services.csv_parse import build_preview, parse_csv
 
 def reference_preview(text: str, sample_rows: int = 10, infer_rows: int = 200) -> dict:
     """The preview as it was before M7: parse everything, then slice."""
-    with patch.object(csv_parse, "_FAST_PREVIEW_CHARS", 10 ** 12):
+    with patch.object(csv_parse, "_FAST_PREVIEW_CHARS", 10**12):
         return build_preview(text, sample_rows, infer_rows)
 
 
 def big(rows: int, tail: str = "") -> str:
-    return "id,name,amount,when\n" + "".join(f"{i},Name {i},{i}.5,2026-01-{i % 28 + 1:02d}\n" for i in range(rows)) + tail
+    return (
+        "id,name,amount,when\n" + "".join(f"{i},Name {i},{i}.5,2026-01-{i % 28 + 1:02d}\n" for i in range(rows)) + tail
+    )
 
 
 @pytest.mark.unit
@@ -60,11 +62,14 @@ class FastPreview(unittest.TestCase):
         self.assertGreater(len(text), csv_parse._FAST_PREVIEW_CHARS)
         with patch.object(csv_parse, "parse_csv", wraps=parse_csv) as spy:
             self.assertEqual(self.assertSamePreview(text, exact_count=False)[0], 150)
-        self.assertIn(((text,), {}), [(c.args, c.kwargs) for c in spy.call_args_list],
-                      "the head ended in blank lines, so the whole file is parsed")
+        self.assertIn(
+            ((text,), {}),
+            [(c.args, c.kwargs) for c in spy.call_args_list],
+            "the head ended in blank lines, so the whole file is parsed",
+        )
 
     def test_a_head_that_ends_in_blank_lines_falls_back_to_the_full_parse(self):
-        text = big(5) + "\n" * 250_000 + big(10)[len("id,name,amount,when\n"):]
+        text = big(5) + "\n" * 250_000 + big(10)[len("id,name,amount,when\n") :]
         self.assertGreater(len(text), csv_parse._FAST_PREVIEW_CHARS)
         self.assertSamePreview(text, exact_count=False)
 

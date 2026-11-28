@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import uuid
 
+from conftest import PASSWORD, shell_sign_in, shell_sign_in_as
 from playwright.sync_api import expect
 from psycopg2 import sql
 
@@ -17,7 +18,6 @@ from api import db  # noqa: F401  (the stack fixture has opened the pool)
 from api.config import settings
 from api.db import Conn
 from api.services import accounts
-from conftest import PASSWORD, shell_sign_in, shell_sign_in_as
 
 NEW_PASSWORD = "a brand new passphrase 42"
 
@@ -119,8 +119,10 @@ def test_changing_your_own_password_works_through_the_real_api_and_the_old_one_s
         _signed_in_as(page, "uploader")
     finally:
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("DELETE FROM {}.users WHERE username = %s").format(
-                sql.Identifier(settings.CONTROL_SCHEMA)), (username,))
+            cur.execute(
+                sql.SQL("DELETE FROM {}.users WHERE username = %s").format(sql.Identifier(settings.CONTROL_SCHEMA)),
+                (username,),
+            )
             conn.commit()
 
 
@@ -148,9 +150,13 @@ def test_a_session_ended_on_the_server_sends_the_next_click_back_to_sign_in(page
     page.get_by_role("heading", name="Change password").wait_for()
 
     with Conn() as conn, conn.cursor() as cur:  # as the API does when a password is reset: revoke the user's sessions
-        cur.execute(sql.SQL("UPDATE {c}.sessions SET revoked_at = now() WHERE user_id = "
-                            "(SELECT id FROM {c}.users WHERE username = %s)").format(
-                                c=sql.Identifier(settings.CONTROL_SCHEMA)), (a.username,))
+        cur.execute(
+            sql.SQL(
+                "UPDATE {c}.sessions SET revoked_at = now() WHERE user_id = "
+                "(SELECT id FROM {c}.users WHERE username = %s)"
+            ).format(c=sql.Identifier(settings.CONTROL_SCHEMA)),
+            (a.username,),
+        )
         conn.commit()
 
     page.get_by_label("Current password").fill(PASSWORD)

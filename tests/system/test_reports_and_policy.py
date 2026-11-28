@@ -97,8 +97,9 @@ class _Base(unittest.TestCase):
         migrate_tenant(cls.slug)
         cls.auth = {}
         for who in roles:
-            res = cls.client.post("/api/auth/login", json={
-                "tenant": cls.slug, "username": f"{cls.slug}_{who}", "password": _PW})
+            res = cls.client.post(
+                "/api/auth/login", json={"tenant": cls.slug, "username": f"{cls.slug}_{who}", "password": _PW}
+            )
             assert res.status_code == 200, res.text
             cls.auth[who] = {"Authorization": f"Bearer {res.json()['token']}"}
 
@@ -117,8 +118,11 @@ class _Base(unittest.TestCase):
         self.tag = uuid.uuid4().hex[:8]
 
     def upload(self, who, name, content, **extra):
-        res = self.client.post("/api/csv/upload", headers=self.auth[who],
-                               json={"fileName": f"{self.tag}_{name}", "content": content, **extra})
+        res = self.client.post(
+            "/api/csv/upload",
+            headers=self.auth[who],
+            json={"fileName": f"{self.tag}_{name}", "content": content, **extra},
+        )
         self.assertEqual(res.status_code, 200, res.text)
         return res.json()
 
@@ -153,8 +157,9 @@ class FilteredAuditReport(_Base):
         now = datetime.now(timezone.utc)
         self.assertEqual(self.events(**{"from": (now + timedelta(hours=1)).isoformat()})["total"], 0)
         self.assertEqual(self.events(**{"to": (now - timedelta(hours=1)).isoformat()})["total"], 0)
-        everything = self.events(**{"from": (now - timedelta(hours=1)).isoformat(),
-                                    "to": (now + timedelta(hours=1)).isoformat()})["total"]
+        everything = self.events(
+            **{"from": (now - timedelta(hours=1)).isoformat(), "to": (now + timedelta(hours=1)).isoformat()}
+        )["total"]
         self.assertEqual(everything, 3)
         self.assertEqual(self.events(**{"from": "2020-01-01"})["total"], 3)
 
@@ -179,23 +184,39 @@ class FilteredAuditReport(_Base):
         self.assertEqual(no_session["total"], 0)
 
     def test_csv_export_matches_the_filter_and_carries_the_marking(self):
-        res = self.client.get("/api/audit/events", headers=self.auth["au"],
-                              params={"file": self.tag, "action": "upload", "format": "csv"})
+        res = self.client.get(
+            "/api/audit/events", headers=self.auth["au"], params={"file": self.tag, "action": "upload", "format": "csv"}
+        )
         self.assertEqual((res.status_code, res.headers["content-type"].split(";")[0]), (200, "text/csv"))
         self.assertEqual(res.headers["x-data-classification"], settings.DATA_CLASSIFICATION)
         self.assertEqual(res.headers["x-total-count"], "2")
         rows = list(csv.DictReader(io.StringIO(res.text)))
         self.assertEqual([r["action"] for r in rows], ["upload", "upload"])
-        self.assertEqual(list(rows[0]), ["id", "performed_at", "actor", "action", "file_id", "file_name", "table_name",
-                                         "mode", "before_value", "after_value"])
+        self.assertEqual(
+            list(rows[0]),
+            [
+                "id",
+                "performed_at",
+                "actor",
+                "action",
+                "file_id",
+                "file_name",
+                "table_name",
+                "mode",
+                "before_value",
+                "after_value",
+            ],
+        )
 
     def test_csv_export_neutralises_formulas_in_user_supplied_names(self):
         name = f'={self.tag}_HYPERLINK("http://example.invalid")'
-        res = self.client.post("/api/csv/upload", headers=self.auth["ad"], json={
-            "fileName": name, "content": f"k\n{self.tag}3\n"})
+        res = self.client.post(
+            "/api/csv/upload", headers=self.auth["ad"], json={"fileName": name, "content": f"k\n{self.tag}3\n"}
+        )
         self.assertEqual(res.json()["status"], "ok", res.text)
-        report = self.client.get("/api/audit/events", headers=self.auth["au"],
-                                 params={"file": f"{self.tag}_HYPERLINK", "format": "csv"})
+        report = self.client.get(
+            "/api/audit/events", headers=self.auth["au"], params={"file": f"{self.tag}_HYPERLINK", "format": "csv"}
+        )
         [row] = list(csv.DictReader(io.StringIO(report.text)))
         self.assertEqual(row["file_name"], "'" + name)
 
@@ -204,9 +225,9 @@ class FilteredAuditReport(_Base):
 class UploadFailureReasons(_Base):
     def test_every_outcome_can_be_filtered_and_failures_say_why(self):
         self.upload("up", "good.csv", f"k\n{self.tag}\n")
-        self.upload("up", "dup.csv", f"k\n{self.tag}\n")                                    # duplicate
-        self.upload("up", "bad.csv", f"n\nx{self.tag}\n", types=["int8"])                   # every row fails
-        self.upload("ad", "empty.csv", "only,a,header\n")                                   # rejected
+        self.upload("up", "dup.csv", f"k\n{self.tag}\n")  # duplicate
+        self.upload("up", "bad.csv", f"n\nx{self.tag}\n", types=["int8"])  # every row fails
+        self.upload("ad", "empty.csv", "only,a,header\n")  # rejected
         res = self.client.get("/api/csv/uploads", headers=self.auth["au"], params={"file": self.tag})
         self.assertEqual(res.status_code, 200, res.text)
         by_status = {u["status"]: u for u in res.json()}
@@ -219,8 +240,10 @@ class UploadFailureReasons(_Base):
     def test_filters_combine(self):
         self.upload("up", "a.csv", f"k\n{self.tag}a\n")
         self.upload("ad", "b.csv", f"k\n{self.tag}b\n")
-        listing = lambda **p: self.client.get("/api/csv/uploads", headers=self.auth["au"],  # noqa: E731
-                                              params={"file": self.tag, **p}).json()
+
+        def listing(**p):
+            return self.client.get("/api/csv/uploads", headers=self.auth["au"], params={"file": self.tag, **p}).json()
+
         self.assertEqual(len(listing()), 2)
         self.assertEqual([u["uploader"] for u in listing(uploader=f"{self.slug}_ad")], [f"{self.slug}_ad"])
         self.assertEqual(len(listing(status="imported")), 2)
@@ -228,8 +251,9 @@ class UploadFailureReasons(_Base):
         future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
         self.assertEqual(listing(**{"from": future}), [])
         self.assertEqual(len(listing(**{"to": future})), 2)
-        self.assertEqual(self.client.get("/api/csv/uploads", headers=self.auth["au"],
-                                         params={"status": "bogus"}).status_code, 422)
+        self.assertEqual(
+            self.client.get("/api/csv/uploads", headers=self.auth["au"], params={"status": "bogus"}).status_code, 422
+        )
 
 
 @pytest.mark.integration
@@ -259,11 +283,15 @@ class ClassificationMarking(_Base):
                 self.assertEqual(res.headers[policy.HEADER], "OFFICIAL: Sensitive")
 
     def test_the_marking_follows_the_deployment_setting(self):
-        with patch.object(settings, "DATA_CLASSIFICATION", "OFFICIAL"), patch.object(settings, "AUDIT_RETENTION_YEARS", 10):
+        with (
+            patch.object(settings, "DATA_CLASSIFICATION", "OFFICIAL"),
+            patch.object(settings, "AUDIT_RETENTION_YEARS", 10),
+        ):
             res = self.client.get("/api/policy", headers=self.auth["up"])
             self.assertEqual((res.headers[policy.HEADER], res.json()["auditRetentionYears"]), ("OFFICIAL", 10))
-            self.assertEqual(self.client.get("/api/audit/events", headers=self.auth["au"]).json()["classification"],
-                             "OFFICIAL")
+            self.assertEqual(
+                self.client.get("/api/audit/events", headers=self.auth["au"]).json()["classification"], "OFFICIAL"
+            )
 
     def test_a_browser_can_read_the_marking(self):
         res = self.client.get("/api/policy", headers={"Origin": "http://localhost:5173"})

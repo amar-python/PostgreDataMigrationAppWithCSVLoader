@@ -1,6 +1,7 @@
 """API unit tests — no database required.
 Database-backed tests live in test_api_integration.py.
 """
+
 from __future__ import annotations
 
 import unittest
@@ -12,11 +13,13 @@ from api.main import app
 
 client = TestClient(app)
 
-_HELP = ("Start PostgreSQL and ensure api/ can reach it. Most often this means "
-         "PGPASSWORD is not set in this shell:\n"
-         "    PowerShell:  $env:PGPASSWORD = '<password>'\n"
-         "    bash:        export PGPASSWORD='<password>'\n"
-         "Defaults come from api/config.py; see scripts/start-api.ps1.")
+_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it. Most often this means "
+    "PGPASSWORD is not set in this shell:\n"
+    "    PowerShell:  $env:PGPASSWORD = '<password>'\n"
+    "    bash:        export PGPASSWORD='<password>'\n"
+    "Defaults come from api/config.py; see scripts/start-api.ps1."
+)
 
 SMALL_CSV = "col_a,col_b\n1,2\n3,4\n"
 
@@ -44,8 +47,7 @@ class UnitCsvParse(unittest.TestCase):
         from api.services.csv_parse import sanitize_columns
 
         out = sanitize_columns(["foo", "foo", "foo_2"])
-        self.assertEqual(len(out), len(set(out)),
-                         f"BUG-036 regression: collision in {out}")
+        self.assertEqual(len(out), len(set(out)), f"BUG-036 regression: collision in {out}")
         # First occurrence keeps its name; later ones get bumped past
         # anything already assigned.
         self.assertEqual(out[0], "foo")
@@ -98,26 +100,23 @@ class RequestValidation(unittest.TestCase):
         self.assertEqual(r.status_code, 422)
 
     def test_preview_rejects_overlong_filename(self):
-        r = client.post("/api/csv/preview",
-                        json={"fileName": "x" * 256, "content": SMALL_CSV})
+        r = client.post("/api/csv/preview", json={"fileName": "x" * 256, "content": SMALL_CSV})
         self.assertEqual(r.status_code, 422)
 
     def test_upload_rejects_unknown_mode(self):
-        r = client.post("/api/csv/upload", json={
-            "fileName": "a.csv", "content": SMALL_CSV, "mode": "sideways"})
+        r = client.post("/api/csv/upload", json={"fileName": "a.csv", "content": SMALL_CSV, "mode": "sideways"})
         self.assertEqual(r.status_code, 422)
 
     def test_upload_te_mode_requires_target_table(self):
-        r = client.post("/api/csv/upload", json={
-            "fileName": "a.csv", "content": SMALL_CSV, "mode": "te"})
+        r = client.post("/api/csv/upload", json={"fileName": "a.csv", "content": SMALL_CSV, "mode": "te"})
         self.assertEqual(r.status_code, 422)
         self.assertIn("targetTable", r.text)
 
     def test_oversized_upload_is_rejected(self):
         from api.config import settings
+
         oversized = "x" * (settings.MAX_UPLOAD_BYTES + 1)
-        r = client.post("/api/csv/preview",
-                        json={"fileName": "big.csv", "content": oversized})
+        r = client.post("/api/csv/preview", json={"fileName": "big.csv", "content": oversized})
         self.assertEqual(r.status_code, 413)
 
 
@@ -130,8 +129,7 @@ class TableNameGuards(unittest.TestCase):
         for name in ("organisations", "personnel", "pg_catalog", "users"):
             with self.subTest(table=name):
                 r = client.get(f"/api/csv/tables/{name}/rows")
-                self.assertEqual(r.status_code, 422,
-                                 f"non-upload table accepted: {name}")
+                self.assertEqual(r.status_code, 422, f"non-upload table accepted: {name}")
 
     def test_overlong_names_are_rejected(self):
         r = client.get(f"/api/csv/tables/csv_{'x' * 70}/rows")
@@ -165,5 +163,4 @@ class TableNameGuards(unittest.TestCase):
                 is_execute = isinstance(func, ast.Attribute) and func.attr == "execute"
                 if is_execute and node.args and isinstance(node.args[0], ast.JoinedStr):
                     offenders.append(f"{path.name}:{node.lineno}")
-        self.assertEqual(offenders, [],
-                         f"execute() called with an f-string at {offenders}")
+        self.assertEqual(offenders, [], f"execute() called with an f-string at {offenders}")

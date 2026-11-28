@@ -5,9 +5,11 @@ before each test and restores them after, preventing the common bug class
 where one test sets CSV_FILE / PGPASSWORD / PATH and leaks that value into
 an unrelated downstream test.
 """
+
 import os
 import sys
 from pathlib import Path
+
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -29,7 +31,6 @@ _settings.API_ALLOW_ANONYMOUS = True
 # Disable both budgets for the session — the same stance taken above for auth —
 # and let tests that specifically exercise limiting set their own budgets.
 from api.ratelimit import limiter as _limiter  # noqa: E402
-
 
 _settings.RATE_LIMIT_READS_PER_MINUTE = 0
 _settings.RATE_LIMIT_WRITES_PER_MINUTE = 0
@@ -53,8 +54,10 @@ from psycopg2 import sql  # noqa: E402
 
 from api.db import Conn  # noqa: E402
 
-_START_HELP = ("Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/PGPASSWORD/"
-               "PGDATABASE). See scripts/start-api.ps1.")
+_START_HELP = (
+    "Start PostgreSQL and ensure api/ can reach it (PGHOST/PGPORT/PGUSER/PGPASSWORD/"
+    "PGDATABASE). See scripts/start-api.ps1."
+)
 
 
 @pytest.fixture(scope="class")
@@ -107,16 +110,24 @@ def te_org_cleanup(request):
     yield names
     if names:
         with Conn() as conn, conn.cursor() as cur:
-            cur.execute(sql.SQL("DELETE FROM {}.organisations WHERE name = ANY(%s)").format(
-                sql.Identifier(_settings.TE_SCHEMA)), (names,))
+            cur.execute(
+                sql.SQL("DELETE FROM {}.organisations WHERE name = ANY(%s)").format(
+                    sql.Identifier(_settings.TE_SCHEMA)
+                ),
+                (names,),
+            )
             conn.commit()
 
 
 # M7 (#111, BR-37): `pytest --block-egress` (or BLOCK_EGRESS=1) refuses any in-process connection that isn't
 # to this machine, so a test run proves the application makes no outbound calls. See tests/egress_guard.py.
 def pytest_addoption(parser):
-    parser.addoption("--block-egress", action="store_true", default=False,
-                     help="refuse network connections to anything but this machine, and fail if one is attempted")
+    parser.addoption(
+        "--block-egress",
+        action="store_true",
+        default=False,
+        help="refuse network connections to anything but this machine, and fail if one is attempted",
+    )
 
 
 def _egress_blocked(config) -> bool:
@@ -126,6 +137,7 @@ def _egress_blocked(config) -> bool:
 def pytest_configure(config):
     if _egress_blocked(config):
         from tests import egress_guard
+
         egress_guard.check_local_database(_settings.PG_HOST)
         egress_guard.install()
 
@@ -138,10 +150,11 @@ def pytest_report_header(config):
 def pytest_sessionfinish(session, exitstatus):
     if _egress_blocked(session.config):
         from tests import egress_guard
+
         egress_guard.uninstall()
         if egress_guard.attempts:
             print("\nEGRESS ATTEMPTED (blocked): " + "; ".join(sorted(set(egress_guard.attempts))))
-            session.exitstatus = 1   # a swallowed EgressBlocked must still fail the run
+            session.exitstatus = 1  # a swallowed EgressBlocked must still fail the run
 
 
 # Folder -> marker (#167). The folder a test lives in is its category, so `-m system`,

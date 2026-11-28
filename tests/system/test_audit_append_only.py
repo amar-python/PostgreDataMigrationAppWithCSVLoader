@@ -13,9 +13,9 @@ from pathlib import Path
 
 import psycopg2
 import pytest
-from alembic import command
 from alembic.config import Config
 
+from alembic import command
 from api.config import settings
 from api.services.audit import acting_as, verify_chain, write_audit
 
@@ -24,8 +24,13 @@ _ALEMBIC_INI = str(Path(__file__).resolve().parents[2] / "alembic.ini")
 
 def _connect():
     try:
-        return psycopg2.connect(host=settings.PG_HOST, port=settings.PG_PORT, user=settings.PG_USER,
-                                password=settings.PG_PASSWORD.get_secret_value(), dbname=settings.PG_DATABASE)
+        return psycopg2.connect(
+            host=settings.PG_HOST,
+            port=settings.PG_PORT,
+            user=settings.PG_USER,
+            password=settings.PG_PASSWORD.get_secret_value(),
+            dbname=settings.PG_DATABASE,
+        )
     except psycopg2.OperationalError as exc:
         raise AssertionError(f"Database unreachable: {exc}") from None
 
@@ -36,13 +41,13 @@ class AppendOnlyAudit(unittest.TestCase):
         self.original = settings.UPLOADS_SCHEMA
         settings.UPLOADS_SCHEMA = self.schema = f"audit_test_{uuid.uuid4().hex[:10]}"
         self.cfg = Config(_ALEMBIC_INI)
-        self.cfg.attributes["scope"] = "tenant"   # per-tenant tables only; leave the control schema alone
+        self.cfg.attributes["scope"] = "tenant"  # per-tenant tables only; leave the control schema alone
         self.conn = _connect()
 
     def tearDown(self):
         self.conn.rollback()
         with self.conn.cursor() as cur:
-            cur.execute(f'DROP SCHEMA IF EXISTS "{self.schema}" CASCADE')   # DROP isn't blocked
+            cur.execute(f'DROP SCHEMA IF EXISTS "{self.schema}" CASCADE')  # DROP isn't blocked
         self.conn.commit()
         self.conn.close()
         settings.UPLOADS_SCHEMA = self.original
@@ -140,7 +145,9 @@ class AppendOnlyAudit(unittest.TestCase):
         command.downgrade(self.cfg, "0005")
         self._sql("UPDATE {t} SET file_name = 'allowed again'")
         with self.conn.cursor() as cur:
-            cur.execute("SELECT count(*) FROM information_schema.columns "
-                        "WHERE table_schema = %s AND table_name = 'audit_log' AND column_name = 'row_hash'",
-                        (self.schema,))
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = 'audit_log' AND column_name = 'row_hash'",
+                (self.schema,),
+            )
             self.assertEqual(cur.fetchone()[0], 0)
