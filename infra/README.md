@@ -11,6 +11,29 @@ Deployment artefacts for the migration runner and the Azure environment stacks.
 | `terraform-test/`, `terraform-staging/` | Test and staging stacks. Code only — the one-time Azure setup in #31 has not been done, so these cannot be applied yet. |
 | `cloudshell_setup.sh` | The one-time setup for those two stacks (Terraform state storage, optional GitHub Actions identity), run in Azure Cloud Shell because `az` and `terraform` cannot run on the dev machine (#32, #34). See `docs/CLOUD_SHELL_SETUP.md`. |
 | `azure-portal-walkthrough.md` | Click-through for the portal steps. |
+| `.tflint.hcl`, `.checkov.baseline` | Configuration for the Terraform checks below (#335). |
+
+## Terraform checks (#335)
+
+`.github/workflows/terraform.yml` runs `scripts/terraform_check.sh` on every pull request and push to main. For every
+directory here that holds a `.tf` file it runs `terraform fmt -check`, `terraform validate` (after
+`init -backend=false`, so no Azure login and no state), `tflint` with `.tflint.hcl`, and `checkov`. Tool versions and
+download checksums are pinned in the workflow.
+
+To run it locally, put `terraform`, `tflint` and `checkov` on `PATH` (the versions in the workflow) and run
+`bash scripts/terraform_check.sh`. `terraform fmt -recursive infra` fixes the layout.
+
+**checkov baseline.** `.checkov.baseline` lists the findings that existed when the check was added (checkov 3.4.11,
+28 Nov 2026: 71 failed checks on 29 resources; dev 28, test 13, staging 13, prod 17). They are not accepted risks: they are waiting for triage under
+#335. checkov fails on anything not in the baseline, so a new insecure setting fails the job. After fixing or
+formally accepting findings, regenerate the baseline and review its diff in the pull request:
+
+```bash
+checkov -d infra --framework terraform --create-baseline --skip-download
+```
+
+Regenerate only to remove findings, never to make a new one pass: a finding added by a change is fixed, or skipped
+in the resource with a `#checkov:skip=<ID>: <reason>` comment that a reviewer can see.
 
 ## Never let a credential into an image layer
 
