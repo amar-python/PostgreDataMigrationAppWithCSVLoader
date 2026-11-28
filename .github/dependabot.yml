@@ -9,6 +9,7 @@ updates:
       - "/"
       - "/api"
       - "/streamlit_app"
+      - "/csv_loader"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
@@ -40,6 +41,7 @@ updates:
     directories:
       - "/container"
       - "/infra"
+      - "/csv_loader"
     ignore:
       # Python's version is a decision (DECISIONS/2026-11-24-one-python-version.md), changed with CI and the locks.
       - dependency-name: "python"

@@ -13,6 +13,7 @@ No database or network needed: these read the files.
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -78,10 +79,21 @@ def test_dependabot_covers_pip_actions_npm_and_docker():
     dirs: dict[str, set[str]] = {}
     for u in updates:
         dirs.setdefault(u["package-ecosystem"], set()).update(u.get("directories") or [u["directory"]])
-    assert "/" in dirs.get("pip", set())
     assert "/" in dirs.get("github-actions", set())
-    assert "/csv-table-hub-main" in dirs.get("npm", set())
-    assert {"/container", "/infra"} <= dirs.get("docker", set())
+    # Every directory holding a manifest is watched, found from the tree rather than listed here: a hand-kept list
+    # missed csv_loader/ (requirements.txt and a Dockerfile) when that tool was imported.
+    tracked = [ROOT / p for p in subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True,
+                                                check=True).stdout.splitlines()]
+    wanted = {
+        "pip": [p for p in tracked if re.fullmatch(r"requirements[\w.-]*\.txt", p.name)],
+        "npm": [p for p in tracked if p.name == "package.json"],
+        "docker": [p for p in tracked if p.name.endswith("Dockerfile")],
+    }
+    for ecosystem, manifests in wanted.items():
+        assert manifests, f"no {ecosystem} manifests found: the check would pass vacuously"
+        need = {"/" + d if (d := p.parent.relative_to(ROOT).as_posix()) != "." else "/" for p in manifests}
+        missing = need - dirs.get(ecosystem, set())
+        assert not missing, f"{ecosystem} manifests that Dependabot does not watch: {sorted(missing)}"
 
 
 # ── #328 ──────────────────────────────────────────────────────────────────────
