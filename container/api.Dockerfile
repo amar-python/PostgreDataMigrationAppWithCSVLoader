@@ -12,11 +12,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# Debian's security update for the package the image scan flagged (#326): zlib1g. The base image
-# is rebuilt only now and then; the fix is in Debian's archive sooner. Only the named package is
+# Debian's security update for the packages the image scan flagged (#326): zlib1g and libzstd1. The base image
+# is rebuilt only now and then; the fix is in Debian's archive sooner. Only the named packages are
 # upgraded, and the line does nothing once the base image carries the fix.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends --only-upgrade zlib1g \
+ && apt-get install -y --no-install-recommends --only-upgrade zlib1g libzstd1 \
  && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --system --uid 10001 --create-home --home-dir /home/app app

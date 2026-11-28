@@ -32,13 +32,13 @@ RUN set -eux; \
 
 FROM postgres:16@sha256:3950ad7c3148ca2175ef1b6c36c9efbf78957ae8fbe8b3a5d7c35af50500382f
 
-# Debian's security updates for the packages the image scan flagged (#326): zlib1g and the
+# Debian's security updates for the packages the image scan flagged (#326): zlib1g, zstd and the
 # Kerberos libraries. The base image is rebuilt only now and then; the fixes are in Debian's
 # archive sooner. Only the named packages are upgraded (a blanket upgrade could move PostgreSQL
 # itself), and the line does nothing once the base image carries the fixes.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends --only-upgrade \
-      zlib1g libgssapi-krb5-2 libkrb5-3 libk5crypto3 libkrb5support0 \
+      zlib1g libzstd1 zstd libgssapi-krb5-2 libkrb5-3 libk5crypto3 libkrb5support0 \
  && rm -rf /var/lib/apt/lists/*
 
 # The rebuilt gosu replaces the official one at the same path (docker-entrypoint.sh calls it
