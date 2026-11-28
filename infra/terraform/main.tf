@@ -27,6 +27,10 @@ terraform {
 }
 
 provider "azurerm" {
+  # null (the default) leaves the provider reading ARM_SUBSCRIPTION_ID, as before. tflint found the variable was
+  # declared and documented but never used (#335).
+  subscription_id = var.subscription_id
+
   features {
     key_vault {
       purge_soft_delete_on_destroy    = true
@@ -91,9 +95,9 @@ resource "azurerm_storage_account" "pg_storage" {
 # The persistent volume for the PostgreSQL Container App. Database files
 # live here. Required by the pg Container App's volume mount.
 resource "azurerm_storage_share" "pg_data" {
-  name                 = "pgdata"
-  storage_account_id   = azurerm_storage_account.pg_storage.id
-  quota                = 50 # GB
+  name               = "pgdata"
+  storage_account_id = azurerm_storage_account.pg_storage.id
+  quota              = 50 # GB
 }
 
 # --- Storage for CSV input + run reports ---------------------------------
@@ -136,11 +140,11 @@ resource "azurerm_key_vault" "kv" {
 }
 
 resource "random_password" "pg_password" {
-  length      = 24
-  special     = true
-  min_lower   = 2
-  min_upper   = 2
-  min_numeric = 2
+  length           = 24
+  special          = true
+  min_lower        = 2
+  min_upper        = 2
+  min_numeric      = 2
   override_special = "!@#$%^&*()-_=+"
 }
 

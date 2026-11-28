@@ -1,0 +1,72 @@
+name: Terraform checks
+
+# #335 (SE-14): nothing checked infra/ until someone ran `terraform plan` by hand. scripts/terraform_check.sh runs
+# fmt -check, validate (init -backend=false: no Azure login, real state never read), tflint and checkov on every
+# root it finds under infra/. checkov fails on any finding not in infra/.checkov.baseline (the findings that existed
+# when this was added, triaged under #335).
+#
+# No path filter: the job takes about a minute, and a filtered workflow would leave a required check pending on
+# pull requests that do not touch infra/. Not a required check yet: that is branch protection (#301).
+# tests/unit/test_terraform_checks.py keeps it honest (pinned and verified tools, every root, no `|| true`).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  terraform:
+    name: terraform (fmt, validate, tflint, checkov)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Bump a version and its SHA-256 together, from the release's published checksums file.
+      TERRAFORM_VERSION: "1.17.2"
+      TERRAFORM_SHA256: e6f16b2f0b137ee5729caa8c4e79a3bae4ee261acd198a1fcfa8584a6296605b
+      TFLINT_VERSION: "0.66.0"
+      TFLINT_SHA256: 22be11cadc25cd02401e94c0ccc91aa63467debb8485c2a755d98f4c0a9d1e2e
+      CHECKOV_VERSION: "3.4.11"
+      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.tf-plugin-cache
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version-file: .python-version
+
+      - name: Install Terraform and tflint (checksums verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/bin" "$TF_PLUGIN_CACHE_DIR"
+          cd "$RUNNER_TEMP"
+          curl -sSfLo terraform.zip \
+            "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+          echo "${TERRAFORM_SHA256}  terraform.zip" | sha256sum -c -
+          curl -sSfLo tflint.zip \
+            "https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/tflint_linux_amd64.zip"
+          echo "${TFLINT_SHA256}  tflint.zip" | sha256sum -c -
+          unzip -oq terraform.zip terraform -d "$HOME/bin"
+          unzip -oq tflint.zip tflint -d "$HOME/bin"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Install checkov
+        run: pip install checkov==${CHECKOV_VERSION}
+
+      - name: Show the tool versions
+        run: |
+          terraform version
+          tflint --version
+          checkov --version
+
+      - name: Run the Terraform checks
+        run: bash scripts/terraform_check.sh
