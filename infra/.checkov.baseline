@@ -1,0 +1,240 @@
+{
+    "failed_checks": [
+        {
+            "file": "/terraform-prod/main.tf",
+            "findings": [
+                {
+                    "resource": "azurerm_container_registry.acr",
+                    "check_ids": [
+                        "CKV_AZURE_164",
+                        "CKV_AZURE_165",
+                        "CKV_AZURE_166",
+                        "CKV_AZURE_233",
+                        "CKV_AZURE_237"
+                    ]
+                },
+                {
+                    "resource": "azurerm_key_vault.kv",
+                    "check_ids": [
+                        "CKV_AZURE_109"
+                    ]
+                },
+                {
+                    "resource": "azurerm_key_vault_secret.app_password",
+                    "check_ids": [
+                        "CKV_AZURE_114",
+                        "CKV_AZURE_41"
+                    ]
+                },
+                {
+                    "resource": "azurerm_key_vault_secret.pg_password",
+                    "check_ids": [
+                        "CKV_AZURE_114",
+                        "CKV_AZURE_41"
+                    ]
+                },
+                {
+                    "resource": "azurerm_key_vault_secret.runtime_password",
+                    "check_ids": [
+                        "CKV_AZURE_114",
+                        "CKV_AZURE_41"
+                    ]
+                },
+                {
+                    "resource": "azurerm_postgresql_flexible_server.pg",
+                    "check_ids": [
+                        "CKV2_AZURE_57",
+                        "CKV_AZURE_136"
+                    ]
+                },
+                {
+                    "resource": "azurerm_subnet.cae",
+                    "check_ids": [
+                        "CKV2_AZURE_31"
+                    ]
+                },
+                {
+                    "resource": "azurerm_subnet.endpoints",
+                    "check_ids": [
+                        "CKV2_AZURE_31"
+                    ]
+                },
+                {
+                    "resource": "azurerm_subnet.pg",
+                    "check_ids": [
+                        "CKV2_AZURE_31"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/terraform-staging/main.tf",
+            "findings": [
+                {
+                    "resource": "azurerm_container_registry.acr",
+                    "check_ids": [
+                        "CKV_AZURE_164",
+                        "CKV_AZURE_165",
+                        "CKV_AZURE_166",
+                        "CKV_AZURE_233",
+                        "CKV_AZURE_237"
+                    ]
+                },
+                {
+                    "resource": "azurerm_key_vault.kv",
+                    "check_ids": [
+                        "CKV_AZURE_109"
+                    ]
+                },
+                {
+                    "resource": "azurerm_key_vault_secret.pg_password",
+                    "check_ids": [
+                        "CKV_AZURE_114",
+                        "CKV_AZURE_41"
+                    ]
+                },
+                {
+                    "resource": "azurerm_postgresql_flexible_server.pg",
+                    "check_ids": [
+                        "CKV2_AZURE_57",
+                        "CKV_AZURE_136"
+                    ]
+                },
+                {
+                    "resource": "azurerm_subnet.cae",
+                    "check_ids": [
+                        "CKV2_AZURE_31"
+                    ]
+                },
+                {
+                    "resource": "azurerm_subnet.endpoints",
+                    "check_ids": [
+                        "CKV2_AZURE_31"
+                    ]
+                },
+                {
+                    "resource": "azurerm_subnet.pg",
+                    "check_ids": [
+                        "CKV2_AZURE_31"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/terraform-test/main.tf",
+            "findings": [
+                {
+                    "resource": "azurerm_container_registry.acr",
+                    "check_ids": [
+                        "CKV_AZURE_164",
+                        "CKV_AZURE_165",
+                        "CKV_AZURE_166",
+                        "CKV_AZURE_233",
+                        "CKV_AZURE_237"
+                    ]
+                },
+                {
+                    "resource": "azurerm_key_vault.kv",
+                    "check_ids": [
+                        "CKV_AZURE_109"
+                    ]
+                },
+                {
+                    "resource": "azurerm_key_vault_secret.pg_password",
+                    "check_ids": [
+                        "CKV_AZURE_114",
+                        "CKV_AZURE_41"
+                    ]
+                },
+                {
+                    "resource": "azurerm_postgresql_flexible_server.pg",
+                    "check_ids": [
+                        "CKV2_AZURE_57",
+                        "CKV_AZURE_136"
+                    ]
+                },
+                {
+                    "resource": "azurerm_subnet.cae",
+                    "check_ids": [
+                        "CKV2_AZURE_31"
+                    ]
+                },
+                {
+                    "resource": "azurerm_subnet.endpoints",
+                    "check_ids": [
+                        "CKV2_AZURE_31"
+                    ]
+                },
+                {
+                    "resource": "azurerm_subnet.pg",
+                    "check_ids": [
+                        "CKV2_AZURE_31"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/terraform/main.tf",
+            "findings": [
+                {
+                    "resource": "azurerm_container_registry.acr",
+                    "check_ids": [
+                        "CKV_AZURE_139",
+                        "CKV_AZURE_163",
+                        "CKV_AZURE_164",
+                        "CKV_AZURE_165",
+                        "CKV_AZURE_166",
+                        "CKV_AZURE_167",
+                        "CKV_AZURE_233",
+                        "CKV_AZURE_237"
+                    ]
+                },
+                {
+                    "resource": "azurerm_key_vault.kv",
+                    "check_ids": [
+                        "CKV2_AZURE_32",
+                        "CKV_AZURE_109",
+                        "CKV_AZURE_110",
+                        "CKV_AZURE_189",
+                        "CKV_AZURE_42"
+                    ]
+                },
+                {
+                    "resource": "azurerm_key_vault_secret.pg_password",
+                    "check_ids": [
+                        "CKV_AZURE_114",
+                        "CKV_AZURE_41"
+                    ]
+                },
+                {
+                    "resource": "azurerm_storage_account.pg_storage",
+                    "check_ids": [
+                        "CKV2_AZURE_1",
+                        "CKV2_AZURE_33",
+                        "CKV2_AZURE_38",
+                        "CKV2_AZURE_40",
+                        "CKV2_AZURE_41",
+                        "CKV2_AZURE_47",
+                        "CKV_AZURE_190",
+                        "CKV_AZURE_206",
+                        "CKV_AZURE_33",
+                        "CKV_AZURE_44",
+                        "CKV_AZURE_59"
+                    ]
+                },
+                {
+                    "resource": "azurerm_storage_container.csv_input",
+                    "check_ids": [
+                        "CKV2_AZURE_21"
+                    ]
+                },
+                {
+                    "resource": "azurerm_storage_container.run_reports",
+                    "check_ids": [
+                        "CKV2_AZURE_21"
+                    ]
+                }
+            ]
+        }
+    ]
+}
