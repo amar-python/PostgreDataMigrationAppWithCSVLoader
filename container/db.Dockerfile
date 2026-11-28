@@ -13,7 +13,7 @@
 # it needs to reach github.com and the Go module proxy (as the other images already need PyPI and npm).
 # #327: the base image is pinned by digest (the tag alone can move under the same name); Dependabot's docker
 # ecosystem proposes the new digest when the tag moves. The tag stays for people and for Dependabot.
-FROM golang:1.26@sha256:4165ee6bf3b7811fd7b40373290405c83d0167dcb87ee5f29c427cdcef45ff8f AS gosu
+FROM golang:1.27@sha256:5f1b98fa02fe396ebce2a0227a0e08309e11792915b9dd2e1f71053d7e7e6666 AS gosu
 ARG GO_MINIMUM_VERSION=1.26.10
 ARG GOSU_VERSION=1.19
 ENV GOTOOLCHAIN=local
