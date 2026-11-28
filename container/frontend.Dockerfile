@@ -8,14 +8,14 @@
 # per user (#96).
 # #327: the base image is pinned by digest (the tag alone can move under the same name); Dependabot's docker
 # ecosystem proposes the new digest when the tag moves. The tag stays for people and for Dependabot.
-FROM node:22-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS build
+FROM node:22-slim@sha256:be979e5523c76fa4d5ca4ebd3099078f220aa47ec39c48ad5b5df9314debd6eb AS build
 WORKDIR /src
 COPY csv-table-hub-main/package.json csv-table-hub-main/package-lock.json ./
 RUN npm ci
 COPY csv-table-hub-main/ ./
 RUN NITRO_PRESET=node-server VITE_API_BASE=__OFFLINE_API_BASE__ npm run build
 
-FROM node:22-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee
+FROM node:22-slim@sha256:be979e5523c76fa4d5ca4ebd3099078f220aa47ec39c48ad5b5df9314debd6eb
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     NITRO_HOST=0.0.0.0 \
