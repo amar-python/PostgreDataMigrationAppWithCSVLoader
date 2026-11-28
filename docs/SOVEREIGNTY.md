@@ -40,6 +40,8 @@ Targets, on a 2 vCPU / 4 GB instance: a 100,000-row import under 60 s, and the f
 
 `python scripts/perf_import.py --rows 100000 --enforce` runs the whole flow (preview, stage, review page, submit, approve, import) in a throwaway tenant and prints timings and the hardware. `tests/performance/test_import_scale.py` runs it as a smoke test, and asserts the targets only with `PERF_ENFORCE=1`.
 
+The manual **Performance on reference limits** workflow (Actions tab, `perf-reference.yml`) runs the same command with PostgreSQL and the API in containers sharing two CPUs and 4 GB. It is closer to the reference instance than a laptop or the 4-CPU runner, but it is still a hosted runner: the run on the real instance remains the evidence for the targets.
+
 Measured 2026-11-09 on a 4-CPU, 15.7 GB machine, 100,000 rows (9.8 MB, 8 typed columns):
 
 | Step | 4 CPUs | Pinned to 2 CPUs |

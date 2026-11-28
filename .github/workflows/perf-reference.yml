@@ -1,0 +1,67 @@
+name: Performance on reference limits
+
+# Manual only (decision 8, BR-33 targets): times the 100,000-row approval flow with PostgreSQL and the API each in a
+# container limited to the same two CPUs and 4 GB of memory between them, then fails if a target is missed. A hosted
+# runner has 4 CPUs and 16 GB, so this approximates the 2 vCPU / 4 GB reference instance; it does not replace running
+# `python scripts/perf_import.py --rows 100000 --enforce` on that instance. The hardware line in the report shows
+# what the run really got.
+on:
+  workflow_dispatch:
+    inputs:
+      rows:
+        description: Rows in the generated CSV
+        default: "100000"
+
+permissions:
+  contents: read
+
+jobs:
+  perf:
+    name: perf (2 CPUs, 4 GB)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        # PostgreSQL gets 2 GB and the API container below the other 2 GB. Both use CPUs 0 and 1, so they share two
+        # CPUs as they would on the reference instance.
+        options: >-
+          --cpuset-cpus 0,1
+          --memory 2g
+          --memory-swap 2g
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Time the import
+        env:
+          ROWS: ${{ inputs.rows }}
+        run: |
+          mkdir -p perf-report
+          rc=0
+          # --network host reaches the PostgreSQL service on localhost:5432. Python 3.12 matches .python-version.
+          docker run --rm --network host --cpuset-cpus 0,1 --memory 2g --memory-swap 2g \
+            -v "$PWD:/work" -w /work \
+            -e PGHOST=localhost -e PGPORT=5432 -e PGUSER=postgres -e PGPASSWORD=postgres -e PGDATABASE=postgres \
+            python:3.12-slim bash -c '
+              set -e
+              pip install --quiet --require-hashes -r requirements-dev.lock
+              python scripts/perf_import.py --rows "$0" --enforce
+            ' "$ROWS" 2>&1 | tee perf-report/perf.txt || rc=$?
+          exit "$rc"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: perf-report
+          path: perf-report/
+          if-no-files-found: ignore
